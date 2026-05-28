@@ -34,6 +34,7 @@ export function MobileExplorerPanel({
           onOpenFileCreate={onOpenFileCreate}
           onOpenFolderCreate={onOpenFolderCreate}
           onCollapseAll={onCollapseAll}
+          showCollapseAction={false}
         />
         <FileTreePanel
           workspaceId={workspaceId}

@@ -327,16 +327,7 @@ export function WorkspaceMobileView() {
               onCollapseAll={() => setMobileFileCollapseVersion((value) => value + 1)}
               onRouteChange={updateMobileFilesRoute}
               onTabChange={setMobileFilesView}
-              onCloseSheet={closeMobileSheet}
               editorState={mobileEditorState}
-            />
-          ) : null,
-          footer: activeWorkspaceId ? (
-            <WorkspaceStatusBar
-              workspaceId={activeWorkspaceId}
-              gitState={gitState}
-              onOpenBranchSwitcher={handleOpenBranchSwitcher}
-              flush
             />
           ) : null,
           kicker: filesSheetKicker,

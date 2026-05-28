@@ -1189,7 +1189,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(workspaceSidebarContent).toContain("background: var(--workspace-content-surface)");
     expect(workspaceSidebarView).toContain("background: var(--workspace-content-surface)");
     expect(workspaceSidebarBody).toContain("background: var(--workspace-content-surface)");
-    expect(activityBarButton).toContain("border-radius: var(--radius-lg)");
+    expect(activityBarButton).toContain("border-radius: var(--radius-md)");
     expect(activityBarButton).toContain("background: transparent");
     expect(activityBarButtonHover).toContain("background: var(--surface-hover)");
     expect(activityBarButtonActive).toContain(
@@ -1435,8 +1435,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(paneLayout).toContain("background: var(--workspace-content-surface)");
     expect(paneLayoutChild).toContain("background: var(--workspace-content-surface)");
     expect(leftPanel).toContain("background: transparent");
-    expect(workspaceSidebarPanel).toContain("background: var(--workspace-sidebar-surface)");
-    expect(workspaceSidebarPanel).toContain("backdrop-filter: var(--material-backdrop-filter)");
+    expect(workspaceSidebarPanel).toContain(
+      "background: color-mix(in srgb, var(--surface-page) 84%, var(--surface-panel) 16%)"
+    );
+    expect(workspaceSidebarPanel).toContain("backdrop-filter: none");
     expect(workspaceSidebarPanel).not.toContain("var(--surface-overlay-bg)");
     expect(workspaceActivityBar).toContain("background: var(--workspace-activitybar-surface)");
     expect(workspaceActivityBar).toContain("backdrop-filter: var(--material-backdrop-filter)");
@@ -2576,31 +2578,47 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileTerminalSheet = getLastRuleBlock(".mobile-terminal-sheet");
     const mobileTerminal = getLastRuleBlock(".mobile-terminal-sheet .bottom-terminal");
     const workspaceSidebarPanel = getLastRuleBlock(".workspace-sidebar-panel");
-    const mobileFilesSurface = getLastRuleBlock(".mobile-sheet--files .file-tree-shell--mobile");
-    const mobileFilesGitSurface = getLastRuleBlock(".mobile-sheet--files .git-panel--mobile");
+    const mobileFilesSurfaceBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".mobile-sheet--files .file-tree-shell--mobile"
+    );
+    const mobileFilesGitSurfaceBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".mobile-sheet--files .git-panel--mobile"
+    );
     const mobileFilesContent = getLastRuleBlock(
       ".mobile-sheet--files .mobile-files-sheet__content"
     );
-    const mobileFilesSegmented = getLastRuleBlock(".mobile-files-sheet__segmented");
-    const mobileFilesSegment = getLastRuleBlock(".mobile-files-sheet__segment");
+    const mobileFilesSegmented = getLastRuleBlock(
+      ".mobile-sheet--files .mobile-files-sheet__segmented"
+    );
+    const mobileFilesSegment = getLastRuleBlock(
+      ".mobile-sheet--files .mobile-files-sheet__segment"
+    );
     const mobileFilesSegmentIcon = getLastRuleBlock(".mobile-files-sheet__segment-icon");
-    const mobileFilesSegmentActive = getLastRuleBlock(".mobile-files-sheet__segment.active");
+    const mobileFilesSegmentActive = getLastRuleBlock(
+      ".mobile-sheet--files .mobile-files-sheet__segment.active"
+    );
     const mobileFilesSegmentIndicator = getLastRuleBlock(
-      ".mobile-files-sheet__segment.active::after"
+      ".mobile-sheet--files .mobile-files-sheet__segment.active::after"
     );
     const workspaceSectionHeader = getLastRuleBlock(".workspace-sidebar-section__header");
     const workspaceSectionActions = getLastRuleBlock(".workspace-sidebar-section__actions");
     const mobileExplorerPanel = getLastRuleBlock(".mobile-explorer-panel");
-    const mobileQuickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
+    const mobileQuickJumpSearch = getLastRuleBlock(
+      ".mobile-sheet--files .workspace-quick-jump__search"
+    );
     const mobileQuickJumpItem = getLastRuleBlock(".workspace-quick-jump__item");
     const mobileSearchPanel = getLastRuleBlock(".workspace-search-panel--mobile");
-    const mobileFilesSearchSurface = getLastRuleBlock(
+    const mobileFilesSearchSurfaceBlocks = getRuleBlocksFrom(
+      stylesheet,
       ".mobile-sheet--files .workspace-search-panel--mobile"
     );
     const mobileFileSearch = getLastRuleBlock(
       ".mobile-sheet--files .file-tree-shell--mobile .file-tree-search"
     );
-    const mobileFileRow = getLastRuleBlock(
+    const mobileFileRowBlocks = getRuleBlocksFrom(
+      stylesheet,
       ".mobile-sheet--files .file-tree-shell--mobile .tree-item"
     );
     const mobileFileRowSelected = getLastRuleBlock(
@@ -2625,59 +2643,68 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(workspaceSidebarPanel).toContain(
       "border-right: 1px solid var(--component-mix-border-default-72pct-transparent)"
     );
-    expect(mobileFilesContent).toContain("padding-top: var(--sp-2)");
+    expect(mobileFilesContent).toContain("padding: 0 16px 16px");
     expect(hasRuleBlock(".mobile-supervisor-sheet__root")).toBe(false);
     expect(hasRuleBlock(".mobile-supervisor-sheet__detail-header")).toBe(false);
+    expect(mobileFilesSegmented).toContain("padding: 16px 16px 14px");
     expect(mobileFilesSegmented).toContain(
-      "border-bottom: 1px solid var(--component-mix-border-default-78pct-transparent)"
+      "border-bottom: 1px solid var(--component-mix-border-default-92pct-transparent)"
     );
-    expect(mobileFilesSegmented).toContain("border-radius: 0");
     expect(mobileFilesSegmented).not.toContain("linear-gradient(");
-    expect(mobileFilesSegmented).toContain("box-shadow: none");
     expect(mobileExplorerPanel).toContain("display: flex");
     expect(mobileExplorerPanel).toContain("flex-direction: column");
     expect(mobileFilesSegment).toContain("padding: 0");
     expect(mobileFilesSegment).toContain("justify-content: center");
-    expect(mobileFilesSegment).toContain("min-width: 32px");
-    expect(mobileFilesSegment).toContain("font-weight: var(--type-body-6-weight)");
+    expect(mobileFilesSegment).toContain("min-width: 38px");
+    expect(mobileFilesSegment).toContain("border-radius: 6px");
     expect(mobileFilesSegmentIcon).toContain("display: block");
-    expect(mobileFilesSegmentActive).toContain("background: transparent");
-    expect(mobileFilesSegmentIndicator).toContain("height: 1.5px");
+    expect(mobileFilesSegmentActive).toContain(
+      "background: var(--component-mix-status-info-fg-14pct-transparent)"
+    );
+    expect(mobileFilesSegmentActive).toContain(
+      "border-color: var(--component-mix-border-default-72pct-transparent)"
+    );
+    expect(mobileFilesSegmentIndicator).toContain("display: none");
     expect(workspaceSectionHeader).toContain("justify-content: space-between");
-    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-1)");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
     expect(workspaceSectionActions).toContain("margin-left: auto");
-    expect(mobileQuickJumpSearch).toContain("border-radius: var(--radius-md)");
+    expect(mobileQuickJumpSearch).toContain("border-radius: 4px");
     expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(mobileSearchPanel).toContain("background: transparent");
-    expect(mobileFilesSearchSurface).toContain(
-      "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
+    expect(
+      mobileFilesSearchSurfaceBlocks.some(
+        (block) =>
+          block.includes("border: none") &&
+          block.includes("background: transparent") &&
+          block.includes("box-shadow: none")
+      )
+    ).toBe(true);
+    expect(
+      mobileFilesSurfaceBlocks.some(
+        (block) =>
+          block.includes("border: none") &&
+          block.includes("background: transparent") &&
+          block.includes("box-shadow: none")
+      )
+    ).toBe(true);
+    expect(mobileFilesSurfaceBlocks.some((block) => block.includes("linear-gradient("))).toBe(
+      false
     );
-    expect(mobileFilesSearchSurface).toContain("border-radius: 0");
-    expect(mobileFilesSearchSurface).toContain(
-      "background: var(--component-mix-surface-panel-92pct-surface-page)"
-    );
-    expect(mobileFilesSearchSurface).toContain("box-shadow: none");
-    expect(mobileFilesSurface).toContain(
-      "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
-    );
-    expect(mobileFilesSurface).toContain("border-radius: 0");
-    expect(mobileFilesSurface).toContain(
-      "background: var(--component-mix-surface-panel-92pct-surface-page)"
-    );
-    expect(mobileFilesSurface).toContain("box-shadow: none");
-    expect(mobileFilesSurface).not.toContain("linear-gradient(");
-    expect(mobileFilesGitSurface).toContain(
-      "border: 1px solid var(--component-mix-border-default-80pct-transparent)"
-    );
-    expect(mobileFilesGitSurface).toContain("border-radius: 0");
-    expect(mobileFilesGitSurface).toContain(
-      "background: var(--component-mix-surface-panel-92pct-surface-page)"
-    );
-    expect(mobileFilesGitSurface).toContain("box-shadow: none");
+    expect(
+      mobileFilesGitSurfaceBlocks.some(
+        (block) =>
+          block.includes("border: none") &&
+          block.includes("background: transparent") &&
+          block.includes("box-shadow: none")
+      )
+    ).toBe(true);
     expect(mobileFileSearch).toContain("margin: 0");
     expect(mobileFileSearch).toContain("border-radius: var(--radius-md)");
-    expect(mobileFileRow).toContain("min-height: 40px");
-    expect(mobileFileRow).toContain("border-radius: var(--radius-md)");
+    expect(
+      mobileFileRowBlocks.some(
+        (block) => block.includes("min-height: 40px") && block.includes("border-radius: 4px")
+      )
+    ).toBe(true);
     expect(mobileFileRowSelected).not.toContain("border-left:");
     expect(mobileFileRowSelected).toContain("border: 1px solid var(--state-selected-border)");
     expect(mobileFileRowSelected).toContain("background: var(--state-selected-bg)");
@@ -3119,7 +3146,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(toggle).toContain("flex: 1 1 auto");
     expect(toggle).toContain("width: 100%");
     expect(toggle).toContain("justify-content: flex-start");
-    expect(desktopPanel).toContain("width: 100%");
+    expect(desktopPanel).toContain("height: auto");
   });
 
   it("keeps the desktop file tree search and selected row aligned with the polished panel chrome", () => {
@@ -3144,21 +3171,17 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchInput).toContain("line-height: var(--type-body-3-line-height)");
     expect(searchInput).toContain("font-weight: var(--type-body-3-weight)");
     expect(emptyState).toContain("padding: var(--sp-5) var(--inset-panel)");
-    expect(row).toContain("min-height: 26px");
-    expect(row).toContain("gap: var(--gap-tight)");
-    expect(row).toContain("padding:");
-    expect(row).toContain("3px");
-    expect(row).toContain("var(--inset-control-block)");
-    expect(row).toContain("var(--inset-row-inline)");
-    expect(row).toContain("border-radius: var(--radius-md)");
-    expect(row).toContain("transition:");
-    expect(row).not.toContain("border: 1px solid transparent");
+    expect(row).toContain("min-height: 32px");
+    expect(row).toContain("gap: 8px");
+    expect(row).toContain("padding-top: 0");
+    expect(row).toContain("padding-bottom: 0");
+    expect(row).toContain("border-radius: var(--radius-sm)");
     expect(rowDesktop).toContain("border: 1px solid transparent");
     expect(rowSelected).not.toContain("border-left:");
     expect(rowSelected).not.toContain("padding-left: calc(");
     expect(rowSelected).toContain("padding-left:");
-    expect(rowSelected).toContain("border: 1px solid var(--state-selected-border)");
-    expect(rowSelected).toContain("background: var(--state-selected-bg)");
+    expect(rowSelected).toContain("--workspace-sidebar-selected-border");
+    expect(rowSelected).toContain("--workspace-sidebar-selected-bg");
     expect(rowSelected).toContain("color: var(--text-primary)");
     expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
@@ -3212,8 +3235,9 @@ describe("components.css theme-sensitive surfaces", () => {
       '.quick-open__item[aria-selected="true"] .quick-open__secondary'
     );
 
-    expect(sidebarRowSelected).toContain("background: var(--state-selected-bg)");
-    expect(sidebarRowSelectedHover).toContain("background: var(--state-selected-bg)");
+    expect(sidebarRowSelected).toContain("--workspace-sidebar-selected-border");
+    expect(sidebarRowSelected).toContain("--workspace-sidebar-selected-bg");
+    expect(sidebarRowSelectedHover).toContain("--workspace-sidebar-selected-hover-bg");
     expect(openEditorsHeader).toContain("display: flex");
     expect(openEditorsHeaderMain).toContain("flex: 1 1 auto");
     expect(openEditorsHeaderMain).toContain("min-width: 0");
@@ -3226,50 +3250,49 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
     expect(workspaceSection).not.toContain("border:");
     expect(workspaceSection).not.toContain("border-radius:");
-    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-1)");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(openEditorsItemHover).toContain("background: var(--surface-hover)");
     expect(openEditorsItemActiveHover).toContain("background: var(--state-selected-bg)");
-    expect(searchControls).toContain(
-      "border-bottom: 1px solid var(--component-mix-border-default-82pct-transparent)"
-    );
+    expect(searchControls).toContain("padding: 10px 0 8px");
+    expect(searchControls).toContain("border-bottom: none");
     expect(searchControls).toContain("background: transparent");
-    expect(searchInput).toContain("min-height: 34px");
-    expect(searchInput).toContain("border-radius: var(--radius-md)");
+    expect(searchInput).toContain("min-height: 36px");
+    expect(searchInput).toContain("border-radius: var(--radius-sm)");
     expect(searchInput).not.toContain("border-radius: 4px");
-    expect(searchInput).toContain("box-shadow: none");
-    expect(searchResults).toContain("padding: var(--sp-1) 0 var(--sp-2)");
+    expect(searchResults).toContain("padding: 0");
     expect(openEditorsItem).toContain("overflow: hidden");
     expect(openEditorsItem).toContain("text-overflow: ellipsis");
     expect(openEditorsItem).toContain("white-space: nowrap");
     expect(openEditorsItemLabel).toContain("text-overflow: ellipsis");
     expect(openEditorsItemLabel).toContain("white-space: nowrap");
-    expect(searchGroup).not.toContain("border:");
+    expect(searchGroup).toContain(
+      "border-top: 1px solid var(--component-mix-border-default-92pct-transparent)"
+    );
     expect(searchGroup).not.toContain("border-radius:");
-    expect(searchGroupAdjacent).toContain("margin-top: var(--sp-1)");
-    expect(searchGroupHeader).toContain("grid-template-columns: 14px minmax(0, 1fr) auto");
+    expect(searchGroupAdjacent).toContain("margin-top: var(--gap-tight)");
+    expect(searchGroupHeader).toContain("grid-template-columns: 18px minmax(0, 1fr) auto");
     expect(searchGroupHeader).toContain("background: transparent");
     expect(searchGroupHeader).not.toContain("border:");
     expect(searchGroupHeader).not.toContain("border-radius:");
-    expect(searchGroupHeader).toContain(
-      "box-shadow: inset 0 -1px 0 var(--component-mix-border-default-96pct-transparent)"
-    );
-    expect(searchGroupPath).toContain("font-family: var(--font-mono)");
-    expect(searchGroupPath).toContain("font-size: var(--type-body-6-size)");
-    expect(searchMatches).toContain("padding-bottom: var(--sp-1)");
-    expect(searchMatch).toContain("grid-template-columns: 40px minmax(0, 1fr)");
-    expect(searchMatch).toContain("border-radius: var(--radius-md)");
+    expect(searchGroupHeader).toContain("box-shadow: none");
+    expect(searchGroupPath).toContain("display: none");
+    expect(searchMatches).toContain("padding: 2px 0 var(--sp-1)");
+    expect(searchMatch).toContain("grid-template-columns: 28px minmax(0, 1fr) auto");
+    expect(searchMatch).toContain("min-height: 32px");
+    expect(searchMatch).toContain("border-radius: var(--radius-sm)");
     expect(searchMatch).toContain("border: 1px solid transparent");
-    expect(searchMatchActive).toContain("border-color: var(--state-selected-border)");
-    expect(searchMatchActive).toContain("background: var(--state-selected-bg)");
-    expect(searchMatchActiveHover).toContain("border-color: var(--state-selected-border)");
-    expect(searchMatchActiveHover).toContain("background: var(--state-selected-bg)");
+    expect(searchMatchActive).toContain("--workspace-sidebar-selected-border");
+    expect(searchMatchActive).toContain("--workspace-sidebar-selected-bg");
+    expect(searchMatchActiveHover).toContain("--workspace-sidebar-selected-border");
+    expect(searchMatchActiveHover).toContain("--workspace-sidebar-selected-hover-bg");
     expect(searchMatchActiveFocus).toContain("border-color: var(--state-selected-border)");
     expect(searchMatchActiveFocus).toContain("background: var(--state-selected-bg)");
     expect(searchMatchActiveFocus).toContain(
       "box-shadow: inset 0 0 0 var(--state-focus-ring-width)"
     );
-    expect(searchLine).toContain("text-align: right");
+    expect(searchLine).toContain("text-align: left");
+    expect(searchLine).toContain("font-weight: var(--font-bold)");
 
     expect(quickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
@@ -3320,18 +3343,19 @@ describe("components.css theme-sensitive surfaces", () => {
     const commandPaletteItemContent = getLastRuleBlock(".command-palette-item-content");
     const commandPaletteItemShortcut = getLastRuleBlock(".command-palette-item-shortcut");
 
-    expect(gitScroll).toContain("gap: var(--sp-3)");
-    expect(gitScroll).toContain("padding: 0 var(--sp-3) var(--sp-3)");
+    expect(gitScroll).toContain("display: flex");
+    expect(gitScroll).toContain("flex-direction: column");
+    expect(gitScroll).toContain("overflow: visible");
+    expect(gitScroll).toContain("gap: 12px");
+    expect(gitScroll).toContain("padding: var(--sp-4) calc(var(--sp-3) + var(--gap-compact))");
     expect(gitCommitBlock).toContain("gap: var(--sp-2)");
-    expect(gitCommitBlock).toContain("padding-bottom: var(--sp-2)");
-    expect(gitCommitBlock).toContain(
-      "border-bottom: 1px solid var(--component-mix-border-default-92pct-transparent)"
-    );
+    expect(gitCommitBlock).toContain("padding-bottom: 0");
+    expect(gitCommitBlock).toContain("border-bottom: none");
     expect(gitCommitInputFocus).toContain("outline: none");
     expect(gitSection).toContain("gap: 8px");
     expect(gitSection).not.toContain("border:");
     expect(gitSection).not.toContain("border-radius:");
-    expect(gitSectionAdjacent).toContain("padding-top: var(--sp-2)");
+    expect(gitSectionAdjacent).toContain("padding-top: calc(var(--sp-2) + var(--gap-compact))");
     expect(gitSectionAdjacent).toContain(
       "border-top: 1px solid var(--component-mix-border-default-92pct-transparent)"
     );
@@ -3339,10 +3363,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
     expect(hasRuleBlock(".git-panel .git-row.active::before")).toBe(false);
-    expect(gitRowActive).toContain("border-color: var(--state-selected-border)");
-    expect(gitRowActive).toContain("background: var(--state-selected-bg)");
-    expect(gitHistoryRowCurrent).toContain("border-color: var(--state-selected-border)");
-    expect(gitHistoryRowCurrent).toContain("background: var(--state-selected-bg)");
+    expect(gitRowActive).toContain("--workspace-sidebar-selected-border");
+    expect(gitRowActive).toContain("--workspace-sidebar-selected-bg");
+    expect(gitHistoryRowCurrent).toContain("--workspace-sidebar-selected-border");
+    expect(gitHistoryRowCurrent).toContain("--workspace-sidebar-selected-bg");
     expect(commandPalette).toContain("max-width: var(--desktop-modal-max-width-md)");
     expect(commandPaletteDesktop).toContain("overflow: hidden");
     expect(commandPaletteHeader).toContain("padding: var(--sp-3) var(--sp-4)");

@@ -3,6 +3,7 @@ import {
   type FileNode,
   type GitStatus,
   type MonitoringResponse,
+  type SearchContentResult,
   type Session,
   type Workspace,
 } from "@coder-studio/core";
@@ -11,6 +12,7 @@ import { SessionGatePage } from "../../features/auth/session-gate";
 import { NotFoundPage } from "../../features/not-found";
 import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
+import type { OpenFile } from "../../features/workspace/atoms";
 import { WorkspaceDesktopView } from "../../features/workspace/views/desktop/workspace-desktop-view";
 import { WorkspaceMobileView } from "../../features/workspace/views/mobile/workspace-mobile-view";
 import { WorkspaceEmptyState } from "../../features/workspace/views/shared/workspace-empty-state";
@@ -28,29 +30,71 @@ const workspace: Workspace = {
   openedAt: 1,
   lastActiveAt: 1,
   uiState: {
-    leftPanelWidth: 280,
+    leftPanelWidth: 402,
     bottomPanelHeight: 220,
     focusMode: false,
+    fileTreeExpandedDirs: [],
     paneLayout: { id: "root", type: "leaf" },
   },
 };
 
 const gitStatus: GitStatus = {
-  branch: "main",
+  branch: "feature/ai-agent",
   ahead: 0,
   behind: 0,
   staged: [],
   modified: [{ path: "packages/web/src/app.tsx", status: "modified" }],
-  untracked: [{ path: "e2e-ui/scenes/index.ts", status: "untracked" }],
+  untracked: [{ path: "e2e-ui/src/index.ts", status: "untracked" }],
   deleted: [],
 };
 
 const fileTreeMap = new Map<string, FileNode[]>();
 fileTreeMap.set(".", [
   { name: "packages", path: "packages", kind: "dir" },
-  { name: "e2e-ui", path: "e2e-ui", kind: "dir" },
+  { name: "core", path: "core", kind: "dir" },
   { name: "README.md", path: "README.md", kind: "file" },
 ]);
+
+const openPreviewFiles: Record<string, OpenFile> = {};
+
+const searchContentResults: SearchContentResult = {
+  files: [
+    {
+      path: "packages/web/src/app.tsx",
+      name: "app.tsx",
+      matchCount: 4,
+      hasMoreMatches: false,
+      matches: [
+        {
+          line: 24,
+          column: 7,
+          endColumn: 18,
+          preview: "const searchQuery = workspacePanelState.query;",
+          previewColumnStart: 7,
+          previewColumnEnd: 18,
+        },
+        {
+          line: 86,
+          column: 8,
+          endColumn: 19,
+          preview: "return searchQuery.trim() ? results : [];",
+          previewColumnStart: 8,
+          previewColumnEnd: 19,
+        },
+      ],
+    },
+    {
+      path: "packages/web/src/tree.tsx",
+      name: "tree.tsx",
+      matchCount: 2,
+      hasMoreMatches: false,
+      matches: [],
+    },
+  ],
+  totalMatchCount: 12,
+  hasMoreFiles: false,
+  truncatedMatchFileCount: 0,
+};
 
 function buildSettingsSeed(context: UiPreviewSceneContext) {
   const monitoringSettings = {
@@ -182,15 +226,30 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
     fileTreeByWorkspaceId: {
       [workspace.id]: fileTreeMap,
     },
+    openFilesByWorkspaceId: {
+      [workspace.id]: openPreviewFiles,
+    },
+    activeFilePathByWorkspaceId: {
+      [workspace.id]: "README.md",
+    },
     gitStateByWorkspaceId: {
       [workspace.id]: gitStatus,
     },
+    gitDiffPreviewByWorkspaceId: {
+      [workspace.id]: {
+        path: "packages/web/src/app.tsx",
+        diff: "diff --git a/packages/web/src/app.tsx b/packages/web/src/app.tsx",
+        source: "file",
+        staged: false,
+      },
+    },
     gitBranchListByWorkspaceId: {
       [workspace.id]: {
-        current: "main",
+        current: "feature/ai-agent",
         branches: [
-          { name: "main", isCurrent: true, isRemote: false },
+          { name: "main", isCurrent: false, isRemote: false },
           { name: "feature/e2e-ui", isCurrent: false, isRemote: false },
+          { name: "feature/ai-agent", isCurrent: true, isRemote: false },
         ],
       },
     },
@@ -216,12 +275,18 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
       workspaceList: [workspace],
       sessionListByWorkspaceId: { [workspace.id]: sessions },
       gitStatusByWorkspaceId: { [workspace.id]: gitStatus },
+      gitLogByWorkspaceId: {
+        [workspace.id]: {
+          entries: [],
+        },
+      },
       gitBranchesByWorkspaceId: {
         [workspace.id]: {
-          current: "main",
+          current: "feature/ai-agent",
           branches: [
-            { name: "main", isCurrent: true, isRemote: false },
+            { name: "main", isCurrent: false, isRemote: false },
             { name: "feature/e2e-ui", isCurrent: false, isRemote: false },
+            { name: "feature/ai-agent", isCurrent: true, isRemote: false },
           ],
         },
       },
@@ -229,6 +294,9 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
         [workspace.id]: {
           ".": fileTreeMap.get(".") ?? [],
         },
+      },
+      fileSearchContentByWorkspaceId: {
+        [workspace.id]: searchContentResults,
       },
       worktreeListByWorkspaceId: {
         [workspace.id]: [],

@@ -188,6 +188,18 @@ describe("UI preview catalog", () => {
     expect(document.querySelector(".mobile-sheet--terminal .terminal-toolbar-left")).toBeNull();
   });
 
+  it("renders seeded content search results inside the mobile files sheet search tab", async () => {
+    renderScene("mobile-files-sheet", "mobile");
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Search|搜索/i }));
+    fireEvent.change(await screen.findByRole("searchbox", { name: /Search|搜索/i }), {
+      target: { value: "search" },
+    });
+
+    expect(await screen.findByText("mobile-files-sheet.tsx")).toBeInTheDocument();
+    expect(screen.getByText("packages/web/src/styles/components.css")).toBeInTheDocument();
+  });
+
   it("captures the mobile terminal showcase from the fullscreen terminal sheet root", () => {
     const scene = getUiPreviewScene("mobile-terminal-sheet");
     expect(scene?.capture?.selector).toBe(".mobile-sheet--terminal");
@@ -295,6 +307,28 @@ describe("UI preview catalog", () => {
 
     expect(await screen.findByText(/changes|更改/i)).toBeInTheDocument();
     expect(document.querySelector(".desktop-review-card--sidebar .git-panel")).toBeTruthy();
+  });
+
+  it("renders seeded content search results in the workspace desktop scene", async () => {
+    renderScene("workspace-desktop");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    fireEvent.change(await screen.findByRole("searchbox", { name: /Search|搜索/i }), {
+      target: { value: "needle" },
+    });
+
+    expect(await screen.findByText("app.tsx")).toBeInTheDocument();
+    expect(screen.getByText("packages/web/src/app.tsx")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /packages\/web\/src\/app\.tsx.*app\.tsx.*4.*(?:matches|匹配)/i,
+      })
+    ).toBeInTheDocument();
+    expect(document.querySelector(".workspace-search-panel__group-count")).toHaveTextContent("4");
   });
 
   it("renders the workspace editor review scene", async () => {

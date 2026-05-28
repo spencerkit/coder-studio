@@ -11,6 +11,7 @@ interface ExplorerPanelProps {
   onCreateRequestConsumed: () => void;
   onOpenFileCreate: () => void;
   onOpenFolderCreate: () => void;
+  refreshToken?: number;
 }
 
 export const ExplorerPanel: FC<ExplorerPanelProps> = ({
@@ -19,8 +20,11 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
   onCreateRequestConsumed,
   onOpenFileCreate,
   onOpenFolderCreate,
+  refreshToken = 0,
 }) => {
   const [collapseVersion, setCollapseVersion] = useState(0);
+  const [workspaceCount, setWorkspaceCount] = useState(0);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
 
   return (
     <div className="workspace-sidebar-view">
@@ -29,6 +33,7 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
 
         <section className="workspace-sidebar-section workspace-sidebar-section--fill">
           <WorkspaceSectionHeader
+            count={workspaceLoading ? undefined : workspaceCount}
             onOpenFileCreate={onOpenFileCreate}
             onOpenFolderCreate={onOpenFolderCreate}
             onCollapseAll={() => setCollapseVersion((value) => value + 1)}
@@ -37,9 +42,15 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
             workspaceId={workspaceId}
             createRequest={createRequest}
             onCreateRequestConsumed={onCreateRequestConsumed}
+            onVisibleCountChange={(count, loading) => {
+              setWorkspaceCount(count);
+              setWorkspaceLoading(loading);
+            }}
             collapseVersion={collapseVersion}
+            refreshToken={refreshToken}
             variant="desktop"
             showSearch={false}
+            preserveSourceOrder
           />
         </section>
       </div>

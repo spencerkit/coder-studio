@@ -204,9 +204,10 @@ describe("MobileExplorerPanel", () => {
     );
 
     const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
-    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(2\)/i);
+    expect(heading).toHaveTextContent(/Open Editors|打开的编辑器/i);
 
     const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("2")).toBeInTheDocument();
 
     expect(
       within(section).getByRole("button", {
@@ -233,7 +234,8 @@ describe("MobileExplorerPanel", () => {
       "workspace-open-editors__item--active"
     );
     expect(within(section).queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
-    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
+    expect(heading).toHaveTextContent(/Open Editors|打开的编辑器/i);
+    expect(within(section).getByText("1")).toBeInTheDocument();
     expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual(["src/beta.tsx"]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(onSelectFile).not.toHaveBeenCalled();
@@ -274,10 +276,9 @@ describe("MobileExplorerPanel", () => {
 
     fireEvent.click(within(workspaceSection).getByRole("button", { name: "New File" }));
     fireEvent.click(within(workspaceSection).getByRole("button", { name: "New Folder" }));
-    fireEvent.click(within(workspaceSection).getByRole("button", { name: "Collapse All" }));
 
     expect(onOpenFileCreate).toHaveBeenCalledTimes(1);
     expect(onOpenFolderCreate).toHaveBeenCalledTimes(1);
-    expect(onCollapseAll).toHaveBeenCalledTimes(1);
+    expect(onCollapseAll).not.toHaveBeenCalled();
   });
 });

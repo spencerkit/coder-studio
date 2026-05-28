@@ -76,15 +76,22 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
               onClick={() => setCollapsed((value) => !value)}
             />
           </Tooltip>
-          <h2 className="workspace-sidebar-section__title workspace-open-editors__title">
-            <span className="workspace-open-editors__title-text">{headingLabel}</span>
+          <h2
+            className="workspace-sidebar-section__title workspace-open-editors__title"
+            aria-label={headingLabel}
+          >
+            <span className="workspace-open-editors__title-text">{resolvedTitle}</span>
           </h2>
+          <span className="workspace-sidebar-section__count workspace-open-editors__count">
+            {openEditorPaths.length}
+          </span>
         </div>
         <button
           type="button"
-          className="workspace-open-editors__close-all"
+          className="workspace-sidebar-section__action workspace-open-editors__close-all"
           disabled={openEditorPaths.length === 0}
           onClick={() => closeAll()}
+          title={headingLabel}
         >
           {t("action.close_all")}
         </button>

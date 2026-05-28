@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Workspace Panel Balanced Workbench Review</title>
+    <style>
+      :root {
+        --bg: #071018;
+        --bg-alt: #0a151f;
+        --surface: rgba(16, 29, 41, 0.92);
+        --surface-2: rgba(20, 37, 53, 0.96);
+        --surface-3: rgba(24, 43, 61, 0.98);
+        --surface-4: rgba(12, 24, 34, 0.94);
+        --stroke: rgba(125, 160, 194, 0.22);
+        --stroke-strong: rgba(125, 160, 194, 0.34);
+        --muted: #8ea3b7;
+        --text: #edf5fb;
+        --text-soft: #c7d6e3;
+        --mint: #8be0c6;
+        --mint-strong: #3dc09c;
+        --blue: #72b7ff;
+        --amber: #f5c06d;
+        --coral: #ff9a87;
+        --violet: #c39aff;
+        --selected-bg: rgba(122, 201, 178, 0.18);
+        --selected-stroke: rgba(122, 201, 178, 0.58);
+        --shadow: 0 22px 64px rgba(0, 0, 0, 0.26);
+        --radius-lg: 8px;
+        --radius-md: 6px;
+        --radius-sm: 4px;
+        --radius-xs: 2px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          "IBM Plex Sans",
+          "SF Pro Display",
+          "Segoe UI",
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Noto Sans SC",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(61, 192, 156, 0.18), transparent 26%),
+          radial-gradient(circle at 85% 10%, rgba(114, 183, 255, 0.16), transparent 22%),
+          linear-gradient(180deg, #061018 0%, #09131c 46%, #050c13 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent 92%);
+      }
+
+      .page {
+        width: min(1440px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 40px 0 96px;
+      }
+
+      .hero,
+      .section {
+        border: 1px solid var(--stroke);
+        background: var(--surface);
+        backdrop-filter: blur(18px);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+        gap: 24px;
+        padding: 28px;
+        border-radius: 14px;
+        animation: rise 560ms ease-out both;
+      }
+
+      .section {
+        margin-top: 24px;
+        padding: 24px;
+        border-radius: 12px;
+        animation: rise 620ms ease-out both;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(139, 224, 198, 0.2);
+        background: rgba(139, 224, 198, 0.08);
+        color: var(--mint);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        margin-top: 18px;
+        font-size: clamp(32px, 5vw, 58px);
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+      }
+
+      .hero p {
+        margin-top: 16px;
+        max-width: 760px;
+        color: var(--text-soft);
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .hero-note {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border: 1px solid rgba(255, 154, 135, 0.18);
+        border-radius: var(--radius-sm);
+        background: rgba(255, 154, 135, 0.06);
+        color: #ffd4cb;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .hero-side {
+        display: grid;
+        gap: 16px;
+      }
+
+      .summary-card,
+      .issue-card,
+      .rule-card,
+      .note-card {
+        border: 1px solid var(--stroke);
+        border-radius: 8px;
+        background: var(--surface-4);
+      }
+
+      .summary-card {
+        padding: 20px;
+      }
+
+      .summary-card h3,
+      .issue-card h3,
+      .rule-card h3,
+      .note-card h3 {
+        font-size: 14px;
+        line-height: 1.2;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .summary-value {
+        margin-top: 12px;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .summary-detail {
+        margin-top: 8px;
+        color: var(--text-soft);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .section-title {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 22px;
+      }
+
+      .section-title h2 {
+        font-size: 28px;
+        letter-spacing: -0.03em;
+      }
+
+      .section-title p {
+        max-width: 620px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+        text-align: right;
+      }
+
+      .shot-groups {
+        display: grid;
+        gap: 28px;
+      }
+
+      .shot-group h3 {
+        margin-bottom: 14px;
+        font-size: 16px;
+        color: var(--text-soft);
+      }
+
+      .shot-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .shot-card {
+        overflow: hidden;
+        border: 1px solid var(--stroke);
+        border-radius: 8px;
+        background: var(--surface-4);
+      }
+
+      .shot-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #0b141b;
+      }
+
+      .shot-body {
+        padding: 16px;
+      }
+
+      .shot-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .shot-tag {
+        flex: none;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(114, 183, 255, 0.12);
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .shot-callout {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .issue-grid,
+      .rule-grid,
+      .notes-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .issue-card,
+      .rule-card,
+      .note-card {
+        padding: 20px;
+      }
+
+      .issue-card p,
+      .rule-card p,
+      .note-card p {
+        margin-top: 10px;
+        color: var(--text-soft);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .issue-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        margin-bottom: 14px;
+        border-radius: 50%;
+        background: rgba(245, 192, 109, 0.14);
+        color: var(--amber);
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .grammar-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+      }
+
+      .anatomy {
+        display: grid;
+        gap: 14px;
+      }
+
+      .anatomy-shell {
+        padding: 16px;
+        border: 1px solid var(--stroke);
+        border-radius: 8px;
+        background: linear-gradient(
+          180deg,
+          rgba(18, 34, 50, 0.96),
+          rgba(12, 24, 34, 0.96)
+        );
+      }
+
+      .anatomy-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--stroke);
+        border-radius: 4px;
+        background: rgba(10, 21, 31, 0.84);
+      }
+
+      .anatomy-label,
+      .row-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .caret,
+      .dot,
+      .rail-btn,
+      .icon-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .caret {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        background: rgba(114, 183, 255, 0.1);
+        color: var(--blue);
+        font-size: 11px;
+      }
+
+      .count,
+      .small-count {
+        padding: 3px 7px;
+        border-radius: 999px;
+        background: rgba(114, 183, 255, 0.1);
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .action-cluster {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .icon-pill {
+        min-width: 24px;
+        height: 24px;
+        padding: 0 8px;
+        border: 1px solid rgba(142, 163, 183, 0.16);
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+
+      .anatomy-body {
+        margin-top: 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .panel-input {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 36px;
+        padding: 0 14px;
+        border: 1px solid var(--stroke);
+        border-radius: 4px;
+        background: rgba(6, 16, 24, 0.56);
+        color: var(--text-soft);
+        font-size: 14px;
+      }
+
+      .panel-input.large {
+        align-items: start;
+        min-height: 64px;
+        padding: 12px 14px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        color: var(--text-soft);
+      }
+
+      .row.active {
+        border-color: var(--selected-stroke);
+        background: var(--selected-bg);
+        color: var(--text);
+      }
+
+      .row strong {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .row span {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .group-body {
+        padding-top: 6px;
+        border-top: 1px solid rgba(125, 160, 194, 0.12);
+      }
+
+      .group-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 2px 8px;
+        color: var(--text-soft);
+        font-size: 13px;
+      }
+
+      .group-head .section-left {
+        min-width: 0;
+      }
+
+      .mock-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .mock-card {
+        padding: 16px;
+        border: 1px solid var(--stroke);
+        border-radius: 8px;
+        background: linear-gradient(
+          180deg,
+          rgba(8, 16, 24, 0.96),
+          rgba(12, 22, 31, 0.96)
+        );
+      }
+
+      .mock-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .mock-title h3 {
+        font-size: 18px;
+        letter-spacing: -0.02em;
+      }
+
+      .mock-note {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .desktop-shell {
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: 58px minmax(0, 1fr);
+        min-height: 620px;
+        border: 1px solid rgba(125, 160, 194, 0.16);
+        border-radius: 0;
+        background: linear-gradient(
+          180deg,
+          rgba(8, 15, 23, 0.96),
+          rgba(11, 19, 28, 0.98)
+        );
+      }
+
+      .rail {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+        padding: 18px 10px;
+        border-right: 1px solid rgba(125, 160, 194, 0.12);
+        background: rgba(8, 16, 24, 0.82);
+      }
+
+      .rail-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .rail-btn.active {
+        border-color: rgba(125, 160, 194, 0.18);
+        background: rgba(114, 183, 255, 0.12);
+        color: var(--text);
+      }
+
+      .mock-panel {
+        display: grid;
+        gap: 12px;
+        padding: 16px 14px 14px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .section-shell {
+        padding: 0;
+        background: transparent;
+      }
+
+      .section-shell + .section-shell {
+        padding-top: 10px;
+        border-top: 1px solid rgba(125, 160, 194, 0.12);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 2px 0 8px;
+        color: var(--text-soft);
+      }
+
+      .section-left,
+      .file-node,
+      .tab-strip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .section-name {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .body-list {
+        display: grid;
+        gap: 4px;
+      }
+
+      .file-node {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        color: var(--text-soft);
+      }
+
+      .file-node.active {
+        border-color: var(--selected-stroke);
+        background: var(--selected-bg);
+        color: var(--text);
+      }
+
+      .file-icon {
+        width: 18px;
+        height: 18px;
+        border-radius: 2px;
+        background: rgba(139, 224, 198, 0.14);
+        color: var(--mint);
+        font-size: 12px;
+      }
+
+      .file-icon.file {
+        background: rgba(195, 154, 255, 0.14);
+        color: var(--violet);
+      }
+
+      .file-meta {
+        margin-left: auto;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status {
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .status.added {
+        background: rgba(139, 224, 198, 0.12);
+        color: var(--mint);
+      }
+
+      .status.modified {
+        background: rgba(245, 192, 109, 0.12);
+        color: var(--amber);
+      }
+
+      .status.removed {
+        background: rgba(255, 154, 135, 0.12);
+        color: var(--coral);
+      }
+
+      .filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .filter-chip {
+        padding: 5px 8px;
+        border: 1px solid rgba(125, 160, 194, 0.16);
+        border-radius: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .filter-chip.active {
+        border-color: rgba(114, 183, 255, 0.24);
+        background: rgba(114, 183, 255, 0.1);
+        color: var(--blue);
+      }
+
+      .code-preview {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .code-preview mark {
+        padding: 0 2px;
+        border-radius: 2px;
+        background: rgba(114, 183, 255, 0.18);
+        color: inherit;
+      }
+
+      .phone-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .phone-card {
+        padding: 16px;
+        border: 1px solid var(--stroke);
+        border-radius: 8px;
+        background: linear-gradient(
+          180deg,
+          rgba(8, 16, 24, 0.98),
+          rgba(12, 22, 31, 0.98)
+        );
+      }
+
+      .phone-shell {
+        overflow: hidden;
+        min-height: 700px;
+        border: 1px solid rgba(125, 160, 194, 0.16);
+        border-radius: 0;
+        background: linear-gradient(
+          180deg,
+          rgba(7, 15, 23, 1),
+          rgba(11, 20, 29, 1)
+        );
+      }
+
+      .phone-top {
+        padding: 20px 18px 14px;
+        border-bottom: 1px solid rgba(125, 160, 194, 0.12);
+      }
+
+      .phone-nav {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: var(--muted);
+      }
+
+      .phone-body {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .tab-strip {
+        gap: 10px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid rgba(125, 160, 194, 0.12);
+      }
+
+      .tab-pill {
+        width: 38px;
+        height: 38px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .tab-pill.active {
+        border-color: rgba(125, 160, 194, 0.18);
+        background: rgba(114, 183, 255, 0.12);
+        color: var(--text);
+      }
+
+      .touch-row {
+        min-height: 40px;
+      }
+
+      .decision-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .decision-strip .note-card {
+        min-height: 176px;
+      }
+
+      .inline-code {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        font-family:
+          "IBM Plex Mono",
+          "SFMono-Regular",
+          "Consolas",
+          "Liberation Mono",
+          monospace;
+        font-size: 12px;
+      }
+
+      .footer-note {
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      @media (max-width: 1200px) {
+        .hero,
+        .grammar-grid,
+        .section-title,
+        .decision-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .section-title {
+          align-items: start;
+        }
+
+        .section-title p {
+          text-align: left;
+        }
+
+        .mock-grid,
+        .shot-grid,
+        .phone-grid,
+        .issue-grid,
+        .rule-grid,
+        .notes-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          width: min(100vw - 24px, 1440px);
+          padding-top: 20px;
+        }
+
+        .hero,
+        .section {
+          padding: 18px;
+          border-radius: 12px;
+        }
+
+        h1 {
+          font-size: 34px;
+        }
+
+        .desktop-shell,
+        .phone-shell {
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Balanced Workbench / 重做版评审稿</div>
+          <h1>Workspace Panels 不是没调，而是还没真正重做。</h1>
+          <p>
+            你会感觉“和优化前没什么太大变化”，核心原因不是颜色或圆角没改够，而是
+            `Explorer / Search / Git`
+            仍然在用三套不同的 panel grammar。上轮更像修边，不像重建系统，所以视觉感受不可能拉开。
+          </p>
+          <p>
+            这版评审稿把桌面端和移动端一起收敛到同一套
+            `section / header / count / actions / row / selected`
+            语法里。方向不是简单把 Explorer 抄成现在的 Git，而是以 Git
+            现有结构为骨架，再把三块面板一起压到同一个更紧、更硬朗的 workbench 系统里。
+          </p>
+          <div class="hero-note">
+            这是一份离线设计稿，不是实现代码。重点是先把“问题在哪、一起改之后长什么样、为什么这样改”讲清楚，再决定是否进入 spec 和落地阶段。
+          </div>
+        </div>
+
+        <div class="hero-side">
+          <div class="summary-card">
+            <h3>统一对象</h3>
+            <div class="summary-value">Explorer / Search / Git / Mobile</div>
+            <div class="summary-detail">
+              不只统一颜色和圆角，统一的是信息容器、折叠头、行态、密度、触控继承规则。
+            </div>
+          </div>
+          <div class="summary-card">
+            <h3>核心变化</h3>
+            <div class="summary-value">Section Shell First</div>
+            <div class="summary-detail">
+              每一块内容都回到统一 section grammar，标题、计数、动作和 body 一起成系统，但不再用一块一块的外框切割。
+            </div>
+          </div>
+          <div class="summary-card">
+            <h3>设计基调</h3>
+            <div class="summary-value">紧凑 / 硬朗 / 高扫描效率</div>
+            <div class="summary-detail">
+              不走消费型大卡片，也不走软糯圆角；接近专业编辑器 workbench，而不是工具拼盘。
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <div>
+            <h2>现状截图</h2>
+          </div>
+          <p>
+            这里先把当前桌面端和移动端的真实界面放一起。问题不是某一个面板丑，而是三者像三个产品：结构语言不同，折叠逻辑不同，块感不同。
+          </p>
+        </div>
+
+        <div class="shot-groups">
+          <div class="shot-group">
+            <h3>Desktop</h3>
+            <div class="shot-grid">
+              <article class="shot-card">
+                <img
+                  src="./assets/2026-05-27-workspace-panel-balanced-workbench/desktop-explorer-current.png"
+                  alt="当前桌面端 Explorer"
+                />
+                <div class="shot-body">
+                  <div class="shot-label">
+                    <span>Explorer</span>
+                    <span class="shot-tag">当前</span>
+                  </div>
+                  <p class="shot-callout">
+                    `Open Editors`
+                    和 `Workspace`
+                    不是同一种 section 语法；动作散在标题右侧，树内容像单独的控件区。
+                  </p>
+                </div>
+              </article>
+
+              <article class="shot-card">
+                <img
+                  src="./assets/2026-05-27-workspace-panel-balanced-workbench/desktop-search-current.png"
+                  alt="当前桌面端 Search"
+                />
+                <div class="shot-body">
+                  <div class="shot-label">
+                    <span>Search</span>
+                    <span class="shot-tag">当前</span>
+                  </div>
+                  <p class="shot-callout">
+                    更像一个塞进 sidebar 的搜索工具页。输入、提示文案和结果容器没有和 Explorer / Git 共用同一层级。
+                  </p>
+                </div>
+              </article>
+
+              <article class="shot-card">
+                <img
+                  src="./assets/2026-05-27-workspace-panel-balanced-workbench/desktop-git-current.png"
+                  alt="当前桌面端 Git"
+                />
+                <div class="shot-body">
+                  <div class="shot-label">
+                    <span>Git</span>
+                    <span class="shot-tag">当前</span>
+                  </div>
+                  <p class="shot-callout">
+                    结构最接近目标，但 commit 区依旧偏表单，下面的 section header 和其他面板也没有真正共用一套语法。
+                  </p>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="shot-group">
+            <h3>Mobile</h3>
+            <div class="shot-grid">
+              <article class="shot-card">
+                <img
+                  src="./assets/2026-05-27-workspace-panel-balanced-workbench/mobile-explorer-current.png"
+                  alt="当前移动端 Explorer"
+                />
+                <div class="shot-body">
+                  <div class="shot-label">
+                    <span>Mobile Explorer</span>
+                    <span class="shot-tag">当前</span>
+                  </div>
+                  <p class="shot-callout">
+                    已经比桌面更完整，但 `Quick Jump / Open Editors / Workspace`
+                    还是三种气质，section grammar 不够统一。
+                  </p>
+                </div>
+              </article>
+
+              <article class="shot-card">
+                <img
+                  src="./assets/2026-05-27-workspace-panel-balanced-workbench/mobile-search-current.png"
+                  alt="当前移动端 Search"
+                />
+                <div class="shot-body">
+                  <div class="shot-label">
+                    <span>Mobile Search</span>
+                    <span class="shot-tag">当前</span>
+                  </div>
+                  <p class="shot-callout">
+                    继承了容器，但没有继承完整 section 系统。它能用，但不像和 Explorer / Git 一家出的。
+                  </p>
+                </div>
+              </article>
+
+              <article class="shot-card">
+                <img
+                  src="./assets/2026-05-27-workspace-panel-balanced-workbench/mobile-git-current.png"
+                  alt="当前移动端 Git"
+                />
+                <div class="shot-body">
+                  <div class="shot-label">
+                    <span>Mobile Git</span>
+                    <span class="shot-tag">当前</span>
+                  </div>
+                  <p class="shot-callout">
+                    能力齐全，但视觉节奏偏碎。commit、section、row 的层次还没回到同一套 compact workbench grammar。
+                  </p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <div>
+            <h2>当前问题</h2>
+          </div>
+          <p>
+            这些问题叠在一起，就是“看着没大变化”的原因。因为你感知到的是系统层面的不一致，而不是单点样式。
+          </p>
+        </div>
+
+        <div class="issue-grid">
+          <article class="issue-card">
+            <div class="issue-index">01</div>
+            <h3>Same Workbench, Three Grammars</h3>
+            <p>
+              Explorer 像树控件，Search 像工具页，Git 像表单加列表。用户在同一个侧栏里切 tab，却要重新学习每块面板的结构语气。
+            </p>
+          </article>
+
+          <article class="issue-card">
+            <div class="issue-index">02</div>
+            <h3>Collapse Semantics Are Inconsistent</h3>
+            <p>
+              有的地方 header 是一条文字加 action，有的地方是完整 section 头，有的地方只是结果组名。折叠和收起的 affordance 没对齐。
+            </p>
+          </article>
+
+          <article class="issue-card">
+            <div class="issue-index">03</div>
+            <h3>Container Hierarchy Is Fighting The Content</h3>
+            <p>
+              现在很多精力都花在“包住内容的壳”上，导致文件树、结果列表、变更列表本身反而不够利落。面板像块状拼起来，不像连续工具面。
+            </p>
+          </article>
+
+          <article class="issue-card">
+            <div class="issue-index">04</div>
+            <h3>Mobile Copies Surfaces, Not Grammar</h3>
+            <p>
+              移动端继承了视觉表层，但没有完整继承 section grammar。结果是它看起来比较整齐，却没有形成和桌面一致的系统感。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <div>
+            <h2>统一 Grammar 规则</h2>
+          </div>
+          <p>
+            这次不是“给三块面板各修一下”，而是先定义一套 workbench grammar，再让
+            Explorer / Search / Git / Mobile 都落到这套 grammar 里。
+          </p>
+        </div>
+
+        <div class="grammar-grid">
+          <div class="anatomy">
+            <div class="anatomy-shell">
+              <div class="anatomy-head">
+                <div class="anatomy-label">
+                  <span class="caret">▾</span>
+                  <strong>Section Header</strong>
+                  <span class="count">12</span>
+                </div>
+                <div class="action-cluster">
+                  <span class="icon-pill">过滤</span>
+                  <span class="icon-pill">新建</span>
+                  <span class="icon-pill">收起</span>
+                </div>
+              </div>
+              <div class="anatomy-body">
+                <div class="panel-input">统一输入框 / filter / quick jump / commit control</div>
+                <div class="row active">
+                  <div class="row-left">
+                    <strong>统一 selected row</strong>
+                    <span>无左侧强调条，改为完整块级高亮</span>
+                  </div>
+                  <span class="small-count">active</span>
+                </div>
+                <div class="row">
+                  <div class="row-left">
+                    <strong>统一 row density</strong>
+                    <span>Explorer / Search / Git 扫描节奏相同</span>
+                  </div>
+                  <span class="small-count">38px</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rule-grid">
+              <article class="rule-card">
+                <h3>Header Contract</h3>
+                <p>
+                  每个 section 都固定拥有 `chevron / title / count / actions / body`。统一的是 header grammar，不是再额外包一层小卡片。
+                </p>
+              </article>
+              <article class="rule-card">
+                <h3>Control Contract</h3>
+                <p>
+                  Search 输入、Quick Jump、Git commit 输入都归入同一档 compact control family，只允许尺寸差异，不允许语气差异。
+                </p>
+              </article>
+              <article class="rule-card">
+                <h3>Row Contract</h3>
+                <p>
+                  文件树行、搜索匹配行、Git 变更行、历史行共享同一 selected / hover / focus 规则。密度统一，交互心智统一。
+                </p>
+              </article>
+              <article class="rule-card">
+                <h3>Mobile Contract</h3>
+                <p>
+                  移动端只放大热区和间距，不重新发明圆角和容器语言。也就是说，手机上看到的是同一系统的触控版，而不是另一套 App。
+                </p>
+              </article>
+            </div>
+          </div>
+
+          <div class="notes-grid">
+            <article class="note-card">
+              <h3>为什么不是直接抄现在的 Git</h3>
+              <p>
+                因为 Git 只是最接近 section 化，不代表已经对。它的 commit 区还偏重，信息层级还偏碎。所以方向是“以 Git 的 section 思维为骨架，再把 Git 自己也收紧”。
+              </p>
+            </article>
+            <article class="note-card">
+              <h3>为什么 Search 也要一起重做</h3>
+              <p>
+                Search 问题看起来小，是因为内容更少。但它恰好最容易暴露 grammar 不一致。只修 Explorer / Git，不修 Search，整个侧栏仍然会像三套产品。
+              </p>
+            </article>
+            <article class="note-card">
+              <h3>为什么这次感知变化会更大</h3>
+              <p>
+                因为用户首先感知的是 section、row 和密度节奏。这些一旦统一，即使功能没变，整个侧栏也会明显像“同一个工作台”，而不是“局部换皮”。
+              </p>
+            </article>
+            <article class="note-card">
+              <h3>实现时的控制点</h3>
+              <p>
+                真正要落地时，优先做共享 section / row / control primitive，再去套 Explorer、Search、Git 和 mobile。否则会再次变成各修各的。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <div>
+            <h2>重做版 Mock / Desktop</h2>
+          </div>
+          <p>
+            这里不是“组件级像素稿”，而是为了让你直接看出整体方向：Explorer / Search / Git
+            是否终于属于同一套 workbench。
+          </p>
+        </div>
+
+        <div class="mock-grid">
+          <article class="mock-card">
+            <div class="mock-title">
+              <h3>Explorer</h3>
+              <span class="shot-tag">重做版</span>
+            </div>
+            <div class="desktop-shell">
+              <aside class="rail">
+                <span class="rail-btn active">⌘</span>
+                <span class="rail-btn">⌕</span>
+                <span class="rail-btn">⑂</span>
+              </aside>
+              <div class="mock-panel">
+                <div class="stack">
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▸</span>
+                        <span class="section-name">打开的编辑器</span>
+                        <span class="count">0</span>
+                      </div>
+                      <div class="action-cluster">
+                        <span class="icon-pill">全部关闭</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▾</span>
+                        <span class="section-name">工作区</span>
+                        <span class="count">3</span>
+                      </div>
+                      <div class="action-cluster">
+                        <span class="icon-pill">+文件</span>
+                        <span class="icon-pill">+目录</span>
+                        <span class="icon-pill">收起</span>
+                      </div>
+                    </div>
+                    <div class="body-list">
+                      <div class="file-node">
+                        <span class="caret">▾</span>
+                        <span class="file-icon">⌂</span>
+                        <strong>packages</strong>
+                      </div>
+                      <div class="file-node">
+                        <span class="caret">▸</span>
+                        <span class="file-icon">⌂</span>
+                        <strong>core</strong>
+                      </div>
+                      <div class="file-node active">
+                        <span class="caret">•</span>
+                        <span class="file-icon file">▤</span>
+                        <strong>README.md</strong>
+                        <span class="file-meta">active</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="mock-note">
+              `Open Editors` 和 `Workspace`
+              回到同一种 section 语法。动作不再飘在标题外，文件树和 section header 重新长成一个连续工具面。
+            </p>
+          </article>
+
+          <article class="mock-card">
+            <div class="mock-title">
+              <h3>Search</h3>
+              <span class="shot-tag">重做版</span>
+            </div>
+            <div class="desktop-shell">
+              <aside class="rail">
+                <span class="rail-btn">⌘</span>
+                <span class="rail-btn active">⌕</span>
+                <span class="rail-btn">⑂</span>
+              </aside>
+              <div class="mock-panel">
+                <div class="stack">
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▾</span>
+                        <span class="section-name">查询</span>
+                      </div>
+                      <div class="action-cluster">
+                        <span class="icon-pill">替换</span>
+                      </div>
+                    </div>
+                    <div class="anatomy-body">
+                      <div class="panel-input">搜索文件内容</div>
+                      <div class="filter-row">
+                        <span class="filter-chip active">全部</span>
+                        <span class="filter-chip">文件名</span>
+                        <span class="filter-chip">区分大小写</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▾</span>
+                        <span class="section-name">结果</span>
+                        <span class="count">12</span>
+                      </div>
+                      <div class="action-cluster">
+                        <span class="icon-pill">清空</span>
+                      </div>
+                    </div>
+
+                    <div class="group-body">
+                      <div class="group-head">
+                        <div class="section-left">
+                          <span class="caret">▾</span>
+                          <span>packages/web/src/app.tsx</span>
+                        </div>
+                        <span>4</span>
+                      </div>
+                      <div class="body-list">
+                        <div class="row active">
+                          <div class="row-left">
+                            <strong>24</strong>
+                            <span class="code-preview">const <mark>searchQuery</mark> = workspacePanelState.query;</span>
+                          </div>
+                          <span>match</span>
+                        </div>
+                        <div class="row">
+                          <div class="row-left">
+                            <strong>86</strong>
+                            <span class="code-preview">return <mark>searchQuery</mark>.trim() ? results : [];</span>
+                          </div>
+                          <span>match</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="group-body">
+                      <div class="group-head">
+                        <div class="section-left">
+                          <span class="caret">▸</span>
+                          <span>packages/web/src/tree.tsx</span>
+                        </div>
+                        <span>2</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="mock-note">
+              Search 也使用同一套 section grammar，但必须保留当前真实能力：按文件分组、每个文件组可展开/收起、每条结果展示行号与命中内容预览，并高亮命中片段。
+            </p>
+          </article>
+
+          <article class="mock-card">
+            <div class="mock-title">
+              <h3>Git</h3>
+              <span class="shot-tag">重做版</span>
+            </div>
+            <div class="desktop-shell">
+              <aside class="rail">
+                <span class="rail-btn">⌘</span>
+                <span class="rail-btn">⌕</span>
+                <span class="rail-btn active">⑂</span>
+              </aside>
+              <div class="mock-panel">
+                <div class="stack">
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▾</span>
+                        <span class="section-name">提交</span>
+                      </div>
+                      <div class="action-cluster">
+                        <span class="icon-pill">提交</span>
+                      </div>
+                    </div>
+                    <div class="anatomy-body">
+                      <div class="panel-input large">输入提交信息…</div>
+                    </div>
+                  </div>
+
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▾</span>
+                        <span class="section-name">更改</span>
+                        <span class="count">2</span>
+                      </div>
+                      <div class="action-cluster">
+                        <span class="icon-pill">暂存全部</span>
+                      </div>
+                    </div>
+                    <div class="body-list">
+                      <div class="row active">
+                        <div class="row-left">
+                          <span class="status modified">M</span>
+                          <strong>app.tsx</strong>
+                        </div>
+                        <span>packages/web/…</span>
+                      </div>
+                      <div class="row">
+                        <div class="row-left">
+                          <span class="status added">A</span>
+                          <strong>index.ts</strong>
+                        </div>
+                        <span>e2e-ui/…</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="section-shell">
+                    <div class="section-head">
+                      <div class="section-left">
+                        <span class="caret">▸</span>
+                        <span class="section-name">历史</span>
+                        <span class="count">0</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="mock-note">
+              Git 不再是“上面一个表单、下面几个列表”。commit 区更紧，下面所有 row 和 section 与 Explorer / Search 完全同一家。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <div>
+            <h2>重做版 Mock / Mobile</h2>
+          </div>
+          <p>
+            移动端保留三视图切换，但不再做成另一套更软的 app。section grammar、
+            action cluster、selected row 继续沿用桌面 grammar，只把点击热区拉到触控尺寸。
+          </p>
+        </div>
+
+        <div class="phone-grid">
+          <article class="phone-card">
+            <div class="mock-title">
+              <h3>Mobile Explorer</h3>
+              <span class="shot-tag">重做版</span>
+            </div>
+            <div class="phone-shell">
+              <div class="phone-top">
+                <div class="phone-nav">
+                  <span>← 返回</span>
+                </div>
+              </div>
+              <div class="phone-body">
+                <div class="tab-strip">
+                  <span class="tab-pill active">⌘</span>
+                  <span class="tab-pill">⌕</span>
+                  <span class="tab-pill">⑂</span>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▾</span>
+                      <span class="section-name">快速跳转</span>
+                    </div>
+                  </div>
+                  <div class="panel-input">输入文件名或路径</div>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▸</span>
+                      <span class="section-name">打开的编辑器</span>
+                      <span class="count">0</span>
+                    </div>
+                    <div class="action-cluster">
+                      <span class="icon-pill">全部关闭</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▾</span>
+                      <span class="section-name">工作区</span>
+                    </div>
+                    <div class="action-cluster">
+                      <span class="icon-pill">+文件</span>
+                      <span class="icon-pill">+目录</span>
+                    </div>
+                  </div>
+                  <div class="body-list">
+                    <div class="file-node touch-row">
+                      <span class="caret">▾</span>
+                      <span class="file-icon">⌂</span>
+                      <strong>packages</strong>
+                    </div>
+                    <div class="file-node touch-row active">
+                      <span class="caret">•</span>
+                      <span class="file-icon file">▤</span>
+                      <strong>README.md</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="mock-note">
+              Quick Jump、Open Editors、Workspace 三块最终像一个系统，不再是三块被分别框起来的小卡片。
+            </p>
+          </article>
+
+          <article class="phone-card">
+            <div class="mock-title">
+              <h3>Mobile Search</h3>
+              <span class="shot-tag">重做版</span>
+            </div>
+            <div class="phone-shell">
+              <div class="phone-top">
+                <div class="phone-nav">
+                  <span>← 返回</span>
+                </div>
+              </div>
+              <div class="phone-body">
+                <div class="tab-strip">
+                  <span class="tab-pill">⌘</span>
+                  <span class="tab-pill active">⌕</span>
+                  <span class="tab-pill">⑂</span>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▾</span>
+                      <span class="section-name">查询</span>
+                    </div>
+                  </div>
+                  <div class="anatomy-body">
+                    <div class="panel-input">搜索文件内容</div>
+                    <div class="filter-row">
+                      <span class="filter-chip active">全部</span>
+                      <span class="filter-chip">文件名</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▾</span>
+                      <span class="section-name">结果</span>
+                      <span class="count">12</span>
+                    </div>
+                  </div>
+                  <div class="group-body">
+                    <div class="group-head">
+                      <div class="section-left">
+                        <span class="caret">▾</span>
+                        <span>app.tsx</span>
+                      </div>
+                      <span>4</span>
+                    </div>
+                    <div class="body-list">
+                      <div class="row active touch-row">
+                        <div class="row-left">
+                          <strong>24</strong>
+                          <span class="code-preview">const <mark>searchQuery</mark> = workspacePanelState.query;</span>
+                        </div>
+                      </div>
+                      <div class="row touch-row">
+                        <div class="row-left">
+                          <strong>86</strong>
+                          <span class="code-preview">return <mark>searchQuery</mark>.trim() ? results : [];</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="group-body">
+                    <div class="group-head">
+                      <div class="section-left">
+                        <span class="caret">▸</span>
+                        <span>tree.tsx</span>
+                      </div>
+                      <span>2</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="mock-note">
+              Search 在移动端也必须保留当前真实能力：文件分组折叠、行号、命中内容预览和命中高亮，只是换成统一后的 panel grammar。
+            </p>
+          </article>
+
+          <article class="phone-card">
+            <div class="mock-title">
+              <h3>Mobile Git</h3>
+              <span class="shot-tag">重做版</span>
+            </div>
+            <div class="phone-shell">
+              <div class="phone-top">
+                <div class="phone-nav">
+                  <span>← 返回</span>
+                </div>
+              </div>
+              <div class="phone-body">
+                <div class="tab-strip">
+                  <span class="tab-pill">⌘</span>
+                  <span class="tab-pill">⌕</span>
+                  <span class="tab-pill active">⑂</span>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▾</span>
+                      <span class="section-name">提交</span>
+                    </div>
+                    <div class="action-cluster">
+                      <span class="icon-pill">提交</span>
+                    </div>
+                  </div>
+                  <div class="panel-input large">输入提交信息…</div>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▾</span>
+                      <span class="section-name">更改</span>
+                      <span class="count">2</span>
+                    </div>
+                  </div>
+                  <div class="body-list">
+                    <div class="row active touch-row">
+                      <div class="row-left">
+                        <span class="status modified">M</span>
+                        <strong>app.tsx</strong>
+                      </div>
+                    </div>
+                    <div class="row touch-row">
+                      <div class="row-left">
+                        <span class="status added">A</span>
+                        <strong>index.ts</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="section-shell">
+                  <div class="section-head">
+                    <div class="section-left">
+                      <span class="caret">▸</span>
+                      <span class="section-name">历史</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="mock-note">
+              Git 在移动端也回到更干净的工具面语气，不再上半块像表单、下半块像另一个列表系统。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">
+          <div>
+            <h2>如果三块一起改，方向就是这个</h2>
+          </div>
+          <p>
+            这不是单独修 Explorer，也不是让 Git 做唯一模板，而是建立一个真正可复用的 panel system。
+          </p>
+        </div>
+
+        <div class="decision-strip">
+          <article class="note-card">
+            <h3>1. Explorer 成为基础语法</h3>
+            <p>
+              `Open Editors / Workspace` 都收敛到统一 section grammar，文件树 row 作为所有列表行的基线。
+            </p>
+          </article>
+          <article class="note-card">
+            <h3>2. Search 回归同一家</h3>
+            <p>
+              输入、过滤、结果组、匹配行全部对齐统一 grammar，不再像塞进 sidebar 的独立工具页。
+            </p>
+          </article>
+          <article class="note-card">
+            <h3>3. Git 只保留能力，不保留碎感</h3>
+            <p>
+              commit 区缩短，changes / history / worktrees 全部落回共享 section 与 row 语言。
+            </p>
+          </article>
+          <article class="note-card">
+            <h3>4. Mobile 继承 grammar，不继承混乱</h3>
+            <p>
+              触控尺寸放大，但继续用同一套 section、control、row、selected contract。
+            </p>
+          </article>
+        </div>
+
+        <p class="footer-note">
+          建议你先直接打开下面这个离线文件看整体感受，再决定要不要进入正式 spec：
+          <span class="inline-code">docs/superpowers/reviews/2026-05-27-workspace-panel-balanced-workbench.html</span>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

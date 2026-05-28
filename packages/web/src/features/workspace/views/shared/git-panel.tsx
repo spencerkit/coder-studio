@@ -1,7 +1,7 @@
 import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
 import { atom, useAtom, useAtomValue } from "jotai";
 import { atomFamily } from "jotai-family";
-import { ChevronDown, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { FC, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -21,6 +21,7 @@ import {
 } from "../../actions/use-git-actions";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
 import type { GitDiffPreview } from "../../atoms";
+import { getFileNodeSemantic } from "./file-tree-icon-semantics";
 import { WorktreeManagerSurface } from "./worktree-manager-surface";
 
 const gitPanelEmptyStateStyle = {
@@ -56,6 +57,10 @@ interface GitPanelProps {
   workspaceId: string;
   refreshToken?: number;
   onPreviewOpen?: (preview: GitDiffPreview) => void;
+  toolbarAction?: {
+    action: "refresh" | "stage-all" | "unstage-all" | "discard-all" | "commit";
+    nonce: number;
+  } | null;
   variant?: "desktop" | "mobile";
 }
 
@@ -64,28 +69,14 @@ interface GitPanelState {
   worktreeSurfaceView: "create" | null;
   worktreesExpanded: boolean;
   historyExpanded: boolean;
-  collapsedGroups: Record<string, boolean>;
 }
 
-function createInitialCollapsedGroups(isMobile: boolean): Record<string, boolean> {
-  return isMobile
-    ? {
-        staged: false,
-        changes: true,
-      }
-    : {
-        staged: false,
-        changes: false,
-      };
-}
-
-function createInitialGitPanelState(isMobile: boolean): GitPanelState {
+function createInitialGitPanelState(): GitPanelState {
   return {
     pendingWorktreeDeletePath: null,
     worktreeSurfaceView: null,
     worktreesExpanded: false,
     historyExpanded: false,
-    collapsedGroups: createInitialCollapsedGroups(isMobile),
   };
 }
 
@@ -93,14 +84,15 @@ function getGitPanelStateKey(workspaceId: string, variant: "desktop" | "mobile")
   return `${workspaceId}::${variant}`;
 }
 
-const gitPanelStateAtomFamily = atomFamily((stateKey: string) =>
-  atom<GitPanelState>(createInitialGitPanelState(stateKey.endsWith("::mobile")))
+const gitPanelStateAtomFamily = atomFamily((_stateKey: string) =>
+  atom<GitPanelState>(createInitialGitPanelState())
 );
 
 export const GitPanel: FC<GitPanelProps> = ({
   workspaceId,
   refreshToken = 0,
   onPreviewOpen,
+  toolbarAction = null,
   variant = "desktop",
 }) => {
   const isMobile = variant === "mobile";
@@ -121,11 +113,12 @@ export const GitPanel: FC<GitPanelProps> = ({
     setCommitMessage,
     handleCancelDiscard,
     handleCommit,
+    handleDiscardAll,
     handleConfirmDiscard,
-    handleRequestDiscardPaths,
     handleRequestDiscardSingle,
-    handleStagePaths,
-    handleUnstagePaths,
+    handleStageAll,
+    handleUnstageAll,
+    loadGitStatus,
     openHistoryDiff,
     openDiff,
     runGitMutation,
@@ -138,17 +131,15 @@ export const GitPanel: FC<GitPanelProps> = ({
   const { currentWorktree, hasWorkspace, list, loadWorktrees, openWorktree, removeWorktreeByPath } =
     useWorktreeManagementActions(workspaceId);
   const worktreeAutoLoadAttemptedRef = useRef(false);
-  const {
-    collapsedGroups,
-    historyExpanded,
-    pendingWorktreeDeletePath,
-    worktreeSurfaceView,
-    worktreesExpanded,
-  } = panelState;
+  const { historyExpanded, pendingWorktreeDeletePath, worktreeSurfaceView, worktreesExpanded } =
+    panelState;
   const pendingWorktreeDelete = useMemo(
     () => list.items.find((item) => item.path === pendingWorktreeDeletePath) ?? null,
     [list.items, pendingWorktreeDeletePath]
   );
+  const totalChangeCount = groups.reduce((count, group) => count + group.changes.length, 0);
+  const worktreesSectionLabel = `${t("worktree.list_title")}${list.items.length}`;
+  const historySectionLabel = `${t("git.history")}${history.length}`;
 
   useEffect(() => {
     worktreeAutoLoadAttemptedRef.current = false;
@@ -170,6 +161,47 @@ export const GitPanel: FC<GitPanelProps> = ({
 
   const stagedCount = gitState?.staged.length ?? 0;
   const canCommit = Boolean(commitMessage.trim()) && stagedCount > 0;
+  const shouldRenderWorktreeSection =
+    hasWorkspace ||
+    list.items.length > 0 ||
+    list.loading ||
+    list.error != null ||
+    worktreeSurfaceView === "create" ||
+    pendingWorktreeDelete !== null;
+  const showWorktreeCount = !isMobile || list.items.length > 0;
+  const showHistoryCount = !isMobile || history.length > 0;
+
+  useEffect(() => {
+    if (!toolbarAction || variant !== "desktop") {
+      return;
+    }
+
+    switch (toolbarAction.action) {
+      case "refresh":
+        void loadGitStatus();
+        break;
+      case "stage-all":
+        void handleStageAll();
+        break;
+      case "unstage-all":
+        void handleUnstageAll();
+        break;
+      case "discard-all":
+        handleDiscardAll();
+        break;
+      case "commit":
+        void handleCommit();
+        break;
+    }
+  }, [
+    handleCommit,
+    handleDiscardAll,
+    handleStageAll,
+    handleUnstageAll,
+    loadGitStatus,
+    toolbarAction,
+    variant,
+  ]);
 
   const handleWorktreeOpen = async (worktree: WorktreeInfo) => {
     if (currentWorktree?.path === worktree.path) {
@@ -190,194 +222,177 @@ export const GitPanel: FC<GitPanelProps> = ({
     <>
       <div className={`git-panel git-panel--${variant}`}>
         <div className="git-panel-scroll">
-          <section className="git-commit-block">
-            <Textarea
-              className="git-commit-input"
-              placeholder={t("git.commit_summary_placeholder")}
-              value={commitMessage}
-              onChange={(event) => setCommitMessage(event.target.value)}
-              rows={3}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                  event.preventDefault();
-                  void handleCommit();
-                }
-              }}
-            />
-
-            <div className="git-commit-actions">
-              <Tooltip content={canCommit ? t("git.commit") : t("git.nothing_staged")}>
-                <button
-                  className="git-commit-primary"
-                  onClick={() => void handleCommit()}
-                  disabled={!canCommit}
-                  type="button"
-                >
-                  <span>{t("git.commit")}</span>
-                  <ThemedIcon semantic="git.commit" size={14} />
-                </button>
-              </Tooltip>
-            </div>
-          </section>
-
-          <section className="git-panel-section">
+          <section className="git-panel-section git-commit-block">
             <div className="git-panel-section-header">
-              <button
-                type="button"
-                className="git-panel-section-toggle"
-                onClick={() =>
-                  setPanelState((current) => ({
-                    ...current,
-                    worktreesExpanded: !current.worktreesExpanded,
-                  }))
-                }
-                aria-expanded={worktreesExpanded}
-              >
-                <span>{t("worktree.list_title")}</span>
-                <span className="git-panel-section-count">{list.items.length}</span>
-                <span
-                  className={`git-panel-section-chevron ${worktreesExpanded ? "expanded" : ""}`}
-                >
+              <div className="git-panel-section-toggle git-panel-section-toggle-static">
+                <span className="git-panel-section-chevron expanded" aria-hidden="true">
                   <ChevronDown size={14} />
                 </span>
-              </button>
-              <button
-                type="button"
-                className="git-panel-section-link"
-                onClick={() =>
-                  setPanelState((current) => ({
-                    ...current,
-                    worktreeSurfaceView: "create",
-                  }))
-                }
-              >
-                <ThemedIcon semantic="worktree.action.new" size={12} />
-                <span>{t("worktree.new")}</span>
-              </button>
+                <span>{t("git.commit")}</span>
+              </div>
+              <div className="git-panel-section-actions git-commit-actions">
+                <Tooltip content={canCommit ? t("git.commit") : t("git.nothing_staged")}>
+                  <button
+                    className="git-commit-primary"
+                    onClick={() => void handleCommit()}
+                    disabled={!canCommit}
+                    type="button"
+                  >
+                    <span>{t("git.commit")}</span>
+                    <ThemedIcon semantic="git.commit" size={14} />
+                  </button>
+                </Tooltip>
+              </div>
             </div>
 
-            {worktreesExpanded ? (
-              <div className="git-panel-section-body">
-                {list.loading && list.items.length === 0 ? (
-                  <GitPanelEmptyState title={t("worktree.loading")} />
-                ) : list.error ? (
-                  <GitPanelEmptyState
-                    action={
-                      <button
-                        type="button"
-                        className="git-panel-section-link"
-                        onClick={() => void loadWorktrees()}
-                      >
-                        {t("action.refresh")}
-                      </button>
-                    }
-                    title={list.error}
-                  />
-                ) : list.items.length === 0 ? (
-                  <GitPanelEmptyState title={t("worktree.list_empty")} />
-                ) : (
-                  list.items.map((worktree, index) => {
-                    const isCurrent = currentWorktree?.path === worktree.path;
-                    const isPrimary = index === 0;
-                    const isRemovable = !isCurrent && !isPrimary;
-
-                    return (
-                      <div
-                        key={worktree.path}
-                        className={`git-worktree-row ${isCurrent ? "active" : ""}`}
-                      >
-                        <button
-                          type="button"
-                          className={`git-worktree-row__main workspace-sidebar-row ${
-                            isCurrent ? "workspace-sidebar-row--selected" : ""
-                          }`}
-                          onClick={() => void handleWorktreeOpen(worktree)}
-                        >
-                          <span
-                            className={`git-worktree-row__dot git-worktree-row__dot-${worktree.status}`}
-                            aria-hidden="true"
-                          />
-                          <span className="git-worktree-row__name">{worktree.name}</span>
-                          <span className="git-worktree-row__tail">
-                            <span className="git-worktree-row__status">
-                              {worktree.status === "clean"
-                                ? t("worktree.clean")
-                                : t("worktree.dirty_status")}
-                            </span>
-                            {isCurrent ? (
-                              <span className="git-worktree-row__chip">
-                                {t("worktree.current")}
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                        {isRemovable ? (
-                          <IconButton
-                            aria-label={t("worktree.remove_row_label", { name: worktree.name })}
-                            className="git-worktree-row__delete"
-                            icon={<Trash2 size={12} />}
-                            onClick={() =>
-                              setPanelState((current) => ({
-                                ...current,
-                                pendingWorktreeDeletePath: worktree.path,
-                              }))
-                            }
-                            size="sm"
-                            variant="ghost"
-                          />
-                        ) : null}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            ) : null}
+            <div className="git-panel-section-body git-commit-body">
+              <Textarea
+                className="git-commit-input"
+                placeholder={t("git.commit_summary_placeholder")}
+                value={commitMessage}
+                onChange={(event) => setCommitMessage(event.target.value)}
+                rows={isMobile ? 3 : 1}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    void handleCommit();
+                  }
+                }}
+              />
+            </div>
           </section>
 
-          <div className="git-panel-groups">
-            {gitState ? (
-              groups.length > 0 ? (
-                groups.map((group) => (
-                  <GitChangeGroup
-                    key={group.title}
-                    title={group.title}
-                    changes={group.changes}
-                    mobile={isMobile}
-                    collapsed={collapsedGroups[group.title] ?? false}
-                    selectedPath={diffPreview?.path ?? null}
-                    onToggleCollapsed={() =>
-                      setPanelState((current) => ({
-                        ...current,
-                        collapsedGroups: {
-                          ...current.collapsedGroups,
-                          [group.title]: !(current.collapsedGroups[group.title] ?? false),
-                        },
-                      }))
-                    }
-                    onStageAll={async () => {
-                      if (group.title === "staged") {
-                        await handleUnstagePaths(group.changes.map(({ change }) => change.path));
-                        return;
-                      }
+          {shouldRenderWorktreeSection ? (
+            <section className="git-panel-section">
+              <div className="git-panel-section-header">
+                <button
+                  type="button"
+                  className="git-panel-section-toggle"
+                  onClick={() =>
+                    setPanelState((current) => ({
+                      ...current,
+                      worktreesExpanded: !current.worktreesExpanded,
+                    }))
+                  }
+                  aria-expanded={worktreesExpanded}
+                  aria-label={worktreesSectionLabel}
+                >
+                  <span className="git-panel-section-chevron">
+                    {worktreesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                  <span>{t("worktree.list_title")}</span>
+                  {showWorktreeCount ? (
+                    <span className="git-panel-section-count">{list.items.length}</span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  className="git-panel-section-link"
+                  onClick={() =>
+                    setPanelState((current) => ({
+                      ...current,
+                      worktreeSurfaceView: "create",
+                    }))
+                  }
+                >
+                  <ThemedIcon semantic="worktree.action.new" size={12} />
+                  <span>{t("worktree.new")}</span>
+                </button>
+              </div>
 
-                      await handleStagePaths(group.changes.map(({ change }) => change.path));
-                    }}
-                    onDiscardAll={() =>
-                      handleRequestDiscardPaths(group.changes.map(({ change }) => change.path))
-                    }
-                    onViewDiff={openDiff}
-                    onRunMutation={runGitMutation}
-                    onRequestDiscard={handleRequestDiscardSingle}
-                    workspaceId={workspaceId}
-                  />
-                ))
-              ) : (
-                <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
-              )
-            ) : (
-              <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
-            )}
-          </div>
+              {worktreesExpanded ? (
+                <div className="git-panel-section-body">
+                  {list.loading && list.items.length === 0 ? (
+                    <GitPanelEmptyState title={t("worktree.loading")} />
+                  ) : list.error ? (
+                    <GitPanelEmptyState
+                      action={
+                        <button
+                          type="button"
+                          className="git-panel-section-link"
+                          onClick={() => void loadWorktrees()}
+                        >
+                          {t("action.refresh")}
+                        </button>
+                      }
+                      title={list.error}
+                    />
+                  ) : list.items.length === 0 ? (
+                    <GitPanelEmptyState title={t("worktree.list_empty")} />
+                  ) : (
+                    list.items.map((worktree, index) => {
+                      const isCurrent = currentWorktree?.path === worktree.path;
+                      const isPrimary = index === 0;
+                      const isRemovable = !isCurrent && !isPrimary;
+
+                      return (
+                        <div
+                          key={worktree.path}
+                          className={`git-worktree-row ${isCurrent ? "active" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            className={`git-worktree-row__main workspace-sidebar-row ${
+                              isCurrent ? "workspace-sidebar-row--selected" : ""
+                            }`}
+                            onClick={() => void handleWorktreeOpen(worktree)}
+                          >
+                            <span
+                              className={`git-worktree-row__dot git-worktree-row__dot-${worktree.status}`}
+                              aria-hidden="true"
+                            />
+                            <span className="git-worktree-row__name">{worktree.name}</span>
+                            <span className="git-worktree-row__tail">
+                              <span className="git-worktree-row__status">
+                                {worktree.status === "clean"
+                                  ? t("worktree.clean")
+                                  : t("worktree.dirty_status")}
+                              </span>
+                              {isCurrent ? (
+                                <span className="git-worktree-row__chip">
+                                  {t("worktree.current")}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                          {isRemovable ? (
+                            <IconButton
+                              aria-label={t("worktree.remove_row_label", { name: worktree.name })}
+                              className="git-worktree-row__delete"
+                              icon={<Trash2 size={12} />}
+                              onClick={() =>
+                                setPanelState((current) => ({
+                                  ...current,
+                                  pendingWorktreeDeletePath: worktree.path,
+                                }))
+                              }
+                              size="sm"
+                              variant="ghost"
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          <GitChangesSection
+            groups={groups}
+            totalCount={totalChangeCount}
+            isLoading={isLoading}
+            mobile={isMobile}
+            selectedPath={diffPreview?.path ?? null}
+            onStageAll={handleStageAll}
+            onUnstageAll={handleUnstageAll}
+            onDiscardAll={handleDiscardAll}
+            onViewDiff={openDiff}
+            onRunMutation={runGitMutation}
+            onRequestDiscard={handleRequestDiscardSingle}
+            workspaceId={workspaceId}
+          />
 
           <section className="git-panel-section git-panel-section-history">
             <div className="git-panel-section-header">
@@ -391,11 +406,15 @@ export const GitPanel: FC<GitPanelProps> = ({
                   }))
                 }
                 aria-expanded={historyExpanded}
+                aria-label={historySectionLabel}
               >
-                <span>{t("git.history")}</span>
-                <span className={`git-panel-section-chevron ${historyExpanded ? "expanded" : ""}`}>
-                  <ChevronDown size={14} />
+                <span className="git-panel-section-chevron">
+                  {historyExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
+                <span>{t("git.history")}</span>
+                {showHistoryCount ? (
+                  <span className="git-panel-section-count">{history.length}</span>
+                ) : null}
               </button>
             </div>
 
@@ -483,10 +502,10 @@ export const GitPanel: FC<GitPanelProps> = ({
   );
 };
 
-interface GitChangeGroupProps {
-  title: string;
-  changes: GitPanelChangeItem[];
-  collapsed: boolean;
+interface GitChangesSectionProps {
+  groups: Array<{ title: string; changes: GitPanelChangeItem[] }>;
+  totalCount: number;
+  isLoading: boolean;
   mobile: boolean;
   selectedPath: string | null;
   workspaceId: string;
@@ -500,14 +519,14 @@ interface GitChangeGroupProps {
     afterSuccess?: () => void
   ) => Promise<boolean>;
   onStageAll: () => Promise<void>;
-  onToggleCollapsed: () => void;
+  onUnstageAll: () => Promise<void>;
   onViewDiff: (change: GitFileChange, type: GitChangeType) => Promise<void>;
 }
 
-const GitChangeGroup: FC<GitChangeGroupProps> = ({
-  title,
-  changes,
-  collapsed,
+const GitChangesSection: FC<GitChangesSectionProps> = ({
+  groups,
+  totalCount,
+  isLoading,
   mobile,
   selectedPath,
   workspaceId,
@@ -515,45 +534,50 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
   onRequestDiscard,
   onRunMutation,
   onStageAll,
-  onToggleCollapsed,
+  onUnstageAll,
   onViewDiff,
 }) => {
   const t = useTranslation();
-  const titleKey = title === "staged" ? "git.staged" : "git.changes";
-  const stageActionLabel = title === "staged" ? t("git.unstage_all") : t("git.stage_all");
+  const hasStaged = groups.some((group) => group.title === "staged" && group.changes.length > 0);
+  const hasUnstaged = groups.some((group) => group.title === "changes" && group.changes.length > 0);
+  const changes = groups.flatMap((group) => group.changes);
 
   return (
     <section className="git-panel-section git-panel-section-changes">
       <div className="git-panel-section-header">
-        <button
-          type="button"
-          className="git-panel-section-toggle"
-          onClick={onToggleCollapsed}
-          aria-expanded={!collapsed}
-        >
-          <span>{t(titleKey)}</span>
-          <span className="git-panel-section-count">{changes.length}</span>
-          <span className={`git-panel-section-chevron ${collapsed ? "" : "expanded"}`}>
+        <div className="git-panel-section-toggle git-panel-section-toggle-static">
+          <span className="git-panel-section-chevron expanded" aria-hidden="true">
             <ChevronDown size={14} />
           </span>
-        </button>
+          <span>{t("git.changes")}</span>
+          <span className="git-panel-section-count">{totalCount}</span>
+        </div>
         <div className="git-panel-section-actions">
-          <Tooltip content={stageActionLabel}>
-            <button
-              type="button"
-              className="git-panel-section-link"
-              onClick={() => void onStageAll()}
-            >
-              {stageActionLabel}
-            </button>
-          </Tooltip>
-          {title === "changes" ? (
-            <Tooltip content={t("git.discard_all")}>
+          {hasStaged ? (
+            <Tooltip content={t("git.unstage_all")}>
               <button
                 type="button"
                 className="git-panel-section-link"
-                onClick={() => void onDiscardAll()}
+                onClick={() => void onUnstageAll()}
               >
+                {t("git.unstage_all")}
+              </button>
+            </Tooltip>
+          ) : null}
+          {hasUnstaged ? (
+            <Tooltip content={t("git.stage_all")}>
+              <button
+                type="button"
+                className="git-panel-section-link"
+                onClick={() => void onStageAll()}
+              >
+                {t("git.stage_all")}
+              </button>
+            </Tooltip>
+          ) : null}
+          {totalCount > 0 ? (
+            <Tooltip content={t("git.discard_all")}>
+              <button type="button" className="git-panel-section-link" onClick={onDiscardAll}>
                 {t("git.discard_all")}
               </button>
             </Tooltip>
@@ -561,9 +585,11 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
         </div>
       </div>
 
-      {collapsed ? null : (
-        <div className="git-panel-section-body">
-          {changes.map(({ change, type }) => (
+      <div className="git-panel-section-body git-panel-section-body--changes">
+        {totalCount === 0 ? (
+          <GitPanelEmptyState title={isLoading ? t("common.loading") : t("git.no_changes")} />
+        ) : (
+          changes.map(({ change, type }) => (
             <GitChangeRow
               key={`${type}:${change.path}`}
               change={change}
@@ -575,9 +601,9 @@ const GitChangeGroup: FC<GitChangeGroupProps> = ({
               onRunMutation={onRunMutation}
               onRequestDiscard={onRequestDiscard}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </section>
   );
 };
@@ -612,11 +638,25 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
   const t = useTranslation();
   const pathParts = useMemo(() => change.path.split("/"), [change.path]);
   const fileName = pathParts[pathParts.length - 1] ?? change.path;
-  const dirName = pathParts.length > 1 ? `${pathParts.slice(0, -1).join("/")}/` : "";
+  const rawDirName = pathParts.length > 1 ? pathParts.slice(0, -1).join("/") : "";
+  const dirName = rawDirName ? `${rawDirName}/` : "";
+  const compactDirName =
+    rawDirName.length > 14 ? `${rawDirName.split("/").slice(0, 2).join("/")}/…` : dirName;
   const toggleStageLabel = type === "staged" ? t("git.unstage") : t("git.stage");
   const discardLabel = t("git.discard");
   const toggleStageIcon = type === "staged" ? <Minus size={12} /> : <Plus size={12} />;
-  const semantic = getChangeSemantic(change, type);
+  const fileSemantic = getFileNodeSemantic(
+    {
+      kind: "file",
+      name: fileName,
+      path: change.path,
+    },
+    false
+  );
+  const statusSemantic = getChangeSemantic(change, type);
+  const status = getResolvedChangeStatus(change, type);
+  const badgeClass = type === "staged" ? "staged" : getStatusBadgeClass(status);
+  const badgeLabel = getStatusBadgeLabel(status, type);
 
   const handleToggleStage = async () => {
     if (type === "staged") {
@@ -663,16 +703,24 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       }}
     >
       <span className="git-row-icon" aria-hidden="true">
-        <ThemedIcon semantic={semantic} size={13} />
+        <ThemedIcon semantic={fileSemantic} size={13} />
+      </span>
+
+      <span className="git-row-status-icon" aria-hidden="true">
+        <ThemedIcon semantic={statusSemantic} size={13} />
       </span>
 
       <div className="git-row-content">
         <span className="git-row-name">{fileName}</span>
         <span className="git-row-meta">
-          {dirName ? <span className="git-row-dir">{dirName}</span> : null}
+          {compactDirName ? <span className="git-row-dir">{compactDirName}</span> : null}
           {change.oldPath ? <span className="git-row-rename">{change.oldPath}</span> : null}
         </span>
       </div>
+
+      <span className={`git-status-badge ${badgeClass}`} aria-hidden="true">
+        {badgeLabel}
+      </span>
 
       <div className="git-row-actions">
         <Tooltip content={toggleStageLabel}>
@@ -815,12 +863,48 @@ function getChangeSemantic(change: GitFileChange, type: GitChangeType) {
     case "deleted":
       return "git.status.deleted";
     case "untracked":
-      return "git.status.untracked";
     case "added":
+      return "git.status.untracked";
     case "renamed":
     case "modified":
     default:
       return type === "staged" ? "git.status.staged" : "git.status.modified";
+  }
+}
+
+function getStatusBadgeClass(status: ReturnType<typeof getResolvedChangeStatus>): string {
+  switch (status) {
+    case "deleted":
+      return "deleted";
+    case "untracked":
+    case "added":
+      return "untracked";
+    case "renamed":
+    case "modified":
+    default:
+      return "modified";
+  }
+}
+
+function getStatusBadgeLabel(
+  status: ReturnType<typeof getResolvedChangeStatus>,
+  type: GitChangeType
+): string {
+  if (type === "staged") {
+    return "S";
+  }
+
+  switch (status) {
+    case "deleted":
+      return "D";
+    case "untracked":
+    case "added":
+      return "A";
+    case "renamed":
+      return "R";
+    case "modified":
+    default:
+      return "M";
   }
 }
 

@@ -53,6 +53,7 @@ const WorkspaceDesktopScene: FC = () => {
     workspace,
     bottomPanelHeight,
     bottomPanelRef,
+    panelRefreshToken,
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
   const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
@@ -123,17 +124,22 @@ const WorkspaceDesktopScene: FC = () => {
                       onCreateRequestConsumed={handleConsumeCreateRequest}
                       onOpenFileCreate={handleOpenFileCreate}
                       onOpenFolderCreate={handleOpenFolderCreate}
+                      refreshToken={panelRefreshToken}
                     />
                   ) : null}
 
                   {activeSidebarView === "search" ? (
-                    <SearchPanel workspaceId={workspace.id} />
+                    <SearchPanel workspaceId={workspace.id} refreshToken={panelRefreshToken} />
                   ) : null}
 
                   {activeSidebarView === "source-control" ? (
                     <div className="workspace-sidebar-view">
                       <div className="workspace-sidebar-panel__body">
-                        <GitPanel workspaceId={workspace.id} variant="desktop" />
+                        <GitPanel
+                          workspaceId={workspace.id}
+                          refreshToken={panelRefreshToken}
+                          variant="desktop"
+                        />
                       </div>
                     </div>
                   ) : null}

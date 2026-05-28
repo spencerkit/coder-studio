@@ -12,6 +12,17 @@ import { SearchPanel } from "./search-panel";
 describe("SearchPanel", () => {
   const singleMatchCountPattern = /1.*(?:matches|条匹配)/i;
 
+  function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function fileGroupNamePattern(path: string, name: string) {
+    return new RegExp(
+      `${escapeRegExp(path)}.*${escapeRegExp(name)}.*${singleMatchCountPattern.source}`,
+      "i"
+    );
+  }
+
   function renderSearchPanel(sendCommand: ReturnType<typeof vi.fn>) {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
@@ -137,7 +148,7 @@ describe("SearchPanel", () => {
     await searchFor("needle");
 
     const groupHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
 
     expect(groupHeader).toHaveAttribute("aria-expanded", "true");
@@ -181,7 +192,7 @@ describe("SearchPanel", () => {
     );
 
     const groupHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
     const matchRow = screen.getByRole("button", { name: /12.*needle/i });
     const mark = matchRow.querySelector("mark");
@@ -222,7 +233,7 @@ describe("SearchPanel", () => {
     await searchFor("needle");
 
     const groupHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
 
     fireEvent.click(groupHeader);
@@ -310,7 +321,7 @@ describe("SearchPanel", () => {
     await searchFor("needle");
 
     const firstHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
 
     fireEvent.click(firstHeader);
@@ -319,10 +330,10 @@ describe("SearchPanel", () => {
     await searchFor("thread");
 
     const appHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
     const workerHeader = screen.getByRole("button", {
-      name: new RegExp(`worker\\.ts.*src/worker\\.ts.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/worker.ts", "worker.ts"),
     });
 
     expect(appHeader).toHaveAttribute("aria-expanded", "true");
@@ -361,7 +372,7 @@ describe("SearchPanel", () => {
     await searchFor("needle");
 
     const groupHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
 
     fireEvent.click(groupHeader);
@@ -371,14 +382,14 @@ describe("SearchPanel", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+        name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
       })
     ).not.toBeInTheDocument();
 
     await searchFor("needle");
 
     const nextHeader = screen.getByRole("button", {
-      name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
     });
 
     expect(nextHeader).toHaveAttribute("aria-expanded", "true");
@@ -515,8 +526,9 @@ describe("SearchPanel", () => {
 
     await searchFor("thread");
 
-    expect(screen.getByRole("button", { name: /4.*threadPool/i })).not.toHaveAttribute(
-      "aria-current"
+    expect(screen.getByRole("button", { name: /4.*threadPool/i })).toHaveAttribute(
+      "aria-current",
+      "true"
     );
   });
 
@@ -565,7 +577,10 @@ describe("SearchPanel", () => {
 
     await searchFor("needle");
 
-    expect(screen.getByRole("button", { name: /12.*needle/i })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("button", { name: /12.*needle/i })).toHaveAttribute(
+      "aria-current",
+      "true"
+    );
   });
 
   it("rapidly reverting to the resolved query before debounce clears loading and selected match without refetching", async () => {
@@ -732,7 +747,7 @@ describe("SearchPanel", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: new RegExp(`app\\.tsx.*src/app\\.tsx.*${singleMatchCountPattern.source}`, "i"),
+        name: fileGroupNamePattern("src/app.tsx", "app.tsx"),
       })
     );
 
@@ -745,7 +760,7 @@ describe("SearchPanel", () => {
     });
 
     const retryHeader = screen.getByRole("button", {
-      name: new RegExp(`thread\\.ts.*src/thread\\.ts.*${singleMatchCountPattern.source}`, "i"),
+      name: fileGroupNamePattern("src/thread.ts", "thread.ts"),
     });
 
     expect(retryHeader).toHaveAttribute("aria-expanded", "true");

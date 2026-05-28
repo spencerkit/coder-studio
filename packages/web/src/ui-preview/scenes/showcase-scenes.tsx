@@ -1,6 +1,7 @@
 import type {
   FileNode,
   GitStatus,
+  SearchContentResult,
   Supervisor,
   UpdateStateView,
   Workspace,
@@ -163,6 +164,62 @@ const fileTreePackages: FileNode[] = [
   { name: "web", path: "packages/web", kind: "dir" },
   { name: "core", path: "packages/core", kind: "dir" },
 ];
+
+const mobileSearchContentResults: SearchContentResult = {
+  files: [
+    {
+      path: "packages/web/src/features/workspace/views/mobile/mobile-files-sheet.tsx",
+      name: "mobile-files-sheet.tsx",
+      matchCount: 2,
+      hasMoreMatches: false,
+      matches: [
+        {
+          line: 64,
+          column: 11,
+          endColumn: 17,
+          preview: '      <SearchPanel workspaceId={workspaceId} variant="mobile" />',
+          previewColumnStart: 8,
+          previewColumnEnd: 14,
+        },
+        {
+          line: 88,
+          column: 15,
+          endColumn: 21,
+          preview: '              aria-label={t("workspace.sidebar.search")}',
+          previewColumnStart: 13,
+          previewColumnEnd: 19,
+        },
+      ],
+    },
+    {
+      path: "packages/web/src/styles/components.css",
+      name: "components.css",
+      matchCount: 2,
+      hasMoreMatches: false,
+      matches: [
+        {
+          line: 13812,
+          column: 28,
+          endColumn: 34,
+          preview: ".workspace-search-panel__summary {",
+          previewColumnStart: 12,
+          previewColumnEnd: 18,
+        },
+        {
+          line: 13994,
+          column: 12,
+          endColumn: 18,
+          preview: ".workspace-search-panel__line {",
+          previewColumnStart: 12,
+          previewColumnEnd: 18,
+        },
+      ],
+    },
+  ],
+  totalMatchCount: 4,
+  hasMoreFiles: false,
+  truncatedMatchFileCount: 0,
+};
 
 const readmeDesktopGitStatus: GitStatus = {
   branch: "feature/readme-refresh",
@@ -790,6 +847,25 @@ function scene(
   };
 }
 
+function MobileFilesSheetPreview() {
+  const [activeView, setActiveView] = useState<"explorer" | "search" | "source-control">(
+    "explorer"
+  );
+  const [route, setRoute] = useState<{ kind: "root" } | { kind: "detail"; path?: string }>({
+    kind: "root",
+  });
+
+  return (
+    <MobileFilesSheet
+      workspaceId={workspace.id}
+      route={route}
+      activeView={activeView}
+      onRouteChange={setRoute}
+      onTabChange={setActiveView}
+    />
+  );
+}
+
 function FooterUpdateRailPreviewShell({
   device,
   className,
@@ -1280,6 +1356,9 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           terminalListByWorkspaceId: {
             [workspace.id]: [],
           },
+          fileSearchContentByWorkspaceId: {
+            [workspace.id]: mobileSearchContentResults,
+          },
         },
       }),
       render: () => (
@@ -1290,13 +1369,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
           contentClassName="mobile-sheet--files"
           onClose={() => {}}
-          body={
-            <MobileFilesSheet
-              workspaceId={workspace.id}
-              route={{ kind: "root" }}
-              activeView="explorer"
-            />
-          }
+          body={<MobileFilesSheetPreview />}
         />
       ),
     }),

@@ -12,6 +12,7 @@ import { deriveEditorModeForPath, editorModeAtomFamily } from "../../atoms";
 
 interface SearchPanelProps {
   workspaceId: string;
+  refreshToken?: number;
   variant?: "desktop" | "mobile";
   onSelectFile?: (path: string) => void;
 }
@@ -55,12 +56,24 @@ function renderPreview(match: SearchContentMatch): ReactNode {
   );
 }
 
-function buildExpandedFileMap(results: SearchContentResult): Record<string, boolean> {
-  return Object.fromEntries(results.files.map((file) => [file.path, true]));
+function getFirstMatchKey(results: SearchContentResult): string | null {
+  for (const file of results.files) {
+    const match = file.matches[0];
+    if (match) {
+      return `${file.path}:${match.line}:${match.column}:${match.endColumn}`;
+    }
+  }
+
+  return null;
+}
+
+function getInitialExpandedFileMap(results: SearchContentResult): Record<string, boolean> {
+  return Object.fromEntries(results.files.map((file) => [file.path, file.matches.length > 0]));
 }
 
 export const SearchPanel: FC<SearchPanelProps> = ({
   workspaceId,
+  refreshToken = 0,
   variant = "desktop",
   onSelectFile,
 }) => {
@@ -87,6 +100,17 @@ export const SearchPanel: FC<SearchPanelProps> = ({
   useEffect(() => {
     inputRef.current?.focus();
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (refreshToken <= 0 || !query.trim()) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      retryNonce: current.retryNonce + 1,
+    }));
+  }, [query, refreshToken, setState]);
 
   useEffect(() => {
     dispatchRef.current = dispatch;
@@ -164,8 +188,8 @@ export const SearchPanel: FC<SearchPanelProps> = ({
             resolvedQuery: trimmed,
             resolvedRetryNonce: retryNonce,
             results: result.data,
-            selectedMatchKey: null,
-            expandedFiles: buildExpandedFileMap(result.data),
+            selectedMatchKey: getFirstMatchKey(result.data),
+            expandedFiles: getInitialExpandedFileMap(result.data),
           }));
         })
         .catch(() => {
@@ -207,147 +231,218 @@ export const SearchPanel: FC<SearchPanelProps> = ({
     });
     onSelectFile?.(path);
   };
+  const hasQuery = Boolean(query.trim());
+  const resultCount = results?.totalMatchCount ?? 0;
+  const primarySearchGroupLabel = (path: string, name: string) =>
+    variant === "mobile" ? name : path;
+  const secondarySearchGroupLabel = (path: string, name: string) =>
+    variant === "mobile" ? path : name;
+  const clearSearch = () =>
+    setState((current) => ({
+      ...current,
+      query: "",
+      resolvedQuery: "",
+      results: null,
+      selectedMatchKey: null,
+      expandedFiles: {},
+      loading: false,
+      error: false,
+    }));
 
   return (
     <div
       className={`workspace-sidebar-view workspace-search-panel workspace-search-panel--${variant}`}
     >
-      <div className="workspace-search-panel__controls">
-        <input
-          ref={inputRef}
-          type="search"
-          aria-label={t("workspace.sidebar.search")}
-          className="workspace-search-panel__input workspace-sidebar-control"
-          value={query}
-          onChange={(event) =>
-            setState((current) => ({
-              ...current,
-              query: event.target.value,
-              selectedMatchKey: null,
-            }))
-          }
-          placeholder={t("workspace.search.placeholder")}
-        />
-
-        <div className="workspace-search-panel__summary">
-          {loading
-            ? t("common.loading")
-            : query.trim()
-              ? t("workspace.search.results_count", {
-                  count: results?.totalMatchCount ?? 0,
-                  files: results?.files.length ?? 0,
-                })
-              : null}
-        </div>
-
-        {results && (results.hasMoreFiles || results.truncatedMatchFileCount > 0) ? (
-          <div className="workspace-search-panel__truncate-note">
-            {t("workspace.search.truncated")}
+      <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
+        <section className="workspace-sidebar-section workspace-search-panel__query-section">
+          <div className="workspace-sidebar-section__header">
+            <div className="workspace-sidebar-section__header-main">
+              <span className="workspace-sidebar-section__chevron" aria-hidden="true">
+                ▾
+              </span>
+              <h2 className="workspace-sidebar-section__title">{t("workspace.search.query")}</h2>
+            </div>
           </div>
-        ) : null}
-      </div>
 
-      <div className="workspace-search-panel__results">
-        {error ? (
-          <div className="workspace-search-panel__state-block">
-            <p className="workspace-search-panel__state">{t("workspace.search.failed")}</p>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() =>
+          <div className="workspace-search-panel__controls">
+            <input
+              ref={inputRef}
+              type="search"
+              aria-label={t("workspace.sidebar.search")}
+              className="workspace-search-panel__input workspace-sidebar-control"
+              value={query}
+              onChange={(event) =>
                 setState((current) => ({
                   ...current,
-                  retryNonce: current.retryNonce + 1,
+                  query: event.target.value,
+                  selectedMatchKey: null,
                 }))
               }
-            >
-              {t("workspace.search.retry")}
-            </Button>
-          </div>
-        ) : !query.trim() ? (
-          <p className="workspace-search-panel__state">{t("workspace.search.empty")}</p>
-        ) : loading ? (
-          <p className="workspace-search-panel__state">{t("common.loading")}</p>
-        ) : !results || results.files.length === 0 ? (
-          <p className="workspace-search-panel__state">{t("workspace.search.no_results")}</p>
-        ) : (
-          results.files.map((file, index) => {
-            const matchesId = `${groupIdPrefix}-group-${index}`;
-            const isExpanded = expandedFiles[file.path] ?? true;
+              placeholder={t("workspace.search.placeholder")}
+            />
 
-            return (
-              <section key={file.path} className="workspace-search-panel__group">
-                <button
-                  type="button"
-                  className="workspace-search-panel__group-header"
+            <div
+              className="workspace-search-panel__filters"
+              aria-label={t("workspace.search.filters")}
+            >
+              <span className="workspace-search-panel__filter workspace-search-panel__filter--active">
+                {t("common.all")}
+              </span>
+              <span className="workspace-search-panel__filter">
+                {t("workspace.search.filename_filter")}
+              </span>
+              {variant === "desktop" ? (
+                <span className="workspace-search-panel__filter">
+                  {t("workspace.search.case_sensitive_filter")}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="workspace-search-panel__summary">
+              {loading ? t("common.loading") : null}
+            </div>
+
+            {results && (results.hasMoreFiles || results.truncatedMatchFileCount > 0) ? (
+              <div className="workspace-search-panel__truncate-note">
+                {t("workspace.search.truncated")}
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="workspace-sidebar-section workspace-sidebar-section--fill workspace-search-panel__results-section">
+          <div className="workspace-sidebar-section__header">
+            <div className="workspace-sidebar-section__header-main">
+              <span className="workspace-sidebar-section__chevron" aria-hidden="true">
+                ▾
+              </span>
+              <h2 className="workspace-sidebar-section__title">{t("workspace.search.results")}</h2>
+              {hasQuery ? (
+                <span className="workspace-sidebar-section__count">{resultCount}</span>
+              ) : null}
+            </div>
+            {hasQuery && variant === "desktop" ? (
+              <button
+                type="button"
+                className="workspace-sidebar-section__action workspace-search-panel__clear"
+                onClick={clearSearch}
+              >
+                {t("datetime.clear")}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="workspace-search-panel__results">
+            {error ? (
+              <div className="workspace-search-panel__state-block">
+                <p className="workspace-search-panel__state">{t("workspace.search.failed")}</p>
+                <Button
+                  size="sm"
+                  variant="secondary"
                   onClick={() =>
                     setState((current) => ({
                       ...current,
-                      expandedFiles: {
-                        ...current.expandedFiles,
-                        [file.path]: !(current.expandedFiles[file.path] ?? true),
-                      },
+                      retryNonce: current.retryNonce + 1,
                     }))
                   }
-                  aria-expanded={isExpanded}
-                  aria-controls={matchesId}
                 >
-                  <span className="workspace-search-panel__group-chevron" aria-hidden="true">
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </span>
-                  <span className="workspace-search-panel__group-copy">
-                    <strong className="workspace-search-panel__group-name">{file.name}</strong>
-                    <span className="workspace-search-panel__group-path">{file.path}</span>
-                  </span>
-                  <span className="workspace-search-panel__group-count">
-                    {t("workspace.search.file_match_count", {
-                      count: file.matchCount,
-                      suffix: file.hasMoreMatches ? "+" : "",
-                    })}
-                  </span>
-                </button>
+                  {t("workspace.search.retry")}
+                </Button>
+              </div>
+            ) : !hasQuery ? (
+              <p className="workspace-search-panel__state">{t("workspace.search.empty")}</p>
+            ) : loading ? (
+              <p className="workspace-search-panel__state">{t("common.loading")}</p>
+            ) : !results || results.files.length === 0 ? (
+              <p className="workspace-search-panel__state">{t("workspace.search.no_results")}</p>
+            ) : (
+              results.files.map((file, index) => {
+                const matchesId = `${groupIdPrefix}-group-${index}`;
+                const isExpanded = expandedFiles[file.path] ?? file.matches.length > 0;
 
-                <div
-                  id={matchesId}
-                  hidden={!isExpanded}
-                  className="workspace-search-panel__matches"
-                >
-                  {isExpanded
-                    ? file.matches.map((match) => {
-                        const matchKey = `${file.path}:${match.line}:${match.column}:${match.endColumn}`;
-                        const isSelected = selectedMatchKey === matchKey;
+                return (
+                  <section key={file.path} className="workspace-search-panel__group">
+                    <button
+                      type="button"
+                      className="workspace-search-panel__group-header"
+                      onClick={() =>
+                        setState((current) => ({
+                          ...current,
+                          expandedFiles: {
+                            ...current.expandedFiles,
+                            [file.path]: !(current.expandedFiles[file.path] ?? true),
+                          },
+                        }))
+                      }
+                      aria-expanded={isExpanded}
+                      aria-controls={matchesId}
+                    >
+                      <span className="workspace-search-panel__group-chevron" aria-hidden="true">
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </span>
+                      <span className="workspace-search-panel__group-copy">
+                        <strong className="workspace-search-panel__group-name">
+                          {primarySearchGroupLabel(file.path, file.name)}
+                        </strong>
+                        <span className="workspace-search-panel__group-path">
+                          {secondarySearchGroupLabel(file.path, file.name)}
+                        </span>
+                      </span>
+                      <span className="workspace-search-panel__group-count" aria-hidden="true">
+                        {file.matchCount}
+                      </span>
+                      <span className="workspace-search-panel__group-count-a11y">
+                        {t("workspace.search.file_match_count", {
+                          count: file.matchCount,
+                          suffix: file.hasMoreMatches ? "+" : "",
+                        })}
+                      </span>
+                    </button>
 
-                        return (
-                          <button
-                            key={matchKey}
-                            type="button"
-                            className={`workspace-search-panel__match workspace-sidebar-row${
-                              isSelected
-                                ? " workspace-search-panel__match--active workspace-sidebar-row--selected"
-                                : ""
-                            }`}
-                            aria-current={isSelected ? "true" : undefined}
-                            onClick={() => {
-                              setState((current) => ({
-                                ...current,
-                                selectedMatchKey: matchKey,
-                              }));
-                              openMatch(file.path, match.line, match.column, match.endColumn);
-                            }}
-                          >
-                            <span className="workspace-search-panel__line">{match.line}</span>
-                            <span className="workspace-search-panel__preview">
-                              {renderPreview(match)}
-                            </span>
-                          </button>
-                        );
-                      })
-                    : null}
-                </div>
-              </section>
-            );
-          })
-        )}
+                    <div
+                      id={matchesId}
+                      hidden={!isExpanded}
+                      className="workspace-search-panel__matches"
+                    >
+                      {isExpanded
+                        ? file.matches.map((match) => {
+                            const matchKey = `${file.path}:${match.line}:${match.column}:${match.endColumn}`;
+                            const isSelected = selectedMatchKey === matchKey;
+
+                            return (
+                              <button
+                                key={matchKey}
+                                type="button"
+                                className={`workspace-search-panel__match workspace-sidebar-row${
+                                  isSelected
+                                    ? " workspace-search-panel__match--active workspace-sidebar-row--selected"
+                                    : ""
+                                }`}
+                                aria-current={isSelected ? "true" : undefined}
+                                onClick={() => {
+                                  setState((current) => ({
+                                    ...current,
+                                    selectedMatchKey: matchKey,
+                                  }));
+                                  openMatch(file.path, match.line, match.column, match.endColumn);
+                                }}
+                              >
+                                <span className="workspace-search-panel__line">{match.line}</span>
+                                <span className="workspace-search-panel__preview">
+                                  {renderPreview(match)}
+                                </span>
+                                <span className="workspace-search-panel__match-kind">match</span>
+                              </button>
+                            );
+                          })
+                        : null}
+                    </div>
+                  </section>
+                );
+              })
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

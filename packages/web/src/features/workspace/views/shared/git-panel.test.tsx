@@ -147,7 +147,7 @@ describe("GitPanel", () => {
     );
 
     expect(container.querySelector(".git-panel.git-panel--desktop")).toBeTruthy();
-    await screen.findByText("Worktrees");
+    await screen.findByText("History");
     expect(container.querySelector('[data-icon-semantic="git.status.staged"]')).toBeTruthy();
     expect(container.querySelector('[data-icon-semantic="git.status.modified"]')).toBeTruthy();
     expect(container.querySelector('[data-icon-semantic="git.status.deleted"]')).toBeTruthy();
@@ -189,7 +189,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    await screen.findByText("Worktrees");
+    await screen.findByText("History");
 
     expect(screen.queryByRole("button", { name: "Current Branch: feature/ai-agent" })).toBeNull();
   });
@@ -226,7 +226,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    await screen.findByText("Worktrees");
+    await screen.findByText("History");
 
     expect(screen.queryByText("4 changes")).toBeNull();
     expect(container.querySelector(".git-panel-status-strip")).toBeNull();
@@ -264,7 +264,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    await screen.findByText("Worktrees");
+    await screen.findByText("History");
 
     const actionRow = container.querySelector(".git-commit-actions");
     const primaryButton = container.querySelector(".git-commit-primary");
@@ -308,7 +308,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    await screen.findByText("Worktrees");
+    await screen.findByText("History");
 
     expect(container.querySelector(".git-commit-actions")).not.toBeNull();
     expect(container.querySelector(".git-commit-actions .git-commit-primary")).not.toBeNull();
@@ -317,7 +317,7 @@ describe("GitPanel", () => {
     expect(container.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
 
-  it("renders the commit box above collapsed worktree and history sections", async () => {
+  it("renders the collapsed git sections in commit, worktrees, changes, history order", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
@@ -354,18 +354,111 @@ describe("GitPanel", () => {
     );
 
     expect(await screen.findByText("Worktrees")).toBeInTheDocument();
+    expect(screen.getByText("Changes")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
     expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
     expect(screen.queryByText("feat: refresh source control surface")).toBeNull();
     const summary = screen.getByText("Worktrees");
+    const changes = screen.getByText("Changes");
+    const history = screen.getByText("History");
     const textarea = screen.getByPlaceholderText("Enter commit message...");
     expect(
       textarea.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      summary.compareDocumentPosition(screen.getByText("History")) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+      summary.compareDocumentPosition(changes) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+    expect(
+      changes.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("keeps the mobile worktree section between commit and changes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    const commitInput = await screen.findByPlaceholderText("Enter commit message...");
+    const worktrees = screen.getByText("Worktrees");
+    const changes = screen.getByText("Changes");
+    const history = screen.getByText("History");
+
+    expect(
+      commitInput.compareDocumentPosition(worktrees) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      worktrees.compareDocumentPosition(changes) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      changes.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("keeps the mobile worktree entry visible even when the list is empty", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" variant="mobile" />
+      </Provider>
+    );
+
+    expect(await screen.findByText("Worktrees")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New" })).toBeInTheDocument();
   });
 
   it("renders the desktop history section as a collapsible header with a chevron", async () => {
@@ -404,7 +497,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    const historyToggle = await screen.findByRole("button", { name: "History" });
+    const historyToggle = await screen.findByRole("button", { name: "History2" });
 
     expect(historyToggle).toHaveAttribute("aria-expanded", "false");
     expect(historyToggle.querySelector(".git-panel-section-chevron")).not.toBeNull();
@@ -494,10 +587,10 @@ describe("GitPanel", () => {
 
     const panel = container.querySelector(".git-panel-scroll");
     const worktreesToggle = await screen.findByRole("button", { name: /Worktrees/ });
-    const historyToggle = screen.getByRole("button", { name: "History" });
+    const historyToggle = screen.getByRole("button", { name: "History2" });
 
     expect(panel).toBeTruthy();
-    expect(panel?.querySelectorAll(".git-panel-section")).toHaveLength(3);
+    expect(panel?.querySelectorAll(".git-panel-section")).toHaveLength(4);
     expect(panel?.querySelector(".panel-header")).toBeNull();
     expect(worktreesToggle).toHaveAttribute("aria-expanded", "false");
     expect(historyToggle).toHaveAttribute("aria-expanded", "false");
@@ -806,14 +899,15 @@ describe("GitPanel", () => {
       expect(sendCommand).toHaveBeenCalledWith("git.status", { workspaceId: "ws-test" }, undefined);
     });
 
-    expect((await screen.findAllByText("Staged")).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("button", { name: "Commit" })).toBeInTheDocument();
     expect(screen.getByText("Changes")).toBeInTheDocument();
+    expect(screen.queryByText("Staged")).toBeNull();
     expect(screen.queryByText("Untracked")).toBeNull();
     expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
     expect(screen.getByText("AppController.tsx")).toBeInTheDocument();
     expect(screen.getByText("supervisor.test.ts")).toBeInTheDocument();
     expect(screen.getByText("deprecated.ts")).toBeInTheDocument();
-    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History0" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Latest Commit")).not.toBeInTheDocument();
   });
 
@@ -912,7 +1006,7 @@ describe("GitPanel", () => {
       gap: "4px",
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByRole("button", { name: "History0" }));
 
     const noCommits = await screen.findByText("No commits yet");
     const historyShell = noCommits.closest(".git-panel-empty");
@@ -969,7 +1063,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+    fireEvent.click(await screen.findByRole("button", { name: "History2" }));
 
     const historyRow = await screen.findByRole("button", {
       name: /feat: refresh source control surface/i,
@@ -1033,7 +1127,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+    fireEvent.click(await screen.findByRole("button", { name: "History2" }));
 
     const subject = await screen.findByText("feat: refresh source control surface");
     expect(subject).not.toHaveAttribute("title");
@@ -1130,7 +1224,7 @@ describe("GitPanel", () => {
     const worktreesToggle = await screen.findByRole("button", { name: /Worktrees/ });
     fireEvent.click(worktreesToggle);
     fireEvent.click(screen.getByText("AuthGate.tsx"));
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByRole("button", { name: "History2" }));
 
     expect(container.querySelector(".git-panel.git-panel--desktop")).toBeTruthy();
     expect(container.querySelector(".git-commit-block")).toBeTruthy();
@@ -1880,14 +1974,10 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    const stagedSection = (await screen.findByText("Staged")).closest(".git-panel-section");
-    const changesSection = screen.getByText("Changes").closest(".git-panel-section");
+    const changesSection = (await screen.findByText("Changes")).closest(".git-panel-section");
 
-    expect(stagedSection).not.toBeNull();
     expect(changesSection).not.toBeNull();
-    expect(
-      within(stagedSection as HTMLElement).queryByRole("button", { name: "Discard All" })
-    ).toBeNull();
+    expect(screen.queryByText("Staged")).toBeNull();
     expect(
       within(changesSection as HTMLElement).getByRole("button", { name: "Discard All" })
     ).toBeInTheDocument();
@@ -1940,7 +2030,7 @@ describe("GitPanel", () => {
     );
 
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
-    expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
+    expect(screen.getByText("确定要放弃 4 个文件的更改吗？")).toBeInTheDocument();
 
     const modal = screen.getByText("放弃所有更改").closest(".modal-card");
     expect(modal).not.toBeNull();
@@ -1952,6 +2042,7 @@ describe("GitPanel", () => {
         {
           workspaceId: "ws-test",
           paths: [
+            "src/auth/AuthGate.tsx",
             "src/app/AppController.tsx",
             "src/legacy/deprecated.ts",
             "tests/supervisor.test.ts",
@@ -2096,7 +2187,7 @@ describe("GitPanel", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
-    expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
+    expect(screen.getByText("确定要放弃 4 个文件的更改吗？")).toBeInTheDocument();
 
     const dialog = screen.getByRole("dialog");
     const modal = dialog.closest(".modal-card") ?? dialog;
@@ -2109,6 +2200,7 @@ describe("GitPanel", () => {
         {
           workspaceId: "ws-test",
           paths: [
+            "src/auth/AuthGate.tsx",
             "src/app/AppController.tsx",
             "src/legacy/deprecated.ts",
             "tests/supervisor.test.ts",
@@ -2297,8 +2389,9 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    expect((await screen.findAllByText("已暂存")).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("button", { name: "提交" })).toBeInTheDocument();
     expect(screen.getByText("更改")).toBeInTheDocument();
+    expect(screen.queryByText("已暂存")).toBeNull();
     expect(screen.queryByText("未跟踪")).toBeNull();
     expect(screen.getByPlaceholderText("输入提交信息...")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "刷新" })).not.toBeInTheDocument();
@@ -2358,10 +2451,6 @@ describe("GitPanel", () => {
         <GitPanel workspaceId="ws-test" variant="mobile" />
       </Provider>
     );
-
-    const changesToggle = (await screen.findByText("Changes")).closest("button");
-    expect(changesToggle).not.toBeNull();
-    fireEvent.click(changesToggle as HTMLElement);
 
     const row = (await screen.findByText("supervisor.test.ts")).closest(".git-row");
     expect(row).not.toBeNull();
@@ -2507,7 +2596,7 @@ describe("GitPanel", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /Worktrees/ }));
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByRole("button", { name: "History2" }));
     fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     expect(await screen.findByText("pr/123-fix-auth")).toBeInTheDocument();
@@ -2524,7 +2613,7 @@ describe("GitPanel", () => {
       "aria-expanded",
       "false"
     );
-    expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "History2" })).toHaveAttribute(
       "aria-expanded",
       "false"
     );
@@ -2542,7 +2631,7 @@ describe("GitPanel", () => {
       "aria-expanded",
       "true"
     );
-    expect(screen.getByRole("button", { name: "History" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "History2" })).toHaveAttribute(
       "aria-expanded",
       "true"
     );

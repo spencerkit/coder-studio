@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workspace Panel Current Audit</title>
+    <style>
+      :root {
+        --bg: #081018;
+        --surface: rgba(13, 23, 33, 0.92);
+        --surface-2: rgba(18, 31, 44, 0.96);
+        --stroke: rgba(128, 159, 191, 0.2);
+        --text: #edf3f9;
+        --muted: #91a4b6;
+        --blue: #76b7ff;
+        --mint: #83d8bf;
+        --amber: #f0c06b;
+        --danger: #ff9d8e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          "IBM Plex Sans",
+          "SF Pro Display",
+          "Segoe UI",
+          "PingFang SC",
+          "Noto Sans SC",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(131, 216, 191, 0.16), transparent 24%),
+          radial-gradient(circle at top right, rgba(118, 183, 255, 0.14), transparent 22%),
+          linear-gradient(180deg, #050c12, #09131c 42%, #060d13);
+      }
+
+      .page {
+        width: min(1480px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 28px 0 72px;
+      }
+
+      .hero,
+      .section,
+      .note {
+        border: 1px solid var(--stroke);
+        background: var(--surface);
+        box-shadow: 0 18px 56px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(16px);
+      }
+
+      .hero {
+        padding: 24px;
+      }
+
+      .section,
+      .note {
+        margin-top: 20px;
+        padding: 20px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(28px, 4.6vw, 48px);
+        letter-spacing: -0.04em;
+      }
+
+      .hero p,
+      .section-head p,
+      .card p,
+      .note p,
+      li {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 10px;
+        border: 1px solid rgba(131, 216, 191, 0.2);
+        color: var(--mint);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero p {
+        margin-top: 12px;
+        max-width: 860px;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .card {
+        padding: 16px;
+        border: 1px solid var(--stroke);
+        background: var(--surface-2);
+      }
+
+      .card h3 {
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .value {
+        margin-top: 10px;
+        color: var(--text);
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 16px;
+      }
+
+      .section-head h2 {
+        font-size: 24px;
+        letter-spacing: -0.03em;
+      }
+
+      .grid-3,
+      .grid-2 {
+        display: grid;
+        gap: 16px;
+      }
+
+      .grid-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .shot {
+        overflow: hidden;
+        border: 1px solid var(--stroke);
+        background: rgba(10, 18, 26, 0.96);
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #0b141b;
+      }
+
+      .shot-body {
+        padding: 14px;
+      }
+
+      .shot-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .shot-head h3 {
+        font-size: 16px;
+      }
+
+      .tag {
+        flex: none;
+        min-height: 24px;
+        padding: 0 8px;
+        border: 1px solid rgba(118, 183, 255, 0.18);
+        color: var(--blue);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 22px;
+      }
+
+      .danger {
+        color: var(--danger);
+      }
+
+      .amber {
+        color: var(--amber);
+      }
+
+      ul {
+        margin: 12px 0 0;
+        padding-left: 18px;
+      }
+
+      .diff-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .diff-item {
+        padding: 16px;
+        border: 1px solid var(--stroke);
+        background: var(--surface-2);
+      }
+
+      .diff-item h3 {
+        font-size: 15px;
+      }
+
+      .diff-item p {
+        margin-top: 8px;
+      }
+
+      .path-row {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      code {
+        color: var(--text);
+        font-family:
+          "IBM Plex Mono",
+          "SFMono-Regular",
+          Consolas,
+          monospace;
+        font-size: 12px;
+      }
+
+      @media (max-width: 1100px) {
+        .summary,
+        .grid-3,
+        .grid-2,
+        .diff-list {
+          grid-template-columns: 1fr;
+        }
+
+        .section-head {
+          display: block;
+        }
+
+        .section-head p {
+          margin-top: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="eyebrow">Current Audit</div>
+        <h1>Workspace 左侧面板现状核对</h1>
+        <p>
+          这次对比改成同口径截图：桌面来自真实 <code>workspace-desktop</code> 路由，移动端来自真实
+          <code>workspace-mobile</code> 路由打开文件面板后的状态。另补抓了最初
+          <code>docs/mockups.html</code> 里的 Explorer / Git 左栏，避免再拿内容片段做误判。
+        </p>
+        <div class="summary">
+          <article class="card">
+            <h3>核心结论</h3>
+            <div class="value danger">你说得对</div>
+            <p>当前版本和前一版相比，最明显的变化确实主要集中在标题移除和局部收边，离最初视觉稿还有明显距离。</p>
+          </article>
+          <article class="card">
+            <h3>为什么会有错觉</h3>
+            <div class="value amber">对比口径不一致</div>
+            <p>之前截到的是面板内部内容，不是完整侧栏壳层；而你看的是真实左栏整体，所以会感觉“几乎没变”。</p>
+          </article>
+          <article class="card">
+            <h3>本次验收范围</h3>
+            <div class="value">Explorer / Search / Git / Mobile</div>
+            <p>包含 Search 的文件分组、展开收起、命中预览、行号和高亮命中内容。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>当前真实实现</h2>
+            <p>桌面和移动端都来自当前真实路由状态，不是拼装 mock。</p>
+          </div>
+        </div>
+        <div class="grid-3">
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/desktop-current-explorer.png?v=20260528-0757" alt="当前桌面 Explorer" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Desktop Explorer</h3>
+                <span class="tag">Current</span>
+              </div>
+              <p>真实当前实现。整体骨架已经切成 activity rail + content，但内容层级仍偏散，和 Git/Search 的语气没统一。</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/desktop-current-search-expanded.png?v=20260528-0757" alt="当前桌面 Search 展开态" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Desktop Search</h3>
+                <span class="tag">Expanded</span>
+              </div>
+              <p>已保留按文件分组、行号、命中预览和高亮。功能点完整，但控件语气仍更像“工具页”，和 Explorer/Git 不同家。</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/desktop-current-git.png?v=20260528-0757" alt="当前桌面 Git" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Desktop Git</h3>
+                <span class="tag">Current</span>
+              </div>
+              <p>Git 还是最有自己语法的一块。commit 输入、section、row 的密度和 Explorer / Search 没对齐，所以切 tab 会像进了另一套产品。</p>
+            </div>
+          </article>
+        </div>
+        <div class="grid-2" style="margin-top:16px;">
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/mobile-current-explorer.png?v=20260528-0757" alt="当前移动端 Explorer" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Mobile Explorer</h3>
+                <span class="tag">Current</span>
+              </div>
+              <p>移动端顶部标题已经不是主要问题，主要问题在内容区的视觉语法仍和桌面没完全对齐。</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/mobile-current-git.png?v=20260528-0757" alt="当前移动端 Git" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Mobile Git</h3>
+                <span class="tag">Current</span>
+              </div>
+              <p>移动端 Git 结构完整，但仍保留大量独立造型，系统感不足。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Search 功能点验收图</h2>
+            <p>展开态和收起态都单独截出，方便你检查行为和信息结构有没有遗漏。</p>
+          </div>
+        </div>
+        <div class="grid-2">
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/desktop-current-search-collapsed.png?v=20260528-0757" alt="桌面 Search 收起态" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Desktop Search Collapsed</h3>
+                <span class="tag">Collapse</span>
+              </div>
+              <ul>
+                <li>按文件分组存在</li>
+                <li>每组可展开 / 收起</li>
+                <li>组头展示文件名、路径、匹配数</li>
+              </ul>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/mobile-current-search-expanded.png?v=20260528-0757" alt="移动端 Search 展开态" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Mobile Search Expanded</h3>
+                <span class="tag">Matches</span>
+              </div>
+              <ul>
+                <li>展示命中内容预览</li>
+                <li>展示行号</li>
+                <li>命中片段以 <code>&lt;mark&gt;</code> 高亮</li>
+              </ul>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/mobile-current-search-collapsed.png?v=20260528-0757" alt="移动端 Search 收起态" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Mobile Search Collapsed</h3>
+                <span class="tag">Collapse</span>
+              </div>
+              <p>移动端同样保留组级折叠。功能上没有发现你担心的那类缺失。</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-balanced-workbench/desktop-search-current.png" alt="旧评审稿中的桌面 Search" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Earlier Review Capture</h3>
+                <span class="tag">Prior Review</span>
+              </div>
+              <p>这里放的是前一轮评审资料里的 Search 图，用来交叉确认当前实现没有把 Search 能力做丢。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>和最初视觉稿的差异</h2>
+            <p>这里不做“像素要求”，只指出你会直接感知到的主要偏差。</p>
+          </div>
+        </div>
+        <div class="grid-2">
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/mockup-desktop-explorer.png" alt="最初视觉稿 Explorer" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Mockup Explorer</h3>
+                <span class="tag">Initial Mockup</span>
+              </div>
+              <p>最初视觉稿是单一左栏叙事：header、tabs、toolbar、content 在一个连续层级里，不是 activity rail 和 panel body 分开的写法。</p>
+            </div>
+          </article>
+          <article class="shot">
+            <img src="./assets/2026-05-27-workspace-panel-current-audit/mockup-desktop-git.png" alt="最初视觉稿 Git" />
+            <div class="shot-body">
+              <div class="shot-head">
+                <h3>Mockup Git</h3>
+                <span class="tag">Initial Mockup</span>
+              </div>
+              <p>Git 在最初稿里和 Explorer 共用明显更多的骨架语言，而当前实现里 Git 仍是更独立的一块。</p>
+            </div>
+          </article>
+        </div>
+        <div class="diff-list" style="margin-top:16px;">
+          <article class="diff-item">
+            <h3>1. 结构语法变了，不只是细节没到位</h3>
+            <p>最初稿更像单一侧栏容器内部切 tab；当前实现是 activity rail + panel content 的二段式结构。这不是删标题就能接近的。</p>
+          </article>
+          <article class="diff-item">
+            <h3>2. 当前版本的变化主要停留在“修边”</h3>
+            <p>标题去掉了，圆角和框感收掉了一部分，但 Explorer / Search / Git 的内部 grammar 没一起重建，所以整体气质变化有限。</p>
+          </article>
+          <article class="diff-item">
+            <h3>3. Git 和 Explorer 仍不是同一设计语气</h3>
+            <p>Explorer 更偏树控件，Git 更偏表单 + section 列表，Search 又更像工具页。这就是你说“完全不是一回事”的根因。</p>
+          </article>
+          <article class="diff-item">
+            <h3>4. Search 功能没丢，但风格没回到系统里</h3>
+            <p>行为完整，不是功能性回退；问题是它还没有被纳入统一的 panel grammar。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="note">
+        <h2>建议的统一方向</h2>
+        <p style="margin-top:10px;">
+          如果一起改，方向不是继续微调 header，而是重做同一套 compact panel grammar，再套到 Explorer / Search / Git / Mobile。
+        </p>
+        <ul>
+          <li>统一 section header、row 高度、control 尺寸、选中态和折叠态。</li>
+          <li>Explorer、Search、Git 都保留真实功能，但用同一套行密度和层次节奏表达。</li>
+          <li>移动端沿用同一家 grammar，不再单独发明一套视觉语气。</li>
+          <li>Search 必须继续保留文件分组、折叠、行号、命中预览、命中高亮。</li>
+        </ul>
+        <div class="path-row">
+          文件路径：
+          <code>docs/superpowers/reviews/2026-05-27-workspace-panel-current-audit.html</code><br />
+          截图目录：
+          <code>docs/superpowers/reviews/assets/2026-05-27-workspace-panel-current-audit/</code>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -82,7 +82,14 @@ export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSection
 
   return (
     <section className="workspace-sidebar-section workspace-quick-jump">
-      <h2 className="workspace-sidebar-section__title">{t("workspace.quick_jump.title")}</h2>
+      <div className="workspace-sidebar-section__header">
+        <div className="workspace-sidebar-section__header-main">
+          <span className="workspace-sidebar-section__chevron" aria-hidden="true">
+            ▾
+          </span>
+          <h2 className="workspace-sidebar-section__title">{t("workspace.quick_jump.title")}</h2>
+        </div>
+      </div>
       <label
         className="workspace-quick-jump__search workspace-sidebar-control"
         htmlFor={`quick-jump-${workspaceId}`}
