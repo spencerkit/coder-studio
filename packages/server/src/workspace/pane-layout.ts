@@ -2,6 +2,14 @@ import type { WorkspacePaneNode } from "@coder-studio/core";
 
 export type PaneDisposition = "draft" | "remove";
 
+function isLegacyLeaf(node: WorkspacePaneNode): boolean {
+  return node.type === "leaf" && node.leafKind === undefined;
+}
+
+function createDraftLeaf(id: string, legacy = false): WorkspacePaneNode {
+  return legacy ? { id, type: "leaf" } : { id, type: "leaf", leafKind: "draft" };
+}
+
 export function applyPaneDisposition(
   layout: WorkspacePaneNode | undefined,
   sessionId: string,
@@ -23,10 +31,7 @@ function closePaneBySessionId(node: WorkspacePaneNode, sessionId: string): Works
 function replaceSessionWithDraft(node: WorkspacePaneNode, sessionId: string): WorkspacePaneNode {
   if (node.type === "leaf") {
     if (node.sessionId === sessionId) {
-      return {
-        id: node.id,
-        type: "leaf",
-      };
+      return createDraftLeaf(node.id, isLegacyLeaf(node));
     }
     return node;
   }
@@ -52,7 +57,7 @@ function replaceSessionWithDraft(node: WorkspacePaneNode, sessionId: string): Wo
 }
 
 function removePaneBySessionId(node: WorkspacePaneNode, sessionId: string): WorkspacePaneNode {
-  return removeSessionPane(node, sessionId) ?? { id: node.id, type: "leaf" };
+  return removeSessionPane(node, sessionId) ?? createDraftLeaf(node.id, isLegacyLeaf(node));
 }
 
 function removeSessionPane(node: WorkspacePaneNode, sessionId: string): WorkspacePaneNode | null {

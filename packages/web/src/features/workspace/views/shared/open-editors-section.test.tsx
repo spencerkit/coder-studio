@@ -5,6 +5,11 @@ import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacesAtom } from "../../../../atoms/workspaces";
 import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
+import {
   __resetPendingEditorLoadsForTests,
   beginPendingEditorLoad,
 } from "../../../code-editor/actions/pending-editor-loads";
@@ -39,7 +44,11 @@ function createFile(path: string): OpenFile {
   };
 }
 
-function renderSection(openFiles?: Record<string, OpenFile>, activePath?: string | null) {
+function renderSection(
+  openFiles?: Record<string, OpenFile>,
+  activePath?: string | null,
+  seedStore?: (store: ReturnType<typeof createStore>) => void
+) {
   const store = createStore();
   store.set(workspacesAtom, {
     "ws-test": {
@@ -60,6 +69,7 @@ function renderSection(openFiles?: Record<string, OpenFile>, activePath?: string
     activePath ?? (files["src/beta.ts"] ? "src/beta.ts" : (Object.keys(files)[0] ?? null))
   );
   store.set(openFilesAtomFamily("ws-test"), files);
+  seedStore?.(store);
 
   render(
     <Provider store={store}>
@@ -79,13 +89,11 @@ describe("OpenEditorsSection", () => {
   it("shows file count, toggles collapse, closes a non-active row, and closes all", () => {
     const { store } = renderSection();
 
-    expect(screen.getByRole("heading", { level: 2, name: "Open Editors (3)" })).toHaveTextContent(
-      "Open Editors (3)"
-    );
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (3)" });
+    expect(heading).toHaveTextContent("Open Editors");
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (3)" })
-      .closest("section") as HTMLElement;
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("3")).toHaveClass("workspace-open-editors__count");
     const toggle = within(section).getByRole("button", { name: /collapse open editors/i });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -142,9 +150,11 @@ describe("OpenEditorsSection", () => {
   it("keeps the header visible but hides the body when there are no open editors", () => {
     renderSection({});
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (0)" })
-      .closest("section") as HTMLElement;
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (0)" });
+    expect(heading).toHaveTextContent("Open Editors");
+
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("0")).toHaveClass("workspace-open-editors__count");
     const toggle = within(section).getByRole("button", { name: "Expand Open Editors" });
 
     expect(toggle).toBeDisabled();
@@ -160,9 +170,11 @@ describe("OpenEditorsSection", () => {
 
     renderSection({}, "src/pending.ts");
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (1)" })
-      .closest("section") as HTMLElement;
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (1)" });
+    expect(heading).toHaveTextContent("Open Editors");
+
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("1")).toHaveClass("workspace-open-editors__count");
 
     expect(within(section).getByRole("button", { name: "Collapse Open Editors" })).toHaveAttribute(
       "aria-expanded",
@@ -172,5 +184,21 @@ describe("OpenEditorsSection", () => {
     expect(within(section).getByRole("button", { name: "src/pending.ts" })).toHaveClass(
       "workspace-open-editors__item--active"
     );
+  });
+
+  it("routes open-editor clicks into the focused editor pane", () => {
+    const { store } = renderSection(undefined, undefined, (draftStore) => {
+      draftStore.set(paneLayoutAtomFamily("ws-test"), {
+        id: "root",
+        type: "leaf",
+        leafKind: "editor",
+      });
+      draftStore.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "README.md" }));
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
   });
 });

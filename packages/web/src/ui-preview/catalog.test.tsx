@@ -87,6 +87,7 @@ describe("UI preview catalog", () => {
         "workspace-load-error",
         "workspace-desktop",
         "workspace-mobile",
+        "workspace-draft-pane-editor-review",
         "auth-preview",
         "session-gate",
         "not-found",
@@ -329,6 +330,17 @@ describe("UI preview catalog", () => {
       })
     ).toBeInTheDocument();
     expect(document.querySelector(".workspace-search-panel__group-count")).toHaveTextContent("4");
+  });
+
+  it("renders the draft-pane editor review scene with a split draft layout", async () => {
+    renderScene("workspace-draft-pane-editor-review");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+    expect(await screen.findByText("README.md")).toBeInTheDocument();
+    expect(document.querySelectorAll(".agent-pane-leaf")).toHaveLength(2);
+    expect(screen.getAllByText("DRAFT")).toHaveLength(2);
   });
 
   it("renders the workspace editor review scene", async () => {

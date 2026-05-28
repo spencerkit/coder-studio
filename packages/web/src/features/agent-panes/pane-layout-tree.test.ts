@@ -5,8 +5,12 @@ import {
   appendSessionToWidestColumn,
   assignSessionToPane,
   closeDraftPaneById,
+  closeEditorPaneById,
   closePaneBySessionId,
+  convertDraftPaneToEditor,
   createFallbackPaneLayout,
+  enforceSingleEditorPaneInvariant,
+  findEditorPaneId,
   insertPaneAtEdge,
   moveSessionToDraftPane,
   removePaneBySessionId,
@@ -16,6 +20,81 @@ import {
 } from "./pane-layout-tree";
 
 describe("pane-layout-tree", () => {
+  it("converts a draft leaf into an editor leaf by pane id", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    };
+
+    expect(convertDraftPaneToEditor(layout, "root")).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+  });
+
+  it("keeps the existing editor leaf when another draft tries to convert", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    };
+
+    expect(convertDraftPaneToEditor(layout, "right")).toBe(layout);
+  });
+
+  it("collapses extra editor leaves back to drafts when enforcing the invariant", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "editor" },
+      ],
+    };
+
+    expect(enforceSingleEditorPaneInvariant(layout)).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+    expect(findEditorPaneId(layout)).toBe("left");
+  });
+
+  it("turns a closed editor leaf back into a draft leaf while preserving siblings", () => {
+    const layout: PaneNode = {
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_2" },
+      ],
+    };
+
+    expect(closeEditorPaneById(layout, "left")).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", leafKind: "draft" },
+        { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_2" },
+      ],
+    });
+  });
+
   it("splits a session leaf into the original session and a draft pane", () => {
     const layout: PaneNode = {
       id: "root",
@@ -499,6 +578,29 @@ describe("pane-layout-tree", () => {
     });
   });
 
+  it("appends a session beside an existing editor leaf without replacing the layout", () => {
+    const layout: PaneNode = {
+      id: "editor-pane",
+      type: "leaf",
+      leafKind: "editor",
+    };
+
+    expect(appendSessionToLayout(layout, "sess_2")).toEqual({
+      id: expect.stringMatching(/^split-editor-pane-horizontal-/),
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "editor-pane", type: "leaf", leafKind: "editor" },
+        expect.objectContaining({
+          type: "leaf",
+          leafKind: "session",
+          sessionId: "sess_2",
+        }),
+      ],
+    });
+  });
+
   it("appends a new session by splitting the widest column horizontally", () => {
     const layout: PaneNode = {
       id: "root",
@@ -557,15 +659,15 @@ describe("pane-layout-tree", () => {
       direction: "horizontal",
       ratio: 0.5,
       children: [
-        { id: "fallback-leaf-1", type: "leaf", sessionId: "sess_1" },
+        { id: "fallback-leaf-1", type: "leaf", leafKind: "session", sessionId: "sess_1" },
         {
           id: "split-fallback-2",
           type: "split",
           direction: "horizontal",
           ratio: 0.5,
           children: [
-            { id: "fallback-leaf-2", type: "leaf", sessionId: "sess_2" },
-            { id: "fallback-leaf-3", type: "leaf", sessionId: "sess_3" },
+            { id: "fallback-leaf-2", type: "leaf", leafKind: "session", sessionId: "sess_2" },
+            { id: "fallback-leaf-3", type: "leaf", leafKind: "session", sessionId: "sess_3" },
           ],
         },
       ],

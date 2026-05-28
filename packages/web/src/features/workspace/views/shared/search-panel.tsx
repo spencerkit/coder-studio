@@ -1,5 +1,5 @@
 import type { SearchContentMatch, SearchContentResult } from "@coder-studio/core";
-import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
+import { atom, useAtom, useAtomValue } from "jotai";
 import { atomFamily } from "jotai-family";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { FC, ReactNode } from "react";
@@ -7,8 +7,7 @@ import { useEffect, useId, useRef } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
-import { deriveEditorModeForPath, editorModeAtomFamily } from "../../atoms";
+import { useOpenWorkspaceFile } from "../../actions/use-open-workspace-file";
 
 interface SearchPanelProps {
   workspaceId: string;
@@ -79,8 +78,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
 }) => {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const { openLocation } = useOpenLocation(workspaceId);
-  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const inputRef = useRef<HTMLInputElement>(null);
   const dispatchRef = useRef(dispatch);
   const groupIdPrefix = useId();
@@ -220,8 +218,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
   }, [query, retryNonce, setState, workspaceId]);
 
   const openMatch = (path: string, line: number, column: number, endColumn: number) => {
-    setEditorMode(deriveEditorModeForPath(path));
-    void openLocation({
+    void openWorkspaceFile({
       workspaceId,
       path,
       line,

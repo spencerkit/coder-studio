@@ -5,6 +5,11 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
+import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
 import { activeFilePathAtomFamily } from "../../atoms/files";
 import { SearchPanel } from "./search-panel";
@@ -23,9 +28,13 @@ describe("SearchPanel", () => {
     );
   }
 
-  function renderSearchPanel(sendCommand: ReturnType<typeof vi.fn>) {
+  function renderSearchPanel(
+    sendCommand: ReturnType<typeof vi.fn>,
+    seedStore?: (store: ReturnType<typeof createStore>) => void
+  ) {
     const store = createStore();
     store.set(wsClientAtom, { sendCommand } as never);
+    seedStore?.(store);
 
     const renderResult = render(
       <Provider store={store}>
@@ -636,6 +645,47 @@ describe("SearchPanel", () => {
 
     expect(sendCommand).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Loading|加载/i)).not.toBeInTheDocument();
+  });
+
+  it("routes selected matches into the focused editor pane", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: "src/app.tsx",
+          name: "app.tsx",
+          matchCount: 1,
+          hasMoreMatches: false,
+          matches: [
+            {
+              line: 12,
+              column: 5,
+              endColumn: 11,
+              preview: "const needle = true;",
+              previewColumnStart: 7,
+              previewColumnEnd: 13,
+            },
+          ],
+        },
+      ],
+      totalMatchCount: 1,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+    } satisfies SearchContentResult);
+
+    const { store } = renderSearchPanel(sendCommand, (draftStore) => {
+      draftStore.set(paneLayoutAtomFamily("ws-test"), {
+        id: "root",
+        type: "leaf",
+        leafKind: "editor",
+      });
+      draftStore.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
+    });
+
+    await searchFor("needle");
+    fireEvent.click(screen.getByRole("button", { name: /12.*needle/i }));
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
   });
 
   it("renders a mobile variant without the desktop header and still opens the selected match", async () => {

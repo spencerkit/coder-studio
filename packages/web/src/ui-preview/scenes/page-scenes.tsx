@@ -96,6 +96,45 @@ const searchContentResults: SearchContentResult = {
   truncatedMatchFileCount: 0,
 };
 
+const draftPaneEditorReviewFileContents = {
+  "README.md": {
+    content: [
+      "# Coder Studio",
+      "",
+      "Use the draft pane to open a file directly into an editor pane.",
+      "",
+      "- Drop a workspace file onto the draft pane.",
+      "- Keep later file opens routed into the focused editor pane.",
+      "- Close the editor pane to return the leaf back to draft.",
+      "",
+      "This preview exists only for acceptance capture.",
+    ].join("\n"),
+    baseHash: "preview:readme",
+  },
+  "packages/web/src/app.tsx": {
+    content: [
+      "export function App() {",
+      "  const searchQuery = workspacePanelState.query;",
+      "",
+      "  if (!searchQuery.trim()) {",
+      "    return null;",
+      "  }",
+      "",
+      "  return <WorkspacePage />;",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:app-tsx",
+  },
+  "packages/web/src/tree.tsx": {
+    content: [
+      "export function TreePreview() {",
+      "  return searchQuery.trim() ? results : [];",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:tree-tsx",
+  },
+} as const;
+
 function buildSettingsSeed(context: UiPreviewSceneContext) {
   const monitoringSettings = {
     enabled: true,
@@ -308,6 +347,135 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
   };
 }
 
+function buildDraftPaneEditorReviewSeed(context: UiPreviewSceneContext) {
+  const reviewWorkspace: Workspace = {
+    ...workspace,
+    uiState: {
+      ...workspace.uiState,
+      paneLayout: {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          {
+            id: "left",
+            type: "leaf",
+            leafKind: "draft",
+          },
+          {
+            id: "right",
+            type: "leaf",
+            leafKind: "draft",
+          },
+        ],
+      },
+    },
+  };
+
+  return {
+    ...context,
+    workspaces: [reviewWorkspace],
+    activeWorkspaceId: reviewWorkspace.id,
+    sessions: [],
+    paneLayoutByWorkspaceId: {
+      [reviewWorkspace.id]: {
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          {
+            id: "left",
+            type: "leaf",
+            leafKind: "draft",
+          },
+          {
+            id: "right",
+            type: "leaf",
+            leafKind: "draft",
+          },
+        ],
+      },
+    },
+    fileTreeByWorkspaceId: {
+      [reviewWorkspace.id]: fileTreeMap,
+    },
+    openFilesByWorkspaceId: {
+      [reviewWorkspace.id]: {},
+    },
+    gitStateByWorkspaceId: {
+      [reviewWorkspace.id]: gitStatus,
+    },
+    gitBranchListByWorkspaceId: {
+      [reviewWorkspace.id]: {
+        current: "feature/draft-pane-editor-integration",
+        branches: [
+          { name: "develop", isCurrent: false, isRemote: false },
+          {
+            name: "feature/draft-pane-editor-integration",
+            isCurrent: true,
+            isRemote: false,
+          },
+        ],
+      },
+    },
+    terminalPanelVisible: false,
+    commands: {
+      settingsGet: {
+        "appearance.locale": context.locale,
+        "appearance.themeId": context.theme,
+        "appearance.personalization.version": 1,
+        "appearance.personalization.common.backgroundMode": "image",
+        "appearance.personalization.common.backgroundAssetId": "preview-background",
+        "appearance.personalization.common.backgroundFit": "cover",
+        "appearance.personalization.common.backgroundDimness": 36,
+        "appearance.personalization.common.backgroundBlur": 8,
+        "appearance.personalization.common.glassEnabled": true,
+        "appearance.personalization.common.glassIntensity": 18,
+        "appearance.personalization.common.surfaceOpacity": 90,
+        "appearance.personalization.desktop.surfaceOpacity": 88,
+      },
+      workspaceList: [reviewWorkspace],
+      sessionListByWorkspaceId: { [reviewWorkspace.id]: [] },
+      gitStatusByWorkspaceId: { [reviewWorkspace.id]: gitStatus },
+      gitLogByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          entries: [],
+        },
+      },
+      gitBranchesByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          current: "feature/draft-pane-editor-integration",
+          branches: [
+            { name: "develop", isCurrent: false, isRemote: false },
+            {
+              name: "feature/draft-pane-editor-integration",
+              isCurrent: true,
+              isRemote: false,
+            },
+          ],
+        },
+      },
+      fileTreeByWorkspaceId: {
+        [reviewWorkspace.id]: {
+          ".": fileTreeMap.get(".") ?? [],
+        },
+      },
+      fileReadByWorkspaceId: {
+        [reviewWorkspace.id]: draftPaneEditorReviewFileContents,
+      },
+      fileSearchContentByWorkspaceId: {
+        [reviewWorkspace.id]: searchContentResults,
+      },
+      worktreeListByWorkspaceId: {
+        [reviewWorkspace.id]: [],
+      },
+      terminalListByWorkspaceId: {
+        [reviewWorkspace.id]: [],
+      },
+    },
+  };
+}
+
 function scene(
   id: string,
   config: Pick<UiPreviewSceneDefinition, "router" | "seed" | "render">
@@ -383,6 +551,15 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
       render: () => (
         <WorkspaceRouteGate>
           <WorkspaceMobileView />
+        </WorkspaceRouteGate>
+      ),
+    }),
+    scene("workspace-draft-pane-editor-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => buildDraftPaneEditorReviewSeed(context),
+      render: () => (
+        <WorkspaceRouteGate>
+          <WorkspaceDesktopView />
         </WorkspaceRouteGate>
       ),
     }),

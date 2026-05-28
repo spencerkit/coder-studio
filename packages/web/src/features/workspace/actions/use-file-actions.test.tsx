@@ -6,6 +6,12 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
+import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
+import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
 import { activeFilePathAtomFamily, fileTreeAtomFamily, openFilesAtomFamily } from "../atoms";
 import { useFileActions } from "./use-file-actions";
 
@@ -155,5 +161,60 @@ describe("useFileActions rename behavior", () => {
 
     expect(sendCommand).not.toHaveBeenCalled();
     expect(result.current.renameDialog?.error).toBe("Name cannot contain / or \\.");
+  });
+
+  it("routes explorer file opens into the focused editor pane when one is active", async () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "pane-editor-1",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    store.set(focusedEditorPaneIdAtomFamily("ws-test"), "pane-editor-1");
+
+    const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      result.current.handleSelectFile("src/app.tsx");
+      await Promise.resolve();
+    });
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("pane-editor-1");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
+      path: "src/app.tsx",
+      source: "file-tree",
+      workspaceId: "ws-test",
+    });
+  });
+
+  it("keeps explorer file opens on the standalone editor path when no reusable editor pane exists", async () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "draft",
+    });
+    store.set(activeEditorPaneIdAtomFamily("ws-test"), "pane-editor-1");
+
+    const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      result.current.handleSelectFile("src/standalone.ts");
+      await Promise.resolve();
+    });
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/standalone.ts");
   });
 });

@@ -1,11 +1,12 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowRight, FlipHorizontal, FlipVertical, X } from "lucide-react";
-import type { FC } from "react";
+import { type DragEvent, type FC, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { getWorkspacePathDragPayload } from "../../../../lib/workspace-path-drag";
 import { buildDiagnosticsPath } from "../../../diagnostics";
 import type { PaneDropIntent } from "../../actions/pane-drag-types";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
@@ -22,6 +23,7 @@ interface DraftLauncherProps {
   paneId?: string;
   onAssignSession?: (paneId: string, sessionId: string) => void;
   onClosePane?: (paneId: string) => void;
+  onOpenFile?: (paneId: string, path: string) => void;
   onPaneDrop?: (intent: PaneDropIntent) => void;
   onReplaceWithSession?: (sessionId: string) => void;
   onSplitPane?: (paneId: string, direction: "horizontal" | "vertical") => void;
@@ -33,6 +35,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   paneId,
   onAssignSession,
   onClosePane,
+  onOpenFile,
   onPaneDrop: _onPaneDrop,
   onReplaceWithSession,
   onSplitPane,
@@ -40,6 +43,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  const [isFileDropTarget, setIsFileDropTarget] = useState(false);
   const { states, launch } = useProviderLauncher(
     dispatch,
     workspaceId,
@@ -145,12 +149,57 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     onClosePane?.(paneId);
   };
 
+  const resolveDroppedFilePath = (event: DragEvent<HTMLDivElement>): string | null => {
+    if (!paneId) {
+      return null;
+    }
+
+    const payload = getWorkspacePathDragPayload(event.dataTransfer);
+    if (!payload || payload.workspaceId !== workspaceId || payload.kind !== "file") {
+      return null;
+    }
+
+    return payload.path;
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    const path = resolveDroppedFilePath(event);
+    if (!path) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsFileDropTarget(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsFileDropTarget(false);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    const path = resolveDroppedFilePath(event);
+    setIsFileDropTarget(false);
+    if (!path || !paneId) {
+      return;
+    }
+
+    event.preventDefault();
+    onOpenFile?.(paneId, path);
+  };
+
   return (
     <div
-      className={`session-card agent-pane${dragState?.isDragging ? " draft-launcher--dragging" : ""}${dragState?.isActiveDropTarget ? " draft-launcher--drop-target" : ""}`}
+      className={`session-card agent-pane${dragState?.isDragging ? " draft-launcher--dragging" : ""}${dragState?.isActiveDropTarget || isFileDropTarget ? " draft-launcher--drop-target" : ""}`}
       data-pane-id={paneId}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
-      {dragState?.isActiveDropTarget ? (
+      {isFileDropTarget ? (
+        <div className="pane-drop-overlay pane-drop-overlay--draft">
+          <div className="pane-drop-overlay__center">Open in editor</div>
+        </div>
+      ) : dragState?.isActiveDropTarget ? (
         <div className="pane-drop-overlay pane-drop-overlay--draft">
           <div className="pane-drop-overlay__center">Move here</div>
         </div>

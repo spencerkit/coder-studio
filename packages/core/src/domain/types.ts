@@ -22,13 +22,48 @@ export interface Workspace {
   uiState: UiState;
 }
 
-export interface WorkspacePaneNode {
+export type WorkspacePaneLeafKind = "draft" | "session" | "editor";
+
+export interface LegacyWorkspacePaneLeaf {
   id: string;
-  type: "leaf" | "split";
+  type: "leaf";
   sessionId?: string;
+  leafKind?: undefined;
+}
+
+export interface WorkspaceDraftPaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind: "draft";
+}
+
+export interface WorkspaceSessionPaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind: "session";
+  sessionId: string;
+}
+
+export interface WorkspaceEditorPaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind: "editor";
+}
+
+export type WorkspacePaneLeaf =
+  | LegacyWorkspacePaneLeaf
+  | WorkspaceDraftPaneLeaf
+  | WorkspaceSessionPaneLeaf
+  | WorkspaceEditorPaneLeaf;
+
+export interface WorkspacePaneSplit {
+  id: string;
+  type: "split";
   direction?: "horizontal" | "vertical";
   children?: WorkspacePaneNode[];
 }
+
+export type WorkspacePaneNode = WorkspacePaneLeaf | WorkspacePaneSplit;
 
 export interface UiState {
   leftPanelWidth: number;

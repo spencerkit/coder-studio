@@ -192,7 +192,7 @@ function err(message: string) {
   };
 }
 
-function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
+function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCommand {
   return async <T>(op: string, args: unknown) => {
     const commands = seed.commands ?? {};
 
@@ -451,7 +451,7 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
 
 export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   const store = createStore();
-  const dispatch = createPreviewDispatcher(seed);
+  const dispatch = createPreviewDispatcher(seed, store);
   const workspaces = seed.workspaces ?? [];
   const resolvedThemeId = resolveStoredThemeId(seed.theme);
   const personalization = resolveAppearancePersonalizationSetting(seed.commands?.settingsGet ?? {});

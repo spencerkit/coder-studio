@@ -4,19 +4,32 @@
  * Server-backed pane layout projection owned by the agent-panes feature.
  */
 
-import type { WorkspacePaneNode } from "@coder-studio/core";
+import type { WorkspacePaneLeafKind, WorkspacePaneNode } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
+import { enforceSingleEditorPaneInvariant } from "../pane-layout-tree";
 
 /**
  * Pane layout by workspace (agent pane splits).
  * The server owns pane structure; only the legacy migration path reads the
  * historical localStorage key.
  */
-export interface PaneNode extends WorkspacePaneNode {
+export interface PaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind?: WorkspacePaneLeafKind;
+  sessionId?: string;
+}
+
+export interface PaneSplit {
+  id: string;
+  type: "split";
+  direction?: "horizontal" | "vertical";
   ratio?: number;
   children?: PaneNode[];
 }
+
+export type PaneNode = PaneLeaf | PaneSplit;
 
 export const LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX = "ui.paneLayout.";
 export const PANE_RATIO_STORAGE_KEY_PREFIX = "ui.paneRatio.";
@@ -24,6 +37,7 @@ export const PANE_RATIO_STORAGE_KEY_PREFIX = "ui.paneRatio.";
 export const defaultPaneLayout: PaneNode = {
   id: "root",
   type: "leaf",
+  leafKind: "draft",
 };
 
 export const paneLayoutAtomFamily = atomFamily((workspaceId: string) =>
@@ -58,6 +72,61 @@ export function readLegacyPaneLayout(workspaceId: string): PaneNode | null {
   } catch {
     return null;
   }
+}
+
+export function normalizePaneLayout(
+  layout: WorkspacePaneNode | PaneNode | null | undefined
+): PaneNode | null {
+  const normalized = normalizePaneLayoutNode(layout);
+  return normalized ? enforceSingleEditorPaneInvariant(normalized) : null;
+}
+
+function normalizePaneLayoutNode(
+  layout: WorkspacePaneNode | PaneNode | null | undefined
+): PaneNode | null {
+  if (!layout) {
+    return null;
+  }
+
+  if (layout.type === "leaf") {
+    if ("leafKind" in layout && layout.leafKind) {
+      if (layout.leafKind === "session" && layout.sessionId) {
+        return {
+          id: layout.id,
+          type: "leaf",
+          leafKind: "session",
+          sessionId: layout.sessionId,
+        };
+      }
+
+      return {
+        id: layout.id,
+        type: "leaf",
+        leafKind: layout.leafKind === "editor" ? "editor" : "draft",
+      };
+    }
+
+    return layout.sessionId
+      ? {
+          id: layout.id,
+          type: "leaf",
+          leafKind: "session",
+          sessionId: layout.sessionId,
+        }
+      : {
+          id: layout.id,
+          type: "leaf",
+          leafKind: "draft",
+        };
+  }
+
+  return {
+    id: layout.id,
+    type: "split",
+    direction: layout.direction,
+    ratio: "ratio" in layout ? layout.ratio : undefined,
+    children: layout.children?.map((child) => normalizePaneLayoutNode(child) ?? defaultPaneLayout),
+  };
 }
 
 export function clearLegacyPaneLayout(workspaceId: string): void {

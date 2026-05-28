@@ -8,7 +8,10 @@ import {
   appendSessionToWidestColumn,
   assignSessionToPane,
   closeDraftPaneById,
+  closeEditorPaneById,
   closePaneBySessionId,
+  convertDraftPaneToEditor,
+  enforceSingleEditorPaneInvariant,
   insertPaneAtEdge,
   moveSessionToDraftPane,
   removePaneBySessionId,
@@ -28,9 +31,10 @@ export function usePaneActions(workspaceId: string) {
     (update: PaneNode | ((current: PaneNode) => PaneNode)) => {
       const current = store.get(paneLayoutAtomFamily(workspaceId));
       const next = typeof update === "function" ? update(current) : update;
-      setPaneLayout(next);
-      void persistUiState({ paneLayout: next });
-      return next;
+      const normalized = enforceSingleEditorPaneInvariant(next);
+      setPaneLayout(normalized);
+      void persistUiState({ paneLayout: normalized });
+      return normalized;
     },
     [persistUiState, setPaneLayout, store, workspaceId]
   );
@@ -63,6 +67,13 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const closeEditorPane = useCallback(
+    (paneId: string) => {
+      applyLayout((current) => closeEditorPaneById(current, paneId));
+    },
+    [applyLayout]
+  );
+
   const removeSessionPane = useCallback(
     (sessionId: string) => {
       applyLayout((current) => removePaneBySessionId(current, sessionId));
@@ -77,11 +88,19 @@ export function usePaneActions(workspaceId: string) {
     [applyLayout]
   );
 
+  const convertDraftPane = useCallback(
+    (paneId: string) => {
+      applyLayout((current) => convertDraftPaneToEditor(current, paneId));
+    },
+    [applyLayout]
+  );
+
   const replaceWithSession = useCallback(
     (sessionId: string) => {
       applyLayout({
         id: "root",
         type: "leaf",
+        leafKind: "session",
         sessionId,
       });
     },
@@ -145,7 +164,9 @@ export function usePaneActions(workspaceId: string) {
     appendSessionToMobileColumn,
     assignSession,
     closeDraftPane,
+    closeEditorPane,
     closeSessionPane,
+    convertDraftPane,
     removeSessionPane,
     replaceSession,
     replaceWithSession,

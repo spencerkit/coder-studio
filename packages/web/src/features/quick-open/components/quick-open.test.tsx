@@ -11,6 +11,11 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
+import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { activeFilePathAtomFamily } from "../../workspace/atoms/files";
 import { QuickOpen } from "./quick-open";
 
@@ -128,5 +133,40 @@ describe("QuickOpen", () => {
 
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/routes.ts");
     expect(store.get(quickOpenOpenAtom)).toBe(false);
+  });
+
+  it("routes quick open selections into the focused editor pane", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }],
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspace(store);
+    store.set(quickOpenOpenAtom, true);
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    store.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
+
+    render(
+      <Provider store={store}>
+        <QuickOpen />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Go to File|跳转到文件/i }), {
+      target: { value: "app" },
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+
+    fireEvent.click(screen.getByRole("option", { name: /app\.tsx/i }));
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
   });
 });
