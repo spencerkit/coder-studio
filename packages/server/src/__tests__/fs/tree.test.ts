@@ -127,7 +127,7 @@ describe("readTree", () => {
     // Subdir children are undefined (lazy loading)
   });
 
-  it("should not hide .gitignore-matched files from the tree", async () => {
+  it("should keep ignored entries visible while marking gitignored metadata", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log\ndist/");
     await writeFile(join(testDir, "app.log"), "log content");
     await writeFile(join(testDir, "app.txt"), "text content");
@@ -136,9 +136,30 @@ describe("readTree", () => {
 
     const result = await readTree(testDir);
 
-    expect(result.children.some((n) => n.name === "app.log")).toBe(true);
-    expect(result.children.some((n) => n.name === "dist")).toBe(true);
-    expect(result.children.some((n) => n.name === "app.txt")).toBe(true);
-    expect(result.children.some((n) => n.name === "src")).toBe(true);
+    const ignoredLog = result.children.find((n) => n.name === "app.log");
+    const ignoredDist = result.children.find((n) => n.name === "dist");
+    const visibleFile = result.children.find((n) => n.name === "app.txt");
+    const visibleDir = result.children.find((n) => n.name === "src");
+
+    expect(ignoredLog).toMatchObject({
+      name: "app.log",
+      kind: "file",
+      isGitIgnored: true,
+    });
+    expect(ignoredDist).toMatchObject({
+      name: "dist",
+      kind: "dir",
+      isGitIgnored: true,
+    });
+    expect(visibleFile).toMatchObject({
+      name: "app.txt",
+      kind: "file",
+      isGitIgnored: false,
+    });
+    expect(visibleDir).toMatchObject({
+      name: "src",
+      kind: "dir",
+      isGitIgnored: false,
+    });
   });
 });

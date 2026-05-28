@@ -5,13 +5,20 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
 import {
   activeFilePathAtomFamily,
+  expandedDirsAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
 } from "../atoms";
+import {
+  applyDirectoryRefresh,
+  applyRootTreeRefresh,
+  collectRefreshTargets,
+} from "./file-tree-refresh";
 import { useOpenWorkspaceFile } from "./use-open-workspace-file";
+import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 export interface CreateRequest {
   id: number;
@@ -56,6 +63,14 @@ interface UseFileActionsArgs {
   onSelectFile?: (path: string) => void;
 }
 
+function isReadTreeResult(value: unknown): value is ReadTreeResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return Array.isArray((value as ReadTreeResult).children);
+}
+
 function rewriteDescendantPath(path: string, fromPath: string, toPath: string): string {
   if (path === fromPath) {
     return toPath;
@@ -92,6 +107,24 @@ function rewriteOpenFiles(
   return Object.fromEntries(nextEntries);
 }
 
+function setsEqual<T>(left: Set<T> | null, right: Set<T>): boolean {
+  if (!left) {
+    return right.size === 0;
+  }
+
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function useFileActions({
   workspaceId,
   refreshToken = 0,
@@ -103,12 +136,15 @@ export function useFileActions({
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
+  const setExpandedDirs = useSetAtom(expandedDirsAtomFamily(workspaceId));
   const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
   const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
   const setLoadedDirs = useSetAtom(loadedDirsAtomFamily(workspaceId));
 
@@ -128,11 +164,69 @@ export function useFileActions({
       workspaceId,
     });
 
-    if (result.ok && result.data) {
-      const treeMap = new Map<string, FileNode[]>();
-      treeMap.set(".", result.data.children);
-      setFileTree(treeMap);
-      setLoadedDirs(new Set());
+    if (result.ok && isReadTreeResult(result.data)) {
+      const reconciled = applyRootTreeRefresh({
+        previousTree: fileTree,
+        previousLoadedDirs: loadedDirs,
+        previousExpandedDirs: expandedDirs,
+        rootChildren: result.data.children,
+      });
+
+      let currentTree = reconciled.tree;
+      let currentLoadedDirs = reconciled.loadedDirs;
+      let currentExpandedDirs: Set<string> | null = expandedDirs;
+
+      setFileTree(currentTree);
+      setLoadedDirs(currentLoadedDirs);
+
+      if (expandedDirs) {
+        if (!setsEqual(expandedDirs, reconciled.prunedExpandedDirs)) {
+          const normalizedExpandedDirs = collectRefreshTargets(reconciled.prunedExpandedDirs);
+          currentExpandedDirs = new Set(normalizedExpandedDirs);
+          setExpandedDirs(currentExpandedDirs);
+          void persistUiState({ fileTreeExpandedDirs: normalizedExpandedDirs });
+        } else {
+          currentExpandedDirs = reconciled.prunedExpandedDirs;
+        }
+      }
+
+      const refreshTargets = collectRefreshTargets(currentExpandedDirs ?? currentLoadedDirs);
+
+      for (const dirPath of refreshTargets) {
+        const childResult = await dispatch<ReadTreeResult>("file.readTree", {
+          workspaceId,
+          subPath: dirPath,
+        });
+
+        if (!childResult.ok || !isReadTreeResult(childResult.data)) {
+          continue;
+        }
+
+        const refreshed = applyDirectoryRefresh({
+          previousTree: currentTree,
+          previousLoadedDirs: currentLoadedDirs,
+          previousExpandedDirs: currentExpandedDirs,
+          dirPath,
+          children: childResult.data.children,
+        });
+
+        currentTree = refreshed.tree;
+        currentLoadedDirs = new Set(refreshed.loadedDirs).add(dirPath);
+        setFileTree(currentTree);
+        setLoadedDirs(currentLoadedDirs);
+
+        if (currentExpandedDirs) {
+          if (!setsEqual(currentExpandedDirs, refreshed.prunedExpandedDirs)) {
+            const normalizedExpandedDirs = collectRefreshTargets(refreshed.prunedExpandedDirs);
+            currentExpandedDirs = new Set(normalizedExpandedDirs);
+            setExpandedDirs(currentExpandedDirs);
+            void persistUiState({ fileTreeExpandedDirs: normalizedExpandedDirs });
+          } else {
+            currentExpandedDirs = refreshed.prunedExpandedDirs;
+          }
+        }
+      }
+
       setIsLoading(false);
       return true;
     }
@@ -143,7 +237,18 @@ export function useFileActions({
 
     setIsLoading(false);
     return false;
-  }, [workspaceId, isLoading, dispatch, setFileTree, setLoadedDirs]);
+  }, [
+    workspaceId,
+    isLoading,
+    dispatch,
+    expandedDirs,
+    fileTree,
+    loadedDirs,
+    persistUiState,
+    setExpandedDirs,
+    setFileTree,
+    setLoadedDirs,
+  ]);
 
   const loadChildren = useCallback(
     async (dirPath: string) => {
@@ -156,19 +261,31 @@ export function useFileActions({
         subPath: dirPath,
       });
 
-      if (result.ok && result.data) {
-        setFileTree((prev) => {
-          if (!prev) return prev;
-          const next = new Map(prev);
-          next.set(dirPath, result.data!.children);
-          return next;
+      if (result.ok && isReadTreeResult(result.data)) {
+        const refreshed = applyDirectoryRefresh({
+          previousTree: fileTree,
+          previousLoadedDirs: loadedDirs,
+          previousExpandedDirs: expandedDirs,
+          dirPath,
+          children: result.data.children,
         });
-        setLoadedDirs((prev) => new Set(prev).add(dirPath));
+
+        setFileTree(refreshed.tree);
+        setLoadedDirs(new Set(refreshed.loadedDirs).add(dirPath));
       }
 
       setIsLoadingDir(null);
     },
-    [workspaceId, isLoadingDir, loadedDirs, fileTree, dispatch, setFileTree, setLoadedDirs]
+    [
+      workspaceId,
+      isLoadingDir,
+      loadedDirs,
+      fileTree,
+      expandedDirs,
+      dispatch,
+      setFileTree,
+      setLoadedDirs,
+    ]
   );
 
   const loadSearchResults = useCallback(
@@ -480,6 +597,7 @@ export function useFileActions({
     cancelDelete,
     confirmDelete,
     handleSelectFile,
+    loadFileTree,
     loadChildren,
     loadSearchResults,
     openCreateDialog,

@@ -12,7 +12,13 @@ import {
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
-import { activeFilePathAtomFamily, fileTreeAtomFamily, openFilesAtomFamily } from "../atoms";
+import {
+  activeFilePathAtomFamily,
+  expandedDirsAtomFamily,
+  fileTreeAtomFamily,
+  loadedDirsAtomFamily,
+  openFilesAtomFamily,
+} from "../atoms";
 import { useFileActions } from "./use-file-actions";
 
 function wrapperFor(store: ReturnType<typeof createStore>) {
@@ -216,5 +222,93 @@ describe("useFileActions rename behavior", () => {
 
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/standalone.ts");
+  });
+
+  it("preserves loaded expanded descendants while refreshing the root tree", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { subPath?: string }) => {
+        if (op !== "file.readTree") {
+          throw new Error(`Unexpected command: ${op}`);
+        }
+
+        if (!args?.subPath) {
+          return {
+            path: "/workspace",
+            children: [{ path: "src", name: "src", kind: "dir", isGitIgnored: false }],
+          };
+        }
+
+        if (args.subPath === "src") {
+          return {
+            path: "src",
+            children: [
+              { path: "src/index.ts", name: "index.ts", kind: "file", isGitIgnored: false },
+            ],
+          };
+        }
+
+        throw new Error(`Unexpected subPath: ${args.subPath}`);
+      });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            { path: "src", name: "src", kind: "dir", isGitIgnored: false },
+            { path: "docs", name: "docs", kind: "dir", isGitIgnored: false },
+          ],
+        ],
+        ["src", [{ path: "src/old.ts", name: "old.ts", kind: "file", isGitIgnored: false }]],
+        ["docs", [{ path: "docs/guide.md", name: "guide.md", kind: "file", isGitIgnored: false }]],
+      ])
+    );
+    store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
+    store.set(loadedDirsAtomFamily("ws-test"), new Set(["src", "docs"]));
+
+    const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.loadFileTree();
+    });
+
+    expect(store.get(fileTreeAtomFamily("ws-test"))).toEqual(
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir", isGitIgnored: false }]],
+        ["src", [{ path: "src/index.ts", name: "index.ts", kind: "file", isGitIgnored: false }]],
+      ])
+    );
+    expect(Array.from(store.get(loadedDirsAtomFamily("ws-test")))).toEqual(["src"]);
+  });
+
+  it("prunes expanded directories that disappear during automatic refresh", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      path: "/workspace",
+      children: [{ path: "docs", name: "docs", kind: "dir", isGitIgnored: false }],
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
+    store.set(loadedDirsAtomFamily("ws-test"), new Set(["src"]));
+
+    const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.loadFileTree();
+    });
+
+    expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual([]);
   });
 });

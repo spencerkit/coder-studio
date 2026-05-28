@@ -230,10 +230,15 @@ describe("File Commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    const children = (result.data as { children: Array<{ name: string }> }).children;
-    expect(children.some((item) => item.name === ".env")).toBe(true);
-    expect(children.some((item) => item.name === "ignored.log")).toBe(true);
-    expect(children.some((item) => item.name === "node_modules")).toBe(true);
+    const children = (result.data as { children: Array<{ name: string; isGitIgnored?: boolean }> })
+      .children;
+    expect(children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: ".env", isGitIgnored: false }),
+        expect.objectContaining({ name: "ignored.log", isGitIgnored: true }),
+        expect.objectContaining({ name: "node_modules", isGitIgnored: true }),
+      ])
+    );
     expect(children.some((item) => item.name === ".git")).toBe(false);
   });
 

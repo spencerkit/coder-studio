@@ -355,6 +355,7 @@ export interface FileNode {
   children?: FileNode[];
   size?: number;
   mtime?: number;
+  isGitIgnored?: boolean;
 }
 
 export interface SearchContentMatch {

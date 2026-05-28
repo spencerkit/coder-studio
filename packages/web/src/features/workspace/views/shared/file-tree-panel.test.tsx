@@ -126,6 +126,75 @@ describe("FileTreePanel", () => {
     );
   });
 
+  it("persists pruned expanded directories after a stale refresh removes them", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { uiState?: Record<string, unknown> }) => {
+        if (op === "workspace.uiState.set") {
+          return {
+            id: "ws-test",
+            path: "/workspace",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: args?.uiState,
+          };
+        }
+
+        return {
+          path: "/workspace",
+          children: [{ path: "docs", name: "docs", kind: "dir", isGitIgnored: false }],
+        };
+      });
+
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          fileTreeExpandedDirs: ["src"],
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "src", name: "src", kind: "dir", isGitIgnored: false }]],
+        ["src", [{ path: "src/index.ts", name: "index.ts", kind: "file", isGitIgnored: false }]],
+      ])
+    );
+    store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
+    store.set(loadedDirsAtomFamily("ws-test"), new Set(["src"]));
+    store.set(fileTreeStaleAtomFamily("ws-test"), true);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual([]);
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        uiState: expect.objectContaining({ fileTreeExpandedDirs: [] }),
+      }),
+      undefined
+    );
+  });
+
   it("consumes a refresh token only once instead of reloading on every render", async () => {
     let resolveTree: ((value: { path: string; children: never[] }) => void) | null = null;
     const sendCommand = vi.fn().mockImplementation(
@@ -712,6 +781,63 @@ describe("FileTreePanel", () => {
         .closest(".tree-search-labels")
         ?.previousElementSibling?.querySelector('[data-icon-semantic="file.type.media"]')
     ).toBeTruthy();
+  });
+
+  it("adds a subdued class to gitignored nodes in the normal tree", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            { path: "ignored.log", name: "ignored.log", kind: "file", isGitIgnored: true },
+            { path: "visible.ts", name: "visible.ts", kind: "file", isGitIgnored: false },
+          ],
+        ],
+      ])
+    );
+
+    const { container } = render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.getByText("ignored.log")).toHaveClass("tree-label", "tree-label--gitignored");
+    expect(screen.getByText("visible.ts")).toHaveClass("tree-label");
+    expect(screen.getByText("visible.ts")).not.toHaveClass("tree-label--gitignored");
+    expect(container.querySelectorAll(".tree-label--gitignored")).toHaveLength(1);
+  });
+
+  it("does not add the subdued class to search result rows", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "file.search") {
+        return {
+          files: [{ path: "ignored.log", name: "ignored.log", kind: "file", isGitIgnored: true }],
+        };
+      }
+
+      return { path: "/workspace", children: [] };
+    });
+
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "ignored" },
+    });
+
+    const resultRow = await screen.findByText("ignored.log");
+    expect(resultRow).toHaveClass("tree-label");
+    expect(resultRow).not.toHaveClass("tree-label--gitignored");
   });
 
   it("opens the new file dialog from the toolbar and dispatches file.create", async () => {

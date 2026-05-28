@@ -53,14 +53,16 @@ describe("useWorkspaceRefreshActions", () => {
         if (op === "file.readTree" && !args?.subPath) {
           return {
             path: "/workspace",
-            children: [{ path: "src", name: "src", kind: "dir" }],
+            children: [{ path: "src", name: "src", kind: "dir", isGitIgnored: false }],
           };
         }
 
         if (op === "file.readTree" && args.subPath === "src") {
           return {
             path: "src",
-            children: [{ path: "src/index.ts", name: "index.ts", kind: "file" }],
+            children: [
+              { path: "src/index.ts", name: "index.ts", kind: "file", isGitIgnored: false },
+            ],
           };
         }
 
@@ -85,8 +87,21 @@ describe("useWorkspaceRefreshActions", () => {
       },
     } as never);
     store.set(expandedDirsAtomFamily("ws-test"), new Set(["src"]));
-    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
-    store.set(loadedDirsAtomFamily("ws-test"), new Set(["src"]));
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            { path: "src", name: "src", kind: "dir", isGitIgnored: false },
+            { path: "docs", name: "docs", kind: "dir", isGitIgnored: false },
+          ],
+        ],
+        ["src", [{ path: "src/old.ts", name: "old.ts", kind: "file", isGitIgnored: false }]],
+        ["docs", [{ path: "docs/guide.md", name: "guide.md", kind: "file", isGitIgnored: false }]],
+      ])
+    );
+    store.set(loadedDirsAtomFamily("ws-test"), new Set(["src", "docs"]));
 
     render(
       <Provider store={store}>
@@ -98,9 +113,14 @@ describe("useWorkspaceRefreshActions", () => {
 
     await waitFor(() => {
       expect(store.get(editorRefreshTokenAtomFamily("ws-test"))).toBe(1);
-      expect(store.get(fileTreeAtomFamily("ws-test"))?.get("src")).toEqual([
-        { path: "src/index.ts", name: "index.ts", kind: "file" },
-      ]);
+      expect(store.get(fileTreeAtomFamily("ws-test"))).toEqual(
+        new Map([
+          [".", [{ path: "src", name: "src", kind: "dir", isGitIgnored: false }]],
+          ["src", [{ path: "src/index.ts", name: "index.ts", kind: "file", isGitIgnored: false }]],
+        ])
+      );
     });
+
+    expect(Array.from(store.get(loadedDirsAtomFamily("ws-test")))).toEqual(["src"]);
   });
 });

@@ -6,7 +6,12 @@
 import type { FileNode } from "@coder-studio/core";
 import { readdir, stat } from "fs/promises";
 import { join, relative } from "path";
-import { createGitignoreFilter, createTreeVisibilityFilter } from "./gitignore.js";
+import {
+  createGitignoreFilter,
+  createGitignoreMatcher,
+  createTreeVisibilityFilter,
+  isPathGitignored,
+} from "./gitignore.js";
 
 export interface ReadTreeResult {
   path: string;
@@ -25,6 +30,7 @@ export interface ReadTreeResult {
 export async function readTree(rootPath: string, subdir?: string): Promise<ReadTreeResult> {
   const targetPath = subdir ? join(rootPath, subdir) : rootPath;
   const filter = createTreeVisibilityFilter();
+  const gitignoreMatcher = createGitignoreMatcher(rootPath);
 
   const entries = await readdir(targetPath, { withFileTypes: true });
   const nodes: FileNode[] = [];
@@ -36,12 +42,14 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
 
     const fullPath = join(targetPath, entry.name);
     const relPath = relative(rootPath, fullPath);
+    const isGitIgnored = isPathGitignored(gitignoreMatcher, relPath);
 
     if (entry.isDirectory()) {
       nodes.push({
         name: entry.name,
         path: relPath,
         kind: "dir",
+        isGitIgnored,
         children: undefined, // Not loaded yet - client will request on expand
       });
     } else if (entry.isFile()) {
@@ -50,6 +58,7 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
         name: entry.name,
         path: relPath,
         kind: "file",
+        isGitIgnored,
         size: stats.size,
         mtime: stats.mtimeMs,
       });

@@ -13,16 +13,17 @@ import {
   loadedDirsAtomFamily,
   worktreeListAtomFamily,
 } from "../atoms";
+import {
+  applyDirectoryRefresh,
+  applyRootTreeRefresh,
+  collectRefreshTargets,
+} from "./file-tree-refresh";
 
 type WorkspaceRefreshStatus = "idle" | "refreshing" | "error";
 
 interface ReadTreeResult {
   path: string;
-  children: Array<{ path: string; name: string; kind: "file" | "dir" }>;
-}
-
-function sortExpandedDirs(paths: Iterable<string>): string[] {
-  return [...paths].sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
+  children: Array<{ path: string; name: string; kind: "file" | "dir"; isGitIgnored?: boolean }>;
 }
 
 export function useWorkspaceRefreshActions(workspaceId: string) {
@@ -30,6 +31,8 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
   const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
+  const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
+  const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
   const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
   const setBranchList = useSetAtom(gitBranchListAtomFamily(workspaceId));
   const setWorktreeList = useSetAtom(worktreeListAtomFamily(workspaceId));
@@ -91,17 +94,24 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
           failures.push("worktrees");
         }
 
-        if (rootTreeResult.ok && rootTreeResult.data) {
-          const nextTree = new Map<string, ReadTreeResult["children"]>();
-          nextTree.set(".", rootTreeResult.data.children);
-          setFileTree(nextTree);
-          setLoadedDirs(new Set());
-        } else {
+        if (!rootTreeResult.ok || !rootTreeResult.data) {
           failures.push("files");
-        }
+        } else {
+          const reconciled = applyRootTreeRefresh({
+            previousTree: fileTree,
+            previousLoadedDirs: loadedDirs,
+            previousExpandedDirs: expandedDirs,
+            rootChildren: rootTreeResult.data.children,
+          });
 
-        if (rootTreeResult.ok && rootTreeResult.data && expandedDirs && expandedDirs.size > 0) {
-          for (const dirPath of sortExpandedDirs(expandedDirs)) {
+          let currentTree = reconciled.tree;
+          let currentLoadedDirs = reconciled.loadedDirs;
+          let currentExpandedDirs = reconciled.prunedExpandedDirs;
+
+          setFileTree(currentTree);
+          setLoadedDirs(currentLoadedDirs);
+
+          for (const dirPath of collectRefreshTargets(currentExpandedDirs)) {
             const result = await dispatch<ReadTreeResult>("file.readTree", {
               workspaceId,
               subPath: dirPath,
@@ -112,12 +122,20 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
               continue;
             }
 
-            setFileTree((prev) => {
-              const next = new Map(prev ?? []);
-              next.set(dirPath, result.data!.children);
-              return next;
+            const refreshed = applyDirectoryRefresh({
+              previousTree: currentTree,
+              previousLoadedDirs: currentLoadedDirs,
+              previousExpandedDirs: currentExpandedDirs,
+              dirPath,
+              children: result.data.children,
             });
-            setLoadedDirs((prev) => new Set(prev).add(dirPath));
+
+            currentTree = refreshed.tree;
+            currentLoadedDirs = new Set(refreshed.loadedDirs).add(dirPath);
+            currentExpandedDirs = refreshed.prunedExpandedDirs;
+
+            setFileTree(currentTree);
+            setLoadedDirs(currentLoadedDirs);
           }
         }
 
@@ -146,7 +164,9 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
     }
   }, [
     dispatch,
+    fileTree,
     expandedDirs,
+    loadedDirs,
     pushToast,
     setBranchList,
     setEditorRefreshToken,

@@ -739,11 +739,18 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
           {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : "•"}
         </span>
 
-        <span className={`tree-icon ${isFolder ? "folder" : "file"}`} aria-hidden="true">
+        <span
+          className={`tree-icon ${isFolder ? "folder" : "file"} ${
+            node.isGitIgnored ? "tree-icon--gitignored" : ""
+          }`}
+          aria-hidden="true"
+        >
           <ThemedIcon semantic={getFileNodeSemantic(node, isExpanded)} size={14} />
         </span>
 
-        <span className="tree-label">{node.name}</span>
+        <span className={`tree-label ${node.isGitIgnored ? "tree-label--gitignored" : ""}`}>
+          {node.name}
+        </span>
 
         {variant === "desktop" && selectedPath === node.path ? (
           <span className="tree-active-meta">active</span>

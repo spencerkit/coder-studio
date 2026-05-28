@@ -15673,6 +15673,16 @@ body.is-dragging-pane .session-action-btn-drag {
   font-weight: var(--font-bold);
 }
 
+.file-tree-shell .tree-icon--gitignored,
+.file-tree-shell .tree-label--gitignored {
+  opacity: 0.5;
+}
+
+.file-tree-shell .tree-item.selected .tree-icon--gitignored,
+.file-tree-shell .tree-item.selected .tree-label--gitignored {
+  opacity: 0.72;
+}
+
 .file-tree-shell .tree-active-meta {
   margin-left: auto;
   color: var(--text-tertiary);
