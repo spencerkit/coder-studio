@@ -2415,6 +2415,20 @@ describe("components.css theme-sensitive surfaces", () => {
     );
   });
 
+  it("keeps the inline workspace launch create-folder controls on shared surface and state tokens", () => {
+    const createFolder = getLastRuleBlock(".fp-create-folder").replace(/\s+/g, " ");
+    const createFolderAction = getLastRuleBlock(".fp-create-folder__action");
+    const createFolderCancel = getLastRuleBlock(".fp-create-folder__cancel");
+
+    expect(createFolder).toContain("grid-template-columns: minmax(0, 1fr) auto auto");
+    expect(createFolder).toContain("gap: var(--sp-2)");
+    expect(createFolderAction).toContain("background: var(--state-info-bg)");
+    expect(createFolderAction).toContain("border-color: var(--state-info-border)");
+    expect(createFolderAction).toContain("color: var(--state-info-text)");
+    expect(createFolderCancel).toContain("background: var(--surface-panel)");
+    expect(createFolderCancel).toContain("color: var(--text-secondary)");
+  });
+
   it("keeps mobile supervisor sheets aligned with the shared fullscreen page spacing and action sizing", () => {
     const supervisorDetail = getLastRuleBlock(".mobile-supervisor-sheet__detail").replace(
       /\s+/g,

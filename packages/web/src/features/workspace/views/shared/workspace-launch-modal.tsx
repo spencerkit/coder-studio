@@ -1,7 +1,9 @@
 import { ArrowUp, X } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import {
   EmptyState,
   IconButton,
+  Input,
   Sheet,
   Spinner,
   ThemedIcon,
@@ -47,22 +49,55 @@ const visuallyHiddenTitleStyle = {
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const isMobile = useViewport() === "mobile";
   const t = useTranslation();
+  const createFolderInputRef = useRef<HTMLInputElement | null>(null);
   const {
     browsing,
+    closeCreateFolder,
     currentPath,
+    createFolderError,
+    creatingFolder,
     directories,
     error,
     getShortPath,
     handleNavigate,
     handleOpen,
     handleSelect,
+    isCreatingFolder,
     launchHint,
     launchTitle,
     loading,
+    newFolderName,
+    openCreateFolder,
     parentPath,
     rootPaths,
     selectedPath,
+    submitCreateFolder,
+    updateNewFolderName,
   } = useWorkspaceLaunchActions(onClose);
+
+  useLayoutEffect(() => {
+    if (!isCreatingFolder) {
+      return;
+    }
+
+    const input = createFolderInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    const focusInput = () => {
+      input.focus();
+    };
+
+    focusInput();
+
+    if (document.activeElement === input) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(focusInput, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [isCreatingFolder]);
 
   const launchBody = (
     <div className="launch-body">
@@ -78,6 +113,9 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
               {t("workspace.launch.go_up")}
             </button>
           )}
+          <button className="fp-btn" type="button" onClick={openCreateFolder}>
+            {t("workspace.launch.new_folder")}
+          </button>
         </div>
 
         <div className="fp-root-chips">
@@ -94,6 +132,53 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
             <span className="fp-chip active">{getShortPath(currentPath)}</span>
           )}
         </div>
+
+        {isCreatingFolder && (
+          <div className="fp-create-folder">
+            <Input
+              ref={createFolderInputRef}
+              aria-label={t("workspace.launch.folder_name_label")}
+              className="fp-create-folder__input"
+              disabled={creatingFolder}
+              invalid={Boolean(createFolderError)}
+              onChange={(event) => updateNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void submitCreateFolder();
+                  return;
+                }
+
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeCreateFolder();
+                }
+              }}
+              placeholder={t("workspace.launch.new_folder_placeholder")}
+              value={newFolderName}
+            />
+            <button
+              className="fp-create-folder__action"
+              type="button"
+              onClick={() => void submitCreateFolder()}
+              disabled={creatingFolder}
+            >
+              {creatingFolder
+                ? t("workspace.launch.creating_folder")
+                : t("workspace.launch.create_folder")}
+            </button>
+            <button
+              className="fp-create-folder__cancel"
+              type="button"
+              onClick={closeCreateFolder}
+              disabled={creatingFolder}
+            >
+              {t("workspace.launch.create_folder_cancel")}
+            </button>
+            {createFolderError && <div className="form-error">{createFolderError}</div>}
+          </div>
+        )}
 
         <div className="fp-dir-list">
           {browsing ? (
@@ -172,7 +257,6 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   if (isMobile) {
     return (
       <Sheet
-        kicker={t("workspace.launch.kicker")}
         title={launchTitle}
         body={launchBody}
         footer={launchFooter}
@@ -197,7 +281,6 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       <div className="launch-modal">
         <div className="launch-header">
           <div className="launch-header-left">
-            <div className="launch-kicker">{t("workspace.launch.kicker")}</div>
             <div className="launch-title">{launchTitle}</div>
             <div className="launch-hint">{launchHint}</div>
           </div>

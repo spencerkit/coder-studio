@@ -85,4 +85,34 @@ test.describe("session flow", () => {
 
     await expect(page.locator(".launch-modal")).toHaveCount(0);
   });
+
+  test("SF-08 workspace launch modal can create a folder inline and keep it selected", async ({
+    page,
+  }) => {
+    await openWelcomeWorkspaceLaunchModal(page);
+
+    const activePathChip = page.locator(".fp-chip.active").last();
+    const previousPath = ((await activePathChip.textContent()) ?? "").trim();
+    const folderName = `launch-folder-${Date.now()}`;
+
+    await page
+      .getByRole("button", { name: translatePatternForE2E("workspace.launch.new_folder") })
+      .click();
+
+    const nameInput = page.getByRole("textbox", {
+      name: translatePatternForE2E("workspace.launch.folder_name_label"),
+    });
+    await expect(nameInput).toBeVisible();
+    await nameInput.fill(folderName);
+    await nameInput.press("Enter");
+
+    await expect(nameInput).toHaveCount(0);
+
+    const createdRow = page.locator(".fp-dir.selected").filter({
+      has: page.locator(".fp-dir-name", { hasText: new RegExp(`^${folderName}$`) }),
+    });
+    await expect(createdRow).toBeVisible({ timeout: 10000 });
+    await expect(activePathChip).toHaveText(previousPath);
+    await expect(page.locator(".fp-dir-action")).toBeVisible();
+  });
 });

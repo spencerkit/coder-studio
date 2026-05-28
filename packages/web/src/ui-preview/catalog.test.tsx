@@ -475,7 +475,7 @@ describe("UI preview catalog", () => {
   it("renders the desktop overlay review scene", async () => {
     renderScene("desktop-overlay-review");
 
-    expect(await screen.findByText("Open Workspace")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
     expect(document.querySelector(".desktop-review-grid")).toBeTruthy();
     expect(document.body.querySelector(".workbench-layer-backdrop")).toBeTruthy();
     expect(document.body.querySelector(".command-palette")).toBeTruthy();
