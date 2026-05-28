@@ -3390,6 +3390,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(commandPaletteItemShortcut).toContain("border-radius: var(--radius-pill)");
   });
 
+  it("keeps commit file preview rows left-aligned inside button chrome", () => {
+    const commitFilePreviewRow = getLastRuleBlock(".commit-file-list-preview__row");
+
+    expect(commitFilePreviewRow).toContain("text-align: left");
+  });
+
   it("keeps session header badges on a single line by truncating the title first", () => {
     const titleRow = getLastRuleBlock(".mobile-shell__agent-stage .session-title-row");
     const title = getLastRuleBlock(".panel-header__title");

@@ -7399,6 +7399,13 @@ textarea.input {
   background: var(--component-rgba-108-182-255-0-08);
 }
 
+.commit-file-list-preview__row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
 .git-row-icon {
   display: inline-flex;
   align-items: center;
