@@ -198,7 +198,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       setIsCreatingFolder(false);
       setNewFolderName("");
       setCreateFolderError(null);
-    } catch (err) {
+    } catch (_err) {
       if (createRequestIdRef.current !== requestId) {
         return;
       }
@@ -253,7 +253,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
           })
         );
       }
-    } catch (err) {
+    } catch (_err) {
       navigate(
         buildDiagnosticsPath({
           context: "workspace_open",
