@@ -67,6 +67,7 @@ interface GitPanelProps {
 interface GitPanelState {
   pendingWorktreeDeletePath: string | null;
   worktreeSurfaceView: "create" | null;
+  commitExpanded: boolean;
   worktreesExpanded: boolean;
   historyExpanded: boolean;
 }
@@ -75,6 +76,7 @@ function createInitialGitPanelState(): GitPanelState {
   return {
     pendingWorktreeDeletePath: null,
     worktreeSurfaceView: null,
+    commitExpanded: true,
     worktreesExpanded: false,
     historyExpanded: false,
   };
@@ -131,13 +133,21 @@ export const GitPanel: FC<GitPanelProps> = ({
   const { currentWorktree, hasWorkspace, list, loadWorktrees, openWorktree, removeWorktreeByPath } =
     useWorktreeManagementActions(workspaceId);
   const worktreeAutoLoadAttemptedRef = useRef(false);
-  const { historyExpanded, pendingWorktreeDeletePath, worktreeSurfaceView, worktreesExpanded } =
-    panelState;
+  const {
+    commitExpanded,
+    historyExpanded,
+    pendingWorktreeDeletePath,
+    worktreeSurfaceView,
+    worktreesExpanded,
+  } = panelState;
   const pendingWorktreeDelete = useMemo(
     () => list.items.find((item) => item.path === pendingWorktreeDeletePath) ?? null,
     [list.items, pendingWorktreeDeletePath]
   );
   const totalChangeCount = groups.reduce((count, group) => count + group.changes.length, 0);
+  const commitSectionLabel = commitExpanded
+    ? t("git.commit_collapse_label")
+    : t("git.commit_expand_label");
   const worktreesSectionLabel = `${t("worktree.list_title")}${list.items.length}`;
   const historySectionLabel = `${t("git.history")}${history.length}`;
 
@@ -224,12 +234,23 @@ export const GitPanel: FC<GitPanelProps> = ({
         <div className="git-panel-scroll">
           <section className="git-panel-section git-commit-block">
             <div className="git-panel-section-header">
-              <div className="git-panel-section-toggle git-panel-section-toggle-static">
-                <span className="git-panel-section-chevron expanded" aria-hidden="true">
-                  <ChevronDown size={14} />
+              <button
+                type="button"
+                className="git-panel-section-toggle"
+                onClick={() =>
+                  setPanelState((current) => ({
+                    ...current,
+                    commitExpanded: !current.commitExpanded,
+                  }))
+                }
+                aria-expanded={commitExpanded}
+                aria-label={commitSectionLabel}
+              >
+                <span className="git-panel-section-chevron">
+                  {commitExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </span>
                 <span>{t("git.commit")}</span>
-              </div>
+              </button>
               <div className="git-panel-section-actions git-commit-actions">
                 <Tooltip content={canCommit ? t("git.commit") : t("git.nothing_staged")}>
                   <button
@@ -245,21 +266,23 @@ export const GitPanel: FC<GitPanelProps> = ({
               </div>
             </div>
 
-            <div className="git-panel-section-body git-commit-body">
-              <Textarea
-                className="git-commit-input"
-                placeholder={t("git.commit_summary_placeholder")}
-                value={commitMessage}
-                onChange={(event) => setCommitMessage(event.target.value)}
-                rows={isMobile ? 3 : 1}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                    event.preventDefault();
-                    void handleCommit();
-                  }
-                }}
-              />
-            </div>
+            {commitExpanded ? (
+              <div className="git-panel-section-body git-commit-body">
+                <Textarea
+                  className="git-commit-input"
+                  placeholder={t("git.commit_summary_placeholder")}
+                  value={commitMessage}
+                  onChange={(event) => setCommitMessage(event.target.value)}
+                  rows={isMobile ? 3 : 1}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                      event.preventDefault();
+                      void handleCommit();
+                    }
+                  }}
+                />
+              </div>
+            ) : null}
           </section>
 
           {shouldRenderWorktreeSection ? (

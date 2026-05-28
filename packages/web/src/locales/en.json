@@ -433,6 +433,8 @@
     "untracked": "Untracked",
     "no_changes": "No changes",
     "commit": "Commit",
+    "commit_expand_label": "Expand Commit",
+    "commit_collapse_label": "Collapse Commit",
     "commit_message": "Commit Message",
     "commit_placeholder": "Enter commit message...",
     "commit_summary_placeholder": "Enter commit message...",

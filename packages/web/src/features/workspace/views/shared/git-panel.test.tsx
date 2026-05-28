@@ -373,6 +373,59 @@ describe("GitPanel", () => {
     ).toBeTruthy();
   });
 
+  it("toggles the commit composer from the commit section header", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const commitInput = await screen.findByPlaceholderText("Enter commit message...");
+    const commitBlock = commitInput.closest(".git-commit-block");
+    const commitToggle = commitBlock?.querySelector("button.git-panel-section-toggle");
+
+    expect(commitBlock).not.toBeNull();
+    expect(commitToggle).not.toBeNull();
+    expect(commitToggle).toHaveAttribute("aria-expanded", "true");
+    expect(commitToggle).toHaveAccessibleName("Collapse Commit");
+
+    fireEvent.click(commitToggle as HTMLButtonElement);
+
+    expect(commitToggle).toHaveAttribute("aria-expanded", "false");
+    expect(commitToggle).toHaveAccessibleName("Expand Commit");
+    expect(screen.queryByPlaceholderText("Enter commit message...")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Commit$/ })).toBeInTheDocument();
+
+    fireEvent.click(commitToggle as HTMLButtonElement);
+
+    expect(await screen.findByPlaceholderText("Enter commit message...")).toBeInTheDocument();
+  });
+
   it("keeps the mobile worktree section between commit and changes", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
@@ -899,7 +952,7 @@ describe("GitPanel", () => {
       expect(sendCommand).toHaveBeenCalledWith("git.status", { workspaceId: "ws-test" }, undefined);
     });
 
-    expect(await screen.findByRole("button", { name: "Commit" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Commit$/ })).toBeInTheDocument();
     expect(screen.getByText("Changes")).toBeInTheDocument();
     expect(screen.queryByText("Staged")).toBeNull();
     expect(screen.queryByText("Untracked")).toBeNull();
@@ -2408,7 +2461,7 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    expect(await screen.findByRole("button", { name: "提交" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^提交$/ })).toBeInTheDocument();
     expect(screen.getByText("更改")).toBeInTheDocument();
     expect(screen.queryByText("已暂存")).toBeNull();
     expect(screen.queryByText("未跟踪")).toBeNull();
@@ -2693,7 +2746,7 @@ describe("GitPanel", () => {
       expect(textarea.value).toBe("feat: ship it");
     });
 
-    const commitButton = await screen.findByRole("button", { name: "提交" });
+    const commitButton = await screen.findByRole("button", { name: /^提交$/ });
     fireEvent.click(commitButton);
 
     await waitFor(() => {

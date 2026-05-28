@@ -433,6 +433,8 @@
     "untracked": "未跟踪",
     "no_changes": "无更改",
     "commit": "提交",
+    "commit_expand_label": "展开提交",
+    "commit_collapse_label": "收起提交",
     "commit_message": "提交信息",
     "commit_placeholder": "输入提交信息...",
     "commit_summary_placeholder": "输入提交信息...",
