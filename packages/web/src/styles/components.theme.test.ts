@@ -1522,6 +1522,9 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(editorShell).toContain("background: var(--workspace-editor-shell-surface)");
     expect(editorShell).toContain("backdrop-filter: var(--material-backdrop-filter)");
+    expect(editorShell).toContain("border: none");
+    expect(editorShell).toContain("border-radius: 0");
+    expect(editorShell).toContain("box-shadow: none");
     expect(editorShell).not.toContain("rgba(11, 18, 24, 0.92)");
     expect(editorHeader).toContain(
       "border-bottom: 1px solid var(--workspace-editor-toolbar-border)"
@@ -1627,7 +1630,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "var(--component-mix-terminal-state-running-border-32pct-transparent)"
     );
     expect(focusPulse).toContain("z-index: var(--z-inline-raised)");
-    expect(gitView).toContain("padding: var(--editor-pane-inset)");
+    expect(gitView).toContain("padding: 0");
     expect(editorHeader).toContain("padding: var(--gap-default) var(--editor-toolbar-inset)");
     expect(editorHeader).toContain(
       "border-bottom: 1px solid var(--workspace-editor-toolbar-border)"
@@ -3339,6 +3342,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const gitSectionBody = getLastRuleBlock(".git-panel-section-body");
     const gitWorktreeRow = getLastRuleBlock(".git-worktree-row");
     const gitHistoryRow = getLastRuleBlock(".git-history-row");
+    const gitRowActions = getLastRuleBlock(".git-panel .git-row-actions");
     const gitRowActive = getLastRuleBlock(".git-panel .git-row.active");
     const gitHistoryRowCurrent = getLastRuleBlock(".git-history-row.current");
     const commandPalette = getLastRuleBlock(".command-palette");
@@ -3369,6 +3373,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(gitSectionBody).toContain("gap: 4px");
     expect(gitWorktreeRow).toContain("min-height: 28px");
     expect(gitHistoryRow).toContain("min-height: 34px");
+    expect(gitRowActions).toContain("display: inline-flex");
     expect(hasRuleBlock(".git-panel .git-row.active::before")).toBe(false);
     expect(gitRowActive).toContain("--workspace-sidebar-selected-border");
     expect(gitRowActive).toContain("--workspace-sidebar-selected-bg");

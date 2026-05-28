@@ -317,7 +317,7 @@ describe("GitPanel", () => {
     expect(container.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
 
-  it("renders the collapsed git sections in commit, worktrees, changes, history order", async () => {
+  it("renders the collapsed git sections in commit, worktrees, staged, changes, history order", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
@@ -354,20 +354,21 @@ describe("GitPanel", () => {
     );
 
     expect(await screen.findByText("Worktrees")).toBeInTheDocument();
+    expect(screen.getByText("Staged")).toBeInTheDocument();
     expect(screen.getByText("Changes")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
     expect(screen.queryByText("pr/123-fix-auth")).toBeNull();
     expect(screen.queryByText("feat: refresh source control surface")).toBeNull();
     const summary = screen.getByText("Worktrees");
+    const staged = screen.getByText("Staged");
     const changes = screen.getByText("Changes");
     const history = screen.getByText("History");
     const textarea = screen.getByPlaceholderText("Enter commit message...");
     expect(
       textarea.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    expect(
-      summary.compareDocumentPosition(changes) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    expect(summary.compareDocumentPosition(staged) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(staged.compareDocumentPosition(changes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
       changes.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -426,7 +427,7 @@ describe("GitPanel", () => {
     expect(await screen.findByPlaceholderText("Enter commit message...")).toBeInTheDocument();
   });
 
-  it("keeps the mobile worktree section between commit and changes", async () => {
+  it("keeps the mobile worktree section between commit and the staged and changes sections", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
@@ -464,6 +465,7 @@ describe("GitPanel", () => {
 
     const commitInput = await screen.findByPlaceholderText("Enter commit message...");
     const worktrees = screen.getByText("Worktrees");
+    const staged = screen.getByText("Staged");
     const changes = screen.getByText("Changes");
     const history = screen.getByText("History");
 
@@ -471,8 +473,9 @@ describe("GitPanel", () => {
       commitInput.compareDocumentPosition(worktrees) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      worktrees.compareDocumentPosition(changes) & Node.DOCUMENT_POSITION_FOLLOWING
+      worktrees.compareDocumentPosition(staged) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+    expect(staged.compareDocumentPosition(changes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
       changes.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -592,10 +595,52 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    const changesToggle = await screen.findByRole("button", { name: "Changes4" });
+    const changesToggle = await screen.findByRole("button", { name: "Changes3" });
 
     expect(changesToggle).toHaveAttribute("aria-expanded", "true");
     expect(changesToggle.querySelector(".git-panel-section-chevron")).not.toBeNull();
+  });
+
+  it("renders the desktop staged section as a collapsible header with a chevron", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const stagedToggle = await screen.findByRole("button", { name: "Staged1" });
+
+    expect(stagedToggle).toHaveAttribute("aria-expanded", "true");
+    expect(stagedToggle.querySelector(".git-panel-section-chevron")).not.toBeNull();
   });
 
   it("toggles the changes list from the changes section header", async () => {
@@ -634,19 +679,73 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    const changesToggle = await screen.findByRole("button", { name: "Changes4" });
+    const changesToggle = await screen.findByRole("button", { name: "Changes3" });
 
     expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
+    expect(screen.getByText("AppController.tsx")).toBeInTheDocument();
 
     fireEvent.click(changesToggle);
 
     expect(changesToggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("AuthGate.tsx")).toBeNull();
+    expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
+    expect(screen.queryByText("AppController.tsx")).toBeNull();
     expect(screen.getByRole("button", { name: "Stage All" })).toBeInTheDocument();
 
     fireEvent.click(changesToggle);
 
     expect(changesToggle).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByText("AppController.tsx")).toBeInTheDocument();
+  });
+
+  it("toggles the staged list from the staged section header", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return {
+          worktrees,
+        };
+      }
+
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const stagedToggle = await screen.findByRole("button", { name: "Staged1" });
+
+    expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
+
+    fireEvent.click(stagedToggle);
+
+    expect(stagedToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("AuthGate.tsx")).toBeNull();
+    expect(screen.getByRole("button", { name: "Unstage All" })).toBeInTheDocument();
+
+    fireEvent.click(stagedToggle);
+
+    expect(stagedToggle).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("AuthGate.tsx")).toBeInTheDocument();
   });
 
@@ -696,7 +795,7 @@ describe("GitPanel", () => {
     ).toBeTruthy();
   });
 
-  it("keeps worktrees history and change groups as section toggles inside one continuous git body", async () => {
+  it("keeps worktrees, staged, changes, and history as section toggles inside one continuous git body", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return unstagedOnlyStatus;
@@ -734,12 +833,14 @@ describe("GitPanel", () => {
 
     const panel = container.querySelector(".git-panel-scroll");
     const worktreesToggle = await screen.findByRole("button", { name: /Worktrees/ });
+    const stagedToggle = screen.getByRole("button", { name: "Staged0" });
     const historyToggle = screen.getByRole("button", { name: "History2" });
 
     expect(panel).toBeTruthy();
-    expect(panel?.querySelectorAll(".git-panel-section")).toHaveLength(4);
+    expect(panel?.querySelectorAll(".git-panel-section")).toHaveLength(5);
     expect(panel?.querySelector(".panel-header")).toBeNull();
     expect(worktreesToggle).toHaveAttribute("aria-expanded", "false");
+    expect(stagedToggle).toHaveAttribute("aria-expanded", "true");
     expect(historyToggle).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -1047,13 +1148,22 @@ describe("GitPanel", () => {
     });
 
     expect(await screen.findByRole("button", { name: /^Commit$/ })).toBeInTheDocument();
+    expect(screen.getByText("Staged")).toBeInTheDocument();
     expect(screen.getByText("Changes")).toBeInTheDocument();
-    expect(screen.queryByText("Staged")).toBeNull();
     expect(screen.queryByText("Untracked")).toBeNull();
-    expect(screen.getByText("AuthGate.tsx")).toBeInTheDocument();
-    expect(screen.getByText("AppController.tsx")).toBeInTheDocument();
-    expect(screen.getByText("supervisor.test.ts")).toBeInTheDocument();
-    expect(screen.getByText("deprecated.ts")).toBeInTheDocument();
+    const stagedSection = screen.getByText("Staged").closest(".git-panel-section");
+    const changesSection = screen.getByText("Changes").closest(".git-panel-section");
+    expect(stagedSection).not.toBeNull();
+    expect(changesSection).not.toBeNull();
+    expect(within(stagedSection as HTMLElement).getByText("AuthGate.tsx")).toBeInTheDocument();
+    expect(within(changesSection as HTMLElement).queryByText("AuthGate.tsx")).toBeNull();
+    expect(
+      within(changesSection as HTMLElement).getByText("AppController.tsx")
+    ).toBeInTheDocument();
+    expect(
+      within(changesSection as HTMLElement).getByText("supervisor.test.ts")
+    ).toBeInTheDocument();
+    expect(within(changesSection as HTMLElement).getByText("deprecated.ts")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History0" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Latest Commit")).not.toBeInTheDocument();
   });
@@ -1141,15 +1251,18 @@ describe("GitPanel", () => {
       </Provider>
     );
 
-    const noChanges = await screen.findByText("No changes");
-    const changesShell = noChanges.closest(".git-panel-empty");
+    const noChanges = await screen.findAllByText("No changes");
 
-    expect(changesShell).not.toBeNull();
-    expect(changesShell).toHaveStyle({
-      minHeight: "auto",
-      padding: "12px 0",
-      gap: "4px",
-    });
+    expect(noChanges).toHaveLength(2);
+    for (const entry of noChanges) {
+      const changesShell = entry.closest(".git-panel-empty");
+      expect(changesShell).not.toBeNull();
+      expect(changesShell).toHaveStyle({
+        minHeight: "auto",
+        padding: "12px 0",
+        gap: "4px",
+      });
+    }
 
     fireEvent.click(screen.getByRole("button", { name: "History0" }));
 
@@ -2101,7 +2214,7 @@ describe("GitPanel", () => {
     });
   });
 
-  it("shows a section-level discard action for the merged changes group only", async () => {
+  it("shows a section-level discard action for the changes group only", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
@@ -2143,13 +2256,13 @@ describe("GitPanel", () => {
     const changesSection = (await screen.findByText("Changes")).closest(".git-panel-section");
 
     expect(changesSection).not.toBeNull();
-    expect(screen.queryByText("Staged")).toBeNull();
+    expect(screen.getByText("Staged")).toBeInTheDocument();
     expect(
       within(changesSection as HTMLElement).getByRole("button", { name: "Discard All" })
     ).toBeInTheDocument();
   });
 
-  it("discards only the merged changes group files after section confirmation", async () => {
+  it("discards only the changes group files after section confirmation", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
@@ -2196,7 +2309,7 @@ describe("GitPanel", () => {
     );
 
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
-    expect(screen.getByText("确定要放弃 4 个文件的更改吗？")).toBeInTheDocument();
+    expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
 
     const modal = screen.getByText("放弃所有更改").closest(".modal-card");
     expect(modal).not.toBeNull();
@@ -2208,7 +2321,6 @@ describe("GitPanel", () => {
         {
           workspaceId: "ws-test",
           paths: [
-            "src/auth/AuthGate.tsx",
             "src/app/AppController.tsx",
             "src/legacy/deprecated.ts",
             "tests/supervisor.test.ts",
@@ -2353,7 +2465,7 @@ describe("GitPanel", () => {
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
-    expect(screen.getByText("确定要放弃 4 个文件的更改吗？")).toBeInTheDocument();
+    expect(screen.getByText("确定要放弃 3 个文件的更改吗？")).toBeInTheDocument();
 
     const dialog = screen.getByRole("dialog");
     const modal = dialog.closest(".modal-card") ?? dialog;
@@ -2366,7 +2478,6 @@ describe("GitPanel", () => {
         {
           workspaceId: "ws-test",
           paths: [
-            "src/auth/AuthGate.tsx",
             "src/app/AppController.tsx",
             "src/legacy/deprecated.ts",
             "tests/supervisor.test.ts",
@@ -2517,7 +2628,6 @@ describe("GitPanel", () => {
       {
         workspaceId: "ws-test",
         paths: [
-          "src/auth/AuthGate.tsx",
           "src/app/AppController.tsx",
           "src/legacy/deprecated.ts",
           "tests/supervisor.test.ts",
@@ -2557,7 +2667,7 @@ describe("GitPanel", () => {
 
     expect(await screen.findByRole("button", { name: /^提交$/ })).toBeInTheDocument();
     expect(screen.getByText("更改")).toBeInTheDocument();
-    expect(screen.queryByText("已暂存")).toBeNull();
+    expect(screen.getByText("已暂存")).toBeInTheDocument();
     expect(screen.queryByText("未跟踪")).toBeNull();
     expect(screen.getByPlaceholderText("输入提交信息...")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "刷新" })).not.toBeInTheDocument();
@@ -2762,7 +2872,8 @@ describe("GitPanel", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /Worktrees/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Changes4" }));
+    fireEvent.click(screen.getByRole("button", { name: "Staged1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Changes3" }));
     fireEvent.click(screen.getByRole("button", { name: "History2" }));
     fireEvent.click(screen.getByRole("button", { name: "New" }));
 
@@ -2785,7 +2896,11 @@ describe("GitPanel", () => {
       "aria-expanded",
       "false"
     );
-    expect(screen.getByRole("button", { name: "Changes4" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Staged1" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "Changes3" })).toHaveAttribute(
       "aria-expanded",
       "true"
     );
@@ -2808,7 +2923,11 @@ describe("GitPanel", () => {
       "aria-expanded",
       "true"
     );
-    expect(screen.getByRole("button", { name: "Changes4" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Staged1" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.getByRole("button", { name: "Changes3" })).toHaveAttribute(
       "aria-expanded",
       "false"
     );

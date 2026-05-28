@@ -802,7 +802,6 @@ export function useGitPanelActions({
 
   const handleDiscardAll = useCallback(() => {
     const paths = [
-      ...(gitState?.staged.map((file) => file.path) ?? []),
       ...(gitState?.modified.map((file) => file.path) ?? []),
       ...(gitState?.deleted.map((file) => file.path) ?? []),
       ...(gitState?.untracked.map((file) => file.path) ?? []),

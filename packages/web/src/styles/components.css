@@ -15115,7 +15115,7 @@ body.is-dragging-pane .session-action-btn-drag {
 .workspace-git-view {
   flex: 1;
   min-height: 0;
-  padding: var(--editor-pane-inset);
+  padding: 0;
   background: transparent;
 }
 
@@ -15222,6 +15222,9 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-git-editor {
   background: var(--workspace-editor-shell-surface);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   backdrop-filter: var(--material-backdrop-filter);
 }
 
@@ -15984,9 +15987,12 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .git-panel .git-row-icon,
-.git-panel .git-row-status-icon,
-.git-panel .git-row-actions {
+.git-panel .git-row-status-icon {
   display: none;
+}
+
+.git-panel .git-row-actions {
+  display: inline-flex;
 }
 
 .git-panel .git-row-content {
