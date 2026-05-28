@@ -744,4 +744,115 @@ describe("WorkspaceLaunchModal", () => {
     expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
     expect(screen.getByTestId("selected-path")).toHaveTextContent("");
   });
+
+  it("creates from the root path without introducing a double slash", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
+      if (op === "workspace.browse" && args.path === "/") {
+        return {
+          currentPath: "/",
+          parentPath: null,
+          directories: [{ name: "root-demo", path: "/root-demo" }],
+          rootPaths: ["/"],
+        };
+      }
+
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/",
+          parentPath: null,
+          directories: [],
+          rootPaths: ["/"],
+        };
+      }
+
+      if (op === "workspace.mkdir") {
+        return { ok: true };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-valid-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.mkdir",
+        { path: "/feature-demo" },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-path")).toHaveTextContent("/feature-demo");
+    });
+  });
+
+  it("resets creating-folder state when navigating during an active create request", async () => {
+    let resolveCreate: (() => void) | undefined;
+    const sendCommand = vi.fn().mockImplementation((op: string, args: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return Promise.resolve({
+          currentPath: args.path ?? "/home/spencer",
+          parentPath: "/home",
+          directories: [],
+        });
+      }
+
+      if (op === "workspace.mkdir") {
+        return new Promise((resolve) => {
+          resolveCreate = () => resolve({ ok: true });
+        });
+      }
+
+      return Promise.resolve({});
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchActionsHarness />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByText("open-create-folder"));
+    fireEvent.click(screen.getByText("set-valid-name"));
+    fireEvent.click(screen.getByText("submit-create-folder"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("creating-folder")).toHaveTextContent("true");
+    });
+
+    fireEvent.click(screen.getByText("navigate-projects"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("creating-folder")).toHaveTextContent("false");
+    });
+
+    resolveCreate?.();
+  });
 });

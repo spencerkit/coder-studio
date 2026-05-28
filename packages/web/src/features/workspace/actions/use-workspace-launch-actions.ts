@@ -33,6 +33,10 @@ interface CreateDirectoryResult {
 
 type TabType = "status" | "diff" | "tree";
 
+function joinChildPath(parentPath: string, childName: string): string {
+  return parentPath === "/" ? `/${childName}` : `${parentPath}/${childName}`;
+}
+
 export function useWorkspaceLaunchActions(onClose: () => void) {
   const t = useTranslation();
   const location = useLocation();
@@ -112,6 +116,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       setIsCreatingFolder(false);
       setNewFolderName("");
       setCreateFolderError(null);
+      setCreatingFolder(false);
       void loadDirectory(path);
     },
     [loadDirectory]
@@ -161,7 +166,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
     try {
       const createResult = await dispatch<CreateDirectoryResult>("workspace.mkdir", {
-        path: `${currentPath}/${trimmedName}`,
+        path: joinChildPath(currentPath, trimmedName),
       });
 
       if (!createResult.ok) {
@@ -187,7 +192,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       setRootPaths(nextRootPaths);
       const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
       setHomePath(detectedHomePath);
-      setSelectedPath(`${browseResult.data.currentPath}/${trimmedName}`);
+      setSelectedPath(joinChildPath(browseResult.data.currentPath, trimmedName));
       setIsCreatingFolder(false);
       setNewFolderName("");
       setCreateFolderError(null);
