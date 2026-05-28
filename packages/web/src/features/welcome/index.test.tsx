@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
 import { WelcomePage } from "./index";
@@ -43,26 +43,6 @@ describe("WelcomePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Workspace" }));
 
     expect(screen.getByTestId("workspace-launch-modal")).toBeInTheDocument();
-  });
-
-  it("navigates to settings from the secondary action", () => {
-    const store = createStore();
-    store.set(localeAtom, "en");
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/"]}>
-          <Routes>
-            <Route path="/" element={<WelcomePage />} />
-            <Route path="/settings" element={<div>Settings Screen</div>} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-
-    expect(screen.getByText("Settings Screen")).toBeInTheDocument();
   });
 
   it("adds the mobile welcome page variant classes on mobile viewports", () => {
@@ -113,7 +93,7 @@ describe("WelcomePage", () => {
     expect(
       screen.getByText("Inside the workspace, launch an AI session for that project.")
     ).toBeInTheDocument();
-    expect(screen.getByText("Need provider setup first?")).toBeInTheDocument();
+    expect(screen.queryByText("Need provider setup first?")).not.toBeInTheDocument();
     expect(screen.getByText("Why use it here")).toBeInTheDocument();
     expect(screen.getByText("Review code and Git side by side")).toBeInTheDocument();
     expect(
@@ -130,25 +110,20 @@ describe("WelcomePage", () => {
     expect(document.querySelector(".welcome-card__hero")).toBeTruthy();
     expect(document.querySelector(".welcome-flow")).toBeTruthy();
     expect(document.querySelector(".welcome-flow__steps")).toBeTruthy();
-    expect(document.querySelector(".welcome-flow__support")).toBeTruthy();
+    expect(document.querySelector(".welcome-flow__support")).toBeFalsy();
     expect(document.querySelector(".welcome-step-card")).toBeTruthy();
     expect(document.querySelector(".welcome-card__features")).toBeTruthy();
     expect(document.querySelector(".welcome-support-list")).toBeTruthy();
     const openWorkspaceButton = screen.getByRole("button", { name: "Open Workspace" });
-    const settingsButton = screen.getByRole("button", { name: "Settings" });
     const stepCards = Array.from(document.querySelectorAll(".welcome-step-card"));
     const supportItems = Array.from(document.querySelectorAll(".welcome-feature"));
-    const flowSupport = document.querySelector(".welcome-flow__support");
-    const settingsCard = settingsButton.closest(".welcome-step-card");
 
     expect(stepCards).toHaveLength(2);
     expect(supportItems).toHaveLength(2);
-    expect(flowSupport?.contains(settingsButton)).toBe(true);
-    expect(settingsCard).toBeNull();
     expect(
       openWorkspaceButton.querySelector('[data-icon-semantic="nav.newWorkspace"]')
     ).toBeTruthy();
-    expect(settingsButton.querySelector('[data-icon-semantic="nav.settings"]')).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Settings" })).not.toBeInTheDocument();
   });
 
   it("renders translated Chinese activation copy in the step-first layout when locale is set to zh", () => {
@@ -175,7 +150,7 @@ describe("WelcomePage", () => {
     expect(screen.getByText("第 2 步")).toBeInTheDocument();
     expect(screen.getByText("启动 Claude 或 Codex")).toBeInTheDocument();
     expect(screen.getByText("进入工作区后，再为当前项目启动一个 AI 会话。")).toBeInTheDocument();
-    expect(screen.getByText("如果要先配置 Provider，可以先去设置。")).toBeInTheDocument();
+    expect(screen.queryByText("如果要先配置 Provider，可以先去设置。")).not.toBeInTheDocument();
     expect(screen.getByText("为什么在这里使用")).toBeInTheDocument();
     expect(screen.getByText("并排查看代码和 Git 变更")).toBeInTheDocument();
     expect(
@@ -233,7 +208,7 @@ describe("WelcomePage", () => {
     expect(container.querySelector(".welcome-card__hero")).toBeTruthy();
     expect(container.querySelector(".welcome-flow")).toBeTruthy();
     expect(container.querySelector(".welcome-flow__steps")).toBeTruthy();
-    expect(container.querySelector(".welcome-flow__support")).toBeTruthy();
+    expect(container.querySelector(".welcome-flow__support")).toBeFalsy();
     expect(container.querySelector(".welcome-card__features")).toBeTruthy();
     expect(container.querySelector(".welcome-support-list")).toBeTruthy();
     expect(container.querySelector(".welcome-card__panel")).toBeFalsy();

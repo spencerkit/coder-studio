@@ -1284,30 +1284,33 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("styles the welcome page as a step-first workflow with compact support content", () => {
+    const welcomeCard = getLastRuleBlock(".welcome-card");
     const welcomeLayout = getLastRuleBlock(".welcome-layout");
     const welcomeFlow = getLastRuleBlock(".welcome-flow");
     const welcomeSteps = getLastRuleBlock(".welcome-flow__steps");
-    const welcomeFlowSupport = getLastRuleBlock(".welcome-flow__support");
     const stepCard = getLastRuleBlock(".welcome-step-card");
     const supportList = getLastRuleBlock(".welcome-support-list");
     const stepHint = getLastRuleBlock(".welcome-step-hint");
     const stepDetail = getLastRuleBlock(".welcome-step-detail");
-    const settingsHint = getLastRuleBlock(".welcome-settings-hint");
+    const welcomeTitle = getLastRuleBlock(".welcome-title");
+    const welcomeBody = getLastRuleBlock(".welcome-body");
 
+    expect(welcomeCard).toContain("width: min(100%, 1180px)");
+    expect(welcomeCard).toContain("max-width: 1180px");
     expect(welcomeLayout).toContain("display: grid");
-    expect(welcomeLayout).toContain("grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr)");
+    expect(welcomeLayout).toContain("grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.3fr)");
     expect(welcomeFlow).toContain("flex-direction: column");
     expect(welcomeSteps).toContain("display: grid");
     expect(welcomeSteps).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
-    expect(welcomeFlowSupport).toContain("display: flex");
     expect(stepCard).toContain("border-radius: var(--radius-lg)");
     expect(stepCard).toContain("background: var(--component-mix-surface-panel-92pct-surface-page)");
     expect(supportList).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(stepHint).toContain("text-transform: uppercase");
     expect(stepHint).toContain("color: var(--text-ter)");
-    expect(stepDetail).toContain("max-width: 34ch");
+    expect(stepDetail).toContain("max-width: 40ch");
     expect(stepDetail).toContain("color: var(--text-secondary)");
-    expect(settingsHint).toContain("color: var(--text-tertiary)");
+    expect(welcomeTitle).not.toContain("max-width");
+    expect(welcomeBody).not.toContain("max-width");
   });
 
   it("keeps quick actions sized to its label instead of icon-button width", () => {
@@ -2722,19 +2725,23 @@ describe("components.css theme-sensitive surfaces", () => {
   it("stacks mobile welcome and auth shells vertically so cards size to content", () => {
     const welcomeContainer = getLastRuleBlock(".welcome-container--mobile");
     const mobileWelcomeLayout = getLastRuleBlock(".welcome-card--mobile .welcome-layout");
+    const mobileWelcomeFeatures = getLastRuleBlock(".welcome-card--mobile .welcome-card__features");
     const mobileWelcomeSteps = getLastRuleBlock(".welcome-card--mobile .welcome-flow__steps");
-    const mobileWelcomeSupport = getLastRuleBlock(".welcome-card--mobile .welcome-flow__support");
     const mobileSupportList = getLastRuleBlock(".welcome-card--mobile .welcome-support-list");
     const authScreen = getLastRuleBlock(".auth-screen--mobile");
+    const mobileWelcomeTitle = getLastRuleBlock(".welcome-card--mobile .welcome-title");
+    const mobileWelcomeBody = getLastRuleBlock(".welcome-card--mobile .welcome-body");
 
     expect(welcomeContainer).toContain("flex-direction: column");
     expect(welcomeContainer).toContain("align-items: stretch");
     expect(welcomeContainer).toContain("justify-content: flex-start");
     expect(welcomeContainer).toContain("overflow-y: auto");
     expect(mobileWelcomeLayout).toContain("flex-direction: column");
+    expect(mobileWelcomeFeatures).toContain("width: 100%");
+    expect(mobileWelcomeFeatures).toContain("align-self: stretch");
     expect(mobileWelcomeSteps).toContain("grid-template-columns: 1fr");
-    expect(mobileWelcomeSupport).toContain("flex-direction: column");
-    expect(mobileWelcomeSupport).toContain("align-items: stretch");
+    expect(mobileWelcomeTitle).not.toContain("max-width");
+    expect(mobileWelcomeBody).not.toContain("max-width");
     expect(mobileSupportList).toContain("grid-template-columns: 1fr");
     expect(authScreen).toContain("padding:");
   });
