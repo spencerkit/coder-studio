@@ -23,6 +23,10 @@ describe("resolveLspServerKind", () => {
     expect(resolveLspServerKind("src/a.jsx")).toBe("typescript");
   });
 
+  it("maps vue files to the vue server kind", () => {
+    expect(resolveLspServerKind("src/App.vue")).toBe("vue");
+  });
+
   it("returns null for unsupported languages", () => {
     expect(resolveLspServerKind("assets/logo.svg")).toBeNull();
   });

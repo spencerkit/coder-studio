@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Workspace } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { VUE_MANAGED_VERSION } from "./definitions.js";
 import { LspToolManager } from "./manager.js";
 import { FileManifestStore } from "./manifest-store.js";
 
@@ -239,6 +240,50 @@ describe("LspToolManager.resolve", () => {
       autoInstallSupported: false,
       installReadiness: "unsupported_platform",
       missingCommands: ["rust-analyzer"],
+    });
+  });
+
+  it("prefers a managed vue install over system PATH", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const executablePath = join(
+      root,
+      "vue",
+      VUE_MANAGED_VERSION,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
+    );
+    mkdirSync(dirname(executablePath), { recursive: true });
+    writeFileSync(executablePath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(
+      join(root, "vue", "manifest.json"),
+      JSON.stringify({
+        serverKind: "vue",
+        version: VUE_MANAGED_VERSION,
+        executablePath,
+        installedAt: 1,
+        source: "managed",
+        platform: process.platform,
+      })
+    );
+
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => true),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "vue",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "managed",
+      command: executablePath,
+      args: ["--stdio"],
     });
   });
 });

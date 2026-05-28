@@ -11,6 +11,7 @@ import type {
   LspServerKind,
   LspSessionSummary,
 } from "@coder-studio/core";
+import { shouldUseShellForCommand } from "@coder-studio/utils";
 import { type MessageConnection, NotificationType, RequestType } from "vscode-jsonrpc";
 import { DocumentStore } from "./document-store.js";
 
@@ -47,11 +48,13 @@ interface SessionDeps {
   };
   onDiagnostics: (event: LspDiagnosticsEvent) => void;
   requestTimeoutMs: number;
+  platform?: NodeJS.Platform;
   logger: {
     info: (...args: unknown[]) => void;
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
+  spawnProcess?: typeof spawn;
 }
 
 interface TextDocumentParams {
@@ -163,9 +166,13 @@ export class LspSession {
   }
 
   private async startConnection(): Promise<LspSessionSummary> {
-    const child = spawn(this.deps.spec.command, this.deps.spec.args, {
+    const platform = this.deps.platform ?? process.platform;
+    const spawnProcess = this.deps.spawnProcess ?? spawn;
+    const child = spawnProcess(this.deps.spec.command, this.deps.spec.args, {
       cwd: this.deps.spec.rootPath,
       stdio: ["pipe", "pipe", "pipe"],
+      shell: shouldUseShellForCommand(this.deps.spec.command, platform),
+      windowsHide: true,
     });
     this.child = child;
 

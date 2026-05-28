@@ -20,6 +20,7 @@ const TYPESCRIPT_EXTENSIONS = new Set([
 const PYTHON_EXTENSIONS = new Set([".py"]);
 const GO_EXTENSIONS = new Set([".go"]);
 const RUST_EXTENSIONS = new Set([".rs"]);
+const VUE_EXTENSIONS = new Set([".vue"]);
 
 export function resolveLspServerKind(path: string): LspServerKind | null {
   const extension = path.slice(path.lastIndexOf(".")).toLowerCase();
@@ -38,6 +39,10 @@ export function resolveLspServerKind(path: string): LspServerKind | null {
 
   if (RUST_EXTENSIONS.has(extension)) {
     return "rust";
+  }
+
+  if (VUE_EXTENSIONS.has(extension)) {
+    return "vue";
   }
 
   return null;

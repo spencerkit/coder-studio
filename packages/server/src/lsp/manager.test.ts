@@ -272,6 +272,74 @@ describe("LspManager", () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a vue session for vue files when the tool manager resolves ready", async () => {
+    const vueSummary = {
+      workspaceId: "ws-1",
+      serverKind: "vue" as const,
+      status: "ready" as const,
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    };
+    const fakeSession = {
+      start: vi.fn(async () => vueSummary),
+      stop: vi.fn(async () => {}),
+      getSummary: () => vueSummary,
+      openDocument: async () => 1,
+      changeDocument: async () => 2,
+      closeDocument: async () => {},
+      definition: async () => [],
+      declaration: async () => [],
+      typeDefinition: async () => [],
+      references: async () => [],
+      hover: async () => null,
+      documentSymbols: async () => [],
+    };
+
+    const manager = new LspManager({
+      workspaceMgr: {
+        get: () => ({
+          id: "ws-1",
+          path: process.cwd(),
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: { leftPanelWidth: 250, bottomPanelHeight: 200, focusMode: false },
+        }),
+      },
+      eventBus: { emit: vi.fn() },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      requestTimeoutMs: 1000,
+      idleTtlMs: 1000,
+      restartLimit: 2,
+      lspToolMgr: {
+        resolve: vi.fn(async () => ({
+          kind: "ready" as const,
+          serverKind: "vue" as const,
+          displayName: "Vue language server",
+          source: "managed" as const,
+          command: "/tools/vue-language-server",
+          args: ["--stdio"],
+        })),
+      } as never,
+      createSession: vi.fn(() => fakeSession),
+    });
+
+    await expect(
+      manager.ensureSession({
+        workspaceId: "ws-1",
+        path: "src/App.vue",
+      })
+    ).resolves.toMatchObject({
+      kind: "ready",
+      summary: { serverKind: "vue" },
+    });
+  });
+
   it("coalesces concurrent ensureSession calls for the same workspace and server kind", async () => {
     let resolveStart: ((summary: typeof readySummary) => void) | null = null;
     const startPromise = new Promise<typeof readySummary>((resolve) => {
