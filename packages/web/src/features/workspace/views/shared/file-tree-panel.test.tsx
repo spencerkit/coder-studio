@@ -684,6 +684,36 @@ describe("FileTreePanel", () => {
     expect(container.querySelector(".file-tree-search")).toBeNull();
   });
 
+  it("does not render a leading tree chevron for file rows", () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/index.ts",
+              name: "index.ts",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" showSearch={false} />
+      </Provider>
+    );
+
+    const row = screen.getByText("index.ts").closest(".tree-item") as HTMLElement;
+
+    expect(row.querySelector(".tree-chevron")).toBeNull();
+  });
+
   it("restores per-type icon tone classes for tree rows and search results", async () => {
     const searchFiles = [
       { path: "src/app.tsx", name: "app.tsx", kind: "file" },

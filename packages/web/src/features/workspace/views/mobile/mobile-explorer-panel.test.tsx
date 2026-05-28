@@ -17,6 +17,8 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.quick_jump.no_results": "No results",
       "workspace.quick_jump.failed": "Search failed",
       "workspace.sidebar.workspace": "Workspace",
+      "workspace.sidebar.workspace_expand_label": "Expand Workspace",
+      "workspace.sidebar.workspace_collapse_label": "Collapse Workspace",
       "workspace.sidebar.open_editors": "Open Editors",
       "file.new_file": "New File",
       "file.new_folder": "New Folder",

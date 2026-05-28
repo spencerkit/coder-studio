@@ -161,7 +161,9 @@
       "search": "Search",
       "source_control": "Source Control",
       "open_editors": "Open Editors",
-      "workspace": "Workspace"
+      "workspace": "Workspace",
+      "workspace_expand_label": "Expand Workspace",
+      "workspace_collapse_label": "Collapse Workspace"
     },
     "quick_jump": {
       "title": "Quick Jump",

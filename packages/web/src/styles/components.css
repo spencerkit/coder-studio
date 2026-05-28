@@ -13318,11 +13318,6 @@ body.is-dragging-pane .session-action-btn-drag {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--component-mix-status-info-fg-10pct-surface-panel);
-  color: var(--status-info-fg);
-  font-size: 11px;
-  line-height: 1;
 }
 
 .workspace-sidebar-section__actions {
@@ -15631,6 +15626,12 @@ body.is-dragging-pane .session-action-btn-drag {
   background: var(--component-mix-status-info-fg-10pct-surface-panel);
   color: var(--status-info-fg);
   font-size: 11px;
+}
+
+.file-tree-shell .tree-indent {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .file-tree-shell .tree-icon {

@@ -25,6 +25,18 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
   const [collapseVersion, setCollapseVersion] = useState(0);
   const [workspaceCount, setWorkspaceCount] = useState(0);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const fileTreePanelId = `workspace-file-tree-${workspaceId}`;
+
+  const handleOpenFileCreate = () => {
+    setWorkspaceCollapsed(false);
+    onOpenFileCreate();
+  };
+
+  const handleOpenFolderCreate = () => {
+    setWorkspaceCollapsed(false);
+    onOpenFolderCreate();
+  };
 
   return (
     <div className="workspace-sidebar-view">
@@ -34,24 +46,30 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
         <section className="workspace-sidebar-section workspace-sidebar-section--fill">
           <WorkspaceSectionHeader
             count={workspaceLoading ? undefined : workspaceCount}
-            onOpenFileCreate={onOpenFileCreate}
-            onOpenFolderCreate={onOpenFolderCreate}
+            isExpanded={!workspaceCollapsed}
+            panelId={fileTreePanelId}
+            onToggleExpanded={() => setWorkspaceCollapsed((value) => !value)}
+            onOpenFileCreate={handleOpenFileCreate}
+            onOpenFolderCreate={handleOpenFolderCreate}
             onCollapseAll={() => setCollapseVersion((value) => value + 1)}
           />
-          <FileTreePanel
-            workspaceId={workspaceId}
-            createRequest={createRequest}
-            onCreateRequestConsumed={onCreateRequestConsumed}
-            onVisibleCountChange={(count, loading) => {
-              setWorkspaceCount(count);
-              setWorkspaceLoading(loading);
-            }}
-            collapseVersion={collapseVersion}
-            refreshToken={refreshToken}
-            variant="desktop"
-            showSearch={false}
-            preserveSourceOrder
-          />
+          {!workspaceCollapsed ? (
+            <FileTreePanel
+              workspaceId={workspaceId}
+              createRequest={createRequest}
+              onCreateRequestConsumed={onCreateRequestConsumed}
+              onVisibleCountChange={(count, loading) => {
+                setWorkspaceCount(count);
+                setWorkspaceLoading(loading);
+              }}
+              collapseVersion={collapseVersion}
+              refreshToken={refreshToken}
+              variant="desktop"
+              showSearch={false}
+              preserveSourceOrder
+              panelId={fileTreePanelId}
+            />
+          ) : null}
         </section>
       </div>
     </div>

@@ -14,6 +14,8 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.sidebar.explorer": "Explorer",
       "workspace.sidebar.workspace": "Workspace",
       "workspace.sidebar.open_editors": "Open Editors",
+      "workspace.sidebar.workspace_expand_label": "Expand Workspace",
+      "workspace.sidebar.workspace_collapse_label": "Collapse Workspace",
       "file.new_file": "New File",
       "file.new_folder": "New Folder",
       "file.collapse_all": "Collapse All",
@@ -131,5 +133,87 @@ describe("ExplorerPanel", () => {
       "workspace-sidebar-row",
       "workspace-sidebar-row--selected"
     );
+  });
+
+  it("toggles the workspace section body from the section chevron control", () => {
+    const store = createStore();
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(openFilesAtomFamily("ws-test"), {});
+
+    render(
+      <Provider store={store}>
+        <ExplorerPanel
+          workspaceId="ws-test"
+          createRequest={null}
+          onCreateRequestConsumed={vi.fn()}
+          onOpenFileCreate={vi.fn()}
+          onOpenFolderCreate={vi.fn()}
+        />
+      </Provider>
+    );
+
+    const workspaceSection = screen
+      .getByRole("heading", { level: 2, name: "Workspace" })
+      .closest("section") as HTMLElement;
+    const toggle = within(workspaceSection).getByRole("button", {
+      name: "Collapse Workspace",
+    });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(workspaceSection).getByTestId("file-tree-panel")).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(workspaceSection).queryByTestId("file-tree-panel")).toBeNull();
+
+    fireEvent.click(
+      within(workspaceSection).getByRole("button", {
+        name: "Expand Workspace",
+      })
+    );
+
+    expect(within(workspaceSection).getByTestId("file-tree-panel")).toBeInTheDocument();
+  });
+
+  it("re-expands the workspace section before forwarding create actions", () => {
+    const onOpenFileCreate = vi.fn();
+    const store = createStore();
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(openFilesAtomFamily("ws-test"), {});
+
+    render(
+      <Provider store={store}>
+        <ExplorerPanel
+          workspaceId="ws-test"
+          createRequest={null}
+          onCreateRequestConsumed={vi.fn()}
+          onOpenFileCreate={onOpenFileCreate}
+          onOpenFolderCreate={vi.fn()}
+        />
+      </Provider>
+    );
+
+    const workspaceSection = screen
+      .getByRole("heading", { level: 2, name: "Workspace" })
+      .closest("section") as HTMLElement;
+
+    fireEvent.click(
+      within(workspaceSection).getByRole("button", {
+        name: "Collapse Workspace",
+      })
+    );
+
+    expect(within(workspaceSection).queryByTestId("file-tree-panel")).toBeNull();
+
+    fireEvent.click(within(workspaceSection).getByRole("button", { name: "New File" }));
+
+    expect(onOpenFileCreate).toHaveBeenCalledTimes(1);
+    expect(
+      within(workspaceSection).getByRole("button", {
+        name: "Collapse Workspace",
+      })
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(within(workspaceSection).getByTestId("file-tree-panel")).toBeInTheDocument();
   });
 });

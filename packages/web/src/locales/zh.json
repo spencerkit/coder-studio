@@ -161,7 +161,9 @@
       "search": "搜索",
       "source_control": "源代码管理",
       "open_editors": "打开的编辑器",
-      "workspace": "工作区"
+      "workspace": "工作区",
+      "workspace_expand_label": "展开工作区",
+      "workspace_collapse_label": "收起工作区"
     },
     "quick_jump": {
       "title": "快速跳转",

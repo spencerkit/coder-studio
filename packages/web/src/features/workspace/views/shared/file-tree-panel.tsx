@@ -113,6 +113,7 @@ interface FileTreePanelProps {
   variant?: "desktop" | "mobile";
   showSearch?: boolean;
   preserveSourceOrder?: boolean;
+  panelId?: string;
 }
 
 interface FileTreePanelState {
@@ -162,6 +163,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   variant = "desktop",
   showSearch = true,
   preserveSourceOrder = false,
+  panelId,
 }) => {
   const [panelState, setPanelState] = useAtom(
     fileTreePanelStateAtomFamily(getFileTreePanelStateKey(workspaceId, variant, showSearch))
@@ -394,7 +396,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
 
   return (
     <>
-      <div className={`file-tree-shell file-tree-shell--${variant}`}>
+      <div className={`file-tree-shell file-tree-shell--${variant}`} id={panelId}>
         {showSearch ? (
           <label
             className={`file-tree-search workspace-sidebar-control ${
@@ -584,9 +586,7 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       onPointerUp={(event) => onCancelLongPress(event.pointerId)}
       style={{ paddingLeft: 12 }}
     >
-      <span className="tree-chevron" aria-hidden="true">
-        •
-      </span>
+      <span className="tree-indent" aria-hidden="true" />
 
       <span className="tree-icon file" aria-hidden="true">
         <ThemedIcon semantic={getFileNodeSemantic(node, false)} size={14} />
@@ -735,9 +735,13 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         }
         style={{ paddingLeft }}
       >
-        <span className="tree-chevron" aria-hidden="true">
-          {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : "•"}
-        </span>
+        {isFolder ? (
+          <span className="tree-chevron" aria-hidden="true">
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+        ) : (
+          <span className="tree-indent" aria-hidden="true" />
+        )}
 
         <span
           className={`tree-icon ${isFolder ? "folder" : "file"} ${
