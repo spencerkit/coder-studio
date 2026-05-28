@@ -11,6 +11,15 @@ import {
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { activeFilePathAtomFamily } from "../../../workspace/atoms";
 
+function getEditorPaneTitle(path: string | null): string {
+  if (!path) {
+    return "Editor";
+  }
+
+  const segments = path.split("/");
+  return segments[segments.length - 1] || path;
+}
+
 interface EditorPaneCardProps {
   paneId: string;
   workspaceId: string;
@@ -27,7 +36,7 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const t = useTranslation();
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const editorState = useCodeEditorActions();
-  const title = activeFilePath ?? "Editor";
+  const title = getEditorPaneTitle(activeFilePath);
 
   return (
     <div

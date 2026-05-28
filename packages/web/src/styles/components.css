@@ -15125,11 +15125,13 @@ body.is-dragging-pane .session-action-btn-drag {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  padding: 0;
 }
 
 .editor-pane-card__toolbar-row {
   justify-content: flex-end;
   flex-shrink: 0;
+  padding-inline: var(--space-3);
 }
 
 .editor-pane-card__content,
@@ -15141,10 +15143,16 @@ body.is-dragging-pane .session-action-btn-drag {
 .editor-pane-card__content {
   display: flex;
   flex: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
 }
 
 .editor-pane-card__content > * {
   flex: 1;
+  border: 0;
+  border-radius: 0;
 }
 
 .mobile-terminal-sheet {

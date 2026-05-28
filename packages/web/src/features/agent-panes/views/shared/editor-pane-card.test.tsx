@@ -48,7 +48,8 @@ describe("EditorPaneCard", () => {
       </Provider>
     );
 
-    expect(screen.getByText("src/app.tsx")).toBeInTheDocument();
+    expect(screen.getByText("app.tsx")).toBeInTheDocument();
+    expect(screen.queryByText("src/app.tsx")).not.toBeInTheDocument();
     expect(screen.getByTestId("editor-toolbar")).toBeInTheDocument();
     expect(screen.getByTestId("editor-host")).toBeInTheDocument();
     expect(mocks.mockCodeEditorDesktopHeaderActions).toHaveBeenCalledWith(
