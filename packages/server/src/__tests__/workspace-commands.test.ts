@@ -209,9 +209,8 @@ describe("Workspace Commands", () => {
       );
 
       expect(result.ok).toBe(true);
-      await expect(stat(join(dir, "demo"))).resolves.toMatchObject({
-        isDirectory: expect.any(Function),
-      });
+      const createdEntry = await stat(join(dir, "demo"));
+      expect(createdEntry.isDirectory()).toBe(true);
     });
 
     it("rejects creating a directory that already exists", async () => {
@@ -233,6 +232,26 @@ describe("Workspace Commands", () => {
       expect(result.ok).toBe(false);
       expect(result.error).toMatchObject({
         code: "already_exists",
+      });
+    });
+
+    it.each(["", ".", ".."])('rejects invalid requested folder path "%s"', async (path) => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `workspace-mkdir-invalid-${path || "empty"}`,
+          op: "workspace.mkdir",
+          args: {
+            path,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "invalid_path",
+        message: "Folder name is required",
       });
     });
   });

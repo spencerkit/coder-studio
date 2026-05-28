@@ -128,6 +128,10 @@ registerCommand(
     path: z.string(),
   }),
   async (args) => {
+    if (args.path === "" || args.path === "." || args.path === "..") {
+      throw { code: "invalid_path", message: "Folder name is required" };
+    }
+
     const targetPath = resolveBrowsePath(args.path);
     const parentPath = dirname(targetPath);
     const dirName = basename(targetPath);
