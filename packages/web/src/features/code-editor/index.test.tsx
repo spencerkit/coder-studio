@@ -1092,6 +1092,47 @@ describe("CodeEditorHost", () => {
     });
   });
 
+  it("keeps search replace diff previews as active diff state for the matching file", async () => {
+    const { store } = setupStore({
+      activePath: "src/dirty.ts",
+      openFiles: {
+        "src/dirty.ts": {
+          kind: "text",
+          path: "src/dirty.ts",
+          content: "changed",
+          savedContent: "original",
+          baseHash: "dirty-hash",
+          isDirty: false,
+        },
+      },
+    });
+    store.set(editorModeAtomFamily("ws-1"), "diff");
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "search-replace-file-diff",
+      path: "src/dirty.ts",
+      title: "src/dirty.ts",
+      sessionId: "session-1",
+      baseHash: "dirty-hash",
+      originalContent: "original",
+      modifiedContent: "changed",
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(result.current.mode).toBe("diff");
+    expect(result.current.activeDiffChange).toEqual({
+      kind: "search-replace-file-diff",
+      path: "src/dirty.ts",
+      title: "src/dirty.ts",
+      sessionId: "session-1",
+      baseHash: "dirty-hash",
+      originalContent: "original",
+      modifiedContent: "changed",
+    });
+  });
+
   it("renders commit diff preview in the mobile content-only editor surface without an active file", () => {
     const { store } = setupStore();
     store.set(gitDiffPreviewAtomFamily("ws-1"), {

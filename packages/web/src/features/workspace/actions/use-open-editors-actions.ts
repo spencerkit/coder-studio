@@ -92,7 +92,8 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       }
 
       const shouldDismissPreview =
-        diffPreview?.kind === "worktree-file-diff" &&
+        (diffPreview?.kind === "worktree-file-diff" ||
+          diffPreview?.kind === "search-replace-file-diff") &&
         shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor);
       if (shouldDismissPreview) {
         setDiffPreviewDismissed(true);
@@ -149,7 +150,8 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     setActiveFilePath(null);
     setEditorMode("edit");
     const shouldDismissPreview =
-      diffPreview?.kind === "worktree-file-diff" &&
+      (diffPreview?.kind === "worktree-file-diff" ||
+        diffPreview?.kind === "search-replace-file-diff") &&
       shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor, {
         preserveCommitPreviewOnExit: true,
       });

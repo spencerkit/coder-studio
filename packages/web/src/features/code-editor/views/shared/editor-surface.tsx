@@ -56,6 +56,8 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const showHeader = chrome === "full";
   const commitFileListPreview = activePreviewKind === "commit-file-list" ? activeDiffChange : null;
   const commitFileDiffPreview = activePreviewKind === "commit-file-diff" ? activeDiffChange : null;
+  const searchReplaceDiffPreview =
+    activePreviewKind === "search-replace-file-diff" ? activeDiffChange : null;
   const worktreeFileDiffPreview =
     activePreviewKind === "worktree-file-diff" ? activeDiffChange : null;
   const isCommitFileListPreview = commitFileListPreview !== null;
@@ -69,9 +71,11 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const textDiffPreview =
     worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "text"
       ? worktreeFileDiffPreview
-      : commitFileDiffPreview?.renderAs === "text"
-        ? commitFileDiffPreview
-        : null;
+      : searchReplaceDiffPreview && mode === "diff"
+        ? searchReplaceDiffPreview
+        : commitFileDiffPreview?.renderAs === "text"
+          ? commitFileDiffPreview
+          : null;
   const imageDiffPreview =
     worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "image"
       ? worktreeFileDiffPreview

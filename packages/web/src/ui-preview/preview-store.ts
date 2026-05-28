@@ -6,7 +6,9 @@ import type {
   GitFileDiffPayload,
   GitStatus,
   MonitoringResponse,
-  SearchContentResult,
+  SearchSessionApplyResult,
+  SearchSessionFilePreview,
+  SearchSessionStartResult,
   Session,
   Supervisor,
   UpdateStateView,
@@ -92,7 +94,9 @@ export interface UiPreviewCommands {
   gitCommitFileDiffByWorkspaceId?: Record<string, GitFileDiffPayload>;
   fileTreeByWorkspaceId?: Record<string, Record<string, FileNode[]>>;
   fileSearchByWorkspaceId?: Record<string, FileNode[]>;
-  fileSearchContentByWorkspaceId?: Record<string, SearchContentResult>;
+  fileSearchSessionByWorkspaceId?: Record<string, SearchSessionStartResult>;
+  fileSearchPreviewByWorkspaceId?: Record<string, Record<string, SearchSessionFilePreview>>;
+  fileSearchApplyByWorkspaceId?: Record<string, SearchSessionApplyResult>;
   fileReadByWorkspaceId?: Record<string, Record<string, { content: string; baseHash?: string }>>;
   worktreeListByWorkspaceId?: Record<string, WorktreeInfo[]>;
   worktreeStatusByPath?: Record<string, GitStatus>;
@@ -361,14 +365,48 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
       return ok({ files: commands.fileSearchByWorkspaceId?.[workspaceId] ?? [] } as unknown as T);
     }
 
-    if (op === "file.searchContent") {
+    if (op === "file.searchSession.start") {
       const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
       return ok(
-        (commands.fileSearchContentByWorkspaceId?.[workspaceId] ?? {
+        (commands.fileSearchSessionByWorkspaceId?.[workspaceId] ?? {
           files: [],
+          sessionId: "preview-search-session",
           totalMatchCount: 0,
+          totalFileCount: 0,
           hasMoreFiles: false,
           truncatedMatchFileCount: 0,
+          skippedBinaryFileCount: 0,
+          skippedLargeFileCount: 0,
+        }) as unknown as T
+      );
+    }
+
+    if (op === "file.searchSession.previewFile") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      return ok(
+        (commands.fileSearchPreviewByWorkspaceId?.[workspaceId]?.[path] ?? {
+          kind: "search-replace-file-diff",
+          path,
+          title: path,
+          sessionId: "preview-search-session",
+          baseHash: "preview-base-hash",
+          originalContent: `// Preview before replacement: ${path}\n`,
+          modifiedContent: `// Preview after replacement: ${path}\n`,
+        }) as unknown as T
+      );
+    }
+
+    if (op === "file.searchSession.apply") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      return ok(
+        (commands.fileSearchApplyByWorkspaceId?.[workspaceId] ?? {
+          sessionId: "preview-search-session",
+          status: "ok",
+          appliedFileCount: 1,
+          conflictFileCount: 0,
+          skippedFileCount: 0,
+          results: [],
         }) as unknown as T
       );
     }

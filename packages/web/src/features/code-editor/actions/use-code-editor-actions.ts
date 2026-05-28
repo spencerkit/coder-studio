@@ -99,7 +99,8 @@ export function useCodeEditorActions() {
     lastSeededModePathRef.current = activeFilePath;
     const shouldPreserveDiffMode =
       mode === "diff" &&
-      diffPreview?.kind === "worktree-file-diff" &&
+      (diffPreview?.kind === "worktree-file-diff" ||
+        diffPreview?.kind === "search-replace-file-diff") &&
       diffPreview.path === activeFilePath;
     const nextMode = shouldPreserveDiffMode ? "diff" : deriveEditorModeForOpenFile(currentFile);
     if (nextMode !== mode) {
@@ -798,7 +799,9 @@ export function useCodeEditorActions() {
   );
   const activeDiffChange =
     diffPreview &&
-    ((diffPreview.kind === "worktree-file-diff" && diffPreview.path === activeFilePath) ||
+    (((diffPreview.kind === "worktree-file-diff" ||
+      diffPreview.kind === "search-replace-file-diff") &&
+      diffPreview.path === activeFilePath) ||
       diffPreview.kind === "commit-file-list" ||
       diffPreview.kind === "commit-file-diff")
       ? diffPreview

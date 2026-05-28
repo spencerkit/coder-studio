@@ -1,7 +1,7 @@
 import type {
   FileNode,
   GitStatus,
-  SearchContentResult,
+  SearchSessionStartResult,
   Supervisor,
   UpdateStateView,
   Workspace,
@@ -165,29 +165,41 @@ const fileTreePackages: FileNode[] = [
   { name: "core", path: "packages/core", kind: "dir" },
 ];
 
-const mobileSearchContentResults: SearchContentResult = {
+const mobileSearchContentResults: SearchSessionStartResult = {
+  sessionId: "mobile-preview-search-session",
   files: [
     {
       path: "packages/web/src/features/workspace/views/mobile/mobile-files-sheet.tsx",
       name: "mobile-files-sheet.tsx",
       matchCount: 2,
       hasMoreMatches: false,
+      baseHash: "preview:mobile-files-sheet",
       matches: [
         {
+          id: "mobile-search-match-1",
           line: 64,
           column: 11,
           endColumn: 17,
           preview: '      <SearchPanel workspaceId={workspaceId} variant="mobile" />',
           previewColumnStart: 8,
           previewColumnEnd: 14,
+          replacementPreview: '      <SearchPanel workspaceId={workspaceId} variant="mobile" />',
+          replacementPreviewColumnStart: 8,
+          replacementPreviewColumnEnd: 14,
+          isReplacementPreviewTruncated: false,
         },
         {
+          id: "mobile-search-match-2",
           line: 88,
           column: 15,
           endColumn: 21,
           preview: '              aria-label={t("workspace.sidebar.search")}',
           previewColumnStart: 13,
           previewColumnEnd: 19,
+          replacementPreview: '              aria-label={t("workspace.sidebar.search")}',
+          replacementPreviewColumnStart: 13,
+          replacementPreviewColumnEnd: 19,
+          isReplacementPreviewTruncated: false,
         },
       ],
     },
@@ -196,29 +208,43 @@ const mobileSearchContentResults: SearchContentResult = {
       name: "components.css",
       matchCount: 2,
       hasMoreMatches: false,
+      baseHash: "preview:components-css",
       matches: [
         {
+          id: "mobile-search-match-3",
           line: 13812,
           column: 28,
           endColumn: 34,
           preview: ".workspace-search-panel__summary {",
           previewColumnStart: 12,
           previewColumnEnd: 18,
+          replacementPreview: ".workspace-search-panel__summary {",
+          replacementPreviewColumnStart: 12,
+          replacementPreviewColumnEnd: 18,
+          isReplacementPreviewTruncated: false,
         },
         {
+          id: "mobile-search-match-4",
           line: 13994,
           column: 12,
           endColumn: 18,
           preview: ".workspace-search-panel__line {",
           previewColumnStart: 12,
           previewColumnEnd: 18,
+          replacementPreview: ".workspace-search-panel__line {",
+          replacementPreviewColumnStart: 12,
+          replacementPreviewColumnEnd: 18,
+          isReplacementPreviewTruncated: false,
         },
       ],
     },
   ],
   totalMatchCount: 4,
+  totalFileCount: 2,
   hasMoreFiles: false,
   truncatedMatchFileCount: 0,
+  skippedBinaryFileCount: 0,
+  skippedLargeFileCount: 0,
 };
 
 const readmeDesktopGitStatus: GitStatus = {
@@ -1370,7 +1396,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           terminalListByWorkspaceId: {
             [workspace.id]: [],
           },
-          fileSearchContentByWorkspaceId: {
+          fileSearchSessionByWorkspaceId: {
             [workspace.id]: mobileSearchContentResults,
           },
         },

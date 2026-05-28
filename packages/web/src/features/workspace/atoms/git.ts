@@ -10,6 +10,7 @@ import type {
   GitCommitFileEntry,
   GitFileDiffPayload,
   GitStatus,
+  SearchSessionFilePreview,
   WorktreeInfo,
 } from "@coder-studio/core";
 import { atom } from "jotai";
@@ -81,10 +82,15 @@ export interface GitCommitFileDiffPreview extends GitFileDiffPayload {
   parentList: GitCommitFileListPreview;
 }
 
+export interface SearchReplaceFileDiffPreview extends SearchSessionFilePreview {
+  kind: "search-replace-file-diff";
+}
+
 export type GitDiffPreview =
   | GitWorktreeFileDiffPreview
   | GitCommitFileListPreview
-  | GitCommitFileDiffPreview;
+  | GitCommitFileDiffPreview
+  | SearchReplaceFileDiffPreview;
 
 export const gitDiffPreviewAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitDiffPreview | null>(null)
