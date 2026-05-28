@@ -1,10 +1,13 @@
+import { execFile } from "child_process";
 import Fastify, { type FastifyInstance } from "fastify";
 import { mkdir, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { registerFileAssetRoutes } from "./file-asset.js";
 
+const execFileAsync = promisify(execFile);
 const PNG_BYTES = Buffer.from(
   "89504E470D0A1A0A0000000D4948445200000001000000010806000000" +
     "1F15C4890000000A49444154789C63000100000005000157CFC4A30000" +
@@ -58,9 +61,6 @@ describe("/api/file", () => {
   });
 
   it("streams an image from HEAD when revision is provided", async () => {
-    const execFileAsync = (await import("util")).promisify(
-      (await import("child_process")).execFile
-    );
     await execFileAsync("git", ["init"], { cwd: testDir });
     await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
     await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
@@ -76,6 +76,26 @@ describe("/api/file", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/file?workspaceId=ws-1&path=pixel.png&revision=HEAD",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.rawPayload.equals(PNG_BYTES)).toBe(true);
+  });
+
+  it("streams an image from a strict commit sha revision", async () => {
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+    await writeFile(join(testDir, "pixel.png"), PNG_BYTES);
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "Add pixel"], { cwd: testDir });
+    const sha = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: testDir })).stdout.trim();
+    app = await buildApp(testDir);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/file?workspaceId=ws-1&path=pixel.png&revision=${sha}`,
     });
 
     expect(res.statusCode).toBe(200);

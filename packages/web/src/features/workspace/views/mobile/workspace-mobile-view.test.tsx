@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
 import {
   activeFilePathAtomFamily,
+  type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
@@ -203,12 +204,7 @@ function createSendCommandMock() {
 function renderMobileView(options: {
   activePath: string | null;
   openFiles: Record<string, OpenFile>;
-  diffPreview?: {
-    path: string;
-    title?: string;
-    diff: string;
-    source: "commit";
-  } | null;
+  diffPreview?: GitDiffPreview | null;
 }) {
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
@@ -330,10 +326,23 @@ describe("WorkspaceMobileView", () => {
         },
       },
       diffPreview: {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
     });
 
@@ -363,10 +372,23 @@ describe("WorkspaceMobileView", () => {
 
   it("preserves an active commit preview when close all clears open editors", async () => {
     const diffPreview = {
+      kind: "commit-file-list" as const,
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit" as const,
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified" as const,
+          renderAs: "text" as const,
+        },
+      ],
     };
     const store = renderMobileView({
       activePath: "src/a.ts",
@@ -384,15 +406,6 @@ describe("WorkspaceMobileView", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Files" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open commit preview" }));
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
-      ).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     const openEditorsSection = screen
       .getByRole("heading", { level: 2, name: "Open Editors (1)" })
       .closest("section") as HTMLElement;
@@ -402,6 +415,14 @@ describe("WorkspaceMobileView", () => {
       expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
       expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
       expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual(diffPreview);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open commit preview" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
+      ).toBeInTheDocument();
     });
   });
 

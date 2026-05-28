@@ -24,7 +24,7 @@ export function useOpenLocation(workspaceId: string): {
 
   const openLocation = useCallback(
     async (input: PendingEditorNavigation) => {
-      if (diffPreview?.source === "commit") {
+      if (diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff") {
         setDiffPreview(null);
         const openFile = openFiles[input.path];
         setEditorMode(

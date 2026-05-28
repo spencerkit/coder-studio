@@ -271,7 +271,7 @@ describe("GitPanel", () => {
 
     expect(actionRow).not.toBeNull();
     expect(primaryButton).not.toBeNull();
-    expect(actionRow).toContainElement(primaryButton);
+    expect(actionRow).toContainElement(primaryButton as HTMLElement);
     expect(actionRow?.querySelectorAll("button")).toHaveLength(1);
     expect(primaryButton?.querySelector('[data-icon-semantic="git.commit"]')).toBeTruthy();
   });
@@ -912,28 +912,26 @@ describe("GitPanel", () => {
   });
 
   it("loads the latest 20 history entries by default and does not render a show-all control", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockImplementation(async (op: string, args?: { limit?: number }) => {
-        if (op === "git.status") {
-          return status;
-        }
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
 
-        if (op === "git.branches") {
-          return {
-            current: "feature/ai-agent",
-            branches: [],
-          };
-        }
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
 
-        if (op === "git.log") {
-          return {
-            entries: historyEntries,
-          };
-        }
+      if (op === "git.log") {
+        return {
+          entries: historyEntries,
+        };
+      }
 
-        return {};
-      });
+      return {};
+    });
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
@@ -1020,7 +1018,7 @@ describe("GitPanel", () => {
   });
 
   it("opens a commit diff when a history row is clicked", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return status;
       }
@@ -1044,9 +1042,16 @@ describe("GitPanel", () => {
         };
       }
 
-      if (op === "git.show") {
+      if (op === "git.commitDetail") {
         return {
-          diff: `commit-diff:${JSON.stringify(args)}`,
+          commit: historyEntries[0],
+          files: [
+            {
+              path: "src/auth/AuthGate.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         };
       }
 
@@ -1072,7 +1077,7 @@ describe("GitPanel", () => {
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
-        "git.show",
+        "git.commitDetail",
         {
           workspaceId: "ws-test",
           sha: historyEntries[0]?.sha,
@@ -1082,16 +1087,30 @@ describe("GitPanel", () => {
     });
 
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "commit-file-list",
       path: historyEntries[0]?.sha,
       title: `98db173 · ${historyEntries[0]?.subject}`,
-      diff: expect.stringContaining("commit-diff"),
-      source: "commit",
+      commit: historyEntries[0],
+      files: [
+        {
+          path: "src/auth/AuthGate.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
     expect(onPreviewOpen).toHaveBeenCalledWith({
+      kind: "commit-file-list",
       path: historyEntries[0]?.sha,
       title: `98db173 · ${historyEntries[0]?.subject}`,
-      diff: expect.stringContaining("commit-diff"),
-      source: "commit",
+      commit: historyEntries[0],
+      files: [
+        {
+          path: "src/auth/AuthGate.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
     expect(historyRow).toHaveClass("workspace-sidebar-row", "workspace-sidebar-row--selected");
   });
@@ -1348,16 +1367,16 @@ describe("GitPanel", () => {
     expect(store.get(gitStateAtomFamily("ws-test"))).toEqual(status);
     expect(store.get(gitBranchListAtomFamily("ws-test")).current).toBe("feature/ai-agent");
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "worktree-file-diff",
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
-      source: "file",
     });
     expect(onPreviewOpen).toHaveBeenCalledWith({
+      kind: "worktree-file-diff",
       path: "src/auth/AuthGate.tsx",
       diff: expect.stringContaining("diff --git a/src/auth/AuthGate.tsx b/src/auth/AuthGate.tsx"),
       staged: true,
-      source: "file",
     });
     expect(dispatchEventSpy).not.toHaveBeenCalled();
   });

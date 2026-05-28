@@ -245,7 +245,7 @@ export function WorkspaceMobileView() {
     }
 
     const isCommitDetailRoute =
-      diffPreview?.source === "commit" &&
+      (diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff") &&
       mobileFilesRoute.path === diffPreview.path &&
       mobileFilesRoute.title === diffPreview.title;
 
@@ -266,7 +266,7 @@ export function WorkspaceMobileView() {
       return;
     }
 
-    if (diffPreview?.source === "commit") {
+    if (diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff") {
       if (
         mobileFilesRoute.path !== diffPreview.path ||
         mobileFilesRoute.title !== diffPreview.title
@@ -334,7 +334,9 @@ export function WorkspaceMobileView() {
           onBack:
             mobileFilesRoute.kind === "root"
               ? undefined
-              : () => updateMobileFilesRoute({ kind: "root" }),
+              : diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff"
+                ? () => void mobileEditorState.handleClose()
+                : () => updateMobileFilesRoute({ kind: "root" }),
           backLabel: t("action.back"),
           headerAction: filesSheetHeaderAction,
           fullscreen: true,

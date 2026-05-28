@@ -344,10 +344,13 @@ export function useWorkspaceScreenModel() {
     Boolean(activeEditorPaneId) &&
     paneLayoutHasEditorPaneId(paneLayout, activeEditorPaneId);
 
-  const mainAreaMode: WorkspaceMainAreaMode =
-    hasActiveEditorPaneTarget || (!activeFilePath && diffPreview?.source !== "commit")
-      ? "agent"
-      : "editor";
+  const mainAreaMode: WorkspaceMainAreaMode = hasActiveEditorPaneTarget
+    ? "agent"
+    : activeFilePath ||
+        diffPreview?.kind === "commit-file-list" ||
+        diffPreview?.kind === "commit-file-diff"
+      ? "editor"
+      : "agent";
 
   return {
     activeSession,

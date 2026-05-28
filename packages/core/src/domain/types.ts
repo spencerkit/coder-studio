@@ -287,6 +287,10 @@ export interface GitStatus {
 
 export type GitChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
 
+export type GitDiffRenderMode = "text" | "image";
+
+export type GitRevisionSource = "HEAD" | "INDEX" | "WORKTREE" | string;
+
 export interface GitFileChange {
   path: string;
   oldPath?: string; // for renames
@@ -299,6 +303,33 @@ export interface GitCommitSummary {
   subject: string;
   authorName: string;
   authoredAt: number;
+}
+
+export interface GitCommitFileEntry {
+  path: string;
+  oldPath?: string;
+  status: Exclude<GitChangeStatus, "untracked">;
+  renderAs: GitDiffRenderMode;
+}
+
+export interface GitCommitDetail {
+  commit: GitCommitSummary & {
+    parentSha?: string;
+  };
+  files: GitCommitFileEntry[];
+}
+
+export interface GitFileDiffPayload {
+  diff: string;
+  renderAs: GitDiffRenderMode;
+  status: "modified" | "added" | "deleted";
+  mime?: string;
+  originalPath?: string;
+  modifiedPath?: string;
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: GitRevisionSource;
+  modifiedRevision?: GitRevisionSource;
 }
 
 export interface GitBranch {

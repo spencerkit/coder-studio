@@ -1,7 +1,9 @@
 import type {
   FileNode,
   GitBranch,
+  GitCommitDetail,
   GitCommitSummary,
+  GitFileDiffPayload,
   GitStatus,
   MonitoringResponse,
   SearchContentResult,
@@ -85,8 +87,9 @@ export interface UiPreviewCommands {
   gitStatusByWorkspaceId?: Record<string, GitStatus>;
   gitBranchesByWorkspaceId?: Record<string, { current: string; branches: GitBranch[] }>;
   gitLogByWorkspaceId?: Record<string, { entries: GitCommitSummary[] }>;
-  gitDiffByWorkspaceId?: Record<string, { diff: string }>;
-  gitShowByWorkspaceId?: Record<string, { diff: string }>;
+  gitDiffByWorkspaceId?: Record<string, GitFileDiffPayload>;
+  gitCommitDetailByWorkspaceId?: Record<string, GitCommitDetail>;
+  gitCommitFileDiffByWorkspaceId?: Record<string, GitFileDiffPayload>;
   fileTreeByWorkspaceId?: Record<string, Record<string, FileNode[]>>;
   fileSearchByWorkspaceId?: Record<string, FileNode[]>;
   fileSearchContentByWorkspaceId?: Record<string, SearchContentResult>;
@@ -135,7 +138,7 @@ export interface UiPreviewSeed {
   gitBranchListByWorkspaceId?: Record<string, { current: string; branches: GitBranch[] }>;
   gitDiffPreviewByWorkspaceId?: Record<
     string,
-    { path: string; diff: string; source?: "file" | "commit" }
+    import("../features/workspace/atoms").GitDiffPreview
   >;
   worktreeListByWorkspaceId?: Record<string, WorktreeInfo[]>;
   terminalMetaById?: Record<
@@ -289,12 +292,40 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
 
     if (op === "git.diff") {
       const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
-      return ok((commands.gitDiffByWorkspaceId?.[workspaceId] ?? { diff: "" }) as unknown as T);
+      return ok(
+        (commands.gitDiffByWorkspaceId?.[workspaceId] ?? {
+          diff: "",
+          renderAs: "text",
+          status: "modified",
+        }) as unknown as T
+      );
     }
 
-    if (op === "git.show") {
+    if (op === "git.commitDetail") {
       const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
-      return ok((commands.gitShowByWorkspaceId?.[workspaceId] ?? { diff: "" }) as unknown as T);
+      return ok(
+        (commands.gitCommitDetailByWorkspaceId?.[workspaceId] ?? {
+          commit: {
+            sha: "",
+            shortSha: "",
+            subject: "",
+            authorName: "",
+            authoredAt: 0,
+          },
+          files: [],
+        }) as unknown as T
+      );
+    }
+
+    if (op === "git.commitFileDiff") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      return ok(
+        (commands.gitCommitFileDiffByWorkspaceId?.[workspaceId] ?? {
+          diff: "",
+          renderAs: "text",
+          status: "modified",
+        }) as unknown as T
+      );
     }
 
     if (op === "git.checkout") {

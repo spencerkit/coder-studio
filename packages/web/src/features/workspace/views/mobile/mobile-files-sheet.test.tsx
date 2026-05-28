@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { wsClientAtom } from "../../../../atoms/connection";
 import type { GitDiffPreview } from "../../atoms";
 import { MobileFilesSheet } from "./mobile-files-sheet";
 
@@ -48,10 +47,23 @@ vi.mock("../shared/git-panel", () => ({
       data-testid="git-panel"
       onClick={() =>
         onPreviewOpen?.({
+          kind: "commit-file-list",
           path: "abc123",
           title: "abc123 · commit subject",
-          diff: "diff --git a/src/app.tsx b/src/app.tsx",
-          source: "commit",
+          commit: {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "commit subject",
+            authorName: "Spencer",
+            authoredAt: 1,
+          },
+          files: [
+            {
+              path: "src/app.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         })
       }
     >
