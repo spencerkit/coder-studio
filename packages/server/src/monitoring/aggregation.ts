@@ -86,6 +86,7 @@ export function buildMonitoringSnapshot(input: {
   sampledAt: number;
   host: MonitoringHostSummary | null;
   roots: ManagedProcessRoot[];
+  workspaceLabels?: Record<string, string>;
   processRows: ProcessStatRow[] | null;
   previousSnapshot: MonitoringSnapshot | null;
   failureReason?: string;
@@ -213,7 +214,7 @@ export function buildMonitoringSnapshot(input: {
         id: workspaceId,
         kind: "workspace",
         workspaceId: root.workspaceId,
-        label: root.workspaceId,
+        label: input.workspaceLabels?.[root.workspaceId] ?? root.workspaceId,
         cpuPercent: 0,
         memoryBytes: 0,
         processCount: 0,

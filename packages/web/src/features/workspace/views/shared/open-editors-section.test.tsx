@@ -23,9 +23,19 @@ import { OpenEditorsSection } from "./open-editors-section";
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string | number>) => {
+    if (key === "common.cancel") return "Cancel";
     if (key === "workspace.sidebar.open_editors") return "Open Editors";
     if (key === "action.close") return "Close";
     if (key === "action.close_all") return "Close all";
+    if (key === "code_editor.unsaved_changes") return "Unsaved changes";
+    if (key === "code_editor.close_unsaved_title") return "Discard unsaved changes?";
+    if (key === "code_editor.close_unsaved_description") {
+      return `${params?.name ?? "File"} has unsaved changes.`;
+    }
+    if (key === "code_editor.discard_and_close") return "Discard and Close";
+    if (key === "workspace.open_editors.close_all_unsaved_description") {
+      return `${params?.count ?? 0} open editors have unsaved changes.`;
+    }
     if (key === "workspace.open_editors.title_with_count") {
       return `${params?.title ?? "Open Editors"} (${params?.count ?? 0})`;
     }
@@ -46,6 +56,15 @@ function createFile(path: string): OpenFile {
     savedContent: "",
     baseHash: `hash:${path}`,
     isDirty: false,
+  };
+}
+
+function createDirtyFile(path: string): OpenFile {
+  return {
+    ...createFile(path),
+    content: "changed",
+    savedContent: "saved",
+    isDirty: true,
   };
 }
 
@@ -233,5 +252,58 @@ describe("OpenEditorsSection", () => {
 
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
+  });
+
+  it("marks dirty open editors and confirms before closing a dirty row", () => {
+    const { store } = renderSection(
+      {
+        "biome.jsonc": createDirtyFile("biome.jsonc"),
+      },
+      "biome.jsonc"
+    );
+
+    const row = screen
+      .getByRole("button", { name: "biome.jsonc" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+
+    expect(row.querySelector(".workspace-open-editors__dirty-indicator")).toBeTruthy();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Close biome.jsonc" }));
+
+    expect(store.get(openFilesAtomFamily("ws-test"))["biome.jsonc"]).toBeDefined();
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(store.get(openFilesAtomFamily("ws-test"))["biome.jsonc"]).toBeDefined();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Close biome.jsonc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+
+    expect(store.get(openFilesAtomFamily("ws-test"))["biome.jsonc"]).toBeUndefined();
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+  });
+
+  it("confirms before closing all when open editors include dirty files", () => {
+    const { store } = renderSection(
+      {
+        "src/clean.ts": createFile("src/clean.ts"),
+        "src/dirty.ts": createDirtyFile("src/dirty.ts"),
+      },
+      "src/clean.ts"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual([
+      "src/clean.ts",
+      "src/dirty.ts",
+    ]);
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    expect(screen.getByText("1 open editors have unsaved changes.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 });

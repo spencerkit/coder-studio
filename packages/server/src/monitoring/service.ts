@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import {
   createEmptyMonitoringResponse,
   deriveMonitoringMode,
@@ -6,6 +7,7 @@ import {
   type Session,
   type Terminal,
   Topics,
+  type Workspace,
 } from "@coder-studio/core";
 import { buildMonitoringSnapshot } from "./aggregation.js";
 import { MonitoringHistoryStore } from "./history-store.js";
@@ -36,6 +38,9 @@ export class MonitoringService {
       sessionMgr: {
         getAll(): Session[];
         findSessionIdByTerminal(terminalId: string): string | undefined;
+      };
+      workspaceMgr?: {
+        get(workspaceId: string): Pick<Workspace, "id" | "name" | "path"> | undefined;
       };
       terminalMgr: {
         getAll(): ActiveTerminalLike[];
@@ -171,6 +176,22 @@ export class MonitoringService {
     }
   }
 
+  private getWorkspaceLabels(roots: ReturnType<ManagedProcessRegistry["listRoots"]>) {
+    const labels: Record<string, string> = {};
+    for (const root of roots) {
+      if (!root.workspaceId || labels[root.workspaceId]) {
+        continue;
+      }
+
+      const workspace = this.deps.workspaceMgr?.get(root.workspaceId);
+      const label = workspace?.name?.trim() || (workspace?.path ? basename(workspace.path) : "");
+      if (label) {
+        labels[root.workspaceId] = label;
+      }
+    }
+    return labels;
+  }
+
   private async sampleOnce(
     settings = resolveMonitoringSettings(this.deps.settingsRepo)
   ): Promise<void> {
@@ -189,11 +210,13 @@ export class MonitoringService {
       }
     }
 
+    const roots = this.deps.registry.listRoots();
     const response = buildMonitoringSnapshot({
       settings,
       sampledAt: startedAt,
       host,
-      roots: this.deps.registry.listRoots(),
+      roots,
+      workspaceLabels: this.getWorkspaceLabels(roots),
       processRows,
       previousSnapshot:
         this.latestSampledSnapshot.sampledAt > 0 ? this.latestSampledSnapshot : null,

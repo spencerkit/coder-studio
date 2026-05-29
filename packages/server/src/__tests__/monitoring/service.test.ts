@@ -334,6 +334,108 @@ describe("MonitoringService", () => {
     );
   });
 
+  it("labels workspace attribution rows with readable workspace names", async () => {
+    const registry = new ManagedProcessRegistry({ now: () => 10 });
+    const service = new MonitoringService({
+      broadcaster: { broadcast: vi.fn() },
+      settingsRepo: {
+        get: (key: string) => {
+          const settings = {
+            "monitoring.enabled": true,
+            "monitoring.hostMetricsEnabled": true,
+            "monitoring.runtimeSummaryEnabled": true,
+            "monitoring.workspaceAttributionEnabled": true,
+            "monitoring.subprocessDrilldownEnabled": false,
+            "monitoring.sampleIntervalMs": 2000,
+          } as Record<string, unknown>;
+          return settings[key];
+        },
+      },
+      registry,
+      sessionMgr: {
+        getAll: () =>
+          [
+            {
+              id: "sess-1",
+              workspaceId: "ws_1779980247607_u2lfvdjf",
+              terminalId: "term-1",
+              providerId: "codex",
+              state: "idle",
+              capability: "full",
+              startedAt: 1,
+              lastActiveAt: 1,
+              title: "Codex",
+            },
+          ] satisfies Session[],
+        findSessionIdByTerminal: () => "sess-1",
+      },
+      workspaceMgr: {
+        get: (workspaceId: string) =>
+          workspaceId === "ws_1779980247607_u2lfvdjf"
+            ? {
+                id: workspaceId,
+                path: "/home/spencer/workspace/coder-studio",
+              }
+            : undefined,
+      },
+      terminalMgr: {
+        getAll: () => [
+          {
+            toDTO: () =>
+              ({
+                id: "term-1",
+                workspaceId: "ws_1779980247607_u2lfvdjf",
+                kind: "agent",
+                title: "Codex",
+                cwd: "/home/spencer/workspace/coder-studio",
+                argv: ["codex"],
+                cols: 120,
+                rows: 30,
+                pid: 100,
+                alive: true,
+                createdAt: 1,
+              }) satisfies Terminal,
+          },
+        ],
+      },
+      hostCollector: {
+        collect: () => ({
+          cpuPercent: 40,
+          memoryUsedBytes: 400,
+          memoryTotalBytes: 1000,
+          memoryAvailableBytes: 600,
+          loadAverage: [0.2, 0.2, 0.1],
+          uptimeSec: 10,
+          pressure: "normal",
+        }),
+      },
+      processCollector: {
+        collect: async () => [
+          { pid: 100, ppid: 1, cpuPercent: 10, rssBytes: 100, elapsedSec: 5, command: "codex" },
+        ],
+      },
+      setInterval: vi.fn(() => ({ unref: vi.fn() })),
+      clearInterval: vi.fn(),
+      now: () => 10,
+    });
+
+    service.start();
+    const response = await service.recheck();
+
+    expect(response.snapshot.workspaces[0]).toEqual(
+      expect.objectContaining({
+        id: "workspace:ws_1779980247607_u2lfvdjf",
+        label: "coder-studio",
+      })
+    );
+    expect(response.snapshot.sessions[0]).toEqual(
+      expect.objectContaining({
+        parentId: "workspace:ws_1779980247607_u2lfvdjf",
+        label: "Codex",
+      })
+    );
+  });
+
   it("unregisters terminal roots that are no longer active", async () => {
     const registry = new ManagedProcessRegistry({ now: () => 10 });
     let sessions: Session[] = [

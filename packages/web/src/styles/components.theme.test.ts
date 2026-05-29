@@ -1581,6 +1581,8 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps workspace editor and diff surfaces theme-aware", () => {
     const editorShell = getLastRuleBlock(".workspace-git-editor");
     const editorHeader = getLastRuleBlock(".code-editor-header");
+    const editorDirtyIndicator = getLastRuleBlock(".code-file-path .dirty-indicator");
+    const editorPaneDirtyIndicator = getLastRuleBlock(".editor-pane-card__dirty-indicator");
     const editorError = getLastRuleBlock(".code-editor-error");
     const codeLines = getLastRuleBlock(".code-lines");
     const codeModeToggleRules = getRuleBlocksFrom(stylesheet, ".code-mode-toggle").join("\n");
@@ -1603,6 +1605,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(editorHeader).toContain("background: var(--workspace-editor-toolbar-surface)");
     expect(editorHeader).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(editorHeader).not.toContain("var(--component-rgba-18-26-34-0-96)");
+    expect(editorDirtyIndicator).toContain("width: 7px");
+    expect(editorDirtyIndicator).toContain("height: 7px");
+    expect(editorDirtyIndicator).toContain("background: var(--editor-dirty-indicator-fg)");
+    expect(editorPaneDirtyIndicator).toContain("width: 7px");
+    expect(editorPaneDirtyIndicator).toContain("height: 7px");
+    expect(editorPaneDirtyIndicator).toContain("background: var(--editor-dirty-indicator-fg)");
     expect(editorError).toContain("gap: var(--gap-tight)");
     expect(editorError).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
     expect(editorError).toContain("background: var(--editor-diagnostic-error-bg)");
@@ -1702,7 +1710,8 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(focusPulse).toContain("z-index: var(--z-inline-raised)");
     expect(gitView).toContain("padding: 0");
-    expect(editorHeader).toContain("padding: var(--gap-default) var(--editor-toolbar-inset)");
+    expect(editorHeader).toContain("min-height: var(--panel-header-height)");
+    expect(editorHeader).toContain("padding: var(--gap-tight) var(--inset-control-inline)");
     expect(editorHeader).toContain(
       "border-bottom: 1px solid var(--workspace-editor-toolbar-border)"
     );
@@ -1802,10 +1811,14 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(toolbar).toContain("display: inline-flex");
     expect(toolbar).toContain("justify-content: flex-end");
+    expect(toolbar).toContain("flex-wrap: nowrap");
     expect(toolbar).toContain("margin-left: auto");
+    expect(toolbar).toContain("background: transparent");
     expect(toolbar).not.toContain("border: 1px");
     expect(toolbarButtons).toContain("border: none");
     expect(toolbarButtons).toContain("box-shadow: none");
+    expect(toolbarButtons).toContain("width: 26px");
+    expect(toolbarButtons).toContain("height: 26px");
     expect(activeToolbarButtons).toContain("box-shadow: none");
   });
 
@@ -3015,14 +3028,25 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps monitoring surfaces on shared theme tokens instead of bespoke colors", () => {
     const monitoringCard = getLastRuleBlock(".monitoring-card");
     const monitoringSettingsCard = getLastRuleBlock(".settings-card--monitoring");
+    const monitoringProcessList = getLastRuleBlock(".monitoring-process-list");
     const monitoringEntityRow = getLastRuleBlock(".monitoring-entity-row");
+    const monitoringChildRow = getLastRuleBlock(".monitoring-entity-row--child");
+    const monitoringChildConnector = getLastRuleBlock(".monitoring-entity-row--child::before");
     const monitoringSparkline = getLastRuleBlock(".monitoring-sparkline");
 
     expect(monitoringCard).toContain("border-radius: var(--monitoring-card-radius)");
     expect(monitoringCard).toContain("box-shadow: var(--shadow-sm)");
     expect(monitoringSettingsCard).toContain("border: 1px solid var(--surface-elevated-border)");
     expect(monitoringSettingsCard).toContain("background: var(--surface-elevated)");
+    expect(monitoringProcessList).toContain("position: relative");
     expect(monitoringEntityRow).toContain("border-radius: var(--monitoring-item-radius)");
+    expect(monitoringChildRow).toContain("position: relative");
+    expect(monitoringChildRow).toContain("margin-left: var(--sp-5)");
+    expect(monitoringChildRow).toContain("width: calc(100% - var(--sp-5))");
+    expect(monitoringChildRow).toContain("padding-left: calc(var(--sp-5) + var(--sp-3))");
+    expect(monitoringChildConnector).toContain('content: ""');
+    expect(monitoringChildConnector).toContain("border-left: 1px solid color-mix");
+    expect(monitoringChildConnector).toContain("border-bottom: 1px solid color-mix");
     expect(monitoringSparkline).toContain("color: var(--status-info-fg)");
   });
 
@@ -3328,7 +3352,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const searchDetailLabel = getLastRuleBlock(".workspace-search-panel__detail-label");
     const searchResults = getLastRuleBlock(".workspace-search-panel__results");
     const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
+    const openEditorsItemContent = getLastRuleBlock(".workspace-open-editors__item-content");
     const openEditorsItemLabel = getLastRuleBlock(".workspace-open-editors__item-label");
+    const openEditorsDirtyIndicator = getLastRuleBlock(".workspace-open-editors__dirty-indicator");
     const searchGroup = getLastRuleBlock(".workspace-search-panel__group");
     const searchGroupAdjacent = getLastRuleBlock(
       ".workspace-search-panel__group + .workspace-search-panel__group"
@@ -3406,11 +3432,17 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchDetailHeading).toContain("padding-inline-end: 0");
     expect(searchDetailLabel).toContain("font-size: 10px");
     expect(searchResults).toContain("padding: 0");
+    expect(openEditorsItem).toContain("display: flex");
     expect(openEditorsItem).toContain("overflow: hidden");
     expect(openEditorsItem).toContain("text-overflow: ellipsis");
     expect(openEditorsItem).toContain("white-space: nowrap");
+    expect(openEditorsItemContent).toContain("display: inline-flex");
+    expect(openEditorsItemContent).toContain("gap: 6px");
     expect(openEditorsItemLabel).toContain("text-overflow: ellipsis");
     expect(openEditorsItemLabel).toContain("white-space: nowrap");
+    expect(openEditorsDirtyIndicator).toContain("width: 7px");
+    expect(openEditorsDirtyIndicator).toContain("height: 7px");
+    expect(openEditorsDirtyIndicator).toContain("background: var(--editor-dirty-indicator-fg)");
     expect(searchGroup).toContain(
       "border-top: 1px solid var(--component-mix-border-default-92pct-transparent)"
     );

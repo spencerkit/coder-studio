@@ -336,6 +336,7 @@ export async function createServer(
     settingsRepo,
     registry: managedProcessRegistry,
     sessionMgr,
+    workspaceMgr,
     terminalMgr,
     hostCollector: new HostCollector(),
     processCollector: createProcessTableCollector(),

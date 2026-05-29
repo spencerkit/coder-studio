@@ -160,6 +160,14 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function pressSaveShortcut() {
+  fireEvent.keyDown(window, {
+    key: "s",
+    code: "KeyS",
+    ctrlKey: true,
+  });
+}
+
 describe("CodeEditorHost", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -912,13 +920,7 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
 
     // Save button must be disabled for images (nothing to write back).
-    const saveBtn = screen.getByRole("button", { name: "Save File" });
-    expect(saveBtn).toBeDisabled();
-    expect(saveBtn).not.toHaveAttribute("title");
-
-    fireEvent.mouseEnter(saveBtn);
-    fireEvent.focus(saveBtn);
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
   });
 
   it("defaults text files into edit mode and shows the text editor", async () => {
@@ -1647,7 +1649,7 @@ describe("CodeEditorHost", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed on background");
 
@@ -1800,7 +1802,7 @@ describe("CodeEditorHost", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed on background");
 
@@ -2025,6 +2027,8 @@ describe("CodeEditorHost", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
 
     await waitFor(() => {
       expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
@@ -2033,7 +2037,7 @@ describe("CodeEditorHost", () => {
     });
   });
 
-  it("shows the save tooltip on desktop for a text buffer", async () => {
+  it("omits the desktop save button for a text buffer", async () => {
     const { store } = setupStore({
       activePath: "src/save.ts",
       openFiles: {
@@ -2054,11 +2058,7 @@ describe("CodeEditorHost", () => {
       </Provider>
     );
 
-    const saveBtn = screen.getByRole("button", { name: "Save File" });
-    expect(saveBtn).not.toHaveAttribute("title");
-
-    fireEvent.mouseEnter(saveBtn);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Save File");
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
   });
 
   it("clears dirty state when text returns to the last saved content", async () => {
@@ -2098,7 +2098,7 @@ describe("CodeEditorHost", () => {
       });
     });
 
-    expect(screen.getByRole("button", { name: "Save File" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
   });
 
   it("reloads a clean text buffer after an external refresh signal changes the file on disk", async () => {
@@ -2194,7 +2194,7 @@ describe("CodeEditorHost", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed on A");
 
@@ -2202,6 +2202,8 @@ describe("CodeEditorHost", () => {
       .getByRole("button", { name: "src/a.ts" })
       .closest(".workspace-open-editors__row") as HTMLElement;
     fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/a.ts" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
 
     await waitFor(() => {
       expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
@@ -2263,7 +2265,7 @@ describe("CodeEditorHost", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -2287,7 +2289,7 @@ describe("CodeEditorHost", () => {
     expect(screen.getByTestId("monaco-host")).toHaveTextContent("changed b");
     expect(screen.queryByRole("button", { name: "Saving" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -2304,6 +2306,126 @@ describe("CodeEditorHost", () => {
 
     await act(async () => {
       saveADeferred.resolve({ newHash: "hash-a-2" });
+    });
+  });
+
+  it("deduplicates repeated save shortcut dispatches while a save is in flight", async () => {
+    const saveDeferred = createDeferred<{ newHash: string }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/a.ts") {
+        return saveDeferred.promise;
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/a.ts",
+      sendCommand,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "changed a",
+          savedContent: "saved a",
+          baseHash: "hash-a",
+          isDirty: true,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    pressSaveShortcut();
+    pressSaveShortcut();
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.write",
+        {
+          workspaceId: "ws-1",
+          path: "src/a.ts",
+          content: "changed a",
+          baseHash: "hash-a",
+        },
+        undefined
+      );
+    });
+    expect(sendCommand.mock.calls.filter(([op]) => op === "file.write")).toHaveLength(1);
+
+    await act(async () => {
+      saveDeferred.resolve({ newHash: "hash-a-2" });
+    });
+  });
+
+  it("deduplicates overlapping save requests before saving state rerenders", async () => {
+    const saveDeferred = createDeferred<{ newHash: string }>();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "file.write" && args?.path === "src/a.ts") {
+        return saveDeferred.promise;
+      }
+
+      if (op === "file.read") {
+        return {
+          kind: "text",
+          content: "hello world",
+          baseHash: "abc123",
+          encoding: "utf-8",
+        };
+      }
+
+      return null;
+    });
+    const { store } = setupStore({
+      activePath: "src/a.ts",
+      sendCommand,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "changed a",
+          savedContent: "saved a",
+          baseHash: "hash-a",
+          isDirty: true,
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    void result.current.handleSave();
+    void result.current.handleSave();
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "file.write",
+        {
+          workspaceId: "ws-1",
+          path: "src/a.ts",
+          content: "changed a",
+          baseHash: "hash-a",
+        },
+        undefined
+      );
+    });
+    expect(sendCommand.mock.calls.filter(([op]) => op === "file.write")).toHaveLength(1);
+
+    await act(async () => {
+      saveDeferred.resolve({ newHash: "hash-a-2" });
     });
   });
 
@@ -2351,7 +2473,7 @@ describe("CodeEditorHost", () => {
       wrapper: wrapperFor(store),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -2393,6 +2515,8 @@ describe("CodeEditorHost", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
@@ -2494,7 +2618,7 @@ describe("CodeEditorHost", () => {
       wrapper: wrapperFor(store),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save File" }));
+    pressSaveShortcut();
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -2536,6 +2660,8 @@ describe("CodeEditorHost", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
 
     await act(async () => {
       await result.current.openLocation({

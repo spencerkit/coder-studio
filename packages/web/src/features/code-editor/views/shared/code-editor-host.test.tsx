@@ -144,7 +144,27 @@ describe("CodeEditorHeaderActions", () => {
     render(<CodeEditorDesktopHeaderActions state={state} showCloseAction={false} />);
 
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save File" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+  });
+
+  it("renders desktop mode actions as icon-only buttons without save chrome", () => {
+    const state = createState({
+      canDiff: true,
+      canEdit: true,
+      canPreview: true,
+      isSvgTextBacked: false,
+      mode: "preview",
+    });
+
+    render(<CodeEditorDesktopHeaderActions state={state} />);
+
+    expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Preview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Edit")).not.toBeInTheDocument();
   });
 
   it("renders semantic icons for save and external file alerts", () => {

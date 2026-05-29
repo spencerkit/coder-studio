@@ -10,8 +10,12 @@ vi.mock("../../../../lib/i18n", () => ({
       "code_editor.mode_edit": "编辑",
       "code_editor.mode_diff": "Diff",
       "code_editor.diff_saved_only": "Diff preview is based on saved file contents.",
+      "code_editor.close_unsaved_title": "Discard unsaved changes?",
+      "code_editor.close_unsaved_description": "app.ts has unsaved changes.",
+      "code_editor.discard_and_close": "Discard and Close",
       "action.close": "Close",
       "action.save_file": "Save File",
+      "common.cancel": "Cancel",
     };
     return dictionary[key] ?? key;
   },
@@ -155,7 +159,7 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
 }
 
 describe("EditorSurface", () => {
-  it("renders 预览, 编辑, and Diff in one persistent header for text files", () => {
+  it("renders icon-only 预览, 编辑, and Diff actions in one persistent header for text files", () => {
     const state = createState();
 
     render(<EditorSurface state={state} />);
@@ -163,6 +167,8 @@ describe("EditorSurface", () => {
     expect(screen.getByRole("button", { name: "预览" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
+    expect(screen.queryByText("预览")).not.toBeInTheDocument();
+    expect(screen.queryByText("编辑")).not.toBeInTheDocument();
   });
 
   it("hides Diff when the active file has no git changes", () => {
@@ -297,7 +303,7 @@ describe("EditorSurface", () => {
     expect(state.openInDiffMode).toHaveBeenCalledTimes(1);
   });
 
-  it("renders desktop header actions in the fixed order and left-aligned group", () => {
+  it("renders desktop header actions in the fixed order without a save button", () => {
     const state = createState({ canSave: true });
     const { container } = render(<EditorSurface state={state} />);
 
@@ -308,7 +314,30 @@ describe("EditorSurface", () => {
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
 
-    expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Save File", "Close"]);
+    expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Close"]);
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+  });
+
+  it("shows only the active filename in the header and marks dirty files with a status dot", () => {
+    const state = createState({
+      currentFile: {
+        kind: "text",
+        path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+        content: "changed",
+        savedContent: "saved",
+        baseHash: "hash-1",
+        isDirty: true,
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    const title = screen.getByText("editor-surface.tsx");
+    const titleContainer = title.closest(".code-file-path");
+
+    expect(titleContainer).toHaveTextContent("editor-surface.tsx");
+    expect(titleContainer).not.toHaveTextContent("packages/web/src");
+    expect(titleContainer?.querySelector(".dirty-indicator")).toBeTruthy();
   });
 
   it("renders a commit file list preview inside the shared editor surface", () => {
@@ -402,6 +431,36 @@ describe("EditorSurface", () => {
       "export const app = 1;\n"
     );
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms before closing a dirty text file and only closes after discard", () => {
+    const state = createState({
+      currentFile: {
+        kind: "text",
+        path: "src/app.ts",
+        content: "changed",
+        savedContent: "saved",
+        baseHash: "hash-1",
+        isDirty: true,
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(state.handleClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    expect(screen.getByText("app.ts has unsaved changes.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(state.handleClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+
     expect(state.handleClose).toHaveBeenCalledTimes(1);
   });
 

@@ -1800,6 +1800,7 @@
 }
 
 .monitoring-process-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
@@ -1839,7 +1840,29 @@
 }
 
 .monitoring-entity-row--child {
-  padding-left: var(--sp-5);
+  position: relative;
+  margin-left: var(--sp-5);
+  width: calc(100% - var(--sp-5));
+  box-sizing: border-box;
+  padding-left: calc(var(--sp-5) + var(--sp-3));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-elevated) 92%, var(--surface-page) 8%) 0%,
+    color-mix(in srgb, var(--surface-elevated) 78%, var(--surface-page) 22%) 100%
+  );
+}
+
+.monitoring-entity-row--child::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--sp-3));
+  top: calc(-1 * var(--sp-3));
+  width: var(--sp-5);
+  height: calc(50% + var(--sp-3));
+  border-left: 1px solid color-mix(in srgb, var(--status-success-fg) 22%, var(--border-default));
+  border-bottom: 1px solid color-mix(in srgb, var(--status-success-fg) 22%, var(--border-default));
+  border-bottom-left-radius: var(--radius-xs);
+  pointer-events: none;
 }
 
 .monitoring-page {
@@ -8151,8 +8174,24 @@ textarea.input {
  * inline save-error ribbon and the Monaco pane need dedicated styling so
  * they sit naturally inside .workspace-git-editor. */
 .code-file-path .dirty-indicator {
-  margin-left: 4px;
-  color: var(--editor-dirty-indicator-fg);
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--editor-dirty-indicator-fg);
+  box-shadow: 0 0 0 2px var(--component-mix-status-warning-fg-15pct-transparent);
+}
+
+.editor-pane-card__dirty-indicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--editor-dirty-indicator-fg);
+  box-shadow: 0 0 0 2px var(--component-mix-status-warning-fg-15pct-transparent);
 }
 
 .code-mode-btn:disabled {
@@ -8163,7 +8202,7 @@ textarea.input {
 .code-mode-btn svg {
   display: inline-block;
   vertical-align: -2px;
-  margin-right: 4px;
+  margin-right: 0;
 }
 
 .code-mode-btn svg:last-child {
@@ -8280,17 +8319,22 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: var(--gap-tight);
+  flex-wrap: nowrap;
+  gap: var(--gap-compact);
   margin-left: auto;
-  padding: var(--sp-1);
-  border-radius: var(--radius-lg);
-  background: var(--component-mix-surface-hover-72pct-surface-panel-28pct);
+  padding: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
 }
 
 .editor-surface__toolbar .code-mode-btn {
   border: none;
   box-shadow: none;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
 }
 
 .editor-surface__toolbar .code-mode-btn.active {
@@ -8382,13 +8426,21 @@ textarea.input {
 }
 
 .code-file-path {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   max-width: 70%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-secondary);
+}
+
+.code-file-path__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .code-editor-body {
@@ -8735,7 +8787,8 @@ textarea.input {
 }
 
 .code-editor-header {
-  padding: var(--gap-default) var(--editor-toolbar-inset);
+  min-height: var(--panel-header-height);
+  padding: var(--gap-tight) var(--inset-control-inline);
   border-bottom: 1px solid var(--workspace-editor-toolbar-border);
   background: linear-gradient(
     180deg,
@@ -8760,9 +8813,12 @@ textarea.input {
 }
 
 .code-mode-btn {
-  height: 24px;
-  padding: 0 10px;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
   border-radius: 6px;
+  justify-content: center;
 }
 
 .code-mode-btn.active {
@@ -14106,7 +14162,8 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .workspace-open-editors__item {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
   min-width: 0;
   min-height: 28px;
@@ -14120,11 +14177,29 @@ body.is-dragging-pane .session-action-btn-drag {
   white-space: nowrap;
 }
 
+.workspace-open-editors__item-content {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .workspace-open-editors__item-label {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-open-editors__dirty-indicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--editor-dirty-indicator-fg);
+  box-shadow: 0 0 0 2px var(--component-mix-status-warning-fg-15pct-transparent);
 }
 
 .workspace-open-editors__item:hover:not(.workspace-open-editors__item--active) {
@@ -15719,12 +15794,6 @@ body.is-dragging-pane .session-action-btn-drag {
   padding: 0;
 }
 
-.editor-pane-card__toolbar-row {
-  justify-content: flex-end;
-  flex-shrink: 0;
-  padding-inline: var(--space-3);
-}
-
 .editor-pane-card__content,
 .editor-pane-card__content > * {
   min-width: 0;
@@ -15823,7 +15892,8 @@ body.is-dragging-pane .session-action-btn-drag {
   display: flex;
   align-items: center;
   gap: var(--gap-default);
-  padding: var(--gap-default) var(--editor-toolbar-inset);
+  min-height: var(--panel-header-height);
+  padding: var(--gap-tight) var(--inset-control-inline);
   border-bottom: 1px solid var(--workspace-editor-toolbar-border);
   background: var(--workspace-editor-toolbar-surface);
   backdrop-filter: var(--material-backdrop-filter);

@@ -1,4 +1,4 @@
-import { FileText, Image as ImageIcon, Save, X } from "lucide-react";
+import { Eye, FileCode2, GitCompareArrows, Image as ImageIcon, PencilLine, X } from "lucide-react";
 import type { FC } from "react";
 import { IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
@@ -26,10 +26,12 @@ interface CodeEditorHeaderActionsProps {
 
 interface CodeEditorDesktopHeaderActionsProps {
   state: CodeEditorState;
+  onRequestClose?: () => void;
   showCloseAction?: boolean;
 }
 
 export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsProps> = ({
+  onRequestClose,
   state,
   showCloseAction = true,
 }) => {
@@ -38,18 +40,14 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
     canDiff,
     canEdit,
     canPreview,
-    canSave,
     handleClose,
-    handleSave,
     isImageFile,
     isSvgTextBacked,
-    isSaving,
     mode,
     openInDiffMode,
     setMode,
     toggleSvgTextMode,
   } = state;
-  const saveLabel = isSaving ? t("code_editor.saving") : t("action.save_file");
   const handlePreviewMode = () => {
     if (isSvgTextBacked && !isImageFile) {
       toggleSvgTextMode();
@@ -64,63 +62,59 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
     }
     setMode("edit");
   };
+  const handleCloseClick = onRequestClose ?? handleClose;
+  const diffLabel = t("code_editor.mode_diff");
+  const previewLabel = t("code_editor.mode_preview");
+  const editLabel = t("code_editor.mode_edit");
 
   return (
     <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
       {canDiff ? (
-        <button
-          type="button"
-          className={`code-mode-btn editor-surface__mode-btn${mode === "diff" ? " active" : ""}`}
-          onClick={() => void openInDiffMode()}
-          aria-pressed={mode === "diff"}
-          aria-label={t("code_editor.mode_diff")}
-        >
-          <span>{t("code_editor.mode_diff")}</span>
-        </button>
+        <Tooltip content={diffLabel}>
+          <button
+            type="button"
+            className={`code-mode-btn editor-surface__mode-btn${mode === "diff" ? " active" : ""}`}
+            onClick={() => void openInDiffMode()}
+            aria-pressed={mode === "diff"}
+            aria-label={diffLabel}
+          >
+            <GitCompareArrows size={14} />
+          </button>
+        </Tooltip>
       ) : null}
       {canPreview ? (
-        <button
-          type="button"
-          className={`code-mode-btn editor-surface__mode-btn${mode === "preview" ? " active" : ""}`}
-          onClick={handlePreviewMode}
-          aria-pressed={mode === "preview"}
-          aria-label={t("code_editor.mode_preview")}
-        >
-          {isImageFile ? <ImageIcon size={12} /> : <FileText size={12} />}
-          <span>{t("code_editor.mode_preview")}</span>
-        </button>
+        <Tooltip content={previewLabel}>
+          <button
+            type="button"
+            className={`code-mode-btn editor-surface__mode-btn${mode === "preview" ? " active" : ""}`}
+            onClick={handlePreviewMode}
+            aria-pressed={mode === "preview"}
+            aria-label={previewLabel}
+          >
+            <Eye size={14} />
+          </button>
+        </Tooltip>
       ) : null}
       {canEdit ? (
-        <button
-          type="button"
-          className={`code-mode-btn editor-surface__mode-btn${mode === "edit" ? " active" : ""}`}
-          onClick={handleEditMode}
-          aria-pressed={mode === "edit"}
-          aria-label={t("code_editor.mode_edit")}
-        >
-          <FileText size={12} />
-          <span>{t("code_editor.mode_edit")}</span>
-        </button>
+        <Tooltip content={editLabel}>
+          <button
+            type="button"
+            className={`code-mode-btn editor-surface__mode-btn${mode === "edit" ? " active" : ""}`}
+            onClick={handleEditMode}
+            aria-pressed={mode === "edit"}
+            aria-label={editLabel}
+          >
+            <PencilLine size={14} />
+          </button>
+        </Tooltip>
       ) : null}
-      <Tooltip content={saveLabel} disabled={!canSave}>
-        <button
-          type="button"
-          className="code-mode-btn editor-surface__action-btn"
-          onClick={handleSave}
-          disabled={!canSave}
-          aria-label={saveLabel}
-        >
-          <Save size={12} />
-          <span>{saveLabel}</span>
-        </button>
-      </Tooltip>
       {showCloseAction ? (
         <Tooltip content={t("action.close")}>
           <IconButton
             aria-label={t("action.close")}
             className="code-mode-btn editor-surface__action-btn"
-            icon={<X size={12} />}
-            onClick={handleClose}
+            icon={<X size={14} />}
+            onClick={handleCloseClick}
             size="sm"
           />
         </Tooltip>
@@ -233,7 +227,7 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
           <IconButton
             aria-label={toggleModeTitle}
             className="mobile-sheet__action mobile-sheet__action--icon"
-            icon={isImageFile ? <FileText size={16} /> : <ImageIcon size={16} />}
+            icon={isImageFile ? <FileCode2 size={16} /> : <ImageIcon size={16} />}
             onClick={toggleSvgTextMode}
           />
         </Tooltip>

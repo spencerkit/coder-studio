@@ -95,6 +95,23 @@ function sortEntities(entities: MonitoringEntitySummary[], mode: SortMode) {
   });
 }
 
+function sortAttributionTree(
+  workspaces: MonitoringEntitySummary[],
+  sessions: MonitoringEntitySummary[],
+  mode: SortMode
+) {
+  const sessionsByParent = new Map<string, MonitoringEntitySummary[]>();
+  for (const session of sessions) {
+    const parentId = session.parentId ?? "";
+    sessionsByParent.set(parentId, [...(sessionsByParent.get(parentId) ?? []), session]);
+  }
+
+  return sortEntities(workspaces, mode).flatMap((workspace) => [
+    workspace,
+    ...sortEntities(sessionsByParent.get(workspace.id) ?? [], mode),
+  ]);
+}
+
 function entityHistory(
   history: MonitoringHistoryBundle,
   entity: MonitoringEntitySummary
@@ -118,6 +135,22 @@ function entityDetailRows(entity: MonitoringEntitySummary, t: ReturnType<typeof 
     { label: t("monitoring.process_count"), value: String(entity.processCount) },
     { label: t("monitoring.uptime"), value: formatUptime(entity.uptimeSec) },
   ];
+}
+
+function formatEntityKindLabel(
+  kind: MonitoringEntitySummary["kind"],
+  t: ReturnType<typeof useTranslation>
+) {
+  switch (kind) {
+    case "workspace":
+      return t("monitoring.entity_kind_workspace");
+    case "session":
+      return t("monitoring.entity_kind_session");
+    case "subprocess_group":
+      return t("monitoring.entity_kind_subprocess");
+    case "background_group":
+      return t("monitoring.entity_kind_background");
+  }
 }
 
 function formatMonitoringMode(mode: MonitoringMode, t: ReturnType<typeof useTranslation>) {
@@ -162,34 +195,40 @@ function EntityList({
   sampledAt: number;
   timeWindow: TimeWindow;
 }) {
+  const t = useTranslation();
+
   return (
     <div className="monitoring-process-list">
-      {entities.map((entity) => (
-        <button
-          key={entity.id}
-          type="button"
-          aria-label={`${entity.label} ${formatPercent(entity.cpuPercent)} / ${formatBytes(
-            entity.memoryBytes
-          )}`}
-          className={`monitoring-entity-row ${entity.kind === "session" || entity.kind === "subprocess_group" ? "monitoring-entity-row--child" : ""} ${
-            selectedEntityId === entity.id ? "monitoring-entity-row--selected" : ""
-          }`}
-          onClick={() => onSelect(entity)}
-        >
-          <div className="monitoring-entity-row__copy">
-            <strong className="monitoring-entity-row__title">{entity.label}</strong>
-            <span className="monitoring-entity-row__meta">
-              {formatPercent(entity.cpuPercent)} / {formatBytes(entity.memoryBytes)}
-            </span>
-          </div>
-          <HistorySparkline
-            bundle={entityHistory(history, entity)}
-            metric="cpuPercent"
-            sampledAt={sampledAt}
-            timeWindow={timeWindow}
-          />
-        </button>
-      ))}
+      {entities.map((entity) => {
+        const kindLabel = formatEntityKindLabel(entity.kind, t);
+        const displayTitle = entity.label;
+        return (
+          <button
+            key={entity.id}
+            type="button"
+            aria-label={`${kindLabel} ${displayTitle} ${formatPercent(entity.cpuPercent)} / ${formatBytes(
+              entity.memoryBytes
+            )}`}
+            className={`monitoring-entity-row ${entity.kind === "session" || entity.kind === "subprocess_group" ? "monitoring-entity-row--child" : ""} ${
+              selectedEntityId === entity.id ? "monitoring-entity-row--selected" : ""
+            }`}
+            onClick={() => onSelect(entity)}
+          >
+            <div className="monitoring-entity-row__copy">
+              <strong className="monitoring-entity-row__title">{displayTitle}</strong>
+              <span className="monitoring-entity-row__meta">
+                {kindLabel} · {formatPercent(entity.cpuPercent)} / {formatBytes(entity.memoryBytes)}
+              </span>
+            </div>
+            <HistorySparkline
+              bundle={entityHistory(history, entity)}
+              metric="cpuPercent"
+              sampledAt={sampledAt}
+              timeWindow={timeWindow}
+            />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -337,7 +376,7 @@ export function MonitoringDashboard({
       return [];
     }
 
-    return sortEntities([...response.snapshot.workspaces, ...response.snapshot.sessions], sortMode);
+    return sortAttributionTree(response.snapshot.workspaces, response.snapshot.sessions, sortMode);
   }, [response, sortMode]);
 
   const processEntities = useMemo(() => {
@@ -509,7 +548,7 @@ export function MonitoringDashboard({
           </div>
           {selectedEntity ? (
             <Tag color="neutral" caps={false}>
-              {selectedEntity.kind}
+              {formatEntityKindLabel(selectedEntity.kind, t)}
             </Tag>
           ) : null}
         </div>

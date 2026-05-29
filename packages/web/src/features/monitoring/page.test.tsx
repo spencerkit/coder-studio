@@ -586,7 +586,7 @@ describe("MonitoringContent", () => {
             id: "session:sess-1",
             parentId: "workspace:ws-1",
             kind: "session",
-            label: "Claude session",
+            label: "Codex",
             cpuPercent: 27,
             memoryBytes: 320,
             processCount: 2,
@@ -659,12 +659,15 @@ describe("MonitoringContent", () => {
 
     expect(await screen.findByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
     expect(screen.getAllByText("Workspace Alpha").length).toBeGreaterThan(1);
-    expect(screen.getByText("Claude session")).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.queryByText("python tool.py")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Claude session 27.0% / 320 B" }));
+    expect(screen.getByText("Workspace total · 42.0% / 600 B")).toBeInTheDocument();
+    expect(screen.getByText("Session · 27.0% / 320 B")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Session Codex 27.0% / 320 B" }));
     expect(screen.getByText("Detail panel")).toBeInTheDocument();
-    expect(screen.getAllByText("Claude session")).toHaveLength(2);
+    expect(screen.getAllByText("Codex")).toHaveLength(2);
     expect(
       screen.getByText("Select a workspace, session, or process to inspect details.")
     ).toBeInTheDocument();
@@ -878,7 +881,11 @@ describe("MonitoringContent", () => {
     renderMonitoringPage(response, "mobile");
 
     expect((await screen.findAllByText("Workspace Alpha")).length).toBeGreaterThan(1);
-    fireEvent.click(screen.getByRole("button", { name: "Claude session 27.0% / 320 B" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Session Claude session 27.0% / 320 B",
+      })
+    );
 
     expect(screen.getByRole("heading", { level: 2, name: "Detail panel" })).toBeInTheDocument();
     expect(screen.getAllByText("Claude session")).toHaveLength(2);
@@ -1003,7 +1010,7 @@ describe("MonitoringContent", () => {
     expect(await screen.findByText("Subprocess drill-down")).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
-        name: `${longPath} 12.0% / 140 B`,
+        name: `Subprocess ${longPath} 12.0% / 140 B`,
       })
     );
 
@@ -1011,7 +1018,7 @@ describe("MonitoringContent", () => {
     expect(
       screen
         .getByRole("button", {
-          name: `${longPath} 12.0% / 140 B`,
+          name: `Subprocess ${longPath} 12.0% / 140 B`,
         })
         .querySelector(".monitoring-entity-row__title")
     ).toHaveTextContent(longPath);
@@ -1185,7 +1192,9 @@ describe("MonitoringContent", () => {
 
     expect(await screen.findByText("Subprocess drill-down")).toBeInTheDocument();
     expect(screen.getByText("python indexer.py")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "python indexer.py 7.0% / 120 B" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Subprocess python indexer.py 7.0% / 120 B" })
+    );
     expect(screen.getByText("Detail panel")).toBeInTheDocument();
   });
 

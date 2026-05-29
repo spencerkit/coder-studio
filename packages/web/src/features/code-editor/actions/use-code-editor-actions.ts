@@ -56,6 +56,7 @@ export function useCodeEditorActions() {
   );
 
   const [savingPaths, setSavingPaths] = useState<Set<string>>(() => new Set());
+  const savingPathsRef = useRef<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<{ path: string; message: string } | null>(null);
   const [fileLoadError, setFileLoadError] = useState<{ path: string; message: string } | null>(
     null
@@ -133,6 +134,7 @@ export function useCodeEditorActions() {
         }
       }
 
+      savingPathsRef.current = changed ? next : current;
       return changed ? next : current;
     });
     setSaveError((current) => (current && removedPaths.has(current.path) ? null : current));
@@ -297,13 +299,16 @@ export function useCodeEditorActions() {
     }
 
     const { path, content, baseHash } = currentFile;
-    if (savingPaths.has(path)) {
+    if (savingPathsRef.current.has(path)) {
       return;
     }
 
     const requestId = ++nextSaveRequestIdRef.current;
     activeSaveRequestIdByPathRef.current.set(path, requestId);
-    setSavingPaths((current) => new Set(current).add(path));
+    const nextSavingPaths = new Set(savingPathsRef.current);
+    nextSavingPaths.add(path);
+    savingPathsRef.current = nextSavingPaths;
+    setSavingPaths(nextSavingPaths);
     setSaveError((current) => (current?.path === path ? null : current));
 
     const result = await dispatch<{ newHash: string }>("file.write", {
@@ -341,12 +346,11 @@ export function useCodeEditorActions() {
     }
 
     activeSaveRequestIdByPathRef.current.delete(path);
-    setSavingPaths((current) => {
-      const next = new Set(current);
-      next.delete(path);
-      return next;
-    });
-  }, [currentFile, dispatch, savingPaths, setOpenFiles, workspaceId]);
+    const nextSavingPathsAfterSave = new Set(savingPathsRef.current);
+    nextSavingPathsAfterSave.delete(path);
+    savingPathsRef.current = nextSavingPathsAfterSave;
+    setSavingPaths(nextSavingPathsAfterSave);
+  }, [currentFile, dispatch, setOpenFiles, workspaceId]);
 
   const handleContentChange = useCallback(
     (newContent: string) => {
@@ -808,6 +812,30 @@ export function useCodeEditorActions() {
       : null;
   const isSaving = Boolean(isTextFile && savingPaths.has(currentFile.path));
   const canSave = Boolean(isTextFile && currentFile.isDirty && !isSaving);
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      const isSaveShortcut =
+        event.key.toLowerCase() === "s" && (event.ctrlKey || event.metaKey) && !event.altKey;
+      if (!isSaveShortcut) {
+        return;
+      }
+
+      if (!isTextFile) {
+        return;
+      }
+
+      event.preventDefault();
+      if (canSave) {
+        void handleSave();
+      }
+    };
+
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleSaveShortcut);
+    };
+  }, [canSave, handleSave, isTextFile]);
+
   const activeLoadError =
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;
   const activeExternalStatus =

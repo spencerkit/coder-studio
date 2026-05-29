@@ -40,6 +40,9 @@ describe("buildMonitoringSnapshot", () => {
           startedAt: 2,
         },
       ],
+      workspaceLabels: {
+        "ws-1": "coder-studio",
+      },
       processRows: [
         {
           pid: 1,
@@ -74,6 +77,7 @@ describe("buildMonitoringSnapshot", () => {
     expect(response.snapshot.workspaces[0]).toEqual(
       expect.objectContaining({
         id: "workspace:ws-1",
+        label: "coder-studio",
         cpuPercent: 25,
         memoryBytes: 250,
       })
@@ -86,6 +90,43 @@ describe("buildMonitoringSnapshot", () => {
       })
     );
     expect(response.snapshot.subprocessGroups[0]?.parentId).toBe("session:sess-1");
+  });
+
+  it("falls back to the workspace id when no readable label is available", () => {
+    const response = buildMonitoringSnapshot({
+      settings: {
+        ...createDefaultMonitoringSettings(),
+        enabled: true,
+      },
+      sampledAt: 100,
+      host: null,
+      roots: [
+        {
+          ownerId: "terminal:term-1",
+          rootPid: 100,
+          kind: "terminal",
+          label: "Codex",
+          workspaceId: "ws_1779980247607_u2lfvdjf",
+          sessionId: "sess-1",
+          terminalId: "term-1",
+          providerId: "codex",
+          startedAt: 2,
+        },
+      ],
+      processRows: [
+        {
+          pid: 100,
+          ppid: 1,
+          cpuPercent: 20,
+          rssBytes: 200,
+          elapsedSec: 90,
+          command: "codex",
+        },
+      ],
+      previousSnapshot: null,
+    });
+
+    expect(response.snapshot.workspaces[0]?.label).toBe("ws_1779980247607_u2lfvdjf");
   });
 
   it("keeps host data when process collection fails", () => {

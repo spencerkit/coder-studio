@@ -1,6 +1,13 @@
 import { X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
+import { useState } from "react";
+import {
+  ConfirmDialog,
+  EmptyState,
+  IconButton,
+  ThemedIcon,
+  Tooltip,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { deriveDocumentPreviewKind } from "../../../workspace/atoms";
 import { CommitFileListPreview } from "../../components/commit-file-list-preview";
@@ -17,8 +24,13 @@ interface EditorSurfaceProps {
   chrome?: CodeEditorChrome;
 }
 
+function getFileName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
 export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }) => {
   const t = useTranslation();
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const {
     activeFilePath,
     activeDiffChange,
@@ -64,10 +76,14 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const isCommitFileDiffPreview = commitFileDiffPreview !== null;
   const isCommitPreview = isCommitFileListPreview || isCommitFileDiffPreview;
   const commitPreview = commitFileListPreview ?? commitFileDiffPreview;
-  const dirtyIndicator =
-    !isCommitPreview && currentTextFile?.isDirty ? (
-      <span className="dirty-indicator">*</span>
-    ) : null;
+  const isDirtyTextFile = !isCommitPreview && currentTextFile?.isDirty === true;
+  const dirtyIndicator = isDirtyTextFile ? (
+    <span
+      className="dirty-indicator"
+      aria-label={t("code_editor.unsaved_changes")}
+      title={t("code_editor.unsaved_changes")}
+    />
+  ) : null;
   const textDiffPreview =
     worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "text"
       ? worktreeFileDiffPreview
@@ -91,8 +107,22 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const titleText = commitPreview
     ? (commitPreview.title ?? commitPreview.path)
     : currentFile
-      ? currentFile.path
+      ? getFileName(currentFile.path)
       : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
+  const closeConfirmFileName =
+    currentTextFile?.path !== undefined ? getFileName(currentTextFile.path) : t("file.title");
+  const requestClose = () => {
+    if (isDirtyTextFile) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+
+    void handleClose();
+  };
+  const confirmClose = () => {
+    setCloseConfirmOpen(false);
+    void handleClose();
+  };
   const buildRevisionUrl = (path: string, revision?: string) => {
     const query = new URLSearchParams({
       workspaceId: workspace.id,
@@ -132,10 +162,13 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
       <div className="code-editor workspace-git-editor">
         {showHeader ? (
           <div className="code-editor-header editor-surface__header">
-            <span className="code-file-path">
+            <span
+              className="code-file-path"
+              title={commitPreview ? titleText : (currentFile?.path ?? titleText)}
+            >
               {currentFile && !isCommitPreview ? (
                 <>
-                  {titleText}
+                  <span className="code-file-path__name">{titleText}</span>
                   {dirtyIndicator}
                 </>
               ) : (
@@ -148,14 +181,14 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
                   <IconButton
                     aria-label={t("action.close")}
                     className="code-mode-btn editor-surface__action-btn"
-                    icon={<X size={12} />}
+                    icon={<X size={14} />}
                     onClick={handleClose}
                     size="sm"
                   />
                 </Tooltip>
               </div>
             ) : (
-              <CodeEditorDesktopHeaderActions state={state} />
+              <CodeEditorDesktopHeaderActions state={state} onRequestClose={requestClose} />
             )}
           </div>
         ) : null}
@@ -262,6 +295,16 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={closeConfirmOpen}
+        onOpenChange={setCloseConfirmOpen}
+        title={t("code_editor.close_unsaved_title")}
+        description={t("code_editor.close_unsaved_description", { name: closeConfirmFileName })}
+        cancelText={t("common.cancel")}
+        confirmText={t("code_editor.discard_and_close")}
+        tone="danger"
+        onConfirm={confirmClose}
+      />
     </div>
   );
 };
