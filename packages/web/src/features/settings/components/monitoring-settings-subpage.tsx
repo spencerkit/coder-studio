@@ -57,10 +57,6 @@ export function MonitoringSettingsSubpage({
     : null;
   const hostSnapshot = stageResponse?.snapshot.host ?? null;
   const runtimeSnapshot = stageResponse?.snapshot.runtime ?? null;
-  const entityCount =
-    (stageResponse?.snapshot.workspaces.length ?? 0) +
-    (stageResponse?.snapshot.sessions.length ?? 0) +
-    (stageResponse?.snapshot.subprocessGroups.length ?? 0);
   const statusLabel =
     settings.enabled && !monitoringData.error && !stageResponse?.telemetry?.degraded
       ? t("monitoring.status_stable")

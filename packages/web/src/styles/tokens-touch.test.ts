@@ -53,9 +53,6 @@ function getDeclaredCustomProperties(block: string): string[] {
 
 describe("tokens.css touch tokens", () => {
   const builtInThemes = THEME_IDS;
-  const seasonalThemes = THEME_IDS.filter((themeId) =>
-    /^(spring|summer|autumn|winter)-(dark|light)$/.test(themeId)
-  );
 
   const requiredIconTokens = [
     "--icon-primary",
