@@ -997,6 +997,11 @@
   padding: var(--sp-4);
 }
 
+.settings-content--fill-height > .settings-content-surface--monitoring-dense {
+  flex: 0 0 auto;
+  min-height: 100%;
+}
+
 .settings-section {
   max-width: 720px;
   min-width: 0;
@@ -1672,6 +1677,11 @@
   background: color-mix(in srgb, var(--surface-elevated) 96%, white 4%);
   border-radius: var(--monitoring-card-radius);
   box-shadow: var(--shadow-sm);
+  padding: var(--sp-3);
+}
+
+.monitoring-tree,
+.monitoring-detail {
   padding: var(--sp-3);
 }
 
@@ -16504,7 +16514,7 @@ body.is-dragging-pane .session-action-btn-drag {
 .workspace-search-panel__details--collapsed {
   min-height: 23px;
   align-items: center;
-  justify-items: start;
+  justify-items: end;
 }
 
 .workspace-search-panel__details--collapsed .workspace-search-panel__filter--details {

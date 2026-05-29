@@ -11,6 +11,15 @@ const rawMonitoringFontSizePattern =
 const rawMonitoringRadiusPattern =
   /border-radius:\s*(?:\d+px|999px|9999px|\d+%|calc\([^)]*\d+px[^)]*\))/;
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getRuleBlock(selector: string) {
+  const pattern = new RegExp(`${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`);
+  return componentsStyles.match(pattern)?.[1] ?? "";
+}
+
 function getMonitoringOffenderBlocks(pattern: RegExp) {
   return Array.from(componentsStyles.matchAll(/([^{}]+)\{([^}]*)\}/g))
     .map((match) => ({
@@ -35,5 +44,20 @@ describe("monitoring style guardrails", () => {
   it("keeps monitoring radii on semantic tokens", () => {
     expect(componentsStyles).toMatch(rawMonitoringRadiusPattern);
     expect(getMonitoringOffenderBlocks(rawMonitoringRadiusPattern)).toEqual([]);
+  });
+
+  it("lets the dense settings monitoring surface grow with dashboard content", () => {
+    const denseFillHeightRule = getRuleBlock(
+      ".settings-content--fill-height > .settings-content-surface--monitoring-dense"
+    );
+
+    expect(denseFillHeightRule).toContain("flex: 0 0 auto");
+    expect(denseFillHeightRule).toContain("min-height: 100%");
+  });
+
+  it("keeps monitoring data panels padded away from their borders", () => {
+    const panelRule = getRuleBlock(".monitoring-tree,\n.monitoring-detail");
+
+    expect(panelRule).toContain("padding: var(--sp-3)");
   });
 });

@@ -3398,7 +3398,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchFilterDetails).toContain("background: transparent");
     expect(searchInlineIcon).toContain("width: 11px");
     expect(searchDetails).toContain("justify-items: stretch");
-    expect(searchDetailsCollapsed).toContain("justify-items: start");
+    expect(searchDetailsCollapsed).toContain("justify-items: end");
     expect(searchDetailsCollapsed).toContain("align-items: center");
     expect(searchDetailHeading).toContain("justify-content: space-between");
     expect(searchDetailHeading).toContain("width: 100%");
