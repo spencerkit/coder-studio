@@ -2,7 +2,7 @@ import type { MonitoringResponse, MonitoringSettings } from "@coder-studio/core"
 import { createDefaultMonitoringSettings, deriveMonitoringMode } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import type { UseMonitoringDataResult } from "../../monitoring";
@@ -175,7 +175,7 @@ function renderStatefulSubpage(options: {
 }
 
 describe("MonitoringSettingsSubpage", () => {
-  it("renders a unified control-first shell on desktop", async () => {
+  it("renders the approved monitoring visual hierarchy on desktop", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -194,27 +194,129 @@ describe("MonitoringSettingsSubpage", () => {
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
     const shell = container.querySelector(".settings-monitoring-shell");
     expect(shell).toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-control-bar")).toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-stage")).not.toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-dock")).not.toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-mobile-entry")).not.toBeInTheDocument();
-    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
-    expect(shell?.lastElementChild).toHaveClass("settings-monitoring-dashboard-stage");
-    expect(
-      container.querySelector(".settings-monitoring-dashboard-stage .monitoring-stage-toolbar")
-    ).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-hero")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-hero__headline")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-hero__summary")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-status-card")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-status-card__health")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-status-card__stats")).toBeNull();
+    expect(container.querySelector(".settings-monitoring-hero-actions")).toBeInTheDocument();
+    expect(container.querySelectorAll(".settings-monitoring-hero-action")).toHaveLength(3);
+    expect(container.querySelector(".settings-monitoring-toolbar")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-kpi-grid")).toBeInTheDocument();
+    expect(container.querySelector(".monitoring-stage-toolbar")).not.toBeInTheDocument();
+    expect(container.querySelector(".monitoring-dashboard-toolbar")).not.toBeInTheDocument();
+    expect(container.querySelector(".monitoring-dashboard-grid")).toBeInTheDocument();
+    expect(container.querySelector(".monitoring-detail-panel")).toBeInTheDocument();
+    expect(container.querySelector(".monitoring-process-section")).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
       "true"
     );
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
-    expect(screen.getByText("Coder Studio footprint")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Time window" })).toBeInTheDocument();
+    const desktopRefreshButton = screen.getByRole("button", { name: "Refresh monitoring" });
+    const desktopToolbarMeta = desktopRefreshButton.closest(".settings-monitoring-toolbar__meta");
+    expect(desktopToolbarMeta).not.toBeNull();
+    expect(desktopToolbarMeta?.querySelector(".settings-pill-disabled")).toBeNull();
+    expect(desktopRefreshButton.closest(".settings-monitoring-toolbar__action-card")).toBeNull();
+    expect(desktopRefreshButton).toHaveClass("btn-ghost");
+    expect(screen.getAllByText("Coder Studio footprint").length).toBeGreaterThan(0);
+    expect(screen.getByText("Performance monitoring")).toBeInTheDocument();
+    expect(screen.getAllByText("Stable").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Open Monitoring" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
     expect(monitoringData.refresh).not.toHaveBeenCalled();
   });
 
-  it("keeps the same control-first shell on mobile without a configuration entry card", async () => {
+  it("renders populated attribution and subprocess content when monitoring data is available", async () => {
+    const settings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: true,
+      runtimeSummaryEnabled: true,
+      workspaceAttributionEnabled: true,
+      subprocessDrilldownEnabled: true,
+    };
+    const baseResponse = createMonitoringResponse(settings);
+
+    renderSubpage(
+      settings,
+      createMonitoringDataResult(settings, {
+        response: {
+          ...baseResponse,
+          snapshot: {
+            ...baseResponse.snapshot,
+            workspaces: [
+              {
+                id: "workspace:observability",
+                kind: "workspace",
+                label: "workspace/coder-studio-observability-dashboard-long-name-preview",
+                cpuPercent: 7.6,
+                memoryBytes: 29.7 * 1024 ** 3,
+                processCount: 4,
+                uptimeSec: 139 * 60 * 60,
+                trend: "steady",
+              },
+            ],
+            sessions: [
+              {
+                id: "session:review-agent",
+                kind: "session",
+                parentId: "workspace:observability",
+                label: "session/review-agent",
+                cpuPercent: 1.4,
+                memoryBytes: 630 * 1024 ** 2,
+                processCount: 1,
+                uptimeSec: 42 * 60,
+                trend: "steady",
+              },
+            ],
+            subprocessGroups: [
+              {
+                id: "subprocess:vite-dev-server",
+                kind: "subprocess_group",
+                parentId: "session:review-agent",
+                label: "vite dev server",
+                cpuPercent: 0.4,
+                memoryBytes: 92 * 1024 ** 2,
+                processCount: 1,
+                uptimeSec: 17 * 60,
+                trend: "steady",
+              },
+            ],
+          },
+          history: {
+            ...baseResponse.history,
+            workspaces: {
+              "workspace:observability": {
+                points: [{ sampledAt: 1_000_000, cpuPercent: 7.6, memoryBytes: 29.7 * 1024 ** 3 }],
+              },
+            },
+            sessions: {
+              "session:review-agent": {
+                points: [{ sampledAt: 1_000_000, cpuPercent: 1.4, memoryBytes: 630 * 1024 ** 2 }],
+              },
+            },
+            subprocessGroups: {
+              "subprocess:vite-dev-server": {
+                points: [{ sampledAt: 1_000_000, cpuPercent: 0.4, memoryBytes: 92 * 1024 ** 2 }],
+              },
+            },
+          },
+        },
+      }),
+      { viewport: "desktop" }
+    );
+
+    expect(await screen.findByText("Host overview")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("workspace/coder-studio-observability-dashboard-long-name-preview").length
+    ).toBeGreaterThan(1);
+    expect(screen.getByText("session/review-agent")).toBeInTheDocument();
+    expect(screen.getByText("vite dev server")).toBeInTheDocument();
+  });
+
+  it("keeps the approved monitoring visual hierarchy on mobile", async () => {
     const settings = {
       ...createDefaultMonitoringSettings(),
       enabled: true,
@@ -229,19 +331,27 @@ describe("MonitoringSettingsSubpage", () => {
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
     const shell = container.querySelector(".settings-monitoring-shell");
     expect(shell).toBeInTheDocument();
-    expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
-    expect(shell?.lastElementChild).toHaveClass("settings-monitoring-dashboard-stage");
-    expect(container.querySelector(".settings-monitoring-stage")).not.toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-dock")).not.toBeInTheDocument();
-    expect(container.querySelector(".settings-monitoring-mobile-entry")).not.toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-hero")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-status-card__health")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-status-card__stats")).toBeNull();
+    expect(container.querySelector(".settings-monitoring-toolbar")).toBeInTheDocument();
+    expect(container.querySelector(".settings-monitoring-kpi-grid")).toBeInTheDocument();
+    expect(container.querySelector(".monitoring-dashboard-grid")).toBeInTheDocument();
+    expect(container.querySelector(".monitoring-stage-toolbar")).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
       "aria-checked",
       "true"
     );
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
-    expect(screen.getByText(/Last updated/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Last updated/).length).toBeGreaterThan(0);
     expect(screen.getByRole("tablist", { name: "Refresh rate" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
+    const mobileRefreshButton = screen.getByRole("button", { name: "Refresh monitoring" });
+    expect(mobileRefreshButton).toBeInTheDocument();
+    const mobileToolbarMeta = mobileRefreshButton.closest(".settings-monitoring-toolbar__meta");
+    expect(mobileToolbarMeta).not.toBeNull();
+    expect(mobileToolbarMeta?.querySelector(".settings-pill-disabled")).toBeNull();
+    expect(mobileRefreshButton.closest(".settings-monitoring-toolbar__action-card")).toBeNull();
+    expect(mobileRefreshButton).toHaveClass("btn-ghost");
     expect(
       screen.getByRole("button", { name: "Show advanced sampling capabilities" })
     ).toHaveAttribute("aria-expanded", "false");
@@ -251,9 +361,6 @@ describe("MonitoringSettingsSubpage", () => {
       screen.queryByRole("switch", { name: "Workspace and session attribution" })
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Subprocess drill-down" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Attribution" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Process" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Monitoring" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open Settings" })).not.toBeInTheDocument();
   });
@@ -393,7 +500,9 @@ describe("MonitoringSettingsSubpage", () => {
     expect(screen.getByText("Host overview")).toBeInTheDocument();
     expect(screen.getAllByText("Waiting for the first process sample.").length).toBeGreaterThan(0);
     expect(screen.getByText("recheck failed")).toBeInTheDocument();
-    expect(screen.getByText(/Last updated/)).toHaveTextContent("Unavailable");
+    expect(
+      screen.getAllByText(/Last updated/).some((node) => node.textContent?.includes("Unavailable"))
+    ).toBe(true);
   });
 
   it("keeps the mobile advanced settings expanded after enabling from the disabled-first layout", async () => {
@@ -424,6 +533,7 @@ describe("MonitoringSettingsSubpage", () => {
     expect(
       screen.getByRole("button", { name: "Show advanced sampling capabilities" })
     ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("switch", { name: "Host metrics" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable performance monitoring" }));
 
@@ -433,13 +543,70 @@ describe("MonitoringSettingsSubpage", () => {
         "true"
       );
     });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Hide advanced sampling capabilities" })
+      ).toHaveAttribute("aria-expanded", "true");
+    });
     const shell = document.querySelector(".settings-monitoring-shell");
     expect(shell?.firstElementChild).toHaveClass("settings-monitoring-control-bar");
     expect(screen.getByRole("tablist", { name: "Preset" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open monitoring configuration" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "Host metrics" })).toBeInTheDocument();
+  });
+
+  it("keeps advanced sampling collapsed when mobile settings hydrate from defaults", async () => {
+    const disabledSettings = {
+      ...createDefaultMonitoringSettings(),
+      enabled: false,
+      runtimeSummaryEnabled: true,
+    };
+    const enabledSettings = {
+      ...disabledSettings,
+      enabled: true,
+      workspaceAttributionEnabled: true,
+    };
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    viewportMocks.viewport = "mobile";
+
+    function HydratingSubpage() {
+      const [settings, setSettings] = useState(disabledSettings);
+      const [ready, setReady] = useState(false);
+
+      useEffect(() => {
+        setSettings(enabledSettings);
+        setReady(true);
+      }, []);
+
+      return (
+        <MonitoringSettingsSubpage
+          mode={deriveMonitoringMode(settings)}
+          monitoringData={createMonitoringDataResult(settings)}
+          monitoringSettingsReady={ready}
+          onChange={vi.fn()}
+          settings={settings}
+        />
+      );
+    }
+
+    render(
+      <Provider store={store}>
+        <HydratingSubpage />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("switch", { name: "Enable performance monitoring" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
     expect(
       screen.getByRole("button", { name: "Show advanced sampling capabilities" })
     ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("switch", { name: "Host metrics" })).not.toBeInTheDocument();
   });
 
   it("disables monitoring controls before monitoring settings are ready", async () => {
@@ -461,7 +628,9 @@ describe("MonitoringSettingsSubpage", () => {
       "true"
     );
     expect(screen.getByRole("button", { name: "Refresh monitoring" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Show advanced sampling capabilities" }));
+    if (screen.queryByRole("button", { name: "Show advanced sampling capabilities" })) {
+      fireEvent.click(screen.getByRole("button", { name: "Show advanced sampling capabilities" }));
+    }
     expect(screen.getByRole("switch", { name: "Host metrics" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable performance monitoring" }));

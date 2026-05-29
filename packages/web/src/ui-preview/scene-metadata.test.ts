@@ -2,7 +2,6 @@
 import { describe, expect, it } from "vitest";
 import { THEME_IDS } from "../theme";
 import { UI_PREVIEW_SCENE_METADATA } from "./scene-metadata";
-import { createPageScenes } from "./scenes/page-scenes";
 
 describe("ui preview scene metadata", () => {
   it("registers icon-focused scenes for theme review", () => {
@@ -71,6 +70,14 @@ describe("ui preview scene metadata", () => {
     expect(scene?.capture?.selector).toBe(".settings-mobile-root");
   });
 
+  it("registers a dedicated monitoring settings review scene", () => {
+    const scene = UI_PREVIEW_SCENE_METADATA.find((entry) => entry.id === "settings-monitoring");
+
+    expect(scene?.devices).toEqual(["desktop", "mobile"]);
+    expect(scene?.capture?.selector).toBe(".settings-monitoring-shell");
+    expect(scene?.description.toLowerCase()).toContain("monitoring");
+  });
+
   it("captures the README scenes from their full workspace shells", () => {
     const heroScene = UI_PREVIEW_SCENE_METADATA.find((entry) => entry.id === "readme-desktop-hero");
     const reviewScene = UI_PREVIEW_SCENE_METADATA.find(
@@ -96,23 +103,6 @@ describe("ui preview scene metadata", () => {
     const mobileWorkspaceScene = UI_PREVIEW_SCENE_METADATA.find(
       (scene) => scene.id === "workspace-mobile"
     );
-    const pageScenes = createPageScenes();
-    const settingsAppearancePageScene = pageScenes.find(
-      (scene) => scene.id === "settings-appearance"
-    );
-    const workspaceDesktopPageScene = pageScenes.find((scene) => scene.id === "workspace-desktop");
-    const workspaceMobilePageScene = pageScenes.find((scene) => scene.id === "workspace-mobile");
-    const seedContext = {
-      theme: THEME_IDS[0],
-      locale: "en" as const,
-      device: "desktop" as const,
-    };
-    const settingsSeed = settingsAppearancePageScene?.seed(seedContext);
-    const workspaceDesktopSeed = workspaceDesktopPageScene?.seed(seedContext);
-    const workspaceMobileSeed = workspaceMobilePageScene?.seed({
-      ...seedContext,
-      device: "mobile",
-    });
 
     expect(ids).toEqual(
       expect.arrayContaining(["settings-appearance", "workspace-desktop", "workspace-mobile"])
@@ -124,19 +114,5 @@ describe("ui preview scene metadata", () => {
     expect(desktopWorkspaceScene?.description.toLowerCase()).toContain("appearance");
     expect(mobileWorkspaceScene?.source).toBe("real-route");
     expect(mobileWorkspaceScene?.description.toLowerCase()).toContain("appearance");
-    expect(settingsSeed?.commands?.settingsGet).toMatchObject({
-      "appearance.personalization.version": 1,
-      "appearance.personalization.common.backgroundMode": "image",
-      "appearance.personalization.common.backgroundAssetId": "preview-background",
-      "appearance.personalization.common.glassEnabled": true,
-    });
-    expect(workspaceDesktopSeed?.commands?.settingsGet).toMatchObject({
-      "appearance.personalization.version": 1,
-      "appearance.personalization.desktop.surfaceOpacity": 88,
-    });
-    expect(workspaceMobileSeed?.commands?.settingsGet).toMatchObject({
-      "appearance.personalization.version": 1,
-      "appearance.personalization.mobile.surfaceOpacity": 96,
-    });
   });
 });

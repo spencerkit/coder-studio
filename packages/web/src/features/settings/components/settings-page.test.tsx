@@ -484,6 +484,7 @@ describe("SettingsPage", () => {
     const contentSurface = document.querySelector(".settings-content-surface") as HTMLElement;
 
     expect(monitoringNavButton).toHaveClass("settings-nav-item-active");
+    expect(contentSurface).not.toHaveClass("settings-content-surface--monitoring");
     expect(within(contentSurface).getByText("主机概览")).toBeInTheDocument();
     expect(within(contentSurface).getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
       "aria-checked",
@@ -750,16 +751,15 @@ describe("SettingsPage", () => {
     renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
 
     const enableSwitch = await screen.findByRole("switch", { name: "启用性能监控" });
-    const hostMetricsSwitch = screen.getByRole("switch", { name: "主机指标" });
     const presetTabs = screen.getByRole("tablist", { name: "预设" });
+    const advancedToggle = screen.getByRole("button", { name: "显示高级采样能力" });
 
     expect(enableSwitch).toHaveAttribute("aria-checked", "false");
     expect(enableSwitch).toBeDisabled();
-    expect(hostMetricsSwitch).toBeDisabled();
+    expect(advancedToggle).toHaveAttribute("aria-expanded", "false");
     expect(presetTabs).toHaveAttribute("aria-disabled", "true");
 
     fireEvent.click(enableSwitch);
-    fireEvent.click(hostMetricsSwitch);
 
     expect(screen.getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
       "aria-checked",
@@ -785,7 +785,12 @@ describe("SettingsPage", () => {
         "true"
       );
     });
+    fireEvent.click(screen.getByRole("button", { name: "显示高级采样能力" }));
     expect(screen.getByRole("switch", { name: "启用性能监控" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "隐藏高级采样能力" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
     expect(screen.getByRole("switch", { name: "主机指标" })).toBeEnabled();
     expect(screen.getByRole("tablist", { name: "预设" })).toHaveAttribute("aria-disabled", "false");
   });
@@ -916,6 +921,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("switch", { name: "启用性能监控" })).toBeEnabled();
     });
+    fireEvent.click(screen.getByRole("button", { name: "显示高级采样能力" }));
     expect(screen.getByRole("switch", { name: "主机指标" })).toBeEnabled();
     expect(screen.getByRole("tablist", { name: "预设" })).toHaveAttribute("aria-disabled", "false");
   });
@@ -1244,9 +1250,9 @@ describe("SettingsPage", () => {
     expect(screen.getByText("主机概览")).toBeInTheDocument();
     expect(screen.getAllByText("正在等待首个进程样本。").length).toBeGreaterThan(0);
     expect(screen.getByText("recheck failed")).toBeInTheDocument();
-    expect(screen.getByText("最后更新").closest(".monitoring-metric")).toHaveTextContent(
-      "Unavailable"
-    );
+    expect(
+      screen.getAllByText(/最后更新/).some((node) => node.textContent?.includes("Unavailable"))
+    ).toBe(true);
   });
 
   it("keeps the mobile monitoring dock expanded after enabling from the disabled-first layout", async () => {

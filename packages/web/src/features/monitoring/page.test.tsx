@@ -198,7 +198,7 @@ describe("MonitoringContent", () => {
     expect(subscribe).toHaveBeenCalledWith(["monitoring.snapshot.updated"], expect.any(Function));
     expect(screen.getByText("Host overview")).toBeInTheDocument();
     expect(screen.getByText("Coder Studio footprint")).toBeInTheDocument();
-    expect(screen.getByText("ws-1")).toBeInTheDocument();
+    expect(screen.getAllByText("ws-1").length).toBeGreaterThan(1);
   });
 
   it("does not let a late monitoring.get response overwrite a newer monitoring.recheck response", async () => {
@@ -658,7 +658,7 @@ describe("MonitoringContent", () => {
     renderMonitoringPage(response);
 
     expect(await screen.findByRole("button", { name: "Refresh monitoring" })).toBeInTheDocument();
-    expect(screen.getByText("Workspace Alpha")).toBeInTheDocument();
+    expect(screen.getAllByText("Workspace Alpha").length).toBeGreaterThan(1);
     expect(screen.getByText("Claude session")).toBeInTheDocument();
     expect(screen.queryByText("python tool.py")).not.toBeInTheDocument();
 
@@ -877,7 +877,7 @@ describe("MonitoringContent", () => {
 
     renderMonitoringPage(response, "mobile");
 
-    expect(await screen.findByText("Workspace Alpha")).toBeInTheDocument();
+    expect((await screen.findAllByText("Workspace Alpha")).length).toBeGreaterThan(1);
     fireEvent.click(screen.getByRole("button", { name: "Claude session 27.0% / 320 B" }));
 
     expect(screen.getByRole("heading", { level: 2, name: "Detail panel" })).toBeInTheDocument();

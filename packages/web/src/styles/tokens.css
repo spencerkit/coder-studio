@@ -77,6 +77,33 @@
   --radius-local-overlay: var(--radius-lg);
   --radius-flush: 0px;
 
+  /* ========== Domain: Monitoring ========== */
+  --monitoring-surface-radius: var(--radius-panel);
+  --monitoring-card-radius: var(--radius-control-lg);
+  --monitoring-item-radius: var(--radius-control-lg);
+  --monitoring-chip-radius: var(--radius-pill);
+  --monitoring-hero-gap: var(--sp-3);
+  --monitoring-hero-padding: var(--sp-3);
+  --monitoring-hero-copy-gap: var(--sp-1);
+  --monitoring-hero-meta-margin-top: var(--sp-2);
+  --monitoring-hero-side-gap: var(--sp-1);
+  --monitoring-status-card-gap: var(--sp-1);
+  --monitoring-status-card-padding: var(--sp-3);
+  --monitoring-hero-action-gap: var(--sp-1);
+  --monitoring-hero-action-padding: var(--sp-2);
+  --monitoring-hero-title-size: var(--type-heading-3-size);
+  --monitoring-hero-title-size-mobile: var(--type-heading-5-size);
+  --monitoring-hero-title-line-height: var(--type-heading-3-line-height);
+  --monitoring-hero-title-line-height-mobile: var(--type-heading-5-line-height);
+  --monitoring-kpi-value-size: var(--type-heading-3-size);
+  --monitoring-kpi-value-size-mobile: var(--type-heading-4-size);
+  --monitoring-hero-action-value-size: var(--type-heading-5-size);
+  --monitoring-hero-action-value-size-mobile: var(--type-body-3-size);
+  --monitoring-sparkline-height: calc(var(--sp-16) + var(--sp-2));
+  --monitoring-sparkline-height-compact: var(--control-height-sm);
+  --monitoring-sparkline-width-compact: calc(var(--sp-16) + var(--sp-8));
+  --monitoring-sparkline-stroke-width: 1.5;
+
   /* ========== Foundation: State / Interaction ========== */
   --state-focus-ring-color: var(--border-focus);
   --state-focus-ring-width: 2px;

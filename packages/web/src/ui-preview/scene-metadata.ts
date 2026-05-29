@@ -96,6 +96,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".settings-page", settingsSection: "shortcuts" },
   },
   {
+    id: "settings-monitoring",
+    title: "Settings / Monitoring",
+    category: "page",
+    source: "real-route",
+    description:
+      "Settings monitoring section with deterministic monitoring data for desktop and mobile review.",
+    devices: ["desktop", "mobile"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".settings-monitoring-shell" },
+  },
+  {
     id: "settings-mobile-root",
     title: "Settings / Mobile Root",
     category: "page",

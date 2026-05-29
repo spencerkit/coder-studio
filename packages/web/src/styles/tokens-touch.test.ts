@@ -468,11 +468,83 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--radius-overlay:");
     expect(root).toContain("--radius-local-overlay:");
     expect(root).toContain("--radius-flush:");
+    expect(root).toContain("--monitoring-surface-radius:");
+    expect(root).toContain("--monitoring-card-radius:");
+    expect(root).toContain("--monitoring-item-radius:");
+    expect(root).toContain("--monitoring-chip-radius:");
+    expect(root).toContain("--monitoring-hero-gap:");
+    expect(root).toContain("--monitoring-hero-padding:");
+    expect(root).toContain("--monitoring-hero-copy-gap:");
+    expect(root).toContain("--monitoring-hero-meta-margin-top:");
+    expect(root).toContain("--monitoring-hero-side-gap:");
+    expect(root).toContain("--monitoring-status-card-gap:");
+    expect(root).toContain("--monitoring-status-card-padding:");
+    expect(root).toContain("--monitoring-hero-action-gap:");
+    expect(root).toContain("--monitoring-hero-action-padding:");
+    expect(root).toContain("--monitoring-hero-title-size:");
+    expect(root).toContain("--monitoring-hero-title-size-mobile:");
+    expect(root).toContain("--monitoring-hero-title-line-height:");
+    expect(root).toContain("--monitoring-hero-title-line-height-mobile:");
+    expect(root).toContain("--monitoring-kpi-value-size:");
+    expect(root).toContain("--monitoring-kpi-value-size-mobile:");
+    expect(root).toContain("--monitoring-hero-action-value-size:");
+    expect(root).toContain("--monitoring-hero-action-value-size-mobile:");
+    expect(root).toContain("--monitoring-sparkline-height:");
+    expect(root).toContain("--monitoring-sparkline-height-compact:");
+    expect(root).toContain("--monitoring-sparkline-width-compact:");
+    expect(root).toContain("--monitoring-sparkline-stroke-width:");
     expect(getCustomProperty(root, "--radius-sm")).toBe("2px");
     expect(getCustomProperty(root, "--radius-md")).toBe("4px");
     expect(getCustomProperty(root, "--radius-lg")).toBe("6px");
     expect(getCustomProperty(root, "--radius-xl")).toBe("8px");
     expect(getCustomProperty(root, "--radius-full")).toBe("9999px");
+    expect(getCustomProperty(root, "--monitoring-surface-radius")).toBe("var(--radius-panel)");
+    expect(getCustomProperty(root, "--monitoring-card-radius")).toBe("var(--radius-control-lg)");
+    expect(getCustomProperty(root, "--monitoring-item-radius")).toBe("var(--radius-control-lg)");
+    expect(getCustomProperty(root, "--monitoring-chip-radius")).toBe("var(--radius-pill)");
+    expect(getCustomProperty(root, "--monitoring-hero-gap")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--monitoring-hero-padding")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--monitoring-hero-copy-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-hero-meta-margin-top")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--monitoring-hero-side-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-status-card-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-status-card-padding")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--monitoring-hero-action-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-hero-action-padding")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--monitoring-hero-title-size")).toBe(
+      "var(--type-heading-3-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-title-size-mobile")).toBe(
+      "var(--type-heading-5-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-title-line-height")).toBe(
+      "var(--type-heading-3-line-height)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-title-line-height-mobile")).toBe(
+      "var(--type-heading-5-line-height)"
+    );
+    expect(getCustomProperty(root, "--monitoring-kpi-value-size")).toBe(
+      "var(--type-heading-3-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-kpi-value-size-mobile")).toBe(
+      "var(--type-heading-4-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-action-value-size")).toBe(
+      "var(--type-heading-5-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-action-value-size-mobile")).toBe(
+      "var(--type-body-3-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-height")).toBe(
+      "calc(var(--sp-16) + var(--sp-2))"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-height-compact")).toBe(
+      "var(--control-height-sm)"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-width-compact")).toBe(
+      "calc(var(--sp-16) + var(--sp-8))"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-stroke-width")).toBe("1.5");
 
     expect(root).toContain("--terminal-panel-inset:");
     expect(getCustomProperty(root, "--terminal-panel-inset")).toBe("2px");

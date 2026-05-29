@@ -258,6 +258,71 @@ describe("components.css theme-sensitive surfaces", () => {
     );
   });
 
+  it("maps monitoring surfaces and typography onto monitoring semantic tokens", () => {
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-control-bar").some((block) =>
+        block.includes("border-radius: var(--monitoring-surface-radius)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-dashboard-stage").some((block) =>
+        block.includes("border-radius: var(--monitoring-surface-radius)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-toolbar").some((block) =>
+        block.includes("border-radius: var(--monitoring-surface-radius)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-status-card").some((block) =>
+        block.includes("border-radius: var(--monitoring-card-radius)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-kpi-card").some((block) =>
+        block.includes("border-radius: var(--monitoring-card-radius)")
+      )
+    ).toBe(true);
+    expect(
+      getLastGroupedRuleBlock(
+        /\.monitoring-card,\s*\.settings-card--monitoring,\s*\.monitoring-tree,\s*\.monitoring-detail,\s*\.monitoring-process-list\s*\{([\s\S]*?)\}/g
+      )
+    ).toContain("border-radius: var(--monitoring-card-radius)");
+    expect(getLastRuleBlock(".monitoring-card")).toContain(
+      "border-radius: var(--monitoring-card-radius)"
+    );
+    expect(getLastRuleBlock(".settings-monitoring-hero-action")).toContain(
+      "border-radius: var(--monitoring-item-radius)"
+    );
+    expect(getLastRuleBlock(".monitoring-entity-row")).toContain(
+      "border-radius: var(--monitoring-item-radius)"
+    );
+    expect(getLastRuleBlock(".monitoring-detail__path")).toContain(
+      "border-radius: var(--monitoring-item-radius)"
+    );
+    expect(
+      getLastGroupedRuleBlock(
+        /\.settings-monitoring-pill,\s*\.settings-monitoring-soft-chip\s*\{([\s\S]*?)\}/g
+      )
+    ).toContain("border-radius: var(--monitoring-chip-radius)");
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-hero__title").some((block) =>
+        block.includes("font-size: var(--monitoring-hero-title-size)")
+      )
+    ).toBe(true);
+    expect(
+      getLastGroupedRuleBlock(
+        /\.settings-monitoring-status-card__stat strong,\s*\.settings-monitoring-kpi-card__value\s*\{([\s\S]*?)\}/g
+      )
+    ).toContain("font-size: var(--monitoring-kpi-value-size)");
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-hero-action__value").some((block) =>
+        block.includes("font-size: var(--monitoring-hero-action-value-size)")
+      )
+    ).toBe(true);
+  });
+
   it("routes semantic icon classes through icon tokens", () => {
     expect(getLastRuleBlock(".settings-mobile-item__icon")).toContain("var(--icon-secondary)");
     expect(getLastRuleBlock(".settings-nav-icon")).toContain("var(--icon-secondary)");
@@ -1378,6 +1443,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsSurface = getRuleBlocksFrom(stylesheet, ".settings-content-surface").find(
       (block) => block.includes("var(--material-overlay)")
     );
+    const monitoringSettingsSurface = getLastRuleBlock(
+      ".settings-content-surface--monitoring-dense"
+    );
     const appTopbar = getLastRuleBlock(".app-topbar");
     const workspacePage = getLastRuleBlock(".workspace-page");
     const workspaceBody = getLastRuleBlock(".workspace-body");
@@ -1420,8 +1488,11 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(settingsContent).toContain("background: var(--material-shell-page)");
     expect(settingsSurface).toBeTruthy();
+    expect(hasRuleBlock(".settings-content-surface--monitoring")).toBe(false);
+    expect(hasRuleBlock(".settings-content-surface--monitoring-dense")).toBe(true);
     expect(settingsSurface).toContain("background: var(--material-overlay)");
     expect(settingsSurface).toContain("backdrop-filter: var(--material-backdrop-filter)");
+    expect(monitoringSettingsSurface).toContain("padding: var(--sp-4)");
     expect(appTopbar).toContain("background: var(--material-shell-topbar)");
     expect(appTopbar).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(workspacePage).toContain("background: transparent");
@@ -2932,16 +3003,11 @@ describe("components.css theme-sensitive surfaces", () => {
     const monitoringEntityRow = getLastRuleBlock(".monitoring-entity-row");
     const monitoringSparkline = getLastRuleBlock(".monitoring-sparkline");
 
-    expect(monitoringCard).toContain("border: 1px solid var(--surface-elevated-border)");
-    expect(monitoringCard).toContain("background: var(--surface-elevated)");
-    expect(monitoringCard).toContain("border-radius: var(--radius-xl)");
+    expect(monitoringCard).toContain("border-radius: var(--monitoring-card-radius)");
     expect(monitoringCard).toContain("box-shadow: var(--shadow-sm)");
     expect(monitoringSettingsCard).toContain("border: 1px solid var(--surface-elevated-border)");
     expect(monitoringSettingsCard).toContain("background: var(--surface-elevated)");
-    expect(monitoringEntityRow).toContain(
-      "border-bottom: 1px solid var(--surface-elevated-border)"
-    );
-    expect(monitoringEntityRow).toContain("background: transparent");
+    expect(monitoringEntityRow).toContain("border-radius: var(--monitoring-item-radius)");
     expect(monitoringSparkline).toContain("color: var(--status-info-fg)");
   });
 
@@ -3742,12 +3808,56 @@ describe("components.css theme-sensitive surfaces", () => {
   });
 
   it("keeps the unified monitoring shell and compact typography on shared theme tokens", () => {
-    const shell = getLastRuleBlock(".settings-monitoring-shell");
+    const shellBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-shell");
     const shellDesktop = getLastRuleBlock(".settings-monitoring-shell--desktop");
-    const controlBar = getLastRuleBlock(".settings-monitoring-control-bar");
-    const controlSummary = getLastRuleBlock(".settings-monitoring-control-bar__summary");
-    const dashboardStage = getLastRuleBlock(".settings-monitoring-dashboard-stage");
-    const signalPrimaryCard = getLastRuleBlock(".settings-monitoring-signal-bar__primary");
+    const controlBarBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-control-bar");
+    const controlCopy = getLastRuleBlock(".settings-monitoring-control-bar__copy");
+    const controlSummaryBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".settings-monitoring-control-bar__summary"
+    );
+    const heroMeta = getLastRuleBlock(".settings-monitoring-hero__meta");
+    const heroSide = getLastRuleBlock(".settings-monitoring-hero__side");
+    const statusCardBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-status-card");
+    const statusCardTitle = getLastRuleBlock(".settings-monitoring-status-card__title");
+    const statusCardSummary = getLastRuleBlock(".settings-monitoring-status-card__summary");
+    const heroAction = getLastRuleBlock(".settings-monitoring-hero-action");
+    const heroTitleMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-hero__title\s*\{([^}]*)\}/g
+    );
+    const heroActionsMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-hero-actions\s*\{([^}]*)\}/g
+    );
+    const heroPillsMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-pill,\s*\.settings-monitoring-soft-chip\s*\{([^}]*)\}/g
+    );
+    const controlSummaryMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-control-bar__summary\s*\{([^}]*)\}/g
+    );
+    const statusHealthMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-status-card__health\s*\{([^}]*)\}/g
+    );
+    const statusToggleMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-status-card__toggle\s*\{([^}]*)\}/g
+    );
+    const statusToggleDescMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-status-card__toggle\s+\.settings-toggle-desc\s*\{([^}]*)\}/g
+    );
+    const toolbarMetaMobile = getLastGroupedRuleBlockFrom(
+      stylesheet,
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-toolbar__meta\s*\{([^}]*)\}/g
+    );
+    const dashboardStageBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".settings-monitoring-dashboard-stage"
+    );
     const signalControlsBase = getRuleBlocksFrom(
       stylesheet,
       ".settings-monitoring-signal-bar__controls"
@@ -3771,7 +3881,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const signalControlsMobile = getLastGroupedRuleBlockFrom(
       stylesheet,
-      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-signal-bar__controls,\s*\.monitoring-settings-grid--capabilities,\s*\.monitoring-stage-toolbar,\s*\.monitoring-overview-grid,\s*\.monitoring-attribution\s*\{([^}]*)\}/g
+      /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.settings-monitoring-status-card__stats,\s*\.settings-monitoring-kpi-grid,\s*\.settings-monitoring-signal-bar__controls,\s*\.monitoring-settings-grid--capabilities,\s*\.monitoring-overview-grid,\s*\.monitoring-attribution\s*\{([^}]*)\}/g
     );
     const capabilityGridMobile = signalControlsMobile;
     const cardHeader = getLastRuleBlock(".monitoring-card__header");
@@ -3779,43 +3889,119 @@ describe("components.css theme-sensitive surfaces", () => {
     const metricValue = getLastRuleBlock(".monitoring-metric__value");
     const dashboardCardTitle = getLastRuleBlock(".monitoring-card__header h2");
     const detailHeading = getLastRuleBlock(".monitoring-detail h3");
+    const toolbarBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-toolbar");
+    const toolbarMetaBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-toolbar__meta");
+    const kpiCardBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-kpi-card");
+    const monitoringCard = getLastRuleBlock(".monitoring-card");
+    const monitoringSparkline = getLastRuleBlock(".monitoring-sparkline");
+    const monitoringEntitySparkline = getLastGroupedRuleBlock(
+      /\.monitoring-entity-row\s+\.monitoring-history-strip\s*\{([\s\S]*?)\}/g
+    );
+    const monitoringSparklinePolyline = getLastGroupedRuleBlock(
+      /\.monitoring-sparkline\s+polyline\s*\{([\s\S]*?)\}/g
+    );
 
-    expect(shell).toContain("display: flex");
-    expect(shell).toContain("flex-direction: column");
-    expect(shell).toContain("width: 100%");
+    expect(shellBlocks.some((block) => block.includes("display: flex"))).toBe(true);
+    expect(shellBlocks.some((block) => block.includes("flex-direction: column"))).toBe(true);
+    expect(shellBlocks.some((block) => block.includes("width: 100%"))).toBe(true);
     expect(shellDesktop).toContain("max-width: none");
     expect(shellDesktop).toContain("margin-inline: auto");
-    expect(controlBar).toContain(
-      "border: 1px solid var(--component-mix-border-default-70pct-transparent)"
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-control-bar").some((block) =>
+        block.includes("border-radius: var(--monitoring-surface-radius)")
+      )
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-control-bar").some((block) =>
+        block.includes("box-shadow: var(--shadow-sm)")
+      )
+    ).toBe(true);
+    expect(
+      controlBarBlocks.some((block) => block.includes("gap: var(--monitoring-hero-gap)"))
+    ).toBe(true);
+    expect(
+      controlBarBlocks.some((block) => block.includes("padding: var(--monitoring-hero-padding)"))
+    ).toBe(true);
+    expect(controlCopy).toContain("gap: var(--monitoring-hero-copy-gap)");
+    expect(
+      controlSummaryBlocks.some((block) => block.includes("font-size: var(--type-body-4-size)"))
+    ).toBe(true);
+    expect(
+      controlSummaryBlocks.some((block) =>
+        block.includes("line-height: var(--type-body-4-line-height)")
+      )
+    ).toBe(true);
+    expect(
+      controlSummaryBlocks.some((block) => block.includes("color: var(--text-secondary)"))
+    ).toBe(true);
+    expect(
+      getRuleBlocksFrom(stylesheet, ".settings-monitoring-hero__title").some((block) =>
+        block.includes("line-height: var(--monitoring-hero-title-line-height)")
+      )
+    ).toBe(true);
+    expect(heroTitleMobile).toContain("font-size: var(--monitoring-hero-title-size-mobile)");
+    expect(heroTitleMobile).toContain(
+      "line-height: var(--monitoring-hero-title-line-height-mobile)"
     );
-    expect(controlBar).toContain("background: var(--surface-elevated)");
-    expect(controlBar).toContain("padding: var(--sp-4)");
-    expect(controlSummary).toContain("font-size: var(--type-body-5-size)");
-    expect(controlSummary).toContain("color: var(--text-secondary)");
-    expect(dashboardStage).toContain("min-width: 0");
-    expect(dashboardStage).toContain(
-      "border: 1px solid var(--component-mix-border-default-70pct-transparent)"
+    expect(heroMeta).toContain("margin-top: var(--monitoring-hero-meta-margin-top)");
+    expect(heroSide).toContain("gap: var(--monitoring-hero-side-gap)");
+    expect(
+      statusCardBlocks.some((block) => block.includes("gap: var(--monitoring-status-card-gap)"))
+    ).toBe(true);
+    expect(
+      statusCardBlocks.some((block) =>
+        block.includes("padding: var(--monitoring-status-card-padding)")
+      )
+    ).toBe(true);
+    expect(statusCardTitle).toContain("font-size: var(--type-heading-5-size)");
+    expect(statusCardTitle).toContain("line-height: var(--type-heading-5-line-height)");
+    expect(statusCardSummary).toContain("line-height: var(--type-body-5-line-height)");
+    expect(toolbarBlocks.some((block) => block.includes("box-shadow: var(--shadow-sm)"))).toBe(
+      true
     );
-    expect(signalPrimaryCard).toContain("grid-template-columns: minmax(0, 1fr) auto");
-    expect(signalPrimaryCard).toContain(
-      "background: var(--component-mix-surface-panel-72pct-transparent)"
+    expect(toolbarMetaBlocks.some((block) => block.includes("align-items: flex-start"))).toBe(true);
+    expect(toolbarMetaBlocks.some((block) => block.includes("align-content: flex-start"))).toBe(
+      true
     );
+    expect(heroAction).toContain("gap: var(--monitoring-hero-action-gap)");
+    expect(heroAction).toContain("padding: var(--monitoring-hero-action-padding)");
+    expect(heroActionsMobile).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
+    expect(heroPillsMobile).toContain("min-height: var(--control-height-sm)");
+    expect(controlSummaryMobile).toContain("font-size: var(--type-body-4-size)");
+    expect(statusHealthMobile).toContain("display: none");
+    expect(statusToggleMobile).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(statusToggleDescMobile).toContain("display: none");
+    expect(toolbarMetaMobile).toContain("justify-content: flex-end");
+    expect(toolbarMetaMobile).toContain("align-items: center");
+    expect(dashboardStageBlocks.some((block) => block.includes("min-width: 0"))).toBe(true);
+    expect(
+      dashboardStageBlocks.some((block) =>
+        block.includes("border-radius: var(--monitoring-surface-radius)")
+      )
+    ).toBe(true);
+    expect(
+      dashboardStageBlocks.some((block) => block.includes("box-shadow: var(--shadow-sm)"))
+    ).toBe(true);
     expect(stackedControlCard).toContain("grid-template-columns: minmax(0, 1fr)");
-    expect(stackedControlCard).toContain(
-      "background: var(--component-mix-surface-panel-72pct-transparent)"
-    );
+    expect(stackedControlCard).toContain("border-radius: var(--monitoring-item-radius)");
+    expect(stackedControlCard).not.toContain("border: 1px solid");
+    expect(stackedControlCard).not.toContain("background: color-mix");
     expect(settingsInfoLabel).toContain("font-size: var(--type-body-6-size)");
     expect(settingsToggleLabel).toContain("font-size: var(--type-body-3-size)");
-    expect(signalControlsBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr)) auto");
+    expect(signalControlsBase).toContain(
+      "grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(12rem, auto)"
+    );
     expect(signalControlsMobile).toContain("grid-template-columns: 1fr");
     expect(capabilityGridBase).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
     expect(capabilityGridMobile).toContain("grid-template-columns: 1fr");
     expect(capabilityCard).toContain("grid-template-columns: minmax(0, 1fr) auto");
-    expect(capabilityCard).toContain(
-      "background: var(--component-mix-surface-panel-72pct-transparent)"
-    );
+    expect(capabilityCard).toContain("border-radius: var(--monitoring-item-radius)");
     expect(capabilityCardCopy).toContain("min-width: 0");
     expect(capabilityCardDependency).toContain("font-size: var(--type-body-6-size)");
+    expect(kpiCardBlocks.some((block) => block.includes("box-shadow: var(--shadow-sm)"))).toBe(
+      true
+    );
+    expect(monitoringCard).toContain("box-shadow: var(--shadow-sm)");
     expect(advancedGridBase).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
     expect(stylesheet).toContain("@media (max-width: 1200px)");
     expect(advancedGridTablet).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
@@ -3823,8 +4009,16 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(cardHeader).toContain("justify-content: space-between");
     expect(metricRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(metricValue).toContain("justify-self: end");
-    expect(dashboardCardTitle).toContain("font-size: var(--type-heading-6-size)");
-    expect(detailHeading).toContain("font-size: var(--type-body-3-size)");
+    expect(dashboardCardTitle).toContain("font-size: var(--type-heading-5-size)");
+    expect(detailHeading).toContain("font-size: var(--type-heading-6-size)");
+    expect(monitoringSparkline).toContain("height: var(--monitoring-sparkline-height)");
+    expect(monitoringEntitySparkline).toContain("width: var(--monitoring-sparkline-width-compact)");
+    expect(monitoringEntitySparkline).toContain(
+      "height: var(--monitoring-sparkline-height-compact)"
+    );
+    expect(monitoringSparklinePolyline).toContain(
+      "stroke-width: var(--monitoring-sparkline-stroke-width)"
+    );
   });
 
   it("keeps diagnostics install surfaces on theme tokens", () => {

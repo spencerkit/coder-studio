@@ -4,10 +4,11 @@ import {
   type MonitoringSampleIntervalMs,
   type MonitoringSettings,
 } from "@coder-studio/core";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Button, Notice, Pill, SegmentedControl, Switch } from "../../../components/ui";
+import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
-import { formatTimestamp } from "../../monitoring/formatters";
+import type { TimeWindow } from "../../monitoring";
 
 type MonitoringPreset = "light" | "standard" | "deep" | "custom";
 
@@ -16,24 +17,12 @@ interface MonitoringSettingsCardProps {
   readonly mode: MonitoringMode;
   readonly monitoringSettingsReady: boolean;
   readonly onChange: (next: MonitoringSettings) => Promise<void> | void;
-  readonly lastSampledAt?: number | null;
   readonly onRefresh?: () => Promise<void> | void;
   readonly refreshDisabled?: boolean;
   readonly headerActions?: ReactNode;
   readonly showHeaderChrome?: boolean;
-}
-
-function formatModeLabel(mode: MonitoringMode, t: ReturnType<typeof useTranslation>) {
-  switch (mode) {
-    case "disabled":
-      return t("monitoring.mode_disabled");
-    case "light":
-      return t("monitoring.mode_light");
-    case "standard":
-      return t("monitoring.mode_standard");
-    case "deep":
-      return t("monitoring.mode_deep");
-  }
+  readonly timeWindow?: TimeWindow;
+  readonly onTimeWindowChange?: (next: TimeWindow) => void;
 }
 
 function toPreset(settings: MonitoringSettings): MonitoringPreset {
@@ -99,27 +88,55 @@ function capabilityDescription(
   }
 }
 
+export function formatModeLabel(mode: MonitoringMode, t: ReturnType<typeof useTranslation>) {
+  switch (mode) {
+    case "disabled":
+      return t("monitoring.mode_disabled");
+    case "light":
+      return t("monitoring.mode_light");
+    case "standard":
+      return t("monitoring.mode_standard");
+    case "deep":
+      return t("monitoring.mode_deep");
+  }
+}
+
 export function MonitoringSettingsCard({
   settings,
   mode,
   monitoringSettingsReady,
   onChange,
-  lastSampledAt = null,
   onRefresh,
   refreshDisabled = false,
   headerActions,
   showHeaderChrome = true,
+  timeWindow = "15m",
+  onTimeWindowChange,
 }: MonitoringSettingsCardProps) {
   const t = useTranslation();
+  const isMobile = useViewport() === "mobile";
   const advancedPanelId = useId();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const resolvedSettings = normalizeSettings(settings);
+  const previousEnabledRef = useRef(resolvedSettings.enabled);
+  const previousReadyRef = useRef(monitoringSettingsReady);
   const controlsDisabled = !monitoringSettingsReady;
   const dependentControlsDisabled = controlsDisabled || !resolvedSettings.enabled;
-  const signalSummary = resolvedSettings.enabled
-    ? t("monitoring.signal_summary_enabled")
-    : t("monitoring.signal_summary_disabled");
   const refreshLabel = `${t("action.refresh")} ${t("monitoring.command_label").toLowerCase()}`;
+  const advancedVisible = advancedOpen;
+
+  useEffect(() => {
+    if (
+      isMobile &&
+      previousReadyRef.current &&
+      !previousEnabledRef.current &&
+      resolvedSettings.enabled
+    ) {
+      setAdvancedOpen(true);
+    }
+    previousEnabledRef.current = resolvedSettings.enabled;
+    previousReadyRef.current = monitoringSettingsReady;
+  }, [isMobile, monitoringSettingsReady, resolvedSettings.enabled]);
 
   const applyPreset = async (preset: MonitoringPreset) => {
     if (preset === "custom") {
@@ -167,7 +184,10 @@ export function MonitoringSettingsCard({
   };
 
   return (
-    <section className="settings-card settings-card--monitoring" aria-label={t("monitoring.group")}>
+    <section
+      className="settings-card settings-card--monitoring settings-monitoring-toolbar"
+      aria-label={t("monitoring.group")}
+    >
       {showHeaderChrome ? (
         <div className="settings-card__header">
           <div>
@@ -181,29 +201,38 @@ export function MonitoringSettingsCard({
         </div>
       ) : null}
 
+      <div className="settings-monitoring-toolbar__summary">
+        <div>
+          <p className="settings-monitoring-toolbar__eyebrow">{t("monitoring.stage_label")}</p>
+          <p className="settings-monitoring-toolbar__intro">{t("monitoring.toolbar_summary")}</p>
+        </div>
+        <div className="settings-monitoring-toolbar__meta">
+          {!isMobile ? (
+            <Button
+              aria-controls={advancedPanelId}
+              aria-expanded={advancedOpen ? "true" : "false"}
+              onClick={() => setAdvancedOpen((open) => !open)}
+              size="sm"
+              variant="ghost"
+            >
+              {advancedOpen
+                ? t("monitoring.hide_advanced_capabilities")
+                : t("monitoring.show_advanced_capabilities")}
+            </Button>
+          ) : null}
+          <Button
+            aria-label={refreshLabel}
+            disabled={refreshDisabled}
+            onClick={() => void onRefresh?.()}
+            size="sm"
+            variant="ghost"
+          >
+            {t("action.refresh")}
+          </Button>
+        </div>
+      </div>
+
       <div className="settings-monitoring-signal-bar">
-        <div className="settings-monitoring-signal-bar__primary">
-          <div className="settings-toggle-info">
-            <span className="settings-toggle-label">{t("monitoring.enable_monitoring")}</span>
-            <span className="settings-toggle-desc">{t("monitoring.enable_monitoring_hint")}</span>
-          </div>
-          <Switch
-            aria-label={t("monitoring.enable_monitoring")}
-            checked={resolvedSettings.enabled}
-            className="settings-toggle"
-            disabled={controlsDisabled}
-            onCheckedChange={(checked) => void onChange({ ...resolvedSettings, enabled: checked })}
-          />
-        </div>
-
-        <div className="settings-monitoring-signal-bar__summary">
-          <Pill disabled>{formatModeLabel(mode, t)}</Pill>
-          <span>{signalSummary}</span>
-          <span>
-            {t("monitoring.last_updated")}: {formatTimestamp(lastSampledAt)}
-          </span>
-        </div>
-
         <div className="settings-monitoring-signal-bar__controls">
           <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact monitoring-settings-row--stacked">
             <span className="settings-info-label">{t("monitoring.preset")}</span>
@@ -249,15 +278,21 @@ export function MonitoringSettingsCard({
             />
           </div>
 
-          <Button
-            aria-label={refreshLabel}
-            disabled={refreshDisabled}
-            onClick={() => void onRefresh?.()}
-            size="sm"
-            variant="secondary"
-          >
-            {t("action.refresh")}
-          </Button>
+          <div className="settings-info-row monitoring-settings-row monitoring-settings-row--compact monitoring-settings-row--stacked">
+            <span className="settings-info-label">{t("monitoring.time_window")}</span>
+            <SegmentedControl
+              aria-label={t("monitoring.time_window")}
+              className="monitoring-settings-segmented-control"
+              onChange={(value) => onTimeWindowChange?.(value as TimeWindow)}
+              options={[
+                { value: "5m", label: "5m" },
+                { value: "15m", label: "15m" },
+                { value: "30m", label: "30m" },
+              ]}
+              size="sm"
+              value={timeWindow}
+            />
+          </div>
         </div>
       </div>
 
@@ -269,21 +304,26 @@ export function MonitoringSettingsCard({
         />
       ) : null}
 
-      <div className="settings-monitoring-advanced-toggle-row">
-        <Button
-          aria-controls={advancedPanelId}
-          aria-expanded={advancedOpen ? "true" : "false"}
-          onClick={() => setAdvancedOpen((open) => !open)}
-          size="sm"
-          variant="ghost"
-        >
-          {advancedOpen
-            ? t("monitoring.hide_advanced_capabilities")
-            : t("monitoring.show_advanced_capabilities")}
-        </Button>
-      </div>
+      {isMobile ? (
+        <div className="settings-monitoring-advanced-toggle-row">
+          <Button
+            aria-controls={advancedPanelId}
+            aria-expanded={advancedOpen ? "true" : "false"}
+            onClick={() => setAdvancedOpen((open) => !open)}
+            size="sm"
+            variant="ghost"
+          >
+            {advancedOpen
+              ? t("monitoring.hide_advanced_capabilities")
+              : t("monitoring.show_advanced_capabilities")}
+          </Button>
+          <span className="settings-monitoring-advanced-toggle-row__hint">
+            {t("monitoring.advanced_capabilities_hint")}
+          </span>
+        </div>
+      ) : null}
 
-      <div className="settings-monitoring-advanced" hidden={!advancedOpen} id={advancedPanelId}>
+      <div className="settings-monitoring-advanced" hidden={!advancedVisible} id={advancedPanelId}>
         <div className="monitoring-settings-grid monitoring-settings-grid--capabilities">
           <div className="settings-monitoring-capability-card">
             <div className="settings-monitoring-capability-card__copy">

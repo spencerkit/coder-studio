@@ -181,19 +181,100 @@ const draftPaneEditorReviewFileContents = {
   },
 } as const;
 
+const monitoringSampledAt = Date.UTC(2026, 4, 27, 14, 27, 49);
+
+function monitoringSeries(cpuValues: number[], memoryValues: number[]) {
+  return {
+    points: cpuValues.map((cpuPercent, index) => ({
+      sampledAt: monitoringSampledAt - (cpuValues.length - 1 - index) * 30_000,
+      cpuPercent,
+      memoryBytes: memoryValues[index] ?? memoryValues[memoryValues.length - 1] ?? null,
+    })),
+  };
+}
+
 function buildSettingsSeed(context: UiPreviewSceneContext) {
   const monitoringSettings = {
     enabled: true,
     hostMetricsEnabled: true,
     runtimeSummaryEnabled: true,
     workspaceAttributionEnabled: true,
-    subprocessDrilldownEnabled: false,
+    subprocessDrilldownEnabled: true,
     sampleIntervalMs: 10000 as const,
   };
+  const monitoringWorkspace = {
+    id: "workspace:observability",
+    kind: "workspace" as const,
+    label: "workspace/coder-studio-observability-dashboard-long-name-preview",
+    cpuPercent: 7.6,
+    memoryBytes: 29.7 * 1024 ** 3,
+    processCount: 4,
+    uptimeSec: 139 * 60 * 60,
+    trend: "steady" as const,
+  };
+  const monitoringSessions = [
+    {
+      id: "session:review-agent",
+      parentId: "workspace:observability",
+      kind: "session" as const,
+      label: "session/review-agent",
+      cpuPercent: 1.4,
+      memoryBytes: 630 * 1024 ** 2,
+      processCount: 1,
+      uptimeSec: 42 * 60,
+      trend: "steady" as const,
+    },
+    {
+      id: "session:build-runner",
+      parentId: "workspace:observability",
+      kind: "session" as const,
+      label: "session/build-runner",
+      cpuPercent: 0.4,
+      memoryBytes: 92 * 1024 ** 2,
+      processCount: 1,
+      uptimeSec: 17 * 60,
+      trend: "falling" as const,
+    },
+  ];
+  const monitoringSubprocessGroups = [
+    {
+      id: "subprocess:vite-dev-server",
+      parentId: "session:review-agent",
+      kind: "subprocess_group" as const,
+      label: "vite dev server",
+      cpuPercent: 0.4,
+      memoryBytes: 92 * 1024 ** 2,
+      processCount: 1,
+      uptimeSec: 17 * 60,
+      trend: "steady" as const,
+    },
+    {
+      id: "subprocess:preview-store-watcher",
+      parentId: "session:review-agent",
+      kind: "subprocess_group" as const,
+      label: "preview store watcher",
+      cpuPercent: 0.2,
+      memoryBytes: 54 * 1024 ** 2,
+      processCount: 1,
+      uptimeSec: 11 * 60,
+      trend: "steady" as const,
+    },
+    {
+      id: "subprocess:drilldown-guide",
+      parentId: "session:build-runner",
+      kind: "subprocess_group" as const,
+      label: "drilldown entry guide",
+      cpuPercent: 0.1,
+      memoryBytes: 28 * 1024 ** 2,
+      processCount: 1,
+      uptimeSec: 5 * 60,
+      trend: "steady" as const,
+    },
+  ];
   const monitoringResponse: MonitoringResponse = {
     settings: monitoringSettings,
     snapshot: {
-      sampledAt: Date.UTC(2026, 4, 27, 14, 27, 49),
+      sampledAt: monitoringSampledAt,
       mode: deriveMonitoringMode(monitoringSettings),
       host: {
         cpuPercent: 7.6,
@@ -205,23 +286,23 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
         pressure: "normal",
       },
       runtime: {
-        serverCpuPercent: null,
-        serverMemoryBytes: null,
-        totalManagedCpuPercent: 0,
-        totalManagedMemoryBytes: 0,
+        serverCpuPercent: 0.8,
+        serverMemoryBytes: 182 * 1024 ** 2,
+        totalManagedCpuPercent: 2.1,
+        totalManagedMemoryBytes: 814 * 1024 ** 2,
         managedProcessCount: 4,
-        cpuShareOfHostPercent: 0,
-        memoryShareOfHostPercent: 0,
+        cpuShareOfHostPercent: 0.0,
+        memoryShareOfHostPercent: 0.0,
       },
-      workspaces: [],
-      sessions: [],
-      subprocessGroups: [],
+      workspaces: [monitoringWorkspace],
+      sessions: monitoringSessions,
+      subprocessGroups: monitoringSubprocessGroups,
       backgroundGroups: [],
     },
     history: {
       host: {
         points: Array.from({ length: 30 }, (_, index) => ({
-          sampledAt: Date.UTC(2026, 4, 27, 14, 27, 49) - (29 - index) * 30_000,
+          sampledAt: monitoringSampledAt - (29 - index) * 30_000,
           cpuPercent:
             [
               9, 6, 8, 7, 7, 6, 7, 9, 8, 7, 8, 6, 5, 12, 7, 9, 8, 16, 11, 10, 8, 7, 6, 8, 7, 6, 5,
@@ -232,15 +313,108 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
       },
       runtime: {
         points: Array.from({ length: 30 }, (_, index) => ({
-          sampledAt: Date.UTC(2026, 4, 27, 14, 27, 49) - (29 - index) * 30_000,
-          cpuPercent: index % 8 === 0 ? 0.2 : 0,
-          memoryBytes: 0,
+          sampledAt: monitoringSampledAt - (29 - index) * 30_000,
+          cpuPercent: [0.8, 0.5, 0.9, 1.1, 0.7, 1.4, 1.9, 1.3, 1.7, 2.1][index % 10] ?? 1.2,
+          memoryBytes: (760 + (index % 5) * 14) * 1024 ** 2,
           processCount: 4,
         })),
       },
-      workspaces: {},
-      sessions: {},
-      subprocessGroups: {},
+      workspaces: {
+        "workspace:observability": monitoringSeries(
+          [5.2, 4.1, 6.3, 5.4, 7.8, 6.6, 7.1, 5.5, 6.4, 7.6],
+          [
+            28.4 * 1024 ** 3,
+            28.7 * 1024 ** 3,
+            28.9 * 1024 ** 3,
+            29.1 * 1024 ** 3,
+            29.3 * 1024 ** 3,
+            29.5 * 1024 ** 3,
+            29.4 * 1024 ** 3,
+            29.6 * 1024 ** 3,
+            29.7 * 1024 ** 3,
+            29.7 * 1024 ** 3,
+          ]
+        ),
+      },
+      sessions: {
+        "session:review-agent": monitoringSeries(
+          [0.9, 1.2, 1.0, 1.5, 1.3, 1.8, 1.7, 1.4, 1.6, 1.4],
+          [
+            580 * 1024 ** 2,
+            590 * 1024 ** 2,
+            602 * 1024 ** 2,
+            608 * 1024 ** 2,
+            618 * 1024 ** 2,
+            624 * 1024 ** 2,
+            628 * 1024 ** 2,
+            631 * 1024 ** 2,
+            633 * 1024 ** 2,
+            630 * 1024 ** 2,
+          ]
+        ),
+        "session:build-runner": monitoringSeries(
+          [0.8, 0.7, 0.6, 0.6, 0.5, 0.5, 0.4, 0.4, 0.4, 0.4],
+          [
+            118 * 1024 ** 2,
+            112 * 1024 ** 2,
+            107 * 1024 ** 2,
+            104 * 1024 ** 2,
+            101 * 1024 ** 2,
+            98 * 1024 ** 2,
+            96 * 1024 ** 2,
+            94 * 1024 ** 2,
+            93 * 1024 ** 2,
+            92 * 1024 ** 2,
+          ]
+        ),
+      },
+      subprocessGroups: {
+        "subprocess:vite-dev-server": monitoringSeries(
+          [0.5, 0.3, 0.4, 0.6, 0.5, 0.4, 0.6, 0.5, 0.4, 0.4],
+          [
+            88 * 1024 ** 2,
+            89 * 1024 ** 2,
+            90 * 1024 ** 2,
+            92 * 1024 ** 2,
+            93 * 1024 ** 2,
+            92 * 1024 ** 2,
+            94 * 1024 ** 2,
+            93 * 1024 ** 2,
+            92 * 1024 ** 2,
+            92 * 1024 ** 2,
+          ]
+        ),
+        "subprocess:preview-store-watcher": monitoringSeries(
+          [0.2, 0.2, 0.1, 0.3, 0.2, 0.2, 0.2, 0.1, 0.2, 0.2],
+          [
+            50 * 1024 ** 2,
+            51 * 1024 ** 2,
+            52 * 1024 ** 2,
+            54 * 1024 ** 2,
+            54 * 1024 ** 2,
+            55 * 1024 ** 2,
+            55 * 1024 ** 2,
+            54 * 1024 ** 2,
+            54 * 1024 ** 2,
+            54 * 1024 ** 2,
+          ]
+        ),
+        "subprocess:drilldown-guide": monitoringSeries(
+          [0.2, 0.2, 0.1, 0.1, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1],
+          [
+            24 * 1024 ** 2,
+            25 * 1024 ** 2,
+            25 * 1024 ** 2,
+            26 * 1024 ** 2,
+            27 * 1024 ** 2,
+            27 * 1024 ** 2,
+            28 * 1024 ** 2,
+            28 * 1024 ** 2,
+            28 * 1024 ** 2,
+            28 * 1024 ** 2,
+          ]
+        ),
+      },
     },
     capabilities: {
       loadAverageAvailable: true,
@@ -250,7 +424,7 @@ function buildSettingsSeed(context: UiPreviewSceneContext) {
     telemetry: {
       durationMs: 39,
       processRowCount: 4,
-      subprocessGroupCount: 0,
+      subprocessGroupCount: 3,
       historyTrimmed: false,
       degraded: false,
     },
@@ -725,6 +899,11 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
     }),
     scene("settings-shortcuts", {
       router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      seed: (context) => buildSettingsSeed(context),
+      render: () => <SettingsPage />,
+    }),
+    scene("settings-monitoring", {
+      router: () => ({ initialEntries: ["/settings?section=monitoring"], path: "/settings" }),
       seed: (context) => buildSettingsSeed(context),
       render: () => <SettingsPage />,
     }),

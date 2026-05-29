@@ -1015,7 +1015,11 @@ export function SettingsPage() {
           <main
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${isMobileDetailView ? "settings-content--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
-            <div className="settings-content-surface">
+            <div
+              className={`settings-content-surface ${
+                detailSection === "monitoring" ? "settings-content-surface--monitoring-dense" : ""
+              }`}
+            >
               {settingsLoadError && (
                 <Notice
                   role="alert"

@@ -30,7 +30,7 @@ export function Sparkline({
 
   return (
     <svg className="monitoring-sparkline" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <polyline fill="none" stroke="currentColor" strokeWidth="2" points={coordinates.join(" ")} />
+      <polyline className="monitoring-sparkline__line" fill="none" points={coordinates.join(" ")} />
     </svg>
   );
 }

@@ -175,6 +175,7 @@ describe("UI preview catalog", () => {
         "welcome",
         "settings-general",
         "settings-appearance",
+        "settings-monitoring",
         "settings-providers",
         "settings-shortcuts",
         "settings-mobile-root",
@@ -201,6 +202,27 @@ describe("UI preview catalog", () => {
   it("marks the shortcuts settings scene for capture-time navigation", () => {
     const scene = getCatalogModule().getUiPreviewScene("settings-shortcuts");
     expect(scene?.capture?.settingsSection).toBe("shortcuts");
+  });
+
+  it("deep-links the monitoring settings scene directly into the monitoring section", () => {
+    const scene = getCatalogModule().getUiPreviewScene("settings-monitoring");
+    expect(
+      scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
+    ).toEqual(["/settings?section=monitoring"]);
+    expect(scene?.capture?.selector).toBe(".settings-monitoring-shell");
+  });
+
+  it("seeds the monitoring review scene with attribution, detail, and subprocess content", () => {
+    const scene = getCatalogModule().getUiPreviewScene("settings-monitoring");
+    const seed = scene?.seed({ theme: "mint-light", locale: "en", device: "desktop" });
+    const monitoringResponse = seed?.commands?.monitoringGet;
+
+    expect(monitoringResponse?.snapshot.workspaces.length).toBeGreaterThan(0);
+    expect(monitoringResponse?.snapshot.sessions.length).toBeGreaterThan(0);
+    expect(monitoringResponse?.snapshot.subprocessGroups.length).toBeGreaterThan(0);
+    expect(Object.keys(monitoringResponse?.history.workspaces ?? {})).not.toHaveLength(0);
+    expect(Object.keys(monitoringResponse?.history.sessions ?? {})).not.toHaveLength(0);
+    expect(Object.keys(monitoringResponse?.history.subprocessGroups ?? {})).not.toHaveLength(0);
   });
 
   it("limits the mobile settings root scene to mobile variants only", () => {
