@@ -1,8 +1,8 @@
 import type { SearchSessionMatchPreview } from "@coder-studio/core";
-import { ChevronDown, ChevronRight, ChevronUp, Regex, Replace, WholeWord } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useId, useMemo, useRef } from "react";
-import { Button, IconButton, Switch } from "../../../../components/ui";
+import { Button } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useOpenWorkspaceFile } from "../../actions/use-open-workspace-file";
 import { useSearchPreviewActions } from "../../actions/use-search-preview-actions";
@@ -37,47 +37,112 @@ function renderPreview(
   );
 }
 
+function ReplaceAllIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="workspace-search-panel__inline-icon"
+      viewBox="0 0 12 12"
+      fill="none"
+    >
+      <path d="M2 3.25h4.5" />
+      <path d="M5.25 1.9l1.35 1.35-1.35 1.35" />
+      <path d="M10 8.75H5.5" />
+      <path d="M6.75 7.4L5.4 8.75l1.35 1.35" />
+      <rect x="1.75" y="6.75" width="2.1" height="2.1" rx=".35" />
+      <rect x="8.15" y="3.15" width="2.1" height="2.1" rx=".35" />
+    </svg>
+  );
+}
+
+function IgnoreFilesIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="workspace-search-panel__inline-icon"
+      viewBox="0 0 12 12"
+      fill="none"
+    >
+      <rect x="3" y="3" width="6" height="6" rx="1" />
+      <path d="M6 1.75v1" />
+      <path d="M6 9.25v1" />
+      <path d="M1.75 6h1" />
+      <path d="M9.25 6h1" />
+      <path d="M2.8 2.8l.7.7" />
+      <path d="M8.5 8.5l.7.7" />
+      <path d="M8.5 3.5l.7-.7" />
+      <path d="M2.8 9.2l.7-.7" />
+    </svg>
+  );
+}
+
+function SearchDetailsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="workspace-search-panel__inline-icon"
+      viewBox="0 0 12 12"
+      fill="currentColor"
+      stroke="none"
+    >
+      <circle cx="2.25" cy="6" r=".95" />
+      <circle cx="6" cy="6" r=".95" />
+      <circle cx="9.75" cy="6" r=".95" />
+    </svg>
+  );
+}
+
 function SearchToggleButton({
   active,
   ariaLabel,
-  icon,
   onClick,
-  text,
+  children,
+  className,
 }: {
   active: boolean;
   ariaLabel: string;
-  icon?: ReactNode;
   onClick: () => void;
-  text: string;
+  children: ReactNode;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       aria-label={ariaLabel}
       aria-pressed={active}
-      className={`workspace-search-panel__filter${active ? " workspace-search-panel__filter--active" : ""}`}
+      className={`workspace-search-panel__filter${active ? " workspace-search-panel__filter--active" : ""}${
+        className ? ` ${className}` : ""
+      }`}
       onClick={onClick}
     >
-      {icon ? <span className="workspace-search-panel__filter-icon">{icon}</span> : null}
-      <span>{text}</span>
+      <span aria-hidden="true">{children}</span>
     </button>
   );
 }
 
-function SearchDetailSwitch({
-  checked,
-  label,
-  onCheckedChange,
+function SearchActionButton({
+  ariaLabel,
+  children,
+  className,
+  disabled = false,
+  onClick,
 }: {
-  checked: boolean;
-  label: string;
-  onCheckedChange: (checked: boolean) => void;
+  ariaLabel: string;
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <label className="workspace-search-panel__detail-switch">
-      <span>{label}</span>
-      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} size="sm" />
-    </label>
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      className={`workspace-search-panel__filter${className ? ` ${className}` : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span aria-hidden="true">{children}</span>
+    </button>
   );
 }
 
@@ -158,174 +223,221 @@ export const SearchPanel: FC<SearchPanelProps> = ({
       <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
         <div className="workspace-search-panel__controls">
           <div className="workspace-search-panel__toolbar">
-            <input
-              ref={inputRef}
-              type="search"
-              aria-label={t("workspace.sidebar.search")}
-              className="workspace-search-panel__input workspace-sidebar-control"
-              value={state.query}
-              onChange={(event) =>
-                update((current) => ({
-                  ...current,
-                  query: event.target.value,
-                  applySummary: null,
-                }))
-              }
-              placeholder={t("workspace.search.placeholder")}
-            />
-
-            <div className="workspace-search-panel__icon-actions">
-              <SearchToggleButton
-                active={state.matchCase}
-                ariaLabel={t("workspace.search.match_case")}
-                onClick={() =>
-                  update((current) => ({
-                    ...current,
-                    matchCase: !current.matchCase,
-                  }))
-                }
-                text={t("workspace.search.match_case")}
-              />
-              <SearchToggleButton
-                active={state.wholeWord}
-                ariaLabel={t("workspace.search.whole_word")}
-                icon={<WholeWord size={12} />}
-                onClick={() =>
-                  update((current) => ({
-                    ...current,
-                    wholeWord: !current.wholeWord,
-                  }))
-                }
-                text={t("workspace.search.whole_word")}
-              />
-              <SearchToggleButton
-                active={state.isRegex}
-                ariaLabel={t("workspace.search.regex")}
-                icon={<Regex size={12} />}
-                onClick={() =>
-                  update((current) => ({
-                    ...current,
-                    isRegex: !current.isRegex,
-                  }))
-                }
-                text={t("workspace.search.regex")}
-              />
-              <IconButton
+            <div className="workspace-search-panel__leading-actions">
+              <button
+                type="button"
                 aria-label={t("workspace.search.toggle_replace")}
-                className={`workspace-search-panel__toolbar-button${
-                  state.replaceExpanded ? " workspace-search-panel__toolbar-button--active" : ""
+                className={`workspace-search-panel__leading-toggle${
+                  state.replaceExpanded ? " workspace-search-panel__leading-toggle--active" : ""
                 }`}
-                icon={state.replaceExpanded ? <ChevronUp size={14} /> : <Replace size={14} />}
                 onClick={() =>
                   update((current) => ({
                     ...current,
                     replaceExpanded: !current.replaceExpanded,
+                    detailsExpanded: current.replaceExpanded ? false : current.detailsExpanded,
                   }))
                 }
-                size="sm"
-              />
-              <IconButton
-                aria-label={t("workspace.search.toggle_details")}
-                className={`workspace-search-panel__toolbar-button${
-                  state.detailsExpanded ? " workspace-search-panel__toolbar-button--active" : ""
-                }`}
-                icon={state.detailsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                onClick={() =>
+              >
+                {state.replaceExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            </div>
+
+            <div className="workspace-search-panel__compound-control">
+              <input
+                ref={inputRef}
+                type="search"
+                aria-label={t("workspace.sidebar.search")}
+                className="workspace-search-panel__input"
+                value={state.query}
+                onChange={(event) =>
                   update((current) => ({
                     ...current,
-                    detailsExpanded: !current.detailsExpanded,
+                    query: event.target.value,
+                    applySummary: null,
                   }))
                 }
-                size="sm"
+                placeholder={t("workspace.search.placeholder")}
               />
+
+              <div className="workspace-search-panel__compound-actions">
+                <SearchToggleButton
+                  active={state.matchCase}
+                  ariaLabel={t("workspace.search.match_case")}
+                  onClick={() =>
+                    update((current) => ({
+                      ...current,
+                      matchCase: !current.matchCase,
+                    }))
+                  }
+                >
+                  Aa
+                </SearchToggleButton>
+                <SearchToggleButton
+                  active={state.wholeWord}
+                  ariaLabel={t("workspace.search.whole_word")}
+                  onClick={() =>
+                    update((current) => ({
+                      ...current,
+                      wholeWord: !current.wholeWord,
+                    }))
+                  }
+                >
+                  ab
+                </SearchToggleButton>
+                <SearchToggleButton
+                  active={state.isRegex}
+                  ariaLabel={t("workspace.search.regex")}
+                  onClick={() =>
+                    update((current) => ({
+                      ...current,
+                      isRegex: !current.isRegex,
+                    }))
+                  }
+                >
+                  .*
+                </SearchToggleButton>
+              </div>
             </div>
           </div>
 
           {state.replaceExpanded ? (
             <div className="workspace-search-panel__replace-row">
-              <input
-                type="text"
-                aria-label={t("workspace.search.replace")}
-                className="workspace-search-panel__input workspace-sidebar-control"
-                value={state.replaceText}
-                onChange={(event) =>
-                  update((current) => ({
-                    ...current,
-                    replaceText: event.target.value,
-                    applySummary: null,
-                  }))
-                }
-                placeholder={t("workspace.search.replace_placeholder")}
-              />
-              <SearchToggleButton
-                active={state.preserveCase}
-                ariaLabel={t("workspace.search.preserve_case")}
-                onClick={() =>
-                  update((current) => ({
-                    ...current,
-                    preserveCase: !current.preserveCase,
-                  }))
-                }
-                text={t("workspace.search.preserve_case")}
-              />
+              <div className="workspace-search-panel__row-offset" aria-hidden="true" />
+              <div className="workspace-search-panel__compound-control">
+                <input
+                  type="text"
+                  aria-label={t("workspace.search.replace")}
+                  className="workspace-search-panel__input"
+                  value={state.replaceText}
+                  onChange={(event) =>
+                    update((current) => ({
+                      ...current,
+                      replaceText: event.target.value,
+                      applySummary: null,
+                    }))
+                  }
+                  placeholder={t("workspace.search.replace_placeholder")}
+                />
+                <div className="workspace-search-panel__compound-actions">
+                  <SearchToggleButton
+                    active={state.preserveCase}
+                    ariaLabel={t("workspace.search.preserve_case")}
+                    onClick={() =>
+                      update((current) => ({
+                        ...current,
+                        preserveCase: !current.preserveCase,
+                      }))
+                    }
+                    className="workspace-search-panel__filter--compact"
+                  >
+                    AB
+                  </SearchToggleButton>
+                  <SearchActionButton
+                    ariaLabel={t("workspace.search.replace_all")}
+                    className="workspace-search-panel__filter--icon"
+                    disabled={!hasReplace || !hasQuery || !state.activeSessionId || state.applying}
+                    onClick={() => void applyReplace({ kind: "all" })}
+                  >
+                    <ReplaceAllIcon />
+                  </SearchActionButton>
+                </div>
+              </div>
             </div>
           ) : null}
 
-          {state.detailsExpanded ? (
-            <div className="workspace-search-panel__details">
-              <label className="workspace-search-panel__detail-field">
-                <span>{t("workspace.search.files_to_include")}</span>
-                <input
-                  type="text"
-                  aria-label={t("workspace.search.files_to_include")}
-                  className="workspace-search-panel__input workspace-sidebar-control"
-                  value={state.includeText}
-                  onChange={(event) =>
+          {state.replaceExpanded ? (
+            <div
+              className={`workspace-search-panel__details${
+                state.detailsExpanded ? "" : " workspace-search-panel__details--collapsed"
+              }`}
+            >
+              {!state.detailsExpanded ? (
+                <SearchToggleButton
+                  active={state.detailsExpanded}
+                  ariaLabel={t("workspace.search.toggle_details")}
+                  onClick={() =>
                     update((current) => ({
                       ...current,
-                      includeText: event.target.value,
+                      detailsExpanded: !current.detailsExpanded,
                     }))
                   }
-                />
-              </label>
-              <label className="workspace-search-panel__detail-field">
-                <span>{t("workspace.search.files_to_exclude")}</span>
-                <input
-                  type="text"
-                  aria-label={t("workspace.search.files_to_exclude")}
-                  className="workspace-search-panel__input workspace-sidebar-control"
-                  value={state.excludeText}
-                  onChange={(event) =>
-                    update((current) => ({
-                      ...current,
-                      excludeText: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <div className="workspace-search-panel__detail-switches">
-                <SearchDetailSwitch
-                  checked={state.onlyOpenEditors}
-                  label={t("workspace.search.only_open_editors")}
-                  onCheckedChange={(checked) =>
-                    update((current) => ({
-                      ...current,
-                      onlyOpenEditors: checked,
-                    }))
-                  }
-                />
-                <SearchDetailSwitch
-                  checked={state.useIgnoreFiles}
-                  label={t("workspace.search.use_exclude_settings_and_ignore_files")}
-                  onCheckedChange={(checked) =>
-                    update((current) => ({
-                      ...current,
-                      useIgnoreFiles: checked,
-                      useExcludeSettings: checked,
-                    }))
-                  }
-                />
-              </div>
+                  className="workspace-search-panel__filter--icon workspace-search-panel__filter--details"
+                >
+                  <SearchDetailsIcon />
+                </SearchToggleButton>
+              ) : null}
+
+              {state.detailsExpanded ? (
+                <>
+                  <label className="workspace-search-panel__detail-field">
+                    <span className="workspace-search-panel__detail-heading">
+                      <span className="workspace-search-panel__detail-label">
+                        {t("workspace.search.files_to_include")}
+                      </span>
+                      <SearchToggleButton
+                        active={state.detailsExpanded}
+                        ariaLabel={t("workspace.search.toggle_details")}
+                        onClick={() =>
+                          update((current) => ({
+                            ...current,
+                            detailsExpanded: !current.detailsExpanded,
+                          }))
+                        }
+                        className="workspace-search-panel__filter--icon workspace-search-panel__filter--details"
+                      >
+                        <SearchDetailsIcon />
+                      </SearchToggleButton>
+                    </span>
+                    <div className="workspace-search-panel__compound-control">
+                      <input
+                        type="text"
+                        aria-label={t("workspace.search.files_to_include")}
+                        className="workspace-search-panel__input"
+                        value={state.includeText}
+                        onChange={(event) =>
+                          update((current) => ({
+                            ...current,
+                            includeText: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </label>
+                  <label className="workspace-search-panel__detail-field">
+                    <span className="workspace-search-panel__detail-label">
+                      {t("workspace.search.files_to_exclude")}
+                    </span>
+                    <div className="workspace-search-panel__compound-control">
+                      <input
+                        type="text"
+                        aria-label={t("workspace.search.files_to_exclude")}
+                        className="workspace-search-panel__input"
+                        value={state.excludeText}
+                        onChange={(event) =>
+                          update((current) => ({
+                            ...current,
+                            excludeText: event.target.value,
+                          }))
+                        }
+                      />
+                      <SearchToggleButton
+                        active={state.useIgnoreFiles}
+                        ariaLabel={t("workspace.search.use_exclude_settings_and_ignore_files")}
+                        onClick={() =>
+                          update((current) => ({
+                            ...current,
+                            useIgnoreFiles: !current.useIgnoreFiles,
+                            useExcludeSettings: !current.useIgnoreFiles,
+                          }))
+                        }
+                        className="workspace-search-panel__filter--icon workspace-search-panel__filter--suffix"
+                      >
+                        <IgnoreFilesIcon />
+                      </SearchToggleButton>
+                    </div>
+                  </label>
+                </>
+              ) : null}
             </div>
           ) : null}
 
@@ -339,16 +451,6 @@ export const SearchPanel: FC<SearchPanelProps> = ({
 
           <div className="workspace-search-panel__summary">
             <span>{state.loading ? t("common.loading") : resultSummaryText}</span>
-            {hasReplace && hasQuery ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={!state.activeSessionId || state.applying}
-                onClick={() => void applyReplace({ kind: "all" })}
-              >
-                {t("workspace.search.replace_all")}
-              </Button>
-            ) : null}
           </div>
 
           {footerMessage ? (

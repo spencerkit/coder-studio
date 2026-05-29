@@ -197,9 +197,11 @@ describe("SearchPanel", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /Files to Exclude|排除的文件/i }), {
       target: { value: "**/*.spec.tsx" },
     });
-    fireEvent.click(screen.getByRole("switch", { name: /Only Open Editors|仅在打开的编辑器中/i }));
+    expect(
+      screen.queryByRole("switch", { name: /Only Open Editors|仅在打开的编辑器中/i })
+    ).toBeNull();
     fireEvent.click(
-      screen.getByRole("switch", {
+      screen.getByRole("button", {
         name: /Use Exclude Settings and Ignore Files|使用排除设置和忽略文件/i,
       })
     );
@@ -220,13 +222,91 @@ describe("SearchPanel", () => {
         excludeGlobs: ["**/*.spec.tsx"],
         useIgnoreFiles: false,
         useExcludeSettings: false,
-        onlyOpenEditors: true,
+        onlyOpenEditors: false,
         openEditorPaths: ["src/app.tsx"],
         maxFiles: 50,
         maxMatchesPerFile: 20,
       },
       undefined
     );
+  });
+
+  it("renders replace all as an icon action inside the replace control", async () => {
+    const sendCommand = vi.fn().mockResolvedValue(baseResult);
+    renderSearchPanel(sendCommand);
+
+    fireEvent.click(screen.getByRole("button", { name: /Toggle replace|切换替换/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /Replace|替换/i }), {
+      target: { value: "replace" },
+    });
+
+    await searchFor("needle");
+
+    const replaceInput = screen.getByRole("textbox", { name: /Replace|替换/i });
+    const replaceCompound = replaceInput.closest(".workspace-search-panel__compound-control");
+    const replaceAllButton = screen.getByRole("button", { name: /Replace All|全部替换/i });
+
+    expect(replaceCompound).not.toBeNull();
+    expect(replaceCompound?.contains(replaceAllButton)).toBe(true);
+    expect(screen.queryByText(/^Replace All$|^全部替换$/i)).toBeNull();
+  });
+
+  it("renders a details toggle outside replace that shows and hides include and exclude filters", () => {
+    const sendCommand = vi.fn();
+    renderSearchPanel(sendCommand);
+
+    expect(screen.queryByRole("textbox", { name: /Files to Include|包含的文件/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /Files to Exclude|排除的文件/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Toggle replace|切换替换/i }));
+    const detailsToggle = screen.getByRole("button", {
+      name: /Toggle search details|切换搜索详情/i,
+    });
+    const replaceInput = screen.getByRole("textbox", { name: /Replace|替换/i });
+    const replaceCompound = replaceInput.closest(".workspace-search-panel__compound-control");
+    const collapsedDetails = detailsToggle.closest(".workspace-search-panel__details--collapsed");
+
+    expect(replaceCompound).not.toBeNull();
+    expect(replaceCompound?.contains(detailsToggle)).toBe(false);
+    expect(collapsedDetails).not.toBeNull();
+    expect(collapsedDetails?.querySelector("input")).toBeNull();
+
+    fireEvent.click(detailsToggle);
+
+    const expandedDetailsToggle = screen.getByRole("button", {
+      name: /Toggle search details|切换搜索详情/i,
+    });
+    expect(expandedDetailsToggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("textbox", { name: /Files to Include|包含的文件/i })).toBeVisible();
+    const includeInput = screen.getByRole("textbox", { name: /Files to Include|包含的文件/i });
+    const includeCompound = includeInput.closest(".workspace-search-panel__compound-control");
+    const includeHeading = screen
+      .getByText(/Files to Include|包含的文件/i)
+      .closest(".workspace-search-panel__detail-heading");
+    const excludeInput = screen.getByRole("textbox", { name: /Files to Exclude|排除的文件/i });
+    const excludeCompound = excludeInput.closest(".workspace-search-panel__compound-control");
+    const ignoreToggle = screen.getByRole("button", {
+      name: /Use Exclude Settings and Ignore Files|使用排除设置和忽略文件/i,
+    });
+
+    expect(includeHeading).not.toBeNull();
+    expect(includeHeading?.contains(expandedDetailsToggle)).toBe(true);
+    expect(includeCompound).not.toBeNull();
+    expect(includeCompound?.contains(expandedDetailsToggle)).toBe(false);
+    expect(replaceCompound?.contains(expandedDetailsToggle)).toBe(false);
+    expect(excludeCompound).not.toBeNull();
+    expect(excludeCompound?.contains(ignoreToggle)).toBe(true);
+    expect(
+      screen.queryByRole("switch", { name: /Only Open Editors|仅在打开的编辑器中/i })
+    ).toBeNull();
+
+    fireEvent.click(expandedDetailsToggle);
+    const collapsedDetailsToggle = screen.getByRole("button", {
+      name: /Toggle search details|切换搜索详情/i,
+    });
+    expect(collapsedDetailsToggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("textbox", { name: /Files to Include|包含的文件/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /Files to Exclude|排除的文件/i })).toBeNull();
   });
 
   it("opens diff preview through the shared editor surface", async () => {

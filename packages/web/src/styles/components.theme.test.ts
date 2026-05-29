@@ -3231,6 +3231,20 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const searchControls = getLastRuleBlock(".workspace-search-panel__controls");
     const searchInput = getLastRuleBlock(".workspace-search-panel__input");
+    const searchLeadingActions = getLastRuleBlock(".workspace-search-panel__leading-actions");
+    const searchLeadingToggle = getLastRuleBlock(".workspace-search-panel__leading-toggle");
+    const searchCompound = getLastRuleBlock(".workspace-search-panel__compound-control");
+    const searchCompoundFocus = getLastRuleBlock(
+      ".workspace-search-panel__compound-control:focus-within"
+    );
+    const searchFilter = getLastRuleBlock(".workspace-search-panel__filter");
+    const searchFilterActive = getLastRuleBlock(".workspace-search-panel__filter--active");
+    const searchFilterDetails = getLastRuleBlock(".workspace-search-panel__filter--details");
+    const searchInlineIcon = getLastRuleBlock(".workspace-search-panel__inline-icon");
+    const searchDetails = getLastRuleBlock(".workspace-search-panel__details");
+    const searchDetailsCollapsed = getLastRuleBlock(".workspace-search-panel__details--collapsed");
+    const searchDetailHeading = getLastRuleBlock(".workspace-search-panel__detail-heading");
+    const searchDetailLabel = getLastRuleBlock(".workspace-search-panel__detail-label");
     const searchResults = getLastRuleBlock(".workspace-search-panel__results");
     const openEditorsItem = getLastRuleBlock(".workspace-open-editors__item");
     const openEditorsItemLabel = getLastRuleBlock(".workspace-open-editors__item-label");
@@ -3278,12 +3292,38 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(openEditorsItemHover).toContain("background: var(--surface-hover)");
     expect(openEditorsItemActiveHover).toContain("background: var(--state-selected-bg)");
-    expect(searchControls).toContain("padding: 10px 0 8px");
+    expect(searchControls).toContain("gap: 5px");
+    expect(searchControls).toContain("padding: 7px 0 7px");
     expect(searchControls).toContain("border-bottom: none");
     expect(searchControls).toContain("background: transparent");
-    expect(searchInput).toContain("min-height: 36px");
-    expect(searchInput).toContain("border-radius: var(--radius-sm)");
-    expect(searchInput).not.toContain("border-radius: 4px");
+    expect(searchControls).toContain("--workspace-search-panel-leading-width: 14px");
+    expect(searchLeadingActions).toContain("justify-content: center");
+    expect(searchLeadingActions).toContain("width: var(--workspace-search-panel-leading-width)");
+    expect(searchLeadingToggle).toContain("width: var(--workspace-search-panel-leading-width)");
+    expect(searchLeadingToggle).toContain("min-height: 23px");
+    expect(searchCompound).toContain("min-height: 23px");
+    expect(searchCompound).toContain("border-radius: 2px");
+    expect(searchCompoundFocus).toContain("box-shadow: inset 0 0 0 1px");
+    expect(searchInput).toContain("min-height: 23px");
+    expect(searchInput).toContain("border: 0");
+    expect(searchInput).toContain("background: transparent");
+    expect(searchFilter).toContain("border-left: 1px solid");
+    expect(searchFilter).toContain("min-width: 21px");
+    expect(searchFilter).toContain("font-size: 10px");
+    expect(searchFilterActive).toContain(
+      "background: color-mix(in srgb, var(--status-info-fg) 1%, transparent)"
+    );
+    expect(searchFilterDetails).toContain("color: var(--text-secondary)");
+    expect(searchFilterDetails).toContain("background: transparent");
+    expect(searchInlineIcon).toContain("width: 11px");
+    expect(searchDetails).toContain("justify-items: stretch");
+    expect(searchDetailsCollapsed).toContain("justify-items: start");
+    expect(searchDetailsCollapsed).toContain("align-items: center");
+    expect(searchDetailHeading).toContain("justify-content: space-between");
+    expect(searchDetailHeading).toContain("width: 100%");
+    expect(searchDetailHeading).toContain("min-height: 20px");
+    expect(searchDetailHeading).toContain("padding-inline-end: 0");
+    expect(searchDetailLabel).toContain("font-size: 10px");
     expect(searchResults).toContain("padding: 0");
     expect(openEditorsItem).toContain("overflow: hidden");
     expect(openEditorsItem).toContain("text-overflow: ellipsis");
