@@ -125,6 +125,36 @@ describe("DraftLauncher", () => {
     expect(screen.getByText("Select Agent")).toBeInTheDocument();
   });
 
+  it("switches draft launcher carousel panels", () => {
+    const store = createStore();
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    const agentButton = screen.getByRole("button", { name: "Agent" });
+    const fileButton = screen.getByRole("button", { name: "File Editor" });
+    const carouselTrack = container.querySelector(".agent-draft-component-row");
+
+    expect(agentButton).toHaveAttribute("aria-pressed", "true");
+    expect(fileButton).toHaveAttribute("aria-pressed", "false");
+    expect(carouselTrack).not.toHaveClass("agent-draft-component-row--file");
+
+    fireEvent.click(fileButton);
+
+    expect(agentButton).toHaveAttribute("aria-pressed", "false");
+    expect(fileButton).toHaveAttribute("aria-pressed", "true");
+    expect(carouselTrack).toHaveClass("agent-draft-component-row--file");
+  });
+
   it("renders a draft drop label when pane drag hover is active", () => {
     const store = createStore();
 

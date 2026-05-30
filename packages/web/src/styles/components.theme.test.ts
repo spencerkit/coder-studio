@@ -1814,9 +1814,13 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");
   });
 
-  it("keeps draft launcher provider cards adaptive inside narrow panes", () => {
+  it("keeps draft launcher provider cards and carousel adaptive inside narrow panes", () => {
     const launcher = getLastRuleBlock(".agent-draft-launcher");
     const content = getLastRuleBlock(".agent-draft-content");
+    const component = getLastRuleBlock(".agent-draft-component");
+    const carouselRow = getLastRuleBlock(".agent-draft-component-row");
+    const carouselDots = getLastRuleBlock(".agent-draft-carousel-dots");
+    const activeCarouselDot = getLastRuleBlock(".agent-draft-carousel-dot--active");
     const providerCard = getLastRuleBlock(".agent-provider-card");
     const providerBody = getLastRuleBlock(".agent-provider-card-body");
     const providerArrow = getLastRuleBlock(".agent-provider-card-arrow");
@@ -1825,9 +1829,22 @@ describe("components.css theme-sensitive surfaces", () => {
     const providerIcon = getLastRuleBlock(".agent-provider-card-icon");
 
     expect(launcher).toContain("container-type: inline-size");
+    expect(content).toContain("width: 100%");
     expect(content).toContain("max-width: 100%");
-    expect(content).toContain("background: var(--agent-draft-surface)");
-    expect(content).toContain("backdrop-filter: var(--material-backdrop-filter)");
+    expect(component).toContain("max-width: 100%");
+    expect(carouselRow).toContain("width: 200%");
+    expect(carouselRow).toContain("flex-direction: row");
+    expect(carouselRow).toContain("gap: 0");
+    expect(getLastRuleBlock(".agent-draft-component-row--file")).toContain(
+      "transform: translateX(-50%)"
+    );
+    expect(
+      getRuleBlocksFrom(stylesheet, ".agent-draft-carousel-dots").some((block) =>
+        block.includes("display: none")
+      )
+    ).toBe(true);
+    expect(carouselDots).toContain("display: flex");
+    expect(activeCarouselDot).toContain("width: 18px");
     expect(providerCard).toContain("background: var(--agent-provider-card-surface)");
     expect(providerCard).toContain("min-width: 0");
     expect(providerBody).toContain("width: 100%");
@@ -1838,9 +1855,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(codexCard).toContain("background: var(--state-info-bg)");
     expect(codexCard).toContain("border-color: var(--state-info-border)");
     expect(providerIcon).toContain("background: var(--icon-surface-subtle)");
-    expect(stylesheet).toMatch(
-      /@container\s*\(max-width:\s*36rem\)\s*\{[\s\S]*?\.agent-draft-providers\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?\}/
-    );
+    expect(carouselRow).not.toContain("flex-direction: column");
   });
 
   it("keeps legacy agent pane chrome aligned to shared density and state tokens", () => {

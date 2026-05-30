@@ -1,7 +1,7 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowRight, FlipHorizontal, FlipVertical, X } from "lucide-react";
-import { type DragEvent, type FC, useState } from "react";
+import { type DragEvent, type FC, type PointerEvent, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
@@ -46,7 +46,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  const [activePanel, setActivePanel] = useState<"agent" | "file">("agent");
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
+  const swipeStartXRef = useRef<number | null>(null);
   const { states, launch } = useProviderLauncher(
     dispatch,
     workspaceId,
@@ -189,6 +191,34 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     onOpenFile?.(paneId, path);
   };
 
+  const handleCarouselPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse") {
+      return;
+    }
+
+    swipeStartXRef.current = event.clientX;
+  };
+
+  const handleCarouselPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const startX = swipeStartXRef.current;
+    swipeStartXRef.current = null;
+
+    if (startX === null || event.pointerType === "mouse") {
+      return;
+    }
+
+    const deltaX = event.clientX - startX;
+    if (Math.abs(deltaX) < 48) {
+      return;
+    }
+
+    setActivePanel(deltaX < 0 ? "file" : "agent");
+  };
+
+  const handleCarouselPointerCancel = () => {
+    swipeStartXRef.current = null;
+  };
+
   return (
     <div
       className={`session-card agent-pane${dragState?.isDragging ? " draft-launcher--dragging" : ""}${dragState?.isActiveDropTarget || isFileDropTarget ? " draft-launcher--drop-target" : ""}`}
@@ -254,7 +284,12 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
       <div className="agent-draft-launcher">
         <div className="agent-draft-content">
           <div className="agent-draft-component">
-            <div className="agent-draft-component-row">
+            <div
+              className={`agent-draft-component-row${activePanel === "file" ? " agent-draft-component-row--file" : ""}`}
+              onPointerCancel={handleCarouselPointerCancel}
+              onPointerDown={handleCarouselPointerDown}
+              onPointerUp={handleCarouselPointerUp}
+            >
               {/* Agent panel */}
               <div className="agent-draft-panel">
                 <div className="agent-draft-panel-header">
@@ -382,6 +417,22 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                   <span className="agent-draft-drop-zone-title">拖入文件打开</span>
                 </div>
               </div>
+            </div>
+
+            <div className="agent-draft-carousel-dots" role="group" aria-label="Draft panels">
+              {[
+                { id: "agent" as const, label: "Agent" },
+                { id: "file" as const, label: "File Editor" },
+              ].map((panel) => (
+                <button
+                  key={panel.id}
+                  aria-label={panel.label}
+                  aria-pressed={activePanel === panel.id}
+                  className={`agent-draft-carousel-dot${activePanel === panel.id ? " agent-draft-carousel-dot--active" : ""}`}
+                  onClick={() => setActivePanel(panel.id)}
+                  type="button"
+                />
+              ))}
             </div>
 
             <div className="agent-draft-footer">点击启动 Agent 或直接拖拽文件到右侧区域打开</div>

@@ -7279,6 +7279,8 @@ textarea.input {
 }
 
 .agent-draft-content {
+  width: 100%;
+  max-width: 100%;
   align-items: center;
   justify-content: center;
 }
@@ -7288,12 +7290,47 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  width: fit-content;
+  max-width: 100%;
 }
 
 .agent-draft-component-row {
   display: flex;
   flex-direction: row;
+  align-items: stretch;
   gap: var(--sp-4);
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.agent-draft-carousel-dots {
+  display: none;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+}
+
+.agent-draft-carousel-dot {
+  appearance: none;
+  border: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-disabled);
+  padding: 0;
+  cursor: pointer;
+  transition:
+    width var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.agent-draft-carousel-dot:focus-visible {
+  outline: 2px solid var(--status-info-fg);
+  outline-offset: 2px;
+}
+
+.agent-draft-carousel-dot--active {
+  width: 18px;
+  background: var(--text-primary);
 }
 
 /* ── Panel ────────────────────────────────────────── */
@@ -7499,14 +7536,46 @@ textarea.input {
 }
 
 @container (max-width: 28rem) {
+  .agent-draft-component {
+    width: min(100%, 24rem);
+    overflow: hidden;
+  }
+
   .agent-draft-component-row {
-    flex-direction: column;
+    width: 200%;
+    flex-direction: row;
+    gap: 0;
+  }
+
+  .agent-draft-component-row--file {
+    transform: translateX(-50%);
+  }
+
+  .agent-draft-panel {
+    flex: 0 0 50%;
+    width: 50%;
+    align-items: stretch;
+    justify-content: center;
   }
 
   .agent-draft-panel + .agent-draft-panel {
     border-left: none;
-    border-top: 1px solid var(--border-default);
+    border-top: none;
     padding-left: var(--sp-5);
+  }
+
+  .agent-draft-panel-header {
+    align-self: flex-start;
+  }
+
+  .agent-draft-panel-list,
+  .agent-draft-drop-zone,
+  .agent-provider-card {
+    width: 100%;
+  }
+
+  .agent-draft-carousel-dots {
+    display: flex;
   }
 }
 
