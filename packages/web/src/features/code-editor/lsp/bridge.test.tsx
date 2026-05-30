@@ -39,6 +39,7 @@ vi.mock("monaco-editor", () => ({
     registerHoverProvider: vi.fn(),
     registerReferenceProvider: vi.fn(),
     registerDocumentSymbolProvider: vi.fn(),
+    registerDocumentSemanticTokensProvider: vi.fn(),
     SymbolKind: {
       Variable: 13,
     },

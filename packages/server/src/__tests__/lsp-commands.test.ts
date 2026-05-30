@@ -38,6 +38,7 @@ class FakeLspManager {
           references: true,
           hover: true,
           documentSymbols: true,
+          semanticTokens: true,
           diagnostics: true,
         },
       },
@@ -78,6 +79,13 @@ class FakeLspManager {
 
   async documentSymbols() {
     return [];
+  }
+
+  async semanticTokens() {
+    return {
+      resultId: "semantic-1",
+      data: [0, 13, 11, 8, 1],
+    };
   }
 }
 
@@ -205,6 +213,27 @@ describe("LSP commands", () => {
       expect.arrayContaining([
         expect.objectContaining({ path: "e2e/fixtures/lsp-workspace/shared.ts" }),
       ])
+    );
+
+    const semanticTokens = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.semanticTokens",
+        args: {
+          workspaceId,
+          path: "e2e/fixtures/lsp-workspace/shared.ts",
+        },
+      },
+      ctx
+    );
+
+    expect(semanticTokens.ok).toBe(true);
+    expect(semanticTokens.data).toEqual(
+      expect.objectContaining({
+        resultId: "semantic-1",
+        data: [0, 13, 11, 8, 1],
+      })
     );
   });
 

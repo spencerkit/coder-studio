@@ -374,6 +374,7 @@ describe("MonacoHost", () => {
         expect.any(HTMLDivElement),
         expect.objectContaining({
           readOnly: false,
+          "semanticHighlighting.enabled": true,
           theme: "coder-studio-workspace-mint-light",
         })
       );

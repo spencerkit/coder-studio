@@ -186,6 +186,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       minimap: { enabled: false },
       readOnly,
       scrollBeyondLastLine: false,
+      "semanticHighlighting.enabled": true,
       padding: { top: 12, bottom: 12 },
       automaticLayout: true,
     });

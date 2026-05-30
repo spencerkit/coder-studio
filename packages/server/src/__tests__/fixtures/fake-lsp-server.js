@@ -14,7 +14,12 @@ const connection = createMessageConnection(
 );
 
 const docs = new Map();
-const exitAfterInitMs = Number(process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS ?? "0");
+const exitAfterInitArg = process.argv.find((arg) => arg.startsWith("--exit-after-init-ms="));
+const exitAfterInitMs = Number(
+  exitAfterInitArg?.slice("--exit-after-init-ms=".length) ??
+    process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS ??
+    "0"
+);
 const hoverDelayMs = Number(process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS ?? "0");
 const initDelayMs = Number(process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS ?? "0");
 const stderrOnInit = process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT ?? "";
@@ -44,6 +49,13 @@ connection.onRequest("initialize", async () => {
       referencesProvider: true,
       hoverProvider: true,
       documentSymbolProvider: true,
+      semanticTokensProvider: {
+        legend: {
+          tokenTypes: ["function", "variable", "class", "typeAlias", "builtinType"],
+          tokenModifiers: ["declaration", "readonly"],
+        },
+        full: true,
+      },
       textDocumentSync: 1,
     },
   };
@@ -219,6 +231,20 @@ connection.onRequest("textDocument/documentSymbol", ({ textDocument }) => {
       },
     },
   ];
+});
+
+connection.onRequest("textDocument/semanticTokens/full", ({ textDocument }) => {
+  if (!textDocument.uri.endsWith("/shared.ts")) {
+    return { data: [] };
+  }
+
+  return {
+    resultId: "semantic-1",
+    data: [
+      // sharedValue: variable + declaration
+      0, 13, 11, 1, 1,
+    ],
+  };
 });
 
 function publishDiagnostics(uri) {

@@ -1,15 +1,17 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import type {
-  LspDiagnostic,
-  LspDiagnosticsEvent,
-  LspDocumentSymbol,
-  LspHoverResult,
-  LspLocation,
-  LspRange,
-  LspServerKind,
-  LspSessionSummary,
+import {
+  LSP_SEMANTIC_TOKEN_MODIFIERS,
+  LSP_SEMANTIC_TOKEN_TYPES,
+  type LspDiagnostic,
+  type LspDiagnosticsEvent,
+  type LspDocumentSymbol,
+  type LspHoverResult,
+  type LspLocation,
+  type LspRange,
+  type LspSemanticTokens,
+  type LspSessionSummary,
 } from "@coder-studio/core";
 import { shouldUseShellForCommand } from "@coder-studio/utils";
 import { type MessageConnection, NotificationType, RequestType } from "vscode-jsonrpc";
@@ -37,7 +39,64 @@ const HoverRequest = new RequestType<PositionParams, unknown, void>("textDocumen
 const DocumentSymbolsRequest = new RequestType<TextDocumentParams, unknown, void>(
   "textDocument/documentSymbol"
 );
+const SemanticTokensRequest = new RequestType<TextDocumentParams, unknown, void>(
+  "textDocument/semanticTokens/full"
+);
 const LSP_REQUEST_TIMEOUT_MESSAGE = "LSP request timed out";
+
+const LSP_CLIENT_CAPABILITIES = {
+  textDocument: {
+    semanticTokens: {
+      dynamicRegistration: false,
+      requests: {
+        range: false,
+        full: true,
+      },
+      tokenTypes: LSP_SEMANTIC_TOKEN_TYPES,
+      tokenModifiers: LSP_SEMANTIC_TOKEN_MODIFIERS,
+      formats: ["relative"],
+      overlappingTokenSupport: false,
+      multilineTokenSupport: true,
+      serverCancelSupport: false,
+      augmentsSyntaxTokens: true,
+    },
+  },
+};
+
+const SEMANTIC_TOKEN_TYPE_INDEX = new Map<string, number>(
+  LSP_SEMANTIC_TOKEN_TYPES.map((type, index) => [type, index] as [string, number])
+);
+const SEMANTIC_TOKEN_MODIFIER_INDEX = new Map<string, number>(
+  LSP_SEMANTIC_TOKEN_MODIFIERS.map((modifier, index) => [modifier, index] as [string, number])
+);
+const SEMANTIC_TOKEN_TYPE_ALIASES: Record<string, string> = {
+  namespace: "variable",
+  class: "type",
+  enum: "type",
+  interface: "type",
+  struct: "type",
+  typeParameter: "type",
+  typeAlias: "type",
+  builtinType: "type",
+  generic: "type",
+  lifetime: "type",
+  parameter: "variable",
+  property: "variable",
+  enumMember: "variable",
+  event: "variable",
+  function: "variable",
+  method: "variable",
+  macro: "variable",
+  decorator: "variable",
+  attribute: "variable",
+  label: "variable",
+  unresolvedReference: "variable",
+  selfKeyword: "keyword",
+  builtinAttribute: "keyword",
+  boolean: "number",
+  escapeSequence: "string",
+  formatSpecifier: "string",
+};
 
 interface SessionDeps {
   workspaceId: string;
@@ -118,6 +177,24 @@ interface SymbolInformationLike {
   location: LocationLike;
 }
 
+interface SemanticTokensLegendLike {
+  tokenTypes: string[];
+  tokenModifiers: string[];
+}
+
+interface SemanticTokensProviderLike {
+  legend?: {
+    tokenTypes?: unknown;
+    tokenModifiers?: unknown;
+  };
+  full?: boolean | Record<string, unknown>;
+}
+
+interface SemanticTokensLike {
+  resultId?: string;
+  data?: unknown;
+}
+
 interface RangeLike {
   start: { line: number; character: number };
   end: { line: number; character: number };
@@ -137,6 +214,7 @@ export class LspSession {
   private bridgeHandle: BridgeHandle | null = null;
   private startPromise: Promise<LspSessionSummary> | null = null;
   private summary: LspSessionSummary;
+  private semanticTokensLegend: SemanticTokensLegendLike | null = null;
 
   constructor(private readonly deps: SessionDeps) {
     this.documents = new DocumentStore(deps.workspacePath);
@@ -151,6 +229,7 @@ export class LspSession {
         references: false,
         hover: false,
         documentSymbols: false,
+        semanticTokens: false,
         diagnostics: true,
       },
     };
@@ -262,7 +341,7 @@ export class LspSession {
           this.connection.sendRequest("initialize", {
             processId: process.pid,
             rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
-            capabilities: {},
+            capabilities: LSP_CLIENT_CAPABILITIES,
             initializationOptions: this.deps.spec.initializationOptions,
           }),
           initTimeoutMs
@@ -272,7 +351,7 @@ export class LspSession {
               companion.connection.sendRequest("initialize", {
                 processId: process.pid,
                 rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
-                capabilities: {},
+                capabilities: LSP_CLIENT_CAPABILITIES,
                 initializationOptions: this.deps.spec.companion?.initializationOptions,
               }),
               initTimeoutMs
@@ -300,34 +379,22 @@ export class LspSession {
         }
       }
 
+      const capabilities =
+        (initializeResult as { capabilities?: Record<string, unknown> }).capabilities ?? {};
+      const semanticTokensLegend = toSemanticTokensLegend(capabilities.semanticTokensProvider);
+      this.semanticTokensLegend = semanticTokensLegend;
+
       this.summary = {
         ...this.summary,
         status: "ready",
         capabilities: {
-          definition: Boolean(
-            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
-              ?.definitionProvider
-          ),
-          declaration: Boolean(
-            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
-              ?.declarationProvider
-          ),
-          typeDefinition: Boolean(
-            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
-              ?.typeDefinitionProvider
-          ),
-          references: Boolean(
-            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
-              ?.referencesProvider
-          ),
-          hover: Boolean(
-            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
-              ?.hoverProvider
-          ),
-          documentSymbols: Boolean(
-            (initializeResult as { capabilities?: Record<string, unknown> }).capabilities
-              ?.documentSymbolProvider
-          ),
+          definition: Boolean(capabilities.definitionProvider),
+          declaration: Boolean(capabilities.declarationProvider),
+          typeDefinition: Boolean(capabilities.typeDefinitionProvider),
+          references: Boolean(capabilities.referencesProvider),
+          hover: Boolean(capabilities.hoverProvider),
+          documentSymbols: Boolean(capabilities.documentSymbolProvider),
+          semanticTokens: Boolean(semanticTokensLegend),
           diagnostics: true,
         },
       };
@@ -547,6 +614,32 @@ export class LspSession {
     }
   }
 
+  async semanticTokens(input: { path: string }): Promise<LspSemanticTokens | null> {
+    const doc = this.documents.get(input.path);
+    if (!doc) {
+      return null;
+    }
+
+    try {
+      await this.start();
+      if (!this.connection || !this.semanticTokensLegend) {
+        return { data: [] };
+      }
+
+      const result = await this.withTimeout(
+        this.connection.sendRequest(SemanticTokensRequest, {
+          textDocument: { uri: doc.uri },
+        })
+      );
+
+      return normalizeSemanticTokens(result, this.semanticTokensLegend);
+    } catch (error) {
+      this.recoverFromRequestFailure(error);
+      this.deps.logger.warn({ error }, "lsp semantic tokens request failed");
+      return { data: [] };
+    }
+  }
+
   async stop(): Promise<void> {
     const child = this.child;
     const companionChild = this.companion?.child ?? null;
@@ -748,6 +841,7 @@ export class LspSession {
     this.bridgeHandle = null;
     this.connection = null;
     this.child = null;
+    this.semanticTokensLegend = null;
     const companion = this.companion;
     this.companion = null;
     companion?.child.kill("SIGTERM");
@@ -891,6 +985,95 @@ function toSharedSymbolEntry(input: unknown): LspDocumentSymbol | null {
   }
 
   return null;
+}
+
+function toSemanticTokensLegend(input: unknown): SemanticTokensLegendLike | null {
+  if (typeof input !== "object" || input === null) {
+    return null;
+  }
+
+  const provider = input as SemanticTokensProviderLike;
+  if (!supportsFullSemanticTokens(provider.full)) {
+    return null;
+  }
+
+  const tokenTypes = Array.isArray(provider.legend?.tokenTypes)
+    ? provider.legend.tokenTypes.filter((value): value is string => typeof value === "string")
+    : [];
+  if (tokenTypes.length === 0) {
+    return null;
+  }
+
+  const tokenModifiers = Array.isArray(provider.legend?.tokenModifiers)
+    ? provider.legend.tokenModifiers.filter((value): value is string => typeof value === "string")
+    : [];
+
+  return { tokenTypes, tokenModifiers };
+}
+
+function supportsFullSemanticTokens(value: unknown): boolean {
+  return value === true || (typeof value === "object" && value !== null);
+}
+
+function normalizeSemanticTokens(
+  input: unknown,
+  legend: SemanticTokensLegendLike
+): LspSemanticTokens {
+  if (typeof input !== "object" || input === null) {
+    return { data: [] };
+  }
+
+  const result = input as SemanticTokensLike;
+  const rawData =
+    Array.isArray(result.data) || result.data instanceof Uint32Array ? result.data : [];
+  const data: number[] = [];
+
+  for (let index = 0; index + 4 < rawData.length; index += 5) {
+    const deltaLine = toNonNegativeInteger(rawData[index]) ?? 0;
+    const deltaStart = toNonNegativeInteger(rawData[index + 1]) ?? 0;
+    const length = toNonNegativeInteger(rawData[index + 2]) ?? 0;
+    const sourceTokenType = legend.tokenTypes[toNonNegativeInteger(rawData[index + 3]) ?? -1];
+    const tokenType = toCanonicalSemanticTokenType(sourceTokenType);
+    const tokenModifiers = toCanonicalSemanticTokenModifiers(
+      toNonNegativeInteger(rawData[index + 4]) ?? 0,
+      legend
+    );
+
+    data.push(deltaLine, deltaStart, length, tokenType, tokenModifiers);
+  }
+
+  return typeof result.resultId === "string" ? { resultId: result.resultId, data } : { data };
+}
+
+function toCanonicalSemanticTokenType(sourceType: string | undefined): number {
+  const targetType = sourceType
+    ? (SEMANTIC_TOKEN_TYPE_ALIASES[sourceType] ?? sourceType)
+    : "variable";
+  return SEMANTIC_TOKEN_TYPE_INDEX.get(targetType) ?? SEMANTIC_TOKEN_TYPE_INDEX.get("variable")!;
+}
+
+function toCanonicalSemanticTokenModifiers(
+  sourceBitset: number,
+  legend: SemanticTokensLegendLike
+): number {
+  let bitset = 0;
+
+  for (let index = 0; index < legend.tokenModifiers.length; index += 1) {
+    if (Math.floor(sourceBitset / 2 ** index) % 2 !== 1) {
+      continue;
+    }
+
+    const targetIndex = SEMANTIC_TOKEN_MODIFIER_INDEX.get(legend.tokenModifiers[index]!);
+    if (targetIndex !== undefined) {
+      bitset += 2 ** targetIndex;
+    }
+  }
+
+  return bitset;
+}
+
+function toNonNegativeInteger(input: unknown): number | null {
+  return typeof input === "number" && Number.isInteger(input) && input >= 0 ? input : null;
 }
 
 function isRangeLike(input: unknown): input is RangeLike {

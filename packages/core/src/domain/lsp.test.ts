@@ -8,6 +8,7 @@ import type {
   LspHoverResult,
   LspLocation,
   LspRuntimeMode,
+  LspSemanticTokens,
   LspSessionSummary,
   LspToolInstallFailure,
   LspToolInstallJobSnapshot,
@@ -83,6 +84,7 @@ describe("LSP shared surface", () => {
         references: boolean;
         hover: boolean;
         documentSymbols: boolean;
+        semanticTokens: boolean;
         diagnostics: boolean;
       };
     }>();
@@ -187,6 +189,11 @@ describe("LSP shared surface", () => {
         endColumn: number;
       };
       version?: number;
+    }>();
+
+    expectTypeOf<LspSemanticTokens>().toEqualTypeOf<{
+      resultId?: string;
+      data: number[];
     }>();
 
     type LspDiagnosticsUpdatedEvent = Extract<DomainEvent, { type: "lsp.diagnostics.updated" }>;

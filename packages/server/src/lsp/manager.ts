@@ -5,6 +5,7 @@ import type {
   LspHoverResult,
   LspLocation,
   LspRuntimeMode,
+  LspSemanticTokens,
   LspSessionSummary,
   Workspace,
 } from "@coder-studio/core";
@@ -37,6 +38,7 @@ interface LspSessionLike {
   references(input: { path: string; line: number; column: number }): Promise<LspLocation[] | null>;
   hover(input: { path: string; line: number; column: number }): Promise<LspHoverResult | null>;
   documentSymbols(input: { path: string }): Promise<LspDocumentSymbol[] | null>;
+  semanticTokens(input: { path: string }): Promise<LspSemanticTokens | null>;
 }
 
 interface ManagedSessionEntry {
@@ -338,6 +340,14 @@ export class LspManager {
     }
     const session = await this.getSessionForPath(input.workspaceId, input.path);
     return session ? await session.documentSymbols(input) : null;
+  }
+
+  async semanticTokens(input: { workspaceId: string; path: string }) {
+    if (this.runtimeMode === "off") {
+      return null;
+    }
+    const session = await this.getSessionForPath(input.workspaceId, input.path);
+    return session ? await session.semanticTokens(input) : null;
   }
 
   async disposeWorkspace(workspaceId: string): Promise<void> {

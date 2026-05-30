@@ -27,6 +27,7 @@ vi.mock("monaco-editor", () => ({
     registerHoverProvider: vi.fn(),
     registerReferenceProvider: vi.fn(),
     registerDocumentSymbolProvider: vi.fn(),
+    registerDocumentSemanticTokensProvider: vi.fn(),
     registerLinkProvider: vi.fn(),
     SymbolKind: {
       Variable: 13,
@@ -126,6 +127,7 @@ describe("LSP providers", () => {
       requestHover: async () => null,
       requestReferences: async () => [],
       requestDocumentSymbols: async () => [],
+      requestSemanticTokens: async () => null,
     });
 
     registry.register("typescript");
@@ -181,6 +183,138 @@ describe("LSP providers", () => {
         }),
       })
     );
+  });
+
+  it("registers semantic token providers and converts LSP token data for Monaco", async () => {
+    const registerDocumentSemanticTokensProvider = vi.mocked(
+      monaco.languages.registerDocumentSemanticTokensProvider
+    );
+    const requestSemanticTokens = vi.fn(async () => ({
+      resultId: "semantic-1",
+      data: [0, 13, 11, 8, 1],
+    }));
+
+    const registry = createLspProviderRegistry({
+      lookupModelMetadata: () => ({
+        workspaceId: "ws-1",
+        workspaceRootPath: "/repo",
+        path: "src/main.go",
+      }),
+      requestDefinition: async () => [],
+      requestDeclaration: async () => [],
+      requestTypeDefinition: async () => [],
+      requestHover: async () => null,
+      requestReferences: async () => [],
+      requestDocumentSymbols: async () => [],
+      requestSemanticTokens,
+    });
+
+    registry.register("go");
+
+    expect(registerDocumentSemanticTokensProvider).toHaveBeenCalledWith(
+      "go",
+      expect.objectContaining({
+        getLegend: expect.any(Function),
+        provideDocumentSemanticTokens: expect.any(Function),
+        releaseDocumentSemanticTokens: expect.any(Function),
+      })
+    );
+
+    const provider =
+      registerDocumentSemanticTokensProvider.mock.calls[
+        registerDocumentSemanticTokensProvider.mock.calls.length - 1
+      ]![1];
+    const model = createMockModel(
+      "package main\n\nfunc sharedValue() {}\n",
+      1,
+      monaco.Uri.file("/repo/src/main.go")
+    );
+
+    expect(provider.getLegend().tokenTypes).toContain("variable");
+
+    const tokens = await provider.provideDocumentSemanticTokens(model, null, {
+      isCancellationRequested: false,
+    } as never);
+
+    expect(requestSemanticTokens).toHaveBeenCalledWith({
+      meta: {
+        workspaceId: "ws-1",
+        workspaceRootPath: "/repo",
+        path: "src/main.go",
+      },
+      version: 1,
+    });
+    expect(tokens).toEqual({
+      resultId: "semantic-1",
+      data: new Uint32Array([0, 13, 11, 8, 1]),
+    });
+  });
+
+  it("wires Monaco semantic token requests through the LSP bridge", async () => {
+    const registerDocumentSemanticTokensProvider = vi.mocked(
+      monaco.languages.registerDocumentSemanticTokensProvider
+    );
+    const sendCommand = vi.fn(async (op) => {
+      if (op === "lsp.ensureSession") {
+        return {
+          kind: "ready",
+          displayName: "Rust language server",
+          source: "managed",
+          summary: {
+            workspaceId: "ws-1",
+            serverKind: "rust",
+            status: "ready",
+            capabilities: {
+              definition: true,
+              references: true,
+              hover: true,
+              documentSymbols: true,
+              semanticTokens: true,
+              diagnostics: true,
+            },
+          },
+        };
+      }
+
+      if (op === "lsp.semanticTokens") {
+        return {
+          resultId: "semantic-rust",
+          data: [0, 7, 5, 8, 0],
+        };
+      }
+
+      return null;
+    }) as BridgeSendCommand;
+    const bridge = createLspBridge({
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+    const model = createMockModel("fn main() {}\n", 1, monaco.Uri.file("/repo/src/main.rs"));
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/main.rs",
+      monacoLanguage: "rust",
+      model,
+    });
+
+    const provider =
+      registerDocumentSemanticTokensProvider.mock.calls[
+        registerDocumentSemanticTokensProvider.mock.calls.length - 1
+      ]![1];
+    const tokens = await provider.provideDocumentSemanticTokens(model, null, {
+      isCancellationRequested: false,
+    } as never);
+
+    expect(sendCommand).toHaveBeenCalledWith("lsp.semanticTokens", {
+      workspaceId: "ws-1",
+      path: "src/main.rs",
+    });
+    expect(tokens).toEqual({
+      resultId: "semantic-rust",
+      data: new Uint32Array([0, 7, 5, 8, 0]),
+    });
   });
 
   it("returns same-file definitions as Monaco locations", async () => {

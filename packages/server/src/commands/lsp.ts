@@ -197,3 +197,12 @@ registerCommand(
   }),
   async (args, ctx) => ctx.lspMgr.documentSymbols(args)
 );
+
+registerCommand(
+  "lsp.semanticTokens",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.semanticTokens(args)
+);

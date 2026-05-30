@@ -4,6 +4,7 @@ import type {
   LspEnsureSessionResult,
   LspHoverResult,
   LspLocation,
+  LspSemanticTokens,
   LspToolInstallJobSnapshot,
 } from "@coder-studio/core";
 import { Topics } from "@coder-studio/core";
@@ -49,15 +50,19 @@ const noopTransport: LspBridgeTransport = {
   subscribe: () => () => {},
 };
 
-type MissingOrFailedReadiness = Exclude<
+type InstallableReadiness = Extract<
   LspEnsureSessionResult,
-  { kind: "ready" | "unsupported_language" }
+  { kind: "tool_missing" | "installing" | "failed" }
 >;
 
-function isMissingOrFailedReadiness(
+function isInstallableReadiness(
   readiness: LspEnsureSessionResult
-): readiness is MissingOrFailedReadiness {
-  return readiness.kind !== "ready" && readiness.kind !== "unsupported_language";
+): readiness is InstallableReadiness {
+  return (
+    readiness.kind === "tool_missing" ||
+    readiness.kind === "installing" ||
+    readiness.kind === "failed"
+  );
 }
 
 export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = {}) {
@@ -123,6 +128,11 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
         workspaceId: meta.workspaceId,
         path: meta.path,
       }),
+    requestSemanticTokens: async ({ meta }) =>
+      await transport.sendCommand<LspSemanticTokens | null>("lsp.semanticTokens", {
+        workspaceId: meta.workspaceId,
+        path: meta.path,
+      }),
   });
 
   function configure(nextTransport: Partial<LspBridgeTransport>): void {
@@ -173,7 +183,7 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
 
       if (readiness.kind !== "ready") {
         onStateChange?.(readiness);
-        if (isMissingOrFailedReadiness(readiness) && readiness.installJob) {
+        if (isInstallableReadiness(readiness) && readiness.installJob) {
           currentJobId = readiness.installJob.jobId;
           schedulePoll();
         }
@@ -360,6 +370,7 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
     provideHover: providers.provideHover,
     provideReferences: providers.provideReferences,
     provideDocumentSymbols: providers.provideDocumentSymbols,
+    provideDocumentSemanticTokens: providers.provideDocumentSemanticTokens,
   };
 }
 

@@ -1,6 +1,18 @@
-import type { LspDocumentSymbol, LspHoverResult, LspLocation } from "@coder-studio/core";
+import {
+  LSP_SEMANTIC_TOKEN_MODIFIERS,
+  LSP_SEMANTIC_TOKEN_TYPES,
+  type LspDocumentSymbol,
+  type LspHoverResult,
+  type LspLocation,
+  type LspSemanticTokens,
+} from "@coder-studio/core";
 import * as monaco from "monaco-editor";
 import { toWorkspaceFileUri } from "../monaco/uri";
+
+const SEMANTIC_TOKENS_LEGEND: monaco.languages.SemanticTokensLegend = {
+  tokenTypes: [...LSP_SEMANTIC_TOKEN_TYPES],
+  tokenModifiers: [...LSP_SEMANTIC_TOKEN_MODIFIERS],
+};
 
 export interface LspModelMetadata {
   workspaceId: string;
@@ -44,6 +56,10 @@ export interface LspProviderRegistryDeps {
     meta: LspModelMetadata;
     version: number;
   }) => Promise<LspDocumentSymbol[] | null>;
+  requestSemanticTokens: (input: {
+    meta: LspModelMetadata;
+    version: number;
+  }) => Promise<LspSemanticTokens | null>;
 }
 
 export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
@@ -73,6 +89,11 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     });
     monaco.languages.registerDocumentSymbolProvider(languageId, {
       provideDocumentSymbols,
+    });
+    monaco.languages.registerDocumentSemanticTokensProvider(languageId, {
+      getLegend,
+      provideDocumentSemanticTokens,
+      releaseDocumentSemanticTokens,
     });
     if (supportsImportSpecifierLinks(languageId)) {
       monaco.languages.registerLinkProvider?.(languageId, {
@@ -244,6 +265,42 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     return result.map(toMonacoSymbol);
   }
 
+  function getLegend(): monaco.languages.SemanticTokensLegend {
+    return SEMANTIC_TOKENS_LEGEND;
+  }
+
+  async function provideDocumentSemanticTokens(
+    model: monaco.editor.ITextModel,
+    _lastResultId: string | null,
+    token: monaco.CancellationToken
+  ): Promise<monaco.languages.SemanticTokens | null> {
+    if (token.isCancellationRequested) {
+      return null;
+    }
+
+    const meta = deps.lookupModelMetadata(model);
+    if (!meta) {
+      return null;
+    }
+
+    const requestVersion = model.getVersionId();
+    const result = await deps.requestSemanticTokens({
+      meta,
+      version: requestVersion,
+    });
+
+    if (token.isCancellationRequested || !result || model.getVersionId() !== requestVersion) {
+      return null;
+    }
+
+    return {
+      resultId: result.resultId,
+      data: new Uint32Array(result.data),
+    };
+  }
+
+  function releaseDocumentSemanticTokens(_resultId: string | undefined): void {}
+
   async function provideLinks(
     model: monaco.editor.ITextModel
   ): Promise<monaco.languages.ILinksList> {
@@ -306,6 +363,7 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
     provideHover,
     provideReferences,
     provideDocumentSymbols,
+    provideDocumentSemanticTokens,
     provideLinks,
     resolveLink,
   };
