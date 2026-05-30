@@ -24,7 +24,7 @@ import { OpenEditorsSection } from "./open-editors-section";
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string | number>) => {
     if (key === "common.cancel") return "Cancel";
-    if (key === "workspace.sidebar.open_editors") return "Open Editors";
+    if (key === "workspace.sidebar.open_editors") return "Open Files";
     if (key === "action.close") return "Close";
     if (key === "action.close_all") return "Close all";
     if (key === "code_editor.unsaved_changes") return "Unsaved changes";
@@ -34,13 +34,13 @@ vi.mock("../../../../lib/i18n", () => ({
     }
     if (key === "code_editor.discard_and_close") return "Discard and Close";
     if (key === "workspace.open_editors.close_all_unsaved_description") {
-      return `${params?.count ?? 0} open editors have unsaved changes.`;
+      return `${params?.count ?? 0} open files have unsaved changes.`;
     }
     if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Editors"} (${params?.count ?? 0})`;
+      return `${params?.title ?? "Open Files"} (${params?.count ?? 0})`;
     }
-    if (key === "workspace.open_editors.expand_label") return "Expand Open Editors";
-    if (key === "workspace.open_editors.collapse_label") return "Collapse Open Editors";
+    if (key === "workspace.open_editors.expand_label") return "Expand Open Files";
+    if (key === "workspace.open_editors.collapse_label") return "Collapse Open Files";
     if (key === "workspace.open_editors.close_path") {
       return `Close ${params?.path ?? ""}`;
     }
@@ -113,12 +113,12 @@ describe("OpenEditorsSection", () => {
   it("shows file count, toggles collapse, closes a non-active row, and closes all", () => {
     const { store } = renderSection();
 
-    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (3)" });
-    expect(heading).toHaveTextContent("Open Editors");
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (3)" });
+    expect(heading).toHaveTextContent("Open Files");
 
     const section = heading.closest("section") as HTMLElement;
     expect(within(section).getByText("3")).toHaveClass("workspace-open-editors__count");
-    const toggle = within(section).getByRole("button", { name: /collapse open editors/i });
+    const toggle = within(section).getByRole("button", { name: /collapse open files/i });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
@@ -142,7 +142,7 @@ describe("OpenEditorsSection", () => {
     ]);
 
     fireEvent.click(toggle);
-    expect(within(section).getByRole("button", { name: "Expand Open Editors" })).toHaveAttribute(
+    expect(within(section).getByRole("button", { name: "Expand Open Files" })).toHaveAttribute(
       "aria-expanded",
       "false"
     );
@@ -152,7 +152,7 @@ describe("OpenEditorsSection", () => {
       })
     ).toBeNull();
 
-    fireEvent.click(within(section).getByRole("button", { name: /expand open editors/i }));
+    fireEvent.click(within(section).getByRole("button", { name: /expand open files/i }));
 
     const readmeRow = within(section)
       .getByRole("button", { name: "README.md" })
@@ -165,21 +165,25 @@ describe("OpenEditorsSection", () => {
     ]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/beta.ts");
 
-    fireEvent.click(within(section).getByRole("button", { name: "Close all" }));
+    const closeAllButton = within(section).getByRole("button", { name: "Close all" });
+    expect(closeAllButton).toHaveTextContent(/^$/);
+    expect(closeAllButton.querySelector("svg")).toBeTruthy();
+
+    fireEvent.click(closeAllButton);
 
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 
-  it("keeps the header visible but hides the body when there are no open editors", () => {
+  it("keeps the header visible but hides the body when there are no open files", () => {
     renderSection({});
 
-    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (0)" });
-    expect(heading).toHaveTextContent("Open Editors");
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (0)" });
+    expect(heading).toHaveTextContent("Open Files");
 
     const section = heading.closest("section") as HTMLElement;
     expect(within(section).getByText("0")).toHaveClass("workspace-open-editors__count");
-    const toggle = within(section).getByRole("button", { name: "Expand Open Editors" });
+    const toggle = within(section).getByRole("button", { name: "Expand Open Files" });
 
     expect(toggle).toBeDisabled();
     expect(toggle).not.toHaveAttribute("aria-expanded");
@@ -194,13 +198,13 @@ describe("OpenEditorsSection", () => {
 
     renderSection({}, "src/pending.ts");
 
-    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (1)" });
-    expect(heading).toHaveTextContent("Open Editors");
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (1)" });
+    expect(heading).toHaveTextContent("Open Files");
 
     const section = heading.closest("section") as HTMLElement;
     expect(within(section).getByText("1")).toHaveClass("workspace-open-editors__count");
 
-    expect(within(section).getByRole("button", { name: "Collapse Open Editors" })).toHaveAttribute(
+    expect(within(section).getByRole("button", { name: "Collapse Open Files" })).toHaveAttribute(
       "aria-expanded",
       "true"
     );
@@ -215,7 +219,7 @@ describe("OpenEditorsSection", () => {
       draftStore.set(openEditorPathsAtomFamily("ws-test"), ["src/app.tsx", "README.md"]);
     });
 
-    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (2)" });
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (2)" });
     const section = heading.closest("section") as HTMLElement;
     const rowButtons = Array.from(
       section.querySelectorAll<HTMLButtonElement>(".workspace-open-editors__item")
@@ -254,7 +258,7 @@ describe("OpenEditorsSection", () => {
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
   });
 
-  it("marks dirty open editors and confirms before closing a dirty row", () => {
+  it("marks dirty open files and confirms before closing a dirty row", () => {
     const { store } = renderSection(
       {
         "biome.jsonc": createDirtyFile("biome.jsonc"),
@@ -283,7 +287,7 @@ describe("OpenEditorsSection", () => {
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 
-  it("confirms before closing all when open editors include dirty files", () => {
+  it("confirms before closing all when open files include dirty files", () => {
     const { store } = renderSection(
       {
         "src/clean.ts": createFile("src/clean.ts"),
@@ -299,7 +303,7 @@ describe("OpenEditorsSection", () => {
       "src/dirty.ts",
     ]);
     expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
-    expect(screen.getByText("1 open editors have unsaved changes.")).toBeInTheDocument();
+    expect(screen.getByText("1 open files have unsaved changes.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
 

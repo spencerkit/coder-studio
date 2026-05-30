@@ -18,7 +18,7 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.sidebar.source_control": "Source Control",
       "workspace.sidebar.label": "Workspace Sidebar",
       "workspace.sidebar.workspace": "Workspace",
-      "workspace.sidebar.open_editors": "Open Editors",
+      "workspace.sidebar.open_editors": "Open Files",
       "workspace.no_workspace": "No workspace",
       "workspace.search.empty": "Type to search across file contents",
       "workspace.search.placeholder": "Search",

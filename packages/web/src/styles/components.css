@@ -13976,7 +13976,15 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-sidebar-section__actions {
   margin-left: auto;
-  gap: 8px;
+  gap: var(--gap-compact);
+}
+
+.workspace-sidebar-section__actions .panel-toolbar-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
 }
 
 .workspace-sidebar-section__title {
@@ -14141,7 +14149,11 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-open-editors__close-all {
   margin-left: auto;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   min-height: 24px;
+  padding: 0;
   background: transparent;
   color: var(--text-secondary);
 }
@@ -16237,9 +16249,11 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .workspace-open-editors__close-all {
   margin-left: auto;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--component-mix-border-default-84pct-transparent);
+  padding: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
@@ -16248,7 +16262,6 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .workspace-open-editors__close-all:disabled {
-  border-color: var(--component-mix-border-default-84pct-transparent);
   background: transparent;
   color: var(--text-secondary);
   opacity: 1;

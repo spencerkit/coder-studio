@@ -197,9 +197,7 @@ describe("SearchPanel", () => {
     fireEvent.change(screen.getByRole("textbox", { name: /Files to Exclude|排除的文件/i }), {
       target: { value: "**/*.spec.tsx" },
     });
-    expect(
-      screen.queryByRole("switch", { name: /Only Open Editors|仅在打开的编辑器中/i })
-    ).toBeNull();
+    expect(screen.queryByRole("switch", { name: /Only Open Files|仅在打开的文件中/i })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", {
         name: /Use Exclude Settings and Ignore Files|使用排除设置和忽略文件/i,
@@ -296,9 +294,7 @@ describe("SearchPanel", () => {
     expect(replaceCompound?.contains(expandedDetailsToggle)).toBe(false);
     expect(excludeCompound).not.toBeNull();
     expect(excludeCompound?.contains(ignoreToggle)).toBe(true);
-    expect(
-      screen.queryByRole("switch", { name: /Only Open Editors|仅在打开的编辑器中/i })
-    ).toBeNull();
+    expect(screen.queryByRole("switch", { name: /Only Open Files|仅在打开的文件中/i })).toBeNull();
 
     fireEvent.click(expandedDetailsToggle);
     const collapsedDetailsToggle = screen.getByRole("button", {

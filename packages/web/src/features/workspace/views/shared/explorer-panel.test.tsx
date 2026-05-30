@@ -13,7 +13,7 @@ vi.mock("../../../../lib/i18n", () => ({
     const translations: Record<string, string> = {
       "workspace.sidebar.explorer": "Explorer",
       "workspace.sidebar.workspace": "Workspace",
-      "workspace.sidebar.open_editors": "Open Editors",
+      "workspace.sidebar.open_editors": "Open Files",
       "workspace.sidebar.workspace_expand_label": "Expand Workspace",
       "workspace.sidebar.workspace_collapse_label": "Collapse Workspace",
       "file.new_file": "New File",
@@ -24,15 +24,15 @@ vi.mock("../../../../lib/i18n", () => ({
     };
 
     if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Editors"} (${params?.count ?? 0})`;
+      return `${params?.title ?? "Open Files"} (${params?.count ?? 0})`;
     }
 
     if (key === "workspace.open_editors.expand_label") {
-      return "Expand Open Editors";
+      return "Expand Open Files";
     }
 
     if (key === "workspace.open_editors.collapse_label") {
-      return "Collapse Open Editors";
+      return "Collapse Open Files";
     }
 
     if (key === "workspace.open_editors.close_path") {

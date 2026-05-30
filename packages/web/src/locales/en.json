@@ -160,7 +160,7 @@
       "explorer": "Explorer",
       "search": "Search",
       "source_control": "Source Control",
-      "open_editors": "Open Editors",
+      "open_editors": "Open Files",
       "workspace": "Workspace",
       "workspace_expand_label": "Expand Workspace",
       "workspace_collapse_label": "Collapse Workspace"
@@ -174,9 +174,9 @@
     "open_editors": {
       "title_with_count": "{title} ({count})",
       "close_path": "Close {path}",
-      "close_all_unsaved_description": "{count} open editors have unsaved changes. Closing them will discard those edits.",
-      "expand_label": "Expand Open Editors",
-      "collapse_label": "Collapse Open Editors"
+      "close_all_unsaved_description": "{count} open files have unsaved changes. Closing them will discard those edits.",
+      "expand_label": "Expand Open Files",
+      "collapse_label": "Collapse Open Files"
     },
     "search": {
       "empty": "Type to search across file contents.",
@@ -200,7 +200,7 @@
       "preserve_case": "Preserve Case",
       "files_to_include": "Files to Include",
       "files_to_exclude": "Files to Exclude",
-      "only_open_editors": "Only Open Editors",
+      "only_open_editors": "Only Open Files",
       "use_ignore_files": "Use Ignore Files",
       "use_exclude_settings_and_ignore_files": "Use Exclude Settings and Ignore Files",
       "preview": "Preview",

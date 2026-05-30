@@ -411,7 +411,7 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    await screen.findByText(/Open Editors|打开的编辑器/i);
+    await screen.findByText(/Open Files|打开的文件/i);
 
     const explorerButton = screen.getByRole("button", { name: /Explorer|资源管理器/i });
     expect(explorerButton).toHaveAttribute("aria-pressed", "true");
@@ -1703,9 +1703,9 @@ describe("WorkspacePage", () => {
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
     const section = heading.closest("section") as HTMLElement;
-    expect(heading).toHaveTextContent(/Open Editors|打开的编辑器/i);
+    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
     expect(within(section).getByText("1")).toHaveClass("workspace-open-editors__count");
     fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
 
@@ -1862,7 +1862,7 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
     const section = heading.closest("section") as HTMLElement;
     fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
 
@@ -1891,7 +1891,7 @@ describe("WorkspacePage", () => {
     });
   });
 
-  it("clearing the final open editor from Open Editors preserves an active commit preview", async () => {
+  it("clearing the final open editor from Open Files preserves an active commit preview", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {

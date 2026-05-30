@@ -460,7 +460,7 @@ describe("CodeEditorHost", () => {
       );
     });
 
-    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (1)" });
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (1)" });
     const section = heading.closest("section") as HTMLElement;
     const closeAll = within(section).getByRole("button", { name: "Close all" });
     expect(closeAll).toBeEnabled();

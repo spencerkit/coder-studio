@@ -56,9 +56,9 @@ vi.mock("../../../../lib/i18n", () => ({
       "mobile.sheet.dismiss": "Dismiss sheet",
       "action.close_all": "Close all",
       "workspace.sidebar.explorer": "Explorer",
-      "workspace.sidebar.open_editors": "Open Editors",
-      "workspace.open_editors.collapse_label": "Collapse Open Editors",
-      "workspace.open_editors.expand_label": "Expand Open Editors",
+      "workspace.sidebar.open_editors": "Open Files",
+      "workspace.open_editors.collapse_label": "Collapse Open Files",
+      "workspace.open_editors.expand_label": "Expand Open Files",
       "workspace.sidebar.search": "Search",
       "workspace.sidebar.source_control": "Source Control",
     };
@@ -68,7 +68,7 @@ vi.mock("../../../../lib/i18n", () => ({
     }
 
     if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Editors"} (${params?.count ?? "0"})`;
+      return `${params?.title ?? "Open Files"} (${params?.count ?? "0"})`;
     }
 
     if (key === "workspace.open_editors.close_path") {
@@ -451,7 +451,7 @@ describe("WorkspaceMobileView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Files" }));
     const openEditorsSection = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (1)" })
+      .getByRole("heading", { level: 2, name: "Open Files (1)" })
       .closest("section") as HTMLElement;
     fireEvent.click(within(openEditorsSection).getByRole("button", { name: "Close all" }));
 

@@ -160,7 +160,7 @@
       "explorer": "资源管理器",
       "search": "搜索",
       "source_control": "源代码管理",
-      "open_editors": "打开的编辑器",
+      "open_editors": "打开的文件",
       "workspace": "工作区",
       "workspace_expand_label": "展开工作区",
       "workspace_collapse_label": "收起工作区"
@@ -174,9 +174,9 @@
     "open_editors": {
       "title_with_count": "{title} ({count})",
       "close_path": "关闭 {path}",
-      "close_all_unsaved_description": "{count} 个打开的编辑器有未保存的更改。关闭后这些编辑将被放弃。",
-      "expand_label": "展开打开的编辑器",
-      "collapse_label": "收起打开的编辑器"
+      "close_all_unsaved_description": "{count} 个打开的文件有未保存的更改。关闭后这些更改将被放弃。",
+      "expand_label": "展开打开的文件",
+      "collapse_label": "收起打开的文件"
     },
     "search": {
       "empty": "输入关键词以搜索文件内容。",
@@ -200,7 +200,7 @@
       "preserve_case": "保留大小写",
       "files_to_include": "包含的文件",
       "files_to_exclude": "排除的文件",
-      "only_open_editors": "仅在打开的编辑器中",
+      "only_open_editors": "仅在打开的文件中",
       "use_ignore_files": "使用忽略文件",
       "use_exclude_settings_and_ignore_files": "使用排除设置和忽略文件",
       "preview": "预览",

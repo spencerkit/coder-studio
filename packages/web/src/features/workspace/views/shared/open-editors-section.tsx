@@ -141,15 +141,16 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
             {openEditorPaths.length}
           </span>
         </div>
-        <button
-          type="button"
-          className="workspace-sidebar-section__action workspace-open-editors__close-all"
-          disabled={openEditorPaths.length === 0}
-          onClick={requestCloseAll}
-          title={headingLabel}
-        >
-          {t("action.close_all")}
-        </button>
+        <Tooltip content={t("action.close_all")}>
+          <IconButton
+            aria-label={t("action.close_all")}
+            className="workspace-open-editors__close-all"
+            disabled={openEditorPaths.length === 0}
+            icon={<X size={14} />}
+            size="sm"
+            onClick={requestCloseAll}
+          />
+        </Tooltip>
       </div>
       {isExpanded ? (
         <div className="workspace-open-editors">

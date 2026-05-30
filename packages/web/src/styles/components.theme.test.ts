@@ -2723,6 +2723,9 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     const workspaceSectionHeader = getLastRuleBlock(".workspace-sidebar-section__header");
     const workspaceSectionActions = getLastRuleBlock(".workspace-sidebar-section__actions");
+    const workspaceSectionActionButton = getLastRuleBlock(
+      ".workspace-sidebar-section__actions .panel-toolbar-btn"
+    );
     const mobileExplorerPanel = getLastRuleBlock(".mobile-explorer-panel");
     const mobileQuickJumpSearch = getLastRuleBlock(
       ".mobile-sheet--files .workspace-quick-jump__search"
@@ -2787,6 +2790,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(workspaceSectionHeader).toContain("justify-content: space-between");
     expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
     expect(workspaceSectionActions).toContain("margin-left: auto");
+    expect(workspaceSectionActions).toContain("gap: var(--gap-compact)");
+    expect(workspaceSectionActionButton).toContain("width: 24px");
+    expect(workspaceSectionActionButton).toContain("height: 24px");
+    expect(workspaceSectionActionButton).toContain("padding: 0");
     expect(mobileQuickJumpSearch).toContain("border-radius: 4px");
     expect(mobileQuickJumpItem).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(mobileSearchPanel).toContain("background: transparent");
@@ -3327,6 +3334,9 @@ describe("components.css theme-sensitive surfaces", () => {
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
     const openEditorsTitleText = getLastRuleBlock(".workspace-open-editors__title-text");
     const openEditorsCloseAll = getLastRuleBlock(".workspace-open-editors__close-all");
+    const openEditorsCloseAllDisabled = getLastRuleBlock(
+      ".workspace-open-editors__close-all:disabled"
+    );
     const openEditorsRow = getLastRuleBlock(".workspace-open-editors__row");
     const openEditorsItemHover = getLastRuleBlock(
       ".workspace-open-editors__item:hover:not(.workspace-open-editors__item--active)"
@@ -3393,6 +3403,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsCloseAll).toContain("margin-left: auto");
     expect(openEditorsCloseAll).toContain("background: transparent");
     expect(openEditorsCloseAll).toContain("color: var(--text-secondary)");
+    expect(openEditorsCloseAll).not.toContain("border:");
+    expect(openEditorsCloseAllDisabled).not.toContain("border-color");
     expect(workspaceSection).not.toContain("border:");
     expect(workspaceSection).not.toContain("border-radius:");
     expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
