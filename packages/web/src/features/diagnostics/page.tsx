@@ -31,6 +31,7 @@ import {
 import { assignSessionToPane } from "../agent-panes/pane-layout-tree";
 import { MobilePageHeader } from "../shared/components/mobile-page-header";
 import { PageHeader } from "../shared/components/page-header";
+import { hydrateWorkspaceEditorState } from "../workspace/actions/open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../workspace/actions/use-workspace-ui-state-persistence";
 import { useSystemDependencyInstaller } from "./actions/use-system-dependency-installer";
@@ -338,6 +339,7 @@ export function DiagnosticsPage() {
       ...prev,
       [result.data!.id]: result.data!,
     }));
+    hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
     setWorkspaceOrder((prev) => {
       if (prev.includes(result.data!.id)) {
         return prev;

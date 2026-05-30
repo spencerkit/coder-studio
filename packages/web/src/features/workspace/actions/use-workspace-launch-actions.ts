@@ -1,5 +1,5 @@
 import type { FileNode, GitStatus, Workspace, WorktreeInfo } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
@@ -12,6 +12,7 @@ import {
 } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
 import { buildDiagnosticsPath } from "../../diagnostics";
+import { hydrateWorkspaceEditorState } from "./open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 export interface DirectoryInfo {
@@ -42,6 +43,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const store = useStore();
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const setWorkspaces = useSetAtom(workspacesAtom);
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
@@ -231,6 +233,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
           ...prev,
           [result.data!.id]: result.data!,
         }));
+        hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
         setWorkspaceOrder((prev) => {
           if (prev.includes(result.data!.id)) {
             return prev;
@@ -275,6 +278,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     setWorkspaces,
     setWorkspacesLoadError,
     setWorkspacesLoadState,
+    store,
     t,
   ]);
 

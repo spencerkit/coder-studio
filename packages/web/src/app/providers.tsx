@@ -73,6 +73,10 @@ import {
 } from "../features/terminal-panel/recovery-singleton";
 import { updateStateAtom } from "../features/updates/atoms";
 import {
+  hydrateWorkspaceEditorState,
+  normalizeWorkspaceEditorUiState,
+} from "../features/workspace/actions/open-editor-state";
+import {
   editorRefreshTokenAtomFamily,
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
@@ -1274,18 +1278,27 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
         return;
       }
 
+      const normalizedPatch: Partial<Workspace> = patch.uiState
+        ? {
+            ...patch,
+            uiState: normalizeWorkspaceEditorUiState(patch.uiState),
+          }
+        : patch;
+
       store.set(workspacesAtom, (prev: Record<string, Workspace>) => ({
         ...prev,
         [workspaceId]: {
           ...prev[workspaceId],
-          ...patch,
+          ...normalizedPatch,
           id: workspaceId,
         } as Workspace,
       }));
-      const paneLayout = patch.uiState?.paneLayout;
-      if (paneLayout) {
-        store.set(paneLayoutAtomFamily(workspaceId), normalizePaneLayout(paneLayout));
+      const paneLayout = normalizedPatch.uiState?.paneLayout;
+      const normalizedPaneLayout = paneLayout ? normalizePaneLayout(paneLayout) : null;
+      if (normalizedPaneLayout) {
+        store.set(paneLayoutAtomFamily(workspaceId), normalizedPaneLayout);
       }
+      hydrateWorkspaceEditorState(store, workspaceId, normalizedPatch.uiState);
       store.set(workspaceOrderAtom, (prev: string[]) => {
         if (prev.includes(workspaceId)) {
           return prev;

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
+import { workspacesAtom } from "../../../atoms/workspaces";
 import {
   activeEditorPaneIdAtomFamily,
   focusedEditorPaneIdAtomFamily,
@@ -17,6 +18,7 @@ import {
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
   loadedDirsAtomFamily,
+  openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../atoms";
 import { useFileActions } from "./use-file-actions";
@@ -27,17 +29,51 @@ function wrapperFor(store: ReturnType<typeof createStore>) {
   };
 }
 
+function seedWorkspace(store: ReturnType<typeof createStore>) {
+  store.set(workspacesAtom, {
+    "ws-test": {
+      id: "ws-test",
+      path: "/workspace",
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+      },
+    },
+  } as never);
+}
+
 describe("useFileActions rename behavior", () => {
   it("renames the active file and rewrites the open-file map key", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ path: "/workspace", children: [] });
-
     const store = createStore();
+    const sendCommand = vi.fn(
+      async (op: string, args?: { workspaceId?: string; uiState?: Record<string, unknown> }) => {
+        if (op === "file.rename") {
+          return undefined;
+        }
+
+        if (op === "workspace.uiState.set") {
+          return {
+            ...(store.get(workspacesAtom)[args?.workspaceId ?? "ws-test"] as never),
+            uiState: args?.uiState,
+          };
+        }
+
+        if (op === "file.readTree") {
+          return { path: "/workspace", children: [] };
+        }
+
+        throw new Error(`Unexpected command: ${op}`);
+      }
+    );
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspace(store);
     store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(openEditorPathsAtomFamily("ws-test"), ["src/app.tsx", "README.md"]);
     store.set(openFilesAtomFamily("ws-test"), {
       "src/app.tsx": {
         kind: "text",
@@ -77,23 +113,45 @@ describe("useFileActions rename behavior", () => {
       undefined
     );
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/main.tsx");
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/main.tsx", "README.md"]);
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({
       "src/main.tsx": expect.objectContaining({
         path: "src/main.tsx",
       }),
     });
+    expect(store.get(workspacesAtom)["ws-test"]?.uiState.openEditorPaths).toEqual([
+      "src/main.tsx",
+      "README.md",
+    ]);
   });
 
   it("rewrites descendant editor paths when renaming a directory", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({ path: "/workspace", children: [] });
-
     const store = createStore();
+    const sendCommand = vi.fn(
+      async (op: string, args?: { workspaceId?: string; uiState?: Record<string, unknown> }) => {
+        if (op === "file.rename") {
+          return undefined;
+        }
+
+        if (op === "workspace.uiState.set") {
+          return {
+            ...(store.get(workspacesAtom)[args?.workspaceId ?? "ws-test"] as never),
+            uiState: args?.uiState,
+          };
+        }
+
+        if (op === "file.readTree") {
+          return { path: "/workspace", children: [] };
+        }
+
+        throw new Error(`Unexpected command: ${op}`);
+      }
+    );
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspace(store);
     store.set(activeFilePathAtomFamily("ws-test"), "src/nested/app.tsx");
+    store.set(openEditorPathsAtomFamily("ws-test"), ["src/nested/app.tsx", "README.md"]);
     store.set(openFilesAtomFamily("ws-test"), {
       "src/nested/app.tsx": {
         kind: "text",
@@ -123,11 +181,19 @@ describe("useFileActions rename behavior", () => {
     });
 
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/renamed/app.tsx");
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([
+      "src/renamed/app.tsx",
+      "README.md",
+    ]);
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({
       "src/renamed/app.tsx": expect.objectContaining({
         path: "src/renamed/app.tsx",
       }),
     });
+    expect(store.get(workspacesAtom)["ws-test"]?.uiState.openEditorPaths).toEqual([
+      "src/renamed/app.tsx",
+      "README.md",
+    ]);
   });
 
   it("rejects blank names and names containing path separators before dispatch", async () => {
@@ -310,5 +376,75 @@ describe("useFileActions rename behavior", () => {
     });
 
     expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual([]);
+  });
+
+  it("removes deleted editor paths from the persisted open editor list", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn(
+      async (op: string, args?: { workspaceId?: string; uiState?: Record<string, unknown> }) => {
+        if (op === "file.delete") {
+          return undefined;
+        }
+
+        if (op === "workspace.uiState.set") {
+          return {
+            ...(store.get(workspacesAtom)[args?.workspaceId ?? "ws-test"] as never),
+            uiState: args?.uiState,
+          };
+        }
+
+        if (op === "file.readTree") {
+          return { path: "/workspace", children: [] };
+        }
+
+        throw new Error(`Unexpected command: ${op}`);
+      }
+    );
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspace(store);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(openEditorPathsAtomFamily("ws-test"), ["src/app.tsx", "README.md"]);
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "export {};",
+        savedContent: "export {};",
+        baseHash: "hash-3",
+        isDirty: false,
+      },
+      "README.md": {
+        kind: "text",
+        path: "README.md",
+        content: "# README",
+        savedContent: "# README",
+        baseHash: "hash-4",
+        isDirty: false,
+      },
+    });
+
+    const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
+      wrapper: wrapperFor(store),
+    });
+
+    act(() => {
+      result.current.requestDelete({
+        path: "src/app.tsx",
+        name: "app.tsx",
+        error: null,
+      });
+    });
+
+    await act(async () => {
+      await result.current.confirmDelete();
+    });
+
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["README.md"]);
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(workspacesAtom)["ws-test"]?.uiState.openEditorPaths).toEqual(["README.md"]);
+    expect(store.get(workspacesAtom)["ws-test"]?.uiState.activeEditorPath).toBeNull();
   });
 });

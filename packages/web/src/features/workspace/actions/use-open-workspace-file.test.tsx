@@ -3,7 +3,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { wsClientAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
 import {
   activeEditorPaneIdAtomFamily,
@@ -11,7 +12,7 @@ import {
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
-import { activeFilePathAtomFamily } from "../atoms";
+import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../atoms";
 import { useOpenWorkspaceFile } from "./use-open-workspace-file";
 
 function wrapperFor(store: ReturnType<typeof createStore>) {
@@ -202,5 +203,55 @@ describe("useOpenWorkspaceFile", () => {
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("left");
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBe("left");
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/reused.ts");
+  });
+
+  it("persists the opened path and active editor path", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      id: "ws-test",
+      path: "/workspace",
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+      },
+    });
+
+    const store = createStore();
+    seedWorkspace(store);
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+
+    const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openWorkspaceFile({
+        workspaceId: "ws-test",
+        path: "src/persisted.ts",
+        source: "manual",
+      });
+    });
+
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/persisted.ts"]);
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/persisted.ts");
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        uiState: expect.objectContaining({
+          openEditorPaths: ["src/persisted.ts"],
+          activeEditorPath: "src/persisted.ts",
+        }),
+      }),
+      undefined
+    );
   });
 });

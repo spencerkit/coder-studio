@@ -10,7 +10,11 @@ import {
 import { orderOpenEditorPaths } from "../../actions/open-editors-close";
 import { useOpenEditorsActions } from "../../actions/use-open-editors-actions";
 import { useOpenWorkspaceFile } from "../../actions/use-open-workspace-file";
-import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../atoms";
+import {
+  activeFilePathAtomFamily,
+  openEditorPathsAtomFamily,
+  openFilesAtomFamily,
+} from "../../atoms";
 
 interface OpenEditorsSectionProps {
   workspaceId: string;
@@ -21,6 +25,7 @@ interface OpenEditorsSectionProps {
 export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEditorsSectionProps) {
   const t = useTranslation();
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
+  const persistedOpenEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const { closeAll, closePath } = useOpenEditorsActions(workspaceId);
@@ -41,9 +46,11 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
     hasPendingEditorLoad(workspaceId, activeFilePath)
       ? activeFilePath
       : null;
-  const openEditorPaths = pendingActivePath
-    ? [...orderOpenEditorPaths(openFiles), pendingActivePath].sort()
-    : orderOpenEditorPaths(openFiles);
+  const openEditorPaths = orderOpenEditorPaths([
+    ...persistedOpenEditorPaths,
+    ...Object.keys(openFiles),
+    ...(pendingActivePath ? [pendingActivePath] : []),
+  ]);
   const resolvedTitle = title ?? t("workspace.sidebar.open_editors");
   const headingLabel = t("workspace.open_editors.title_with_count", {
     count: openEditorPaths.length,

@@ -13,7 +13,12 @@ import {
   __resetPendingEditorLoadsForTests,
   beginPendingEditorLoad,
 } from "../../../code-editor/actions/pending-editor-loads";
-import { activeFilePathAtomFamily, type OpenFile, openFilesAtomFamily } from "../../atoms";
+import {
+  activeFilePathAtomFamily,
+  type OpenFile,
+  openEditorPathsAtomFamily,
+  openFilesAtomFamily,
+} from "../../atoms";
 import { OpenEditorsSection } from "./open-editors-section";
 
 vi.mock("../../../../lib/i18n", () => ({
@@ -184,6 +189,34 @@ describe("OpenEditorsSection", () => {
     expect(within(section).getByRole("button", { name: "src/pending.ts" })).toHaveClass(
       "workspace-open-editors__item--active"
     );
+  });
+
+  it("renders persisted editor paths when buffers have not loaded yet", () => {
+    const { store } = renderSection({}, "src/app.tsx", (draftStore) => {
+      draftStore.set(openEditorPathsAtomFamily("ws-test"), ["src/app.tsx", "README.md"]);
+    });
+
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Editors (2)" });
+    const section = heading.closest("section") as HTMLElement;
+    const rowButtons = Array.from(
+      section.querySelectorAll<HTMLButtonElement>(".workspace-open-editors__item")
+    );
+
+    expect(rowButtons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "README.md",
+      "src/app.tsx",
+    ]);
+    expect(within(section).getByRole("button", { name: "src/app.tsx" })).toHaveClass(
+      "workspace-open-editors__item--active"
+    );
+
+    const readmeRow = within(section)
+      .getByRole("button", { name: "README.md" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(within(readmeRow).getByRole("button", { name: "Close README.md" }));
+
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/app.tsx"]);
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
   });
 
   it("routes open-editor clicks into the focused editor pane", () => {

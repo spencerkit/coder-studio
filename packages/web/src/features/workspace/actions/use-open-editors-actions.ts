@@ -13,9 +13,12 @@ import {
   type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   gitDiffPreviewDismissedAtomFamily,
+  openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../atoms";
+import { mergeOpenEditorPaths, removeOpenEditorPaths } from "./open-editor-state";
 import { resolveOpenEditorsClose } from "./open-editors-close";
+import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 interface UseOpenEditorsActionsOptions {
   workspaceRootPath?: string;
@@ -46,10 +49,12 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
   const workspaceRootPath = options?.workspaceRootPath ?? workspace?.path;
   const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId));
+  const [openEditorPaths, setOpenEditorPaths] = useAtom(openEditorPathsAtomFamily(workspaceId));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId));
   const [diffPreview, setDiffPreview] = useAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
   const [, setEditorMode] = useAtom(editorModeAtomFamily(workspaceId));
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   const closePath = useCallback(
     (targetPath?: string) => {
@@ -57,6 +62,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
         activeFilePath && !(activeFilePath in openFiles) ? activeFilePath : null;
       const resolution = resolveOpenEditorsClose({
         openFiles,
+        openEditorPaths,
         activeFilePath,
         pendingActiveFilePath: transientActiveFilePath,
         targetPath,
@@ -86,10 +92,24 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
         }
       }
 
+      const nextOpenEditorPaths = removeOpenEditorPaths(
+        mergeOpenEditorPaths(
+          openEditorPaths,
+          Object.keys(openFiles),
+          transientActiveFilePath ? [transientActiveFilePath] : undefined
+        ),
+        resolution.removedPaths
+      );
+
+      setOpenEditorPaths(nextOpenEditorPaths);
       setActiveFilePath(resolution.nextActiveFilePath);
       if (resolution.nextActiveFilePath !== activeFilePath || resolution.shouldExitEditor) {
         setEditorMode("edit");
       }
+      void persistUiState({
+        openEditorPaths: nextOpenEditorPaths,
+        activeEditorPath: resolution.nextActiveFilePath,
+      });
 
       const shouldDismissPreview =
         (diffPreview?.kind === "worktree-file-diff" ||
@@ -108,12 +128,15 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     [
       activeFilePath,
       diffPreview,
+      openEditorPaths,
       openFiles,
       setActiveFilePath,
       setDiffPreview,
       setDiffPreviewDismissed,
       setEditorMode,
+      setOpenEditorPaths,
       setOpenFiles,
+      persistUiState,
       workspaceId,
       workspaceRootPath,
     ]
@@ -124,6 +147,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       activeFilePath && !(activeFilePath in openFiles) ? activeFilePath : null;
     const resolution = resolveOpenEditorsClose({
       openFiles,
+      openEditorPaths,
       activeFilePath,
       pendingActiveFilePath: transientActiveFilePath,
       closeAll: true,
@@ -139,6 +163,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
     cancelAllPendingEditorLoads(workspaceId);
     setOpenFiles({});
+    setOpenEditorPaths([]);
 
     for (const path of resolution.removedPaths) {
       const removedFile = openFiles[path];
@@ -149,6 +174,10 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
     setActiveFilePath(null);
     setEditorMode("edit");
+    void persistUiState({
+      openEditorPaths: [],
+      activeEditorPath: null,
+    });
     const shouldDismissPreview =
       (diffPreview?.kind === "worktree-file-diff" ||
         diffPreview?.kind === "search-replace-file-diff") &&
@@ -168,12 +197,15 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
   }, [
     activeFilePath,
     diffPreview,
+    openEditorPaths,
     openFiles,
     setActiveFilePath,
     setDiffPreview,
     setDiffPreviewDismissed,
     setEditorMode,
+    setOpenEditorPaths,
     setOpenFiles,
+    persistUiState,
     workspaceId,
     workspaceRootPath,
   ]);

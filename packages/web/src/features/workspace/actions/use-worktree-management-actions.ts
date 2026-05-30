@@ -1,5 +1,5 @@
 import type { Workspace, WorktreeInfo } from "@coder-studio/core";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useMemo } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import { worktreeListAtomFamily } from "../atoms";
+import { hydrateWorkspaceEditorState } from "./open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 function slugifyBranchName(branch: string) {
@@ -70,6 +71,7 @@ function isAbsoluteWorktreePath(path: string) {
 export function useWorktreeManagementActions(workspaceId: string) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const store = useStore();
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
   const [list, setList] = useAtom(worktreeListAtomFamily(workspaceId));
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
@@ -213,6 +215,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
         ...prev,
         [result.data!.id]: result.data!,
       }));
+      hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
       setWorkspaceOrder((prev) => {
         if (prev.includes(result.data!.id)) {
           return prev;
@@ -234,6 +237,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       setWorkspaces,
       setWorkspacesLoadError,
       setWorkspacesLoadState,
+      store,
       t,
     ]
   );

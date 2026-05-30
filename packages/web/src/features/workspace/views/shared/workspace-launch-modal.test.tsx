@@ -6,6 +6,7 @@ import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { CommandResultError } from "../../../../ws/client";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
+import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../../atoms";
 import { WorkspaceLaunchModal } from "./workspace-launch-modal";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -243,6 +244,17 @@ describe("WorkspaceLaunchModal", () => {
       if (op === "workspace.open") {
         return {
           id: "ws-1",
+          path: "/home/spencer/workspace",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: {
+            leftPanelWidth: 280,
+            bottomPanelHeight: 200,
+            focusMode: false,
+            openEditorPaths: ["src/app.tsx", "README.md"],
+            activeEditorPath: "README.md",
+          },
         };
       }
 
@@ -287,6 +299,8 @@ describe("WorkspaceLaunchModal", () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalled();
     });
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toEqual(["src/app.tsx", "README.md"]);
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("README.md");
   });
 
   it("navigates to /workspace after opening a workspace from outside the workspace page", async () => {

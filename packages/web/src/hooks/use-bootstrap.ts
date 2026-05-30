@@ -1,5 +1,5 @@
 import type { Workspace, WorkspaceLastViewedTarget } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from "../atoms";
@@ -13,6 +13,10 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import {
+  hydrateWorkspaceEditorState,
+  normalizeWorkspaceEditorUiState,
+} from "../features/workspace/actions/open-editor-state";
 
 export function useBootstrap() {
   const bootstrapRequestIdRef = useRef(0);
@@ -31,6 +35,7 @@ export function useBootstrap() {
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
+  const store = useStore();
 
   useEffect(() => {
     if (authEnabled === null) {
@@ -101,10 +106,16 @@ export function useBootstrap() {
             return;
           }
 
-          const nextWorkspaces = Array.isArray(listResult.data) ? listResult.data : [];
+          const nextWorkspaces = (Array.isArray(listResult.data) ? listResult.data : []).map(
+            (workspace) => ({
+              ...workspace,
+              uiState: normalizeWorkspaceEditorUiState(workspace.uiState),
+            })
+          );
           const wsMap: Record<string, Workspace> = {};
           for (const workspace of nextWorkspaces) {
             wsMap[workspace.id] = workspace;
+            hydrateWorkspaceEditorState(store, workspace.id, workspace.uiState);
           }
 
           setWorkspaces(wsMap);
@@ -159,6 +170,7 @@ export function useBootstrap() {
     setLastViewedTarget,
     setWorkspacesLoadError,
     setWorkspacesLoadState,
+    store,
     workspaces.length,
     workspacesLoadState,
   ]);

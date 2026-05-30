@@ -1,13 +1,15 @@
 import type { Workspace } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
-import { dispatchCommandAtom } from "../../../atoms/connection";
+import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import {
+  activeFilePathAtomFamily,
   bottomPanelHeightAtomFamily,
   focusModeAtomFamily,
   leftPanelWidthAtomFamily,
+  openEditorPathsAtomFamily,
 } from "../atoms";
 
 function isWorkspace(value: unknown): value is Workspace {
@@ -26,6 +28,7 @@ function isWorkspace(value: unknown): value is Workspace {
 
 export function useWorkspaceUiStatePersistence(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const wsClient = useAtomValue(wsClientAtom);
   const setWorkspaces = useSetAtom(workspacesAtom);
   const store = useStore();
 
@@ -40,12 +43,26 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         return false;
       }
 
+      const currentOpenEditorPaths = store.get(openEditorPathsAtomFamily(workspaceId));
+      const currentActiveEditorPath = store.get(activeFilePathAtomFamily(workspaceId));
+      const shouldIncludeEditorState =
+        workspace.uiState?.openEditorPaths !== undefined ||
+        workspace.uiState?.activeEditorPath !== undefined ||
+        currentOpenEditorPaths.length > 0 ||
+        currentActiveEditorPath !== null;
+
       const nextUiState: Workspace["uiState"] = {
         ...workspace.uiState,
         leftPanelWidth: store.get(leftPanelWidthAtomFamily(workspaceId)),
         bottomPanelHeight: store.get(bottomPanelHeightAtomFamily(workspaceId)),
         focusMode: store.get(focusModeAtomFamily(workspaceId)),
         paneLayout: store.get(paneLayoutAtomFamily(workspaceId)),
+        ...(shouldIncludeEditorState
+          ? {
+              openEditorPaths: currentOpenEditorPaths,
+              activeEditorPath: currentActiveEditorPath,
+            }
+          : {}),
         ...patch,
       };
 
@@ -63,6 +80,10 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
           },
         };
       });
+
+      if (!wsClient) {
+        return true;
+      }
 
       try {
         const result = await dispatch<Workspace>("workspace.uiState.set", {
@@ -88,7 +109,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         return false;
       }
     },
-    [dispatch, setWorkspaces, store, workspaceId]
+    [dispatch, setWorkspaces, store, workspaceId, wsClient]
   );
 
   return {

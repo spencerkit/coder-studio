@@ -1,4 +1,4 @@
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 import { usePaneActions } from "../../agent-panes/actions/use-pane-actions";
 import {
@@ -13,7 +13,9 @@ import {
 } from "../../agent-panes/pane-layout-tree";
 import { useOpenLocation } from "../../code-editor/actions/use-open-location";
 import { type PendingEditorNavigation } from "../../code-editor/atoms";
-import { deriveEditorModeForPath, editorModeAtomFamily } from "../atoms";
+import { deriveEditorModeForPath, editorModeAtomFamily, openEditorPathsAtomFamily } from "../atoms";
+import { appendOpenEditorPath } from "./open-editor-state";
+import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 interface OpenWorkspaceFileOptions {
   targetDraftPaneId?: string;
@@ -26,8 +28,11 @@ export function useOpenWorkspaceFile(workspaceId: string) {
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
   const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
+  const setOpenEditorPaths = useSetAtom(openEditorPathsAtomFamily(workspaceId));
+  const store = useStore();
   const { openLocation } = useOpenLocation(workspaceId);
   const { convertDraftPane } = usePaneActions(workspaceId);
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   const openWorkspaceFile = useCallback(
     async (input: PendingEditorNavigation, options: OpenWorkspaceFileOptions = {}) => {
@@ -55,6 +60,15 @@ export function useOpenWorkspaceFile(workspaceId: string) {
       setActiveEditorPaneId(targetEditorPaneId);
       setEditorMode(deriveEditorModeForPath(input.path));
       await openLocation(input);
+      const nextOpenEditorPaths = appendOpenEditorPath(
+        store.get(openEditorPathsAtomFamily(workspaceId)),
+        input.path
+      );
+      setOpenEditorPaths(nextOpenEditorPaths);
+      void persistUiState({
+        openEditorPaths: nextOpenEditorPaths,
+        activeEditorPath: input.path,
+      });
     },
     [
       activeEditorPaneId,
@@ -62,9 +76,13 @@ export function useOpenWorkspaceFile(workspaceId: string) {
       focusedEditorPaneId,
       openLocation,
       paneLayout,
+      persistUiState,
       setActiveEditorPaneId,
       setEditorMode,
       setFocusedEditorPaneId,
+      setOpenEditorPaths,
+      store,
+      workspaceId,
     ]
   );
 

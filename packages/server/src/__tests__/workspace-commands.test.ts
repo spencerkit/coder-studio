@@ -547,6 +547,51 @@ describe("Workspace Commands", () => {
           .fileTreeExpandedDirs
       ).toEqual(["packages", "packages/web"]);
     });
+
+    it("persists open editor paths and the active editor into workspace ui state", async () => {
+      const dir = join(tmpdir(), `workspace-open-editors-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-open-editors",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-open-editors",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              openEditorPaths: ["README.md", "src/app.tsx"],
+              activeEditorPath: "src/app.tsx",
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { openEditorPaths?: string[] } }).uiState.openEditorPaths
+      ).toEqual(["README.md", "src/app.tsx"]);
+      expect(
+        (result.data as { uiState: { activeEditorPath?: string | null } }).uiState.activeEditorPath
+      ).toBe("src/app.tsx");
+    });
   });
 
   describe("workspace.lastViewedTarget", () => {

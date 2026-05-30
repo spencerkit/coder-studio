@@ -124,6 +124,11 @@ export const openFilesAtomFamily = atomFamily((workspaceId: string) =>
 );
 
 /**
+ * Persisted open editor path list. File buffers still live in openFilesAtomFamily.
+ */
+export const openEditorPathsAtomFamily = atomFamily((workspaceId: string) => atom<string[]>([]));
+
+/**
  * Active file path (UI local state)
  */
 export const activeFilePathAtomFamily = atomFamily((workspaceId: string) =>

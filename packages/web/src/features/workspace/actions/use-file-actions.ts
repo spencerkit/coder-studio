@@ -10,6 +10,7 @@ import {
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   type OpenFile,
+  openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../atoms";
 import {
@@ -17,6 +18,11 @@ import {
   applyRootTreeRefresh,
   collectRefreshTargets,
 } from "./file-tree-refresh";
+import {
+  mergeOpenEditorPaths,
+  removeOpenEditorPaths,
+  rewriteOpenEditorPaths,
+} from "./open-editor-state";
 import { useOpenWorkspaceFile } from "./use-open-workspace-file";
 import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
@@ -136,11 +142,14 @@ export function useFileActions({
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
+  const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const setOpenEditorPaths = useSetAtom(openEditorPathsAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
   const setExpandedDirs = useSetAtom(expandedDirsAtomFamily(workspaceId));
   const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
@@ -482,13 +491,38 @@ export function useFileActions({
       return;
     }
 
-    setActiveFilePath((current) =>
-      current ? rewriteDescendantPath(current, renameDialog.fromPath, toPath) : current
+    const nextActiveFilePath = activeFilePath
+      ? rewriteDescendantPath(activeFilePath, renameDialog.fromPath, toPath)
+      : activeFilePath;
+    const nextOpenEditorPaths = rewriteOpenEditorPaths(
+      mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles)),
+      renameDialog.fromPath,
+      toPath
     );
+
+    setActiveFilePath(nextActiveFilePath);
+    setOpenEditorPaths(nextOpenEditorPaths);
     setOpenFiles((current) => rewriteOpenFiles(current, renameDialog.fromPath, toPath));
+    void persistUiState({
+      openEditorPaths: nextOpenEditorPaths,
+      activeEditorPath: nextActiveFilePath,
+    });
     await loadFileTree();
     setRenameDialog(null);
-  }, [dispatch, loadFileTree, renameDialog, setActiveFilePath, setOpenFiles, t, workspaceId]);
+  }, [
+    activeFilePath,
+    dispatch,
+    loadFileTree,
+    openEditorPaths,
+    openFiles,
+    persistUiState,
+    renameDialog,
+    setActiveFilePath,
+    setOpenEditorPaths,
+    setOpenFiles,
+    t,
+    workspaceId,
+  ]);
 
   const cancelDelete = useCallback(() => {
     setPendingDelete(null);
@@ -516,9 +550,17 @@ export function useFileActions({
       return;
     }
 
-    if (activeFilePath === pendingDelete.path) {
-      setActiveFilePath(null);
+    const nextActiveFilePath = activeFilePath === pendingDelete.path ? null : activeFilePath;
+    const nextOpenEditorPaths = removeOpenEditorPaths(
+      mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles)),
+      [pendingDelete.path]
+    );
+
+    if (activeFilePath !== nextActiveFilePath) {
+      setActiveFilePath(nextActiveFilePath);
     }
+
+    setOpenEditorPaths(nextOpenEditorPaths);
 
     setOpenFiles((prev) => {
       if (!(pendingDelete.path in prev)) {
@@ -529,6 +571,10 @@ export function useFileActions({
       delete next[pendingDelete.path];
       return next;
     });
+    void persistUiState({
+      openEditorPaths: nextOpenEditorPaths,
+      activeEditorPath: nextActiveFilePath,
+    });
     await loadFileTree();
     setPendingDelete(null);
   }, [
@@ -536,7 +582,11 @@ export function useFileActions({
     dispatch,
     workspaceId,
     activeFilePath,
+    openEditorPaths,
+    openFiles,
+    persistUiState,
     setActiveFilePath,
+    setOpenEditorPaths,
     setOpenFiles,
     loadFileTree,
     t,

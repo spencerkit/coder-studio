@@ -72,6 +72,8 @@ export interface UiState {
   activeSessionId?: string;
   paneLayout?: WorkspacePaneNode;
   fileTreeExpandedDirs?: string[];
+  openEditorPaths?: string[];
+  activeEditorPath?: string | null;
 }
 
 export interface WorkspaceLastViewedTarget {

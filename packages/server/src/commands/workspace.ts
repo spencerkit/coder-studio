@@ -200,6 +200,8 @@ registerCommand(
       activeSessionId: z.string().optional(),
       fileTreeExpandedDirs: z.array(z.string()).optional(),
       paneLayout: workspacePaneNodeSchema.optional(),
+      openEditorPaths: z.array(z.string()).optional(),
+      activeEditorPath: z.string().nullable().optional(),
     }),
   }),
   async (args, ctx) => {
