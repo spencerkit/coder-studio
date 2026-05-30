@@ -329,7 +329,7 @@
     "agent": "Agent Terminal",
     "reconnect_hint": "Connection lost, reconnecting...",
     "no_terminal": "No terminals",
-    "empty_hint": "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace.",
+    "empty_hint": "Launch a shell to inspect files and run commands.",
     "load_failed_title": "Could not load terminals",
     "load_failed_body": "Refresh the workspace connection and try again.",
     "create_failed_title": "Could not create terminal",

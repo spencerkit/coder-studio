@@ -329,7 +329,7 @@
     "agent": "Agent 终端",
     "reconnect_hint": "连接已断开，正在重连...",
     "no_terminal": "暂无终端",
-    "empty_hint": "启动一个 Shell 来查看文件、运行命令，并在不离开工作区的情况下验证更改。",
+    "empty_hint": "启动一个 Shell 来查看文件、运行命令。",
     "load_failed_title": "加载终端失败",
     "load_failed_body": "请刷新工作区连接后重试。",
     "create_failed_title": "创建终端失败",
