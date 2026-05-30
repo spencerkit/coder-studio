@@ -1,12 +1,13 @@
-import { createEvent, fireEvent, render, screen } from "@testing-library/react";
+import { act, createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import { DraftLauncher } from "./draft-launcher";
 
 const mockUseProviderLauncher = vi.fn();
+const originalResizeObserver = global.ResizeObserver;
 
 vi.mock("../../actions/use-provider-launcher", () => ({
   useProviderLauncher: (...args: unknown[]) => mockUseProviderLauncher(...args),
@@ -31,7 +32,57 @@ function createRuntimeState(providerId: "claude" | "codex") {
   };
 }
 
+function createDraftLauncherStore() {
+  const store = createStore();
+
+  store.set(localeAtom, "en");
+  store.set(wsClientAtom, {
+    sendCommand: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
+  } as never);
+
+  return store;
+}
+
+function installResizeObserverMock() {
+  let callback: ResizeObserverCallback | null = null;
+
+  class ResizeObserverMock {
+    constructor(observerCallback: ResizeObserverCallback) {
+      callback = observerCallback;
+    }
+
+    observe() {}
+    disconnect() {}
+  }
+
+  global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+
+  return {
+    resize(target: Element, width: number) {
+      if (!callback) {
+        throw new Error("ResizeObserver was not created");
+      }
+
+      callback(
+        [
+          {
+            target,
+            contentRect: { width },
+          } as ResizeObserverEntry,
+        ],
+        {} as ResizeObserver
+      );
+    },
+  };
+}
+
 describe("DraftLauncher", () => {
+  afterEach(() => {
+    global.ResizeObserver = originalResizeObserver;
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseProviderLauncher.mockReturnValue({
@@ -126,13 +177,7 @@ describe("DraftLauncher", () => {
   });
 
   it("switches draft launcher carousel panels", () => {
-    const store = createStore();
-
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, {
-      sendCommand: vi.fn(),
-      subscribe: vi.fn(() => () => {}),
-    } as never);
+    const store = createDraftLauncherStore();
 
     const { container } = render(
       <Provider store={store}>
@@ -153,6 +198,69 @@ describe("DraftLauncher", () => {
     expect(agentButton).toHaveAttribute("aria-pressed", "false");
     expect(fileButton).toHaveAttribute("aria-pressed", "true");
     expect(carouselTrack).toHaveClass("agent-draft-component-row--file");
+  });
+
+  it("auto-rotates draft launcher carousel panels in compact layout", async () => {
+    vi.useFakeTimers();
+    const resizeObserver = installResizeObserverMock();
+    const store = createDraftLauncherStore();
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    const launcher = container.querySelector(".agent-draft-launcher");
+    const agentButton = screen.getByRole("button", { name: "Agent" });
+    const fileButton = screen.getByRole("button", { name: "File Editor" });
+    const carouselTrack = container.querySelector(".agent-draft-component-row");
+
+    expect(launcher).not.toBeNull();
+    expect(carouselTrack).not.toHaveClass("agent-draft-component-row--file");
+
+    act(() => {
+      resizeObserver.resize(launcher as Element, 360);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+
+    expect(agentButton).toHaveAttribute("aria-pressed", "false");
+    expect(fileButton).toHaveAttribute("aria-pressed", "true");
+    expect(carouselTrack).toHaveClass("agent-draft-component-row--file");
+  });
+
+  it("does not auto-rotate draft launcher carousel panels in wide layout", async () => {
+    vi.useFakeTimers();
+    const resizeObserver = installResizeObserverMock();
+    const store = createDraftLauncherStore();
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    const launcher = container.querySelector(".agent-draft-launcher");
+    const agentButton = screen.getByRole("button", { name: "Agent" });
+    const fileButton = screen.getByRole("button", { name: "File Editor" });
+    const carouselTrack = container.querySelector(".agent-draft-component-row");
+
+    expect(launcher).not.toBeNull();
+
+    act(() => {
+      resizeObserver.resize(launcher as Element, 640);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+
+    expect(agentButton).toHaveAttribute("aria-pressed", "true");
+    expect(fileButton).toHaveAttribute("aria-pressed", "false");
+    expect(carouselTrack).not.toHaveClass("agent-draft-component-row--file");
   });
 
   it("renders a draft drop label when pane drag hover is active", () => {

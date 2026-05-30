@@ -1,7 +1,7 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { ArrowRight, FlipHorizontal, FlipVertical, X } from "lucide-react";
-import { type DragEvent, type FC, type PointerEvent, useRef, useState } from "react";
+import { type DragEvent, type FC, type PointerEvent, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, ThemedIcon, Tooltip } from "../../../../components/ui";
@@ -13,6 +13,24 @@ import {
 import { buildDiagnosticsPath } from "../../../diagnostics";
 import type { PaneDropIntent } from "../../actions/pane-drag-types";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
+
+const COMPACT_CAROUSEL_MAX_WIDTH_REM = 28;
+const COMPACT_CAROUSEL_INTERVAL_MS = 4000;
+
+function getCompactCarouselMaxWidthPx(): number {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return COMPACT_CAROUSEL_MAX_WIDTH_REM * 16;
+  }
+
+  const rootFontSize = window.getComputedStyle(document.documentElement).fontSize;
+  const parsedRootFontSize = Number.parseFloat(rootFontSize);
+
+  if (!Number.isFinite(parsedRootFontSize) || parsedRootFontSize <= 0) {
+    return COMPACT_CAROUSEL_MAX_WIDTH_REM * 16;
+  }
+
+  return COMPACT_CAROUSEL_MAX_WIDTH_REM * parsedRootFontSize;
+}
 
 interface DraftLauncherDragState {
   isDragging: boolean;
@@ -47,7 +65,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
   const [activePanel, setActivePanel] = useState<"agent" | "file">("agent");
+  const [isCompactCarousel, setIsCompactCarousel] = useState(false);
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
+  const draftLauncherRef = useRef<HTMLDivElement | null>(null);
   const swipeStartXRef = useRef<number | null>(null);
   const { states, launch } = useProviderLauncher(
     dispatch,
@@ -219,6 +239,62 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     swipeStartXRef.current = null;
   };
 
+  useEffect(() => {
+    const element = draftLauncherRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    const updateCompactState = (width: number) => {
+      setIsCompactCarousel(width > 0 && width <= getCompactCarouselMaxWidthPx());
+    };
+
+    updateCompactState(element.getBoundingClientRect().width);
+
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+
+        if (!entry) {
+          return;
+        }
+
+        updateCompactState(entry.contentRect.width || entry.target.getBoundingClientRect().width);
+      });
+
+      observer.observe(element);
+
+      return () => {
+        observer.disconnect();
+      };
+    }
+
+    const handleWindowResize = () => {
+      updateCompactState(element.getBoundingClientRect().width);
+    };
+
+    window.addEventListener("resize", handleWindowResize);
+
+    return () => {
+      window.removeEventListener("resize", handleWindowResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isCompactCarousel) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setActivePanel((currentPanel) => (currentPanel === "agent" ? "file" : "agent"));
+    }, COMPACT_CAROUSEL_INTERVAL_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activePanel, isCompactCarousel]);
+
   return (
     <div
       className={`session-card agent-pane${dragState?.isDragging ? " draft-launcher--dragging" : ""}${dragState?.isActiveDropTarget || isFileDropTarget ? " draft-launcher--drop-target" : ""}`}
@@ -281,7 +357,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
         </div>
       </div>
 
-      <div className="agent-draft-launcher">
+      <div className="agent-draft-launcher" ref={draftLauncherRef}>
         <div className="agent-draft-content">
           <div className="agent-draft-component">
             <div
@@ -435,7 +511,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
               ))}
             </div>
 
-            <div className="agent-draft-footer">点击启动 Agent 或直接拖拽文件到右侧区域打开</div>
+            <div className="agent-draft-footer">
+              点击「启动 Agent」，或将文件拖到右侧区域直接打开。
+            </div>
           </div>
         </div>
       </div>
