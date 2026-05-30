@@ -8,9 +8,15 @@ import type {
   LspSessionSummary,
   Workspace,
 } from "@coder-studio/core";
-import { LspToolManager } from "../lsp-tools/manager.js";
+import { LspToolManager, type ResolvedLspToolCommand } from "../lsp-tools/manager.js";
 import { resolveLspServerKind, wrapLspCommandForWorkspace } from "./server-factory.js";
 import { LspSession } from "./session.js";
+import {
+  buildVueSpecParts,
+  inferVueLanguageServerLocation,
+  parseVueBridgeMode,
+  type VueBridgeMode,
+} from "./vue-spec.js";
 
 type LspSessionDeps = ConstructorParameters<typeof LspSession>[0];
 
@@ -61,6 +67,12 @@ export class LspManager {
       restartLimit: number;
       lspToolMgr: LspToolManager;
       createSession?: (deps: LspSessionDeps) => LspSessionLike;
+      /**
+       * Optional override for the Vue tsserver bridge. When omitted, the
+       * manager reads `process.env.CODER_STUDIO_VUE_TSSERVER_BRIDGE` (`auto`
+       * or `off`). Useful in tests to avoid touching the real environment.
+       */
+      vueBridgeMode?: VueBridgeMode;
     }
   ) {}
 
@@ -125,12 +137,18 @@ export class LspManager {
       };
     }
 
+    const vueParts =
+      serverKind === "vue" ? await this.composeVueSpecParts(workspace, resolution) : null;
+
     const spec = wrapLspCommandForWorkspace({
       workspace,
       serverKind,
       command: resolution.command,
       args: resolution.args,
       rootPath: workspace.path,
+      initializationOptions: vueParts?.initializationOptions,
+      companion: vueParts?.companion,
+      bridges: vueParts?.bridges,
     });
 
     const key = this.keyFor(input.workspaceId, spec.serverKind);
@@ -336,6 +354,90 @@ export class LspManager {
 
   private createSession(deps: LspSessionDeps): LspSessionLike {
     return this.deps.createSession ? this.deps.createSession(deps) : new LspSession(deps);
+  }
+
+  private async composeVueSpecParts(
+    workspace: Workspace,
+    vueResolution: ResolvedLspToolCommand
+  ): Promise<ReturnType<typeof buildVueSpecParts> | null> {
+    const bridgeMode =
+      this.deps.vueBridgeMode ?? parseVueBridgeMode(process.env.CODER_STUDIO_VUE_TSSERVER_BRIDGE);
+
+    const vueLanguageServerLocation = inferVueLanguageServerLocation(vueResolution.command);
+    if (!vueLanguageServerLocation) {
+      // We can't tell the TypeScript server where `@vue/typescript-plugin`
+      // lives, so without that the bridge would be useless. Run Volar alone
+      // and accept that semantic features won't return — better than failing
+      // to start at all.
+      this.deps.logger.warn(
+        { command: vueResolution.command },
+        "could not infer @vue/language-server install location; vue tsserver bridge disabled"
+      );
+      return buildVueSpecParts({
+        vueCommand: vueResolution.command,
+        vueArgs: vueResolution.args,
+        vueLanguageServerLocation: "",
+        typescriptCommand: "",
+        typescriptArgs: [],
+        bridgeMode: "off",
+      });
+    }
+
+    if (bridgeMode === "off") {
+      return buildVueSpecParts({
+        vueCommand: vueResolution.command,
+        vueArgs: vueResolution.args,
+        vueLanguageServerLocation,
+        typescriptCommand: "",
+        typescriptArgs: [],
+        bridgeMode: "off",
+      });
+    }
+
+    let tsResolution: Awaited<ReturnType<LspToolManager["resolve"]>>;
+    try {
+      tsResolution = await this.deps.lspToolMgr.resolve({
+        workspace,
+        serverKind: "typescript",
+      });
+    } catch (error) {
+      this.deps.logger.warn(
+        { err: error },
+        "failed to resolve typescript companion for vue session; bridge disabled"
+      );
+      return buildVueSpecParts({
+        vueCommand: vueResolution.command,
+        vueArgs: vueResolution.args,
+        vueLanguageServerLocation,
+        typescriptCommand: "",
+        typescriptArgs: [],
+        bridgeMode: "off",
+      });
+    }
+
+    if (tsResolution.kind !== "ready") {
+      this.deps.logger.warn(
+        { missing: tsResolution.missingCommands },
+        "typescript language server unavailable for vue tsserver bridge"
+      );
+      return buildVueSpecParts({
+        vueCommand: vueResolution.command,
+        vueArgs: vueResolution.args,
+        vueLanguageServerLocation,
+        typescriptCommand: "",
+        typescriptArgs: [],
+        bridgeMode: "off",
+      });
+    }
+
+    return buildVueSpecParts({
+      vueCommand: vueResolution.command,
+      vueArgs: vueResolution.args,
+      vueLanguageServerLocation,
+      typescriptCommand: tsResolution.command,
+      typescriptArgs: tsResolution.args,
+      bridgeMode: "auto",
+    });
   }
 
   private async getSessionForPath(

@@ -224,6 +224,12 @@ vi.mock("monaco-editor", () => ({
     register: mockRegisterLanguage,
     setLanguageConfiguration: mockSetLanguageConfiguration,
     setMonarchTokensProvider: mockSetMonarchTokensProvider,
+    IndentAction: {
+      None: 0,
+      Indent: 1,
+      IndentOutdent: 2,
+      Outdent: 3,
+    },
     typescript: {
       JsxEmit: {
         ReactJSX: 4,

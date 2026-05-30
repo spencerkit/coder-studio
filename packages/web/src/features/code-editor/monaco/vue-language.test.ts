@@ -14,8 +14,34 @@ vi.mock("monaco-editor", () => ({
     register: mockRegisterLanguage,
     setLanguageConfiguration: mockSetLanguageConfiguration,
     setMonarchTokensProvider: mockSetMonarchTokensProvider,
+    IndentAction: { Indent: 1, IndentOutdent: 2 },
   },
 }));
+
+interface MonarchProvider {
+  tokenizer: {
+    root: Array<unknown>;
+    templateBlock?: Array<unknown>;
+    tagAttributes?: Array<unknown>;
+    scriptTsEmbedded?: Array<unknown>;
+    scriptJsEmbedded?: Array<unknown>;
+    styleCssEmbedded?: Array<unknown>;
+    styleScssEmbedded?: Array<unknown>;
+    [state: string]: Array<unknown> | undefined;
+  };
+}
+
+function getRegisteredProvider(): MonarchProvider {
+  const lastCall = mockSetMonarchTokensProvider.mock.calls.at(-1);
+  expect(lastCall?.[0]).toBe("vue");
+  return lastCall?.[1] as MonarchProvider;
+}
+
+function stringifyRules(rules: Array<unknown> | undefined): string {
+  return rules
+    ? JSON.stringify(rules, (_, value) => (value instanceof RegExp ? value.source : value))
+    : "";
+}
 
 describe("ensureVueLanguageRegistered", () => {
   beforeEach(() => {
@@ -48,16 +74,45 @@ describe("ensureVueLanguageRegistered", () => {
     );
     expect(monaco.languages.setMonarchTokensProvider).toHaveBeenCalledWith(
       "vue",
-      expect.objectContaining({
-        tokenizer: expect.objectContaining({
-          root: expect.arrayContaining([
-            [/\{\{|\}\}/, "delimiter.bracket"],
-            [/v-[\w-]+|:[\w-]+|@[\w-]+/, "attribute.name"],
-            [/<!--/, "comment", "@comment"],
-          ]),
-        }),
-      })
+      expect.any(Object)
     );
+  });
+
+  it("delegates <script> contents to typescript or javascript based on lang attribute", async () => {
+    const { ensureVueLanguageRegistered } = await import("./vue-language");
+    ensureVueLanguageRegistered();
+
+    const provider = getRegisteredProvider();
+    const rootSource = stringifyRules(provider.tokenizer.root);
+
+    expect(rootSource).toContain("@scriptTsEmbedded");
+    expect(rootSource).toContain("@scriptJsEmbedded");
+
+    expect(stringifyRules(provider.tokenizer.scriptTsEmbedded)).toContain("typescript");
+    expect(stringifyRules(provider.tokenizer.scriptJsEmbedded)).toContain("javascript");
+  });
+
+  it("delegates <style> contents to css / scss / less based on lang attribute", async () => {
+    const { ensureVueLanguageRegistered } = await import("./vue-language");
+    ensureVueLanguageRegistered();
+
+    const provider = getRegisteredProvider();
+    expect(stringifyRules(provider.tokenizer.styleCssEmbedded)).toContain("css");
+    expect(stringifyRules(provider.tokenizer.styleScssEmbedded)).toContain("scss");
+    expect(stringifyRules(provider.tokenizer.styleLessEmbedded)).toContain("less");
+  });
+
+  it("recognises vue directive shorthand and mustache interpolation in templates", async () => {
+    const { ensureVueLanguageRegistered } = await import("./vue-language");
+    ensureVueLanguageRegistered();
+
+    const provider = getRegisteredProvider();
+    const templateSource = stringifyRules(provider.tokenizer.templateBlock);
+    const attributesSource = stringifyRules(provider.tokenizer.tagAttributes);
+
+    expect(templateSource).toContain("\\\\{\\\\{"); // mustache opener
+    expect(attributesSource).toContain("v-"); // v-bind/v-if/v-on
+    expect(attributesSource).toContain("[:@#]"); // shorthand for bind/on/slot
   });
 
   it("does not register the vue language again after a fresh module import", async () => {

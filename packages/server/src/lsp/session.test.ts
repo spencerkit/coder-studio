@@ -2,6 +2,8 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { LspSession } from "./session.js";
 
+const FAKE_LSP = join(process.cwd(), "src/__tests__/fixtures/fake-lsp-server.js");
+
 describe.sequential("LspSession", () => {
   it("coalesces concurrent start calls until initialization completes", async () => {
     const session = new LspSession({
@@ -388,6 +390,104 @@ describe.sequential("LspSession", () => {
         process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS = previous;
       }
     }
+  });
+
+  it("fans hover requests out to the companion and merges contents from both ends", async () => {
+    // Two fake-lsp processes: primary returns one hover string, companion
+    // returns another. The session should merge both into one hover payload
+    // so users see Vue-specific *and* TS-semantic information together.
+    const session = new LspSession({
+      workspaceId: "ws-1",
+      workspacePath: process.cwd(),
+      spec: {
+        serverKind: "vue",
+        command: "node",
+        args: [FAKE_LSP],
+        rootPath: process.cwd(),
+        companion: {
+          command: "node",
+          args: [FAKE_LSP],
+        },
+        bridges: { tsserverRequest: true },
+      },
+      onDiagnostics: vi.fn(),
+      requestTimeoutMs: 2000,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    await session.openDocument({
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      languageId: "vue",
+      text: "export const sharedValue = 1;\n",
+    });
+
+    const hover = await session.hover({
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      line: 1,
+      column: 16,
+    });
+
+    expect(hover?.contents).toEqual([
+      // Same content twice because both legs return the same fake hover.
+      // The merge step preserves both entries — proof that the companion
+      // result was actually consulted.
+      expect.stringContaining("sharedValue"),
+      expect.stringContaining("sharedValue"),
+    ]);
+
+    await session.stop();
+  });
+
+  it("fans definition requests out to the companion and deduplicates merged locations", async () => {
+    const session = new LspSession({
+      workspaceId: "ws-1",
+      workspacePath: process.cwd(),
+      spec: {
+        serverKind: "vue",
+        command: "node",
+        args: [FAKE_LSP],
+        rootPath: process.cwd(),
+        companion: {
+          command: "node",
+          args: [FAKE_LSP],
+        },
+        bridges: { tsserverRequest: true },
+      },
+      onDiagnostics: vi.fn(),
+      requestTimeoutMs: 2000,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    await session.openDocument({
+      path: "e2e/fixtures/lsp-workspace/shared.ts",
+      languageId: "vue",
+      text: "export const sharedValue = 1;\n",
+    });
+    await session.openDocument({
+      path: "e2e/fixtures/lsp-workspace/consumer.ts",
+      languageId: "vue",
+      text: 'import { sharedValue } from "./shared";\nexport const computedValue = sharedValue + 1;\n',
+    });
+
+    const definition = await session.definition({
+      path: "e2e/fixtures/lsp-workspace/consumer.ts",
+      line: 1,
+      column: 12,
+    });
+
+    // Both fake servers return the same single location; merge+dedupe yields one.
+    expect(definition).toHaveLength(1);
+    expect(definition?.[0]?.path).toBe("e2e/fixtures/lsp-workspace/shared.ts");
+
+    await session.stop();
   });
 
   it("drains child stderr output without breaking startup", async () => {

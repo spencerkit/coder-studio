@@ -14,6 +14,8 @@ import type {
 import { shouldUseShellForCommand } from "@coder-studio/utils";
 import { type MessageConnection, NotificationType, RequestType } from "vscode-jsonrpc";
 import { DocumentStore } from "./document-store.js";
+import type { LspServerSpec } from "./server-factory.js";
+import { type BridgeHandle, bridgeTsserverRequests } from "./tsserver-bridge.js";
 
 const require = createRequire(import.meta.url);
 type VscodeJsonrpcNode = typeof import("vscode-jsonrpc/node");
@@ -40,12 +42,7 @@ const LSP_REQUEST_TIMEOUT_MESSAGE = "LSP request timed out";
 interface SessionDeps {
   workspaceId: string;
   workspacePath: string;
-  spec: {
-    serverKind: LspServerKind;
-    command: string;
-    args: string[];
-    rootPath: string;
-  };
+  spec: LspServerSpec;
   onDiagnostics: (event: LspDiagnosticsEvent) => void;
   requestTimeoutMs: number;
   platform?: NodeJS.Platform;
@@ -114,10 +111,18 @@ interface RangeLike {
   end: { line: number; character: number };
 }
 
+interface ChildLink {
+  child: ChildProcess;
+  connection: MessageConnection;
+  label: "primary" | "companion";
+}
+
 export class LspSession {
   private readonly documents: DocumentStore;
   private child: ChildProcess | null = null;
   private connection: MessageConnection | null = null;
+  private companion: ChildLink | null = null;
+  private bridgeHandle: BridgeHandle | null = null;
   private startPromise: Promise<LspSessionSummary> | null = null;
   private summary: LspSessionSummary;
 
@@ -180,20 +185,7 @@ export class LspSession {
       throw new Error("Failed to start LSP process stdio");
     }
 
-    child.stderr?.on("data", (chunk) => {
-      const message = chunk.toString().trim();
-      if (!message) {
-        return;
-      }
-
-      this.deps.logger.warn(
-        {
-          serverKind: this.deps.spec.serverKind,
-          stderr: message,
-        },
-        "lsp child stderr"
-      );
-    });
+    this.attachStderr(child, "primary");
 
     child.once("exit", () => {
       this.handleChildTermination(child);
@@ -227,26 +219,70 @@ export class LspSession {
 
     this.connection.listen();
 
-    try {
-      const initializeResult = await this.withTimeout(
-        this.connection.sendRequest("initialize", {
-          processId: process.pid,
-          rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
-          capabilities: {},
-        })
+    let companion: ChildLink | null = null;
+    if (this.deps.spec.companion) {
+      try {
+        companion = this.startCompanion(spawnProcess, platform);
+      } catch (error) {
+        child.kill("SIGTERM");
+        throw error;
+      }
+      this.companion = companion;
+    }
+
+    if (companion && this.deps.spec.bridges?.tsserverRequest) {
+      this.bridgeHandle = bridgeTsserverRequests(
+        {
+          primary: this.connection,
+          companion: companion.connection,
+        },
+        {
+          timeoutMs: this.deps.requestTimeoutMs,
+          logger: this.deps.logger,
+        }
       );
+    }
+
+    try {
+      const [initializeResult] = await Promise.all([
+        this.withTimeout(
+          this.connection.sendRequest("initialize", {
+            processId: process.pid,
+            rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
+            capabilities: {},
+            initializationOptions: this.deps.spec.initializationOptions,
+          })
+        ),
+        companion
+          ? this.withTimeout(
+              companion.connection.sendRequest("initialize", {
+                processId: process.pid,
+                rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
+                capabilities: {},
+                initializationOptions: this.deps.spec.companion?.initializationOptions,
+              })
+            )
+          : Promise.resolve(null),
+      ]);
 
       this.sendNotification("initialized", {});
+      if (companion) {
+        this.sendNotificationOn(companion.connection, "initialized", {});
+      }
 
       for (const doc of this.documents.listReplayable()) {
-        this.sendNotification("textDocument/didOpen", {
+        const didOpenParams = {
           textDocument: {
             uri: doc.uri,
             languageId: doc.languageId,
             version: doc.version,
             text: doc.text,
           },
-        });
+        };
+        this.sendNotification("textDocument/didOpen", didOpenParams);
+        if (companion) {
+          this.sendNotificationOn(companion.connection, "textDocument/didOpen", didOpenParams);
+        }
       }
 
       this.summary = {
@@ -291,14 +327,15 @@ export class LspSession {
   async openDocument(input: { path: string; languageId: string; text: string }): Promise<number> {
     await this.start();
     const doc = this.documents.open(input);
-    this.sendNotification("textDocument/didOpen", {
+    const params = {
       textDocument: {
         uri: doc.uri,
         languageId: doc.languageId,
         version: doc.version,
         text: doc.text,
       },
-    });
+    };
+    this.broadcastNotification("textDocument/didOpen", params);
     return doc.version;
   }
 
@@ -309,7 +346,7 @@ export class LspSession {
 
     await this.start();
     const doc = this.documents.change(path, text);
-    this.sendNotification("textDocument/didChange", {
+    this.broadcastNotification("textDocument/didChange", {
       textDocument: {
         uri: doc.uri,
         version: doc.version,
@@ -330,7 +367,7 @@ export class LspSession {
       return;
     }
 
-    this.sendNotification("textDocument/didClose", {
+    this.broadcastNotification("textDocument/didClose", {
       textDocument: { uri: doc.uri },
     });
     this.documents.close(path);
@@ -341,18 +378,7 @@ export class LspSession {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
-    if (!this.documents.get(input.path)) {
-      return null;
-    }
-
-    try {
-      await this.start();
-      return (await this.requestLocations(DefinitionRequest, input)) ?? [];
-    } catch (error) {
-      this.recoverFromRequestFailure(error);
-      this.deps.logger.warn({ error }, "lsp definition request failed");
-      return [];
-    }
+    return this.locationsAcrossConnections(DefinitionRequest, "definition", input);
   }
 
   async references(input: {
@@ -360,18 +386,7 @@ export class LspSession {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
-    if (!this.documents.get(input.path)) {
-      return null;
-    }
-
-    try {
-      await this.start();
-      return (await this.requestLocations(ReferencesRequest, input)) ?? [];
-    } catch (error) {
-      this.recoverFromRequestFailure(error);
-      this.deps.logger.warn({ error }, "lsp references request failed");
-      return [];
-    }
+    return this.locationsAcrossConnections(ReferencesRequest, "references", input);
   }
 
   async declaration(input: {
@@ -379,18 +394,7 @@ export class LspSession {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
-    if (!this.documents.get(input.path)) {
-      return null;
-    }
-
-    try {
-      await this.start();
-      return (await this.requestLocations(DeclarationRequest, input)) ?? [];
-    } catch (error) {
-      this.recoverFromRequestFailure(error);
-      this.deps.logger.warn({ error }, "lsp declaration request failed");
-      return [];
-    }
+    return this.locationsAcrossConnections(DeclarationRequest, "declaration", input);
   }
 
   async typeDefinition(input: {
@@ -398,18 +402,7 @@ export class LspSession {
     line: number;
     column: number;
   }): Promise<LspLocation[] | null> {
-    if (!this.documents.get(input.path)) {
-      return null;
-    }
-
-    try {
-      await this.start();
-      return (await this.requestLocations(TypeDefinitionRequest, input)) ?? [];
-    } catch (error) {
-      this.recoverFromRequestFailure(error);
-      this.deps.logger.warn({ error }, "lsp type definition request failed");
-      return [];
-    }
+    return this.locationsAcrossConnections(TypeDefinitionRequest, "type definition", input);
   }
 
   async hover(input: {
@@ -428,28 +421,80 @@ export class LspSession {
         return null;
       }
 
-      const result = await this.withTimeout(
-        this.connection.sendRequest(HoverRequest, {
-          textDocument: { uri: doc.uri },
-          position: { line: input.line - 1, character: input.column - 1 },
-        })
-      );
+      // Volar 3.x intentionally delegates TS-semantic hover to a TypeScript
+      // server that has @vue/typescript-plugin loaded. Volar itself only
+      // returns Vue-specific hovers (template / directives / SFC structure).
+      // Fan out to both ends when a companion is configured, then merge.
+      const params = {
+        textDocument: { uri: doc.uri },
+        position: { line: input.line - 1, character: input.column - 1 },
+      };
 
-      if (!result) {
-        return null;
+      const targets: Array<{
+        label: "primary" | "companion";
+        connection: MessageConnection;
+      }> = [{ label: "primary", connection: this.connection }];
+      if (this.companion) {
+        targets.push({ label: "companion", connection: this.companion.connection });
       }
 
-      return {
-        contents: toHoverContents((result as { contents?: unknown }).contents),
-        range:
-          typeof result === "object" &&
-          result !== null &&
-          "range" in result &&
-          (result as { range?: LocationLike["range"] }).range
-            ? toSharedRange((result as { range: LocationLike["range"] }).range)
-            : undefined,
-        version: doc.version,
-      };
+      const results = await Promise.allSettled(
+        targets.map(({ connection }) =>
+          this.withTimeout(connection.sendRequest(HoverRequest, params))
+        )
+      );
+
+      const hovers: Array<{ contents: string[]; range?: LspRange }> = [];
+      let timedOut = false;
+      results.forEach((res, idx) => {
+        if (res.status === "rejected") {
+          if (res.reason instanceof LspRequestTimeoutError) {
+            timedOut = true;
+          }
+          this.deps.logger.warn(
+            { error: res.reason, source: targets[idx]?.label },
+            "lsp hover request failed"
+          );
+          return;
+        }
+        const value = res.value;
+        if (!value) {
+          return;
+        }
+        const contents = toHoverContents((value as { contents?: unknown }).contents);
+        const rawRange =
+          typeof value === "object" &&
+          value !== null &&
+          "range" in value &&
+          (value as { range?: LocationLike["range"] }).range
+            ? (value as { range: LocationLike["range"] }).range
+            : null;
+        hovers.push({
+          contents,
+          range: rawRange ? toSharedRange(rawRange) : undefined,
+        });
+      });
+
+      if (timedOut) {
+        // Stay defensive: if any leg timed out we already restarted the session
+        // via recoverFromRequestFailure for that leg.
+        this.recoverFromRequestFailure(new LspRequestTimeoutError());
+      }
+
+      if (hovers.length === 0) {
+        return null;
+      }
+      // Prefer the companion (TS-server) range when present since it's
+      // expressed against the SFC source positions, then fall back to whatever
+      // we have.
+      const mergedContents = hovers
+        .flatMap((entry) => entry.contents)
+        .filter((value) => value.length > 0);
+      const range = hovers.find((entry) => entry.range)?.range;
+      if (mergedContents.length === 0) {
+        return null;
+      }
+      return { contents: mergedContents, range, version: doc.version };
     } catch (error) {
       this.recoverFromRequestFailure(error);
       this.deps.logger.warn({ error }, "lsp hover request failed");
@@ -489,8 +534,10 @@ export class LspSession {
 
   async stop(): Promise<void> {
     const child = this.child;
+    const companionChild = this.companion?.child ?? null;
     this.resetConnectionState();
     child?.kill("SIGTERM");
+    companionChild?.kill("SIGTERM");
   }
 
   getSummary(): LspSessionSummary {
@@ -508,23 +555,74 @@ export class LspSession {
     return this.documents.listReplayable();
   }
 
-  private async requestLocations(
+  private async locationsAcrossConnections(
     type: RequestType<PositionParams, unknown, void>,
+    label: string,
     input: { path: string; line: number; column: number }
   ): Promise<LspLocation[] | null> {
-    const doc = this.documents.get(input.path);
-    if (!doc || !this.connection) {
+    if (!this.documents.get(input.path)) {
       return null;
     }
 
-    const result = await this.withTimeout(
-      this.connection.sendRequest(type, {
-        textDocument: { uri: doc.uri },
-        position: { line: input.line - 1, character: input.column - 1 },
-      })
+    try {
+      await this.start();
+    } catch (error) {
+      this.deps.logger.warn({ error, label }, `lsp ${label} start failed`);
+      return [];
+    }
+
+    const doc = this.documents.get(input.path);
+    if (!doc || !this.connection) {
+      return [];
+    }
+
+    const params = {
+      textDocument: { uri: doc.uri },
+      position: { line: input.line - 1, character: input.column - 1 },
+    };
+
+    const targets: Array<{
+      label: "primary" | "companion";
+      connection: MessageConnection;
+    }> = [{ label: "primary", connection: this.connection }];
+    if (this.companion) {
+      targets.push({ label: "companion", connection: this.companion.connection });
+    }
+
+    const results = await Promise.allSettled(
+      targets.map(({ connection }) => this.withTimeout(connection.sendRequest(type, params)))
     );
 
-    return normalizeLocations(result, this.documents);
+    const merged: LspLocation[] = [];
+    const seen = new Set<string>();
+    let timedOut = false;
+    results.forEach((res, idx) => {
+      if (res.status === "rejected") {
+        if (res.reason instanceof LspRequestTimeoutError) {
+          timedOut = true;
+        }
+        this.deps.logger.warn(
+          { error: res.reason, label, source: targets[idx]?.label },
+          `lsp ${label} request failed`
+        );
+        return;
+      }
+      const locations = normalizeLocations(res.value, this.documents) ?? [];
+      for (const location of locations) {
+        const key = `${location.path}:${location.range.startLine}:${location.range.startColumn}:${location.range.endLine}:${location.range.endColumn}`;
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        merged.push(location);
+      }
+    });
+
+    if (timedOut) {
+      this.recoverFromRequestFailure(new LspRequestTimeoutError());
+    }
+
+    return merged;
   }
 
   private async withTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -553,13 +651,79 @@ export class LspSession {
       return;
     }
 
+    this.sendNotificationOn(connection, method, params);
+  }
+
+  private sendNotificationOn(connection: MessageConnection, method: string, params: unknown): void {
     void connection.sendNotification(method, params).catch((error) => {
       this.deps.logger.warn({ error, method }, "lsp notification send failed");
     });
   }
 
+  private broadcastNotification(method: string, params: unknown): void {
+    this.sendNotification(method, params);
+    const companion = this.companion;
+    if (companion) {
+      this.sendNotificationOn(companion.connection, method, params);
+    }
+  }
+
+  private attachStderr(child: ChildProcess, label: ChildLink["label"]): void {
+    child.stderr?.on("data", (chunk) => {
+      const message = chunk.toString().trim();
+      if (!message) {
+        return;
+      }
+
+      this.deps.logger.warn(
+        {
+          serverKind: this.deps.spec.serverKind,
+          companion: label === "companion" ? true : undefined,
+          stderr: message,
+        },
+        "lsp child stderr"
+      );
+    });
+  }
+
+  private startCompanion(spawnProcess: typeof spawn, platform: NodeJS.Platform): ChildLink {
+    const companionSpec = this.deps.spec.companion;
+    if (!companionSpec) {
+      throw new Error("startCompanion called without companion spec");
+    }
+
+    const companionChild = spawnProcess(companionSpec.command, companionSpec.args, {
+      cwd: this.deps.spec.rootPath,
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: shouldUseShellForCommand(companionSpec.command, platform),
+      windowsHide: true,
+    });
+
+    if (!companionChild.stdin || !companionChild.stdout) {
+      throw new Error("Failed to start LSP companion stdio");
+    }
+
+    this.attachStderr(companionChild, "companion");
+
+    companionChild.once("exit", () => {
+      this.handleChildTermination(companionChild);
+    });
+    companionChild.once("error", (error) => {
+      this.deps.logger.error({ err: error }, "lsp companion process error");
+      this.handleChildTermination(companionChild);
+    });
+
+    const companionConnection = createMessageConnection(
+      new StreamMessageReader(companionChild.stdout),
+      new StreamMessageWriter(companionChild.stdin)
+    );
+    companionConnection.listen();
+
+    return { child: companionChild, connection: companionConnection, label: "companion" };
+  }
+
   private handleChildTermination(child: ChildProcess): void {
-    if (this.child !== child) {
+    if (this.child !== child && this.companion?.child !== child) {
       return;
     }
 
@@ -567,8 +731,13 @@ export class LspSession {
   }
 
   private resetConnectionState(): void {
+    this.bridgeHandle?.dispose();
+    this.bridgeHandle = null;
     this.connection = null;
     this.child = null;
+    const companion = this.companion;
+    this.companion = null;
+    companion?.child.kill("SIGTERM");
     this.summary = {
       ...this.summary,
       status: "stopped",
@@ -581,8 +750,10 @@ export class LspSession {
     }
 
     const child = this.child;
-    child?.kill("SIGTERM");
+    const companionChild = this.companion?.child ?? null;
     this.resetConnectionState();
+    child?.kill("SIGTERM");
+    companionChild?.kill("SIGTERM");
   }
 }
 

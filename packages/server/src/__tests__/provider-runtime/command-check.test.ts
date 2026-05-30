@@ -57,4 +57,69 @@ describe("checkCommandAvailable", () => {
 
     expect(execFile).toHaveBeenCalledWith("where", ["codex"], { windowsHide: true });
   });
+
+  it("checks the filesystem directly for absolute Windows paths instead of invoking where", async () => {
+    // `where.exe` rejects `C:\...` arguments with "invalid pattern" because it
+    // parses the first colon as a path:pattern separator. Make sure we never
+    // hand absolute paths to it.
+    const execFile = vi.fn();
+    const absolutePath = "C:\\tools\\lsp\\vue\\node_modules\\.bin\\vue-language-server.cmd";
+
+    await expect(
+      checkCommandAvailable(absolutePath, {
+        platform: "win32",
+        runCommand: execFile,
+        existsSync: (file) => file === absolutePath,
+      })
+    ).resolves.toBe(true);
+
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it("returns false for absolute Windows paths that do not exist on disk", async () => {
+    const execFile = vi.fn();
+
+    await expect(
+      checkCommandAvailable("C:\\tools\\missing.cmd", {
+        platform: "win32",
+        runCommand: execFile,
+        existsSync: () => false,
+        pathExt: ".CMD;.EXE",
+      })
+    ).resolves.toBe(false);
+
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it("appends PATHEXT extensions when an absolute Windows path has no extension", async () => {
+    const execFile = vi.fn();
+    const baseline = "C:\\tools\\bin\\vue-language-server";
+    const resolved = `${baseline}.CMD`;
+
+    await expect(
+      checkCommandAvailable(baseline, {
+        platform: "win32",
+        runCommand: execFile,
+        existsSync: (file) => file === resolved,
+        pathExt: ".EXE;.CMD",
+      })
+    ).resolves.toBe(true);
+
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it("checks the filesystem directly for absolute POSIX paths", async () => {
+    const execFile = vi.fn();
+    const absolutePath = "/opt/coder-studio/lsp-tools/go/bin/gopls";
+
+    await expect(
+      checkCommandAvailable(absolutePath, {
+        platform: "linux",
+        runCommand: execFile,
+        existsSync: (file) => file === absolutePath,
+      })
+    ).resolves.toBe(true);
+
+    expect(execFile).not.toHaveBeenCalled();
+  });
 });
