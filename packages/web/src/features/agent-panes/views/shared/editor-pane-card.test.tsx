@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => ({
     </div>
   )),
 }));
+const paneDragEnabledMock = vi.hoisted(() => ({
+  value: true,
+}));
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string>) => {
@@ -37,6 +40,10 @@ vi.mock("../../../../lib/i18n", () => ({
   },
 }));
 
+vi.mock("../../actions/use-pane-drag-enabled", () => ({
+  usePaneDragEnabled: () => paneDragEnabledMock.value,
+}));
+
 vi.mock("../../../code-editor/actions/use-code-editor-actions", () => ({
   useCodeEditorActions: mocks.mockUseCodeEditorActions,
 }));
@@ -49,6 +56,37 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
 describe("EditorPaneCard", () => {
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("renders a drag handle in the header actions on desktop", () => {
+    const store = createStore();
+    const onClosePane = vi.fn();
+    const onSplitPane = vi.fn();
+    const onPaneDragStart = vi.fn();
+
+    mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
+    store.set(localeAtom, "en");
+    store.set(activeFilePathAtomFamily("ws-123"), "src/app.tsx");
+
+    render(
+      <Provider store={store}>
+        <EditorPaneCard
+          workspaceId="ws-123"
+          paneId="pane-1"
+          onClosePane={onClosePane}
+          onSplitPane={onSplitPane}
+          onPaneDragStart={onPaneDragStart as never}
+        />
+      </Provider>
+    );
+
+    const dragHandle = screen.getByRole("button", { name: "Drag pane" });
+
+    expect(dragHandle).toBeInTheDocument();
+
+    fireEvent.pointerDown(dragHandle);
+
+    expect(onPaneDragStart).toHaveBeenCalledWith(expect.objectContaining({ paneId: "pane-1" }));
   });
 
   it("renders editor pane actions and delegates split and close callbacks", () => {

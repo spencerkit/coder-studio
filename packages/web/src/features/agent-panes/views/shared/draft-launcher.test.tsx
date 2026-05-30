@@ -7,10 +7,17 @@ import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import { DraftLauncher } from "./draft-launcher";
 
 const mockUseProviderLauncher = vi.fn();
+const paneDragEnabledMock = vi.hoisted(() => ({
+  value: true,
+}));
 const originalResizeObserver = global.ResizeObserver;
 
 vi.mock("../../actions/use-provider-launcher", () => ({
   useProviderLauncher: (...args: unknown[]) => mockUseProviderLauncher(...args),
+}));
+
+vi.mock("../../actions/use-pane-drag-enabled", () => ({
+  usePaneDragEnabled: () => paneDragEnabledMock.value,
 }));
 
 function createRuntimeState(providerId: "claude" | "codex") {
@@ -85,6 +92,7 @@ describe("DraftLauncher", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    paneDragEnabledMock.value = true;
     mockUseProviderLauncher.mockReturnValue({
       states: {
         claude: createRuntimeState("claude"),
@@ -137,6 +145,29 @@ describe("DraftLauncher", () => {
     expect(onSplitPane).toHaveBeenNthCalledWith(1, "pane-1", "horizontal");
     expect(onSplitPane).toHaveBeenNthCalledWith(2, "pane-1", "vertical");
     expect(onClosePane).toHaveBeenCalledWith("pane-1");
+  });
+
+  it("renders a drag handle in the header actions on desktop", () => {
+    const store = createDraftLauncherStore();
+    const onPaneDragStart = vi.fn();
+
+    render(
+      <Provider store={store}>
+        <DraftLauncher
+          workspaceId="ws-123"
+          paneId="pane-1"
+          onPaneDragStart={onPaneDragStart as never}
+        />
+      </Provider>
+    );
+
+    const dragHandle = screen.getByRole("button", { name: "Drag pane" });
+
+    expect(dragHandle).toBeInTheDocument();
+
+    fireEvent.pointerDown(dragHandle);
+
+    expect(onPaneDragStart).toHaveBeenCalledWith(expect.objectContaining({ paneId: "pane-1" }));
   });
 
   it("renders provider cards with semantic business icons", () => {

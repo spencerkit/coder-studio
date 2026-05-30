@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { FlipHorizontal, FlipVertical, X } from "lucide-react";
+import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
 import type { FC } from "react";
 import { useState } from "react";
 import { ConfirmDialog, IconButton, Tooltip } from "../../../../components/ui";
@@ -11,6 +11,9 @@ import {
 } from "../../../code-editor/views/shared/code-editor-host";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../../workspace/atoms";
+import type { PaneDropPlacement } from "../../actions/pane-drag-types";
+import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
+import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 
 function getEditorPaneTitle(path: string | null): string {
   if (!path) {
@@ -22,16 +25,24 @@ function getEditorPaneTitle(path: string | null): string {
 }
 
 interface EditorPaneCardProps {
+  dragState?: {
+    isDragging: boolean;
+    isActiveDropTarget: boolean;
+    hoverPlacement: PaneDropPlacement | null;
+  };
   paneId: string;
   workspaceId: string;
   onClosePane: (paneId: string) => void;
+  onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
   onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
 }
 
 export const EditorPaneCard: FC<EditorPaneCardProps> = ({
+  dragState,
   paneId,
   workspaceId,
   onClosePane,
+  onPaneDragStart,
   onSplitPane,
 }) => {
   const t = useTranslation();
@@ -39,9 +50,12 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const editorState = useCodeEditorActions();
+  const supportsPaneDrag = usePaneDragEnabled();
+  const canDragPane = supportsPaneDrag && Boolean(onPaneDragStart);
   const title = getEditorPaneTitle(activeFilePath);
   const activeOpenFile = activeFilePath ? openFiles[activeFilePath] : undefined;
   const isDirtyTextFile = activeOpenFile?.kind === "text" && activeOpenFile.isDirty === true;
+  const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
   const dirtyIndicator = isDirtyTextFile ? (
     <span
       className="dirty-indicator editor-pane-card__dirty-indicator"
@@ -64,16 +78,44 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
 
   return (
     <div
-      className="session-card agent-pane editor-pane-card"
+      className={`session-card agent-pane editor-pane-card${dragState?.isDragging ? " editor-pane-card--dragging" : ""}${dragState?.isActiveDropTarget ? " editor-pane-card--drop-target" : ""}`}
       data-pane-id={paneId}
       data-testid={`editor-pane-${paneId}`}
     >
+      {dragOverlayPlacement ? (
+        <div className={`pane-drop-overlay pane-drop-overlay--${dragOverlayPlacement}`}>
+          {dragOverlayPlacement === "center" ? (
+            <div className="pane-drop-overlay__center">Swap</div>
+          ) : null}
+        </div>
+      ) : null}
+
       <PanelHeader
         title={title}
         meta={dirtyIndicator}
         metaPlacement="inline"
         actions={
           <>
+            {canDragPane ? (
+              <Tooltip content="Drag pane">
+                <IconButton
+                  aria-label="Drag pane"
+                  className="session-action-btn session-action-btn-drag"
+                  icon={<GripVertical size={13} />}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    if (event.pointerType === "touch") {
+                      return;
+                    }
+
+                    onPaneDragStart?.({ paneId });
+                  }}
+                  size="sm"
+                />
+              </Tooltip>
+            ) : null}
             <CodeEditorDesktopHeaderActions state={editorState} showCloseAction={false} />
             <Tooltip content="Split horizontal">
               <IconButton

@@ -70,10 +70,6 @@ function resolvePlacement(
     return null;
   }
 
-  if (pane.type === "draft") {
-    return "center";
-  }
-
   const edgeX = clampEdgeBand(rect.width);
   const edgeY = clampEdgeBand(rect.height);
 

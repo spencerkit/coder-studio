@@ -113,7 +113,7 @@ type MockDraftLauncherProps = {
   dragState?: {
     isActiveDropTarget: boolean;
     isDragging: boolean;
-    hoverPlacement: "center" | null;
+    hoverPlacement: PaneDropIntent["placement"] | null;
   };
   workspaceId: string;
   paneId?: string;
@@ -168,14 +168,32 @@ vi.mock("./views/shared/draft-launcher", async () => {
 const mockEditorPaneCard = vi.fn(
   ({
     paneId,
+    dragState,
     onClosePane,
+    onPaneDragStart,
   }: {
     paneId: string;
     workspaceId: string;
+    dragState?: {
+      isActiveDropTarget: boolean;
+      isDragging: boolean;
+      hoverPlacement: PaneDropIntent["placement"] | null;
+    };
     onClosePane: (paneId: string) => void;
+    onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
     onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   }) => (
-    <div data-testid={`editor-pane-${paneId}`}>
+    <div
+      data-testid={`editor-pane-${paneId}`}
+      data-dragging={dragState?.isDragging ? "true" : undefined}
+      data-drop-target={dragState?.isActiveDropTarget ? "true" : undefined}
+      data-hover-placement={dragState?.hoverPlacement ?? undefined}
+    >
+      {onPaneDragStart ? (
+        <button type="button" onPointerDown={() => onPaneDragStart({ paneId, title: paneId })}>
+          drag-{paneId}
+        </button>
+      ) : null}
       <button type="button" onClick={() => onClosePane(paneId)}>
         close-editor-{paneId}
       </button>
@@ -187,7 +205,13 @@ vi.mock("./views/shared/editor-pane-card", () => ({
   EditorPaneCard: (props: {
     paneId: string;
     workspaceId: string;
+    dragState?: {
+      isActiveDropTarget: boolean;
+      isDragging: boolean;
+      hoverPlacement: PaneDropIntent["placement"] | null;
+    };
     onClosePane: (paneId: string) => void;
+    onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
     onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   }) => mockEditorPaneCard(props),
 }));
@@ -586,7 +610,7 @@ describe("AgentPanes", () => {
     );
   });
 
-  it("moves a session into a draft pane on a center drop over a draft target", async () => {
+  it("swaps a session with a draft pane on a center drop over a draft target", async () => {
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "session.list") {
         return [
@@ -644,9 +668,14 @@ describe("AgentPanes", () => {
 
     await waitFor(() => {
       expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
-        id: "right",
-        type: "leaf",
-        sessionId: "sess_1",
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf" },
+          { id: "right", type: "leaf", sessionId: "sess_1" },
+        ],
       });
     });
 
@@ -656,9 +685,14 @@ describe("AgentPanes", () => {
         workspaceId: "ws-1",
         uiState: expect.objectContaining({
           paneLayout: {
-            id: "right",
-            type: "leaf",
-            sessionId: "sess_1",
+            id: "root",
+            type: "split",
+            direction: "horizontal",
+            ratio: 0.5,
+            children: [
+              { id: "left", type: "leaf" },
+              { id: "right", type: "leaf", sessionId: "sess_1" },
+            ],
           },
         }),
       }),
@@ -863,6 +897,103 @@ describe("AgentPanes", () => {
     });
 
     expect(document.body).not.toHaveClass("is-dragging-pane");
+  });
+
+  it("registers editor pane wrappers as drop targets and swaps with a session through pointer drag", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+        { id: "right", type: "leaf", leafKind: "editor" },
+      ],
+    });
+    store.set(activeEditorPaneIdAtomFamily("ws-1"), "right");
+    store.set(focusedEditorPaneIdAtomFamily("ws-1"), "right");
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    const editorPane = setPaneRect("right", { left: 260, top: 0, width: 220, height: 180 });
+    setPaneRect("left", { left: 0, top: 0, width: 220, height: 180 });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "drag-sess_1" }));
+    fireEvent.pointerMove(window, { clientX: 370, clientY: 90 });
+
+    await waitFor(() => {
+      expect(editorPane).toHaveAttribute("data-pane-drop-target", "true");
+      expect(editorPane).toHaveAttribute("data-pane-hover-placement", "center");
+    });
+
+    fireEvent.pointerUp(window, { clientX: 370, clientY: 90 });
+
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", leafKind: "editor" },
+          { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+        ],
+      });
+      expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("left");
+    });
+  });
+
+  it("keeps editor focus attached when the editor pane is dragged over a session", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+      ],
+    });
+    store.set(activeEditorPaneIdAtomFamily("ws-1"), "left");
+    store.set(focusedEditorPaneIdAtomFamily("ws-1"), "left");
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    setPaneRect("left", { left: 0, top: 0, width: 220, height: 180 });
+    const sessionPane = setPaneRect("right", { left: 260, top: 0, width: 220, height: 180 });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "drag-left" }));
+    fireEvent.pointerMove(window, { clientX: 370, clientY: 90 });
+
+    await waitFor(() => {
+      expect(sessionPane).toHaveAttribute("data-pane-drop-target", "true");
+      expect(sessionPane).toHaveAttribute("data-pane-hover-placement", "center");
+    });
+
+    fireEvent.pointerUp(window, { clientX: 370, clientY: 90 });
+
+    await waitFor(() => {
+      expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.5,
+        children: [
+          { id: "left", type: "leaf", leafKind: "session", sessionId: "sess_1" },
+          { id: "right", type: "leaf", leafKind: "editor" },
+        ],
+      });
+      expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("right");
+      expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBe("right");
+    });
   });
 
   it("keeps the remaining draft pane visible after closing the last session pane", async () => {

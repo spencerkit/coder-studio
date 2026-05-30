@@ -1,6 +1,6 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { ArrowRight, FlipHorizontal, FlipVertical, X } from "lucide-react";
+import { ArrowRight, FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
 import { type DragEvent, type FC, type PointerEvent, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
@@ -11,7 +11,9 @@ import {
   hasWorkspacePathDragType,
 } from "../../../../lib/workspace-path-drag";
 import { buildDiagnosticsPath } from "../../../diagnostics";
-import type { PaneDropIntent } from "../../actions/pane-drag-types";
+import type { PaneDropIntent, PaneDropPlacement } from "../../actions/pane-drag-types";
+import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
+import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 import { type ProviderId, useProviderLauncher } from "../../actions/use-provider-launcher";
 
 const COMPACT_CAROUSEL_MAX_WIDTH_REM = 28;
@@ -35,13 +37,14 @@ function getCompactCarouselMaxWidthPx(): number {
 interface DraftLauncherDragState {
   isDragging: boolean;
   isActiveDropTarget: boolean;
-  hoverPlacement: "center" | null;
+  hoverPlacement: PaneDropPlacement | null;
 }
 
 interface DraftLauncherProps {
   dragState?: DraftLauncherDragState;
   workspaceId: string;
   paneId?: string;
+  onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
   onAssignSession?: (paneId: string, sessionId: string) => void;
   onClosePane?: (paneId: string) => void;
   onOpenFile?: (paneId: string, path: string) => void;
@@ -54,6 +57,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   dragState,
   workspaceId,
   paneId,
+  onPaneDragStart,
   onAssignSession,
   onClosePane,
   onOpenFile,
@@ -69,6 +73,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
   const draftLauncherRef = useRef<HTMLDivElement | null>(null);
   const swipeStartXRef = useRef<number | null>(null);
+  const supportsPaneDrag = usePaneDragEnabled();
+  const canDragPane = supportsPaneDrag && Boolean(paneId && onPaneDragStart);
+  const paneDropOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
   const { states, launch } = useProviderLauncher(
     dispatch,
     workspaceId,
@@ -307,8 +314,8 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
         <div className="pane-drop-overlay pane-drop-overlay--draft">
           <div className="pane-drop-overlay__center">Open in editor</div>
         </div>
-      ) : dragState?.isActiveDropTarget ? (
-        <div className="pane-drop-overlay pane-drop-overlay--draft">
+      ) : paneDropOverlayPlacement ? (
+        <div className={`pane-drop-overlay pane-drop-overlay--${paneDropOverlayPlacement}`}>
           <div className="pane-drop-overlay__center">Move here</div>
         </div>
       ) : null}
@@ -327,6 +334,30 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
         </div>
 
         <div className="session-header-actions">
+          {canDragPane ? (
+            <Tooltip content="Drag pane">
+              <IconButton
+                aria-label="Drag pane"
+                className="session-action-btn session-action-btn-drag"
+                icon={<GripVertical size={13} />}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+
+                  if (event.pointerType === "touch") {
+                    return;
+                  }
+
+                  if (!paneId) {
+                    return;
+                  }
+
+                  onPaneDragStart?.({ paneId });
+                }}
+                size="sm"
+              />
+            </Tooltip>
+          ) : null}
           <Tooltip content="Split horizontal">
             <IconButton
               aria-label="Split horizontal"

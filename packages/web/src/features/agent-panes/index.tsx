@@ -68,7 +68,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   });
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
-  const { insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions } = paneActions;
+  const { insertPaneAtEdge, swapPaneLeaves } = paneActions;
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
   const shouldShowStandaloneDraftLauncher =
     sessions.length === 0 &&
@@ -124,19 +124,53 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
 
   const handlePaneDrop = useCallback(
     (intent: PaneDropIntent) => {
-      if (intent.placement === "center") {
-        if (intent.targetType === "draft") {
-          moveSessionToDraft(intent.sourcePaneId, intent.targetPaneId);
+      const sourceWasEditor = paneLayoutHasEditorPaneId(paneLayout, intent.sourcePaneId);
+      const targetWasEditor = paneLayoutHasEditorPaneId(paneLayout, intent.targetPaneId);
+      const previousEditorPaneId = sourceWasEditor
+        ? intent.sourcePaneId
+        : targetWasEditor
+          ? intent.targetPaneId
+          : null;
+      let nextEditorPaneId = previousEditorPaneId;
+      const syncEditorPaneFocus = () => {
+        if (
+          !previousEditorPaneId ||
+          !nextEditorPaneId ||
+          previousEditorPaneId === nextEditorPaneId
+        ) {
           return;
         }
 
-        swapPaneSessions(intent.sourcePaneId, intent.targetPaneId);
+        setActiveEditorPaneId((current) =>
+          current === previousEditorPaneId ? nextEditorPaneId : current
+        );
+        setFocusedEditorPaneId((current) =>
+          current === previousEditorPaneId ? nextEditorPaneId : current
+        );
+      };
+
+      if (intent.placement === "center") {
+        if (sourceWasEditor) {
+          nextEditorPaneId = intent.targetPaneId;
+        } else if (targetWasEditor) {
+          nextEditorPaneId = intent.sourcePaneId;
+        }
+
+        swapPaneLeaves(intent.sourcePaneId, intent.targetPaneId);
+        syncEditorPaneFocus();
         return;
       }
 
-      insertSessionPaneAtEdge(intent.sourcePaneId, intent.targetPaneId, intent.placement);
+      if (sourceWasEditor) {
+        nextEditorPaneId = intent.sourcePaneId;
+      } else if (targetWasEditor) {
+        nextEditorPaneId = intent.targetPaneId;
+      }
+
+      insertPaneAtEdge(intent.sourcePaneId, intent.targetPaneId, intent.placement);
+      syncEditorPaneFocus();
     },
-    [insertSessionPaneAtEdge, moveSessionToDraft, swapPaneSessions]
+    [insertPaneAtEdge, paneLayout, setActiveEditorPaneId, setFocusedEditorPaneId, swapPaneLeaves]
   );
   const dragController = usePaneDragController({
     enabled: paneDragEnabled,
@@ -285,12 +319,8 @@ const PaneLeaf: FC<PaneLeafProps> = ({
       return;
     }
 
-    if (isEditorLeaf(node)) {
-      return;
-    }
-
     dragController.registerPane(node.id, {
-      type: node.sessionId ? "session" : "draft",
+      type: isEditorLeaf(node) ? "editor" : node.sessionId ? "session" : "draft",
       element,
     });
 
@@ -299,7 +329,9 @@ const PaneLeaf: FC<PaneLeafProps> = ({
     };
   }, [dragController, node]);
 
-  if (node.sessionId) {
+  const sessionId = node.sessionId;
+
+  if (sessionId) {
     return (
       <div
         ref={leafRef}
@@ -315,13 +347,13 @@ const PaneLeaf: FC<PaneLeafProps> = ({
           paneId={node.id}
           onPaneDragStart={dragController.startDrag}
           onPaneDrop={onPaneDrop}
-          sessionId={node.sessionId}
+          sessionId={sessionId}
           onClose={async () => {
-            onCloseSession(node.sessionId);
-            await onCloseSessionCommand(node.sessionId, "draft");
+            onCloseSession(sessionId);
+            await onCloseSessionCommand(sessionId, "draft");
           }}
-          onSplitHorizontal={() => onSplitSession(node.sessionId!, "horizontal")}
-          onSplitVertical={() => onSplitSession(node.sessionId!, "vertical")}
+          onSplitHorizontal={() => onSplitSession(sessionId, "horizontal")}
+          onSplitVertical={() => onSplitSession(sessionId, "vertical")}
         />
       </div>
     );
@@ -334,11 +366,15 @@ const PaneLeaf: FC<PaneLeafProps> = ({
         className="agent-pane-leaf"
         data-pane-id={node.id}
         data-pane-dragging={dragState.isDragging ? "true" : undefined}
+        data-pane-drop-target={dragState.isActiveDropTarget ? "true" : undefined}
+        data-pane-hover-placement={dragState.hoverPlacement ?? undefined}
         onPointerDownCapture={() => onActivateEditorPane(node.id)}
       >
         <EditorPaneCard
+          dragState={dragState}
           paneId={node.id}
           workspaceId={workspaceId}
+          onPaneDragStart={dragController.startDrag}
           onClosePane={onCloseEditorPane}
           onSplitPane={onSplitDraftPane}
         />
@@ -360,10 +396,11 @@ const PaneLeaf: FC<PaneLeafProps> = ({
         dragState={{
           isDragging: dragState.isDragging,
           isActiveDropTarget: dragState.isActiveDropTarget,
-          hoverPlacement: dragState.hoverPlacement === "center" ? "center" : null,
+          hoverPlacement: dragState.isActiveDropTarget ? dragState.hoverPlacement : null,
         }}
         workspaceId={workspaceId}
         paneId={node.id}
+        onPaneDragStart={dragController.startDrag}
         onAssignSession={onAssignSession}
         onClosePane={onCloseDraftPane}
         onOpenFile={onOpenFile}

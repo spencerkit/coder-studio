@@ -1,6 +1,6 @@
-import type { PaneNode } from "./atoms/pane-layout";
+import type { PaneLeaf, PaneNode, PaneSplit } from "./atoms/pane-layout";
 
-type PaneDirection = NonNullable<PaneNode["direction"]>;
+type PaneDirection = NonNullable<PaneSplit["direction"]>;
 type PaneDropPlacement = "left" | "right" | "top" | "bottom" | "center";
 
 function isLegacyLeaf(node: PaneNode): boolean {
@@ -44,7 +44,7 @@ export function paneLayoutHasDraftPaneId(node: PaneNode, paneId: string): boolea
   return leaf ? isDraftLeaf(leaf) : false;
 }
 
-function createDraftLeaf(id: string, legacy = false): PaneNode {
+function createDraftLeaf(id: string, legacy = false): PaneLeaf {
   return {
     id,
     type: "leaf",
@@ -52,7 +52,7 @@ function createDraftLeaf(id: string, legacy = false): PaneNode {
   };
 }
 
-function createSessionLeaf(id: string, sessionId: string, legacy = false): PaneNode {
+function createSessionLeaf(id: string, sessionId: string, legacy = false): PaneLeaf {
   return {
     id,
     type: "leaf",
@@ -61,11 +61,18 @@ function createSessionLeaf(id: string, sessionId: string, legacy = false): PaneN
   };
 }
 
-function createEditorLeaf(id: string): PaneNode {
+function createEditorLeaf(id: string): PaneLeaf {
   return {
     id,
     type: "leaf",
     leafKind: "editor",
+  };
+}
+
+function cloneLeafWithId(leaf: PaneLeaf, id: string): PaneLeaf {
+  return {
+    ...leaf,
+    id,
   };
 }
 
@@ -76,7 +83,7 @@ function createDragSplitId(
   return `split-${targetPaneId}-${placement}-${Date.now()}`;
 }
 
-function findLeafByPaneId(node: PaneNode, paneId: string): PaneNode | null {
+function findLeafByPaneId(node: PaneNode, paneId: string): PaneLeaf | null {
   if (node.type === "leaf") {
     return node.id === paneId ? node : null;
   }
@@ -94,7 +101,7 @@ function findLeafByPaneId(node: PaneNode, paneId: string): PaneNode | null {
 function replaceLeafByPaneId(
   node: PaneNode,
   paneId: string,
-  replace: (leaf: PaneNode) => PaneNode
+  replace: (leaf: PaneLeaf) => PaneNode
 ): PaneNode {
   if (node.type === "leaf") {
     if (node.id !== paneId) {
@@ -332,7 +339,7 @@ export function swapPaneSessionsByPaneId(
   }));
 }
 
-export function moveSessionToDraftPane(
+export function swapPaneLeavesByPaneId(
   node: PaneNode,
   sourcePaneId: string,
   targetPaneId: string
@@ -343,14 +350,17 @@ export function moveSessionToDraftPane(
 
   const source = findLeafByPaneId(node, sourcePaneId);
   const target = findLeafByPaneId(node, targetPaneId);
-  if (!source?.sessionId || !target || target.sessionId) {
+  if (!source || !target) {
     return node;
   }
 
-  const stripped =
-    removeLeafByPaneId(node, sourcePaneId) ??
-    createDraftLeaf(node.id, node.type === "leaf" && isLegacyLeaf(node));
-  return assignSessionToPane(stripped, targetPaneId, source.sessionId);
+  const withSourceSwapped = replaceLeafByPaneId(node, sourcePaneId, (leaf) =>
+    cloneLeafWithId(target, leaf.id)
+  );
+
+  return replaceLeafByPaneId(withSourceSwapped, targetPaneId, (leaf) =>
+    cloneLeafWithId(source, leaf.id)
+  );
 }
 
 export function insertPaneAtEdge(
@@ -365,14 +375,14 @@ export function insertPaneAtEdge(
 
   const source = findLeafByPaneId(node, sourcePaneId);
   const target = findLeafByPaneId(node, targetPaneId);
-  if (!source?.sessionId || !target?.sessionId) {
+  if (!source || !target) {
     return node;
   }
 
   const stripped =
     removeLeafByPaneId(node, sourcePaneId) ??
     createDraftLeaf(node.id, node.type === "leaf" && isLegacyLeaf(node));
-  const incomingLeaf = createSessionLeaf(source.id, source.sessionId, isLegacyLeaf(source));
+  const incomingLeaf = cloneLeafWithId(source, source.id);
 
   return replaceLeafByPaneId(stripped, targetPaneId, (leaf) => ({
     id: createDragSplitId(leaf.id, placement),
