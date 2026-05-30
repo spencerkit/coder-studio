@@ -12,6 +12,7 @@ import {
   type CommandCheckDeps,
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
+import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
 import {
   getLspCommandOverridePrefix,
   getLspToolDefinition,
@@ -102,7 +103,7 @@ export class LspToolManager {
       };
     }
 
-    if (await commandExists(definition.defaultCommand)) {
+    if (await this.isSystemCommandUsable(definition.defaultCommand, commandExists)) {
       return {
         kind: "ready",
         serverKind: input.serverKind,
@@ -145,6 +146,43 @@ export class LspToolManager {
       missingPrerequisites: result.missingPrerequisites,
       message: result.message,
     };
+  }
+
+  /**
+   * Decide whether a system-PATH command should be treated as a usable LSP
+   * source. `commandExists` only checks PATH presence, but Windows is full of
+   * zero-byte or proxy shims that satisfy that check yet refuse to actually
+   * run:
+   *
+   *  - `%LOCALAPPDATA%\Microsoft\WindowsApps\python(3).exe` — Microsoft
+   *    Store app execution aliases that redirect to the Store when the
+   *    underlying app isn't installed.
+   *  - `~/.cargo/bin/rust-analyzer.exe` when the `rust-analyzer` rustup
+   *    component isn't installed — the rustup proxy prints
+   *    "Unknown binary 'rust-analyzer.exe' in official toolchain" and exits.
+   *
+   * Accepting either of those as a "system" source leads to ambiguous LSP
+   * timeouts the first time a hover lands. Probe with `--version` on
+   * Windows so we fall through to the managed install path instead.
+   */
+  private async isSystemCommandUsable(
+    command: string,
+    commandExists: CommandAvailabilityCheck
+  ): Promise<boolean> {
+    if (!(await commandExists(command))) {
+      return false;
+    }
+    const platform = this.deps.platform ?? process.platform;
+    if (platform !== "win32") {
+      return true;
+    }
+    const runCommand: CommandRunner = this.deps.runCommand ?? runCommandAsString;
+    try {
+      const result = await runCommand(command, ["--version"], { windowsHide: true });
+      return `${result.stdout}\n${result.stderr}`.trim().length > 0;
+    } catch {
+      return false;
+    }
   }
 
   private resolveOverride(
@@ -238,7 +276,11 @@ export class LspToolManager {
 
     if (managed && workspace.targetRuntime === "native") {
       if (definition.serverKind === "python") {
-        const pythonCommand = await resolveManagedPythonCommand(commandExists, platform);
+        const pythonCommand = await resolveManagedPythonCommand(
+          commandExists,
+          platform,
+          this.deps.runCommand
+        );
         if (!pythonCommand) {
           missingPrerequisites.push(...getManagedPrerequisites("python", platform));
         }

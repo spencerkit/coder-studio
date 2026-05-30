@@ -63,6 +63,13 @@ export class LspManager {
         error: (...args: unknown[]) => void;
       };
       requestTimeoutMs: number;
+      /**
+       * Timeout for the one-off LSP `initialize` request. Defaults to
+       * `requestTimeoutMs * 10` inside `LspSession`; override here if you
+       * want a different ceiling without inflating `requestTimeoutMs` (which
+       * also governs every hover/definition query).
+       */
+      initializeTimeoutMs?: number;
       idleTtlMs: number;
       restartLimit: number;
       lspToolMgr: LspToolManager;
@@ -189,6 +196,7 @@ export class LspManager {
       workspacePath: workspace.path,
       spec,
       requestTimeoutMs: this.deps.requestTimeoutMs,
+      initializeTimeoutMs: this.deps.initializeTimeoutMs,
       logger: this.deps.logger,
       onDiagnostics: (payload) =>
         this.deps.eventBus.emit({

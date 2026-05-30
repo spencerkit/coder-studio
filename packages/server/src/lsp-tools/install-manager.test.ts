@@ -49,6 +49,30 @@ describe("LspToolInstallManager", () => {
     });
   });
 
+  it("fails with missing_prerequisite when the Windows python candidate is a Microsoft Store stub", async () => {
+    // Regression test: `where.exe python` returns the zero-byte App
+    // Execution Alias at `%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe`
+    // even when Python is not installed. The manager must reject the
+    // candidate via the version probe instead of silently falling through
+    // to the venv install step (which then fails opaquely).
+    const manager = new LspToolInstallManager({
+      manifestStore: new FileManifestStore(mkdtempSync(join(tmpdir(), "lsp-tools-"))),
+      platform: "win32",
+      // `where` finds both stubs.
+      commandExists: vi.fn(async () => true),
+      // ...but invoking the stub produces no output (Store stub behavior).
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
+    });
+
+    const job = await manager.start({ workspace, serverKind: "python" });
+
+    expect(job.status).toBe("failed");
+    expect(job.failure).toMatchObject({
+      code: "missing_prerequisite",
+      missingCommands: ["python3", "python"],
+    });
+  });
+
   it("allows managed Python install on Windows when python is available but python3 is not", async () => {
     const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
     let installed = false;
@@ -72,6 +96,13 @@ describe("LspToolInstallManager", () => {
         return false;
       }),
       runCommand: vi.fn(async (file: string, args: string[]) => {
+        // The resolver also probes `python --version` on Windows to defend
+        // against Microsoft Store stubs. Return a believable version banner
+        // so the candidate is accepted.
+        if (file === "python" && args[0] === "--version") {
+          return { stdout: "Python 3.12.0\n", stderr: "" };
+        }
+
         if (file === "python" && args[0] === "-m" && args[1] === "venv") {
           return { stdout: "created venv", stderr: "" };
         }
@@ -81,7 +112,7 @@ describe("LspToolInstallManager", () => {
           return { stdout: "installed pylsp", stderr: "" };
         }
 
-        throw new Error(`unexpected command: ${file}`);
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
       }),
     });
 
@@ -239,6 +270,10 @@ describe("LspToolInstallManager", () => {
     });
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(mkdtempSync(join(tmpdir(), "lsp-tools-"))),
+      // Pin platform so the Windows-only Microsoft Store stub probe (which
+      // calls `python --version`) doesn't intercept the ENOENT we want the
+      // install step itself to surface.
+      platform: "linux",
       commandExists: vi.fn(async () => true),
       runCommand: vi.fn(async () => {
         throw installError;
@@ -288,6 +323,12 @@ describe("LspToolInstallManager", () => {
         return false;
       }),
       runCommand: vi.fn(async (file: string, args: string[]) => {
+        // On Windows the resolver probes `python3 --version` to defend
+        // against the Microsoft Store stub. Return a believable banner.
+        if (file === "python3" && args[0] === "--version") {
+          return { stdout: "Python 3.12.0\n", stderr: "" };
+        }
+
         if (file === "python3" && args[0] === "-m" && args[1] === "venv") {
           return { stdout: "created venv", stderr: "" };
         }
@@ -297,7 +338,7 @@ describe("LspToolInstallManager", () => {
           return { stdout: "installed pylsp", stderr: "" };
         }
 
-        throw new Error(`unexpected command: ${file}`);
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
       }),
     });
 

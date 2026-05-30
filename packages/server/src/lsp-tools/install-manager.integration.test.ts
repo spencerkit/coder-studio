@@ -117,7 +117,20 @@ describe(`LspToolInstallManager verify step (platform=${PLATFORM})`, () => {
     const root = mkdtempSync(join(tmpdir(), `lsp-install-${serverKind}-`));
     const expectedPath = pathFn(root, PLATFORM);
 
-    const runCommand = vi.fn(async () => {
+    const runCommand = vi.fn(async (file: string, args: string[]) => {
+      // On Windows, the python prereq resolver probes `<candidate>
+      // --version` to defend against the Microsoft Store stub. Return a
+      // believable banner so the probe accepts the candidate; otherwise
+      // the install would short-circuit with `missing_prerequisite`
+      // before ever reaching the verify step under test.
+      if (
+        PLATFORM === "win32" &&
+        serverKind === "python" &&
+        (file === "python" || file === "python3") &&
+        args[0] === "--version"
+      ) {
+        return { stdout: "Python 3.12.0\n", stderr: "" };
+      }
       // Simulate the install step actually putting the executable on disk
       // so the verify step (real `checkCommandAvailable`) can find it.
       mkdirSync(dirname(expectedPath), { recursive: true });
@@ -170,7 +183,20 @@ describe(`LspToolInstallManager verify step (platform=${PLATFORM})`, () => {
       commandExists: smartCommandExists,
       // runCommand succeeds but never writes the file, simulating an
       // install step that silently completed without producing the binary.
-      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
+      // For python on Windows we also need to satisfy the `--version`
+      // probe, otherwise the prereq resolver would short-circuit before
+      // ever reaching the verify step under test.
+      runCommand: vi.fn(async (file: string, args: string[]) => {
+        if (
+          PLATFORM === "win32" &&
+          serverKind === "python" &&
+          (file === "python" || file === "python3") &&
+          args[0] === "--version"
+        ) {
+          return { stdout: "Python 3.12.0\n", stderr: "" };
+        }
+        return { stdout: "", stderr: "" };
+      }),
     });
 
     const job = await manager.start({ workspace, serverKind });

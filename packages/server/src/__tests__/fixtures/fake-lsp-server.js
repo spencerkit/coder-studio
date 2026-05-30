@@ -16,9 +16,10 @@ const connection = createMessageConnection(
 const docs = new Map();
 const exitAfterInitMs = Number(process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS ?? "0");
 const hoverDelayMs = Number(process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS ?? "0");
+const initDelayMs = Number(process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS ?? "0");
 const stderrOnInit = process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT ?? "";
 
-connection.onRequest("initialize", () => {
+connection.onRequest("initialize", async () => {
   if (stderrOnInit) {
     process.stderr.write(`${stderrOnInit}\n`);
   }
@@ -26,6 +27,13 @@ connection.onRequest("initialize", () => {
   if (exitAfterInitMs > 0) {
     const timer = setTimeout(() => process.exit(0), exitAfterInitMs);
     timer.unref?.();
+  }
+
+  if (initDelayMs > 0) {
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, initDelayMs);
+      timer.unref?.();
+    });
   }
 
   return {

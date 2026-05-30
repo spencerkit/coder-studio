@@ -260,7 +260,15 @@ export async function createServer(
     workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
     eventBus,
     logger: app.log,
-    requestTimeoutMs: 2000,
+    // Semantic queries (hover/definition/references/...) should fail fast so
+    // the editor's "Loading..." popup doesn't linger. 8s is comfortable for
+    // any LSP that's actually responsive.
+    requestTimeoutMs: 8_000,
+    // The one-off `initialize` request is a different beast — rust-analyzer
+    // can take 20-30s to scan a Cargo workspace and load proc-macros on
+    // first boot, and the Vue companion can be slow to start tsserver too.
+    // 60s is generous but caps the wait when the server is truly dead.
+    initializeTimeoutMs: 60_000,
     idleTtlMs: 60_000,
     restartLimit: 2,
     lspToolMgr,

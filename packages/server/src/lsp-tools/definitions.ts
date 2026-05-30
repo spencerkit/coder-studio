@@ -1,4 +1,5 @@
 import type { LspServerKind } from "@coder-studio/core";
+import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
 
 export const VUE_LANGUAGE_SERVER_VERSION = "3.3.2";
 export const VUE_TYPESCRIPT_VERSION = "6.0.3";
@@ -102,14 +103,41 @@ export function getManagedPrerequisites(
 
 export async function resolveManagedPythonCommand(
   commandExists: (command: string) => Promise<boolean>,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  runCommand: CommandRunner = runCommandAsString
 ): Promise<string | null> {
   const candidates = getManagedPrerequisites("python", platform);
   for (const candidate of candidates) {
-    if (await commandExists(candidate)) {
-      return candidate;
+    if (!(await commandExists(candidate))) {
+      continue;
     }
+    if (platform === "win32" && !(await isWindowsPythonAlive(candidate, runCommand))) {
+      // `where python(3)` happily returns
+      // `%LOCALAPPDATA%\Microsoft\WindowsApps\python(3).exe` even when Python
+      // is not installed — those are zero-byte Microsoft Store "App Execution
+      // Aliases" that redirect to the Store. Accepting them would pass the
+      // prerequisite check and then explode at the `python -m venv ...`
+      // install step with an empty/non-existent venv. Probe the candidate
+      // with `--version` and require it to actually print something.
+      continue;
+    }
+    return candidate;
   }
 
   return null;
+}
+
+/**
+ * Returns true if invoking `<command> --version` produces any output. Python
+ * prints its version to stdout from 3.4 onwards and stderr on older builds,
+ * so we accept either. The Microsoft Store stub prints nothing.
+ */
+async function isWindowsPythonAlive(command: string, runCommand: CommandRunner): Promise<boolean> {
+  try {
+    const result = await runCommand(command, ["--version"], { windowsHide: true });
+    const combined = `${result.stdout}\n${result.stderr}`.trim();
+    return combined.length > 0;
+  } catch {
+    return false;
+  }
 }

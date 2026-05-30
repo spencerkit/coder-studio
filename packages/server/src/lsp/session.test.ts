@@ -592,6 +592,100 @@ describe.sequential("LspSession", () => {
     expect((session as WithCompanion).companion).toBeNull();
   });
 
+  it("uses initializeTimeoutMs (not requestTimeoutMs) for the LSP initialize handshake", async () => {
+    // Regression test: rust-analyzer's `initialize` routinely takes 10-30s in
+    // real projects, but per-request semantic queries should still fail fast.
+    // The session must wait the longer ceiling for initialize and the short
+    // one for hover/definition. Here we simulate a 350ms initialize and a
+    // 1000ms hover; with a request timeout of 200ms the initialize must
+    // still succeed and the hover must still time out.
+    const previousInit = process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS;
+    const previousHover = process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS;
+    process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS = "350";
+    process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS = "1000";
+
+    try {
+      const session = new LspSession({
+        workspaceId: "ws-1",
+        workspacePath: process.cwd(),
+        spec: {
+          serverKind: "rust",
+          command: "node",
+          args: [FAKE_LSP],
+          rootPath: process.cwd(),
+        },
+        onDiagnostics: vi.fn(),
+        requestTimeoutMs: 200,
+        initializeTimeoutMs: 5_000,
+        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      });
+
+      // Initialize takes 350ms but the longer timeout allows it.
+      await expect(session.start()).resolves.toMatchObject({ status: "ready" });
+
+      await session.openDocument({
+        path: "e2e/fixtures/lsp-workspace/shared.ts",
+        languageId: "rust",
+        text: "export const sharedValue = 1;\n",
+      });
+
+      // Hover takes 1000ms which exceeds requestTimeoutMs of 200ms — must
+      // still time out and recover so the next query can succeed.
+      await expect(
+        session.hover({
+          path: "e2e/fixtures/lsp-workspace/shared.ts",
+          line: 1,
+          column: 16,
+        })
+      ).resolves.toBeNull();
+
+      await session.stop();
+    } finally {
+      if (previousInit === undefined) {
+        delete process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS;
+      } else {
+        process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS = previousInit;
+      }
+      if (previousHover === undefined) {
+        delete process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS;
+      } else {
+        process.env.CODER_STUDIO_FAKE_LSP_HOVER_DELAY_MS = previousHover;
+      }
+    }
+  });
+
+  it("falls back to requestTimeoutMs * 10 for initialize when initializeTimeoutMs is omitted", async () => {
+    const previousInit = process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS;
+    // 350ms init delay must succeed when requestTimeoutMs is 100 (so the
+    // implicit init budget is 1000ms).
+    process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS = "350";
+
+    try {
+      const session = new LspSession({
+        workspaceId: "ws-1",
+        workspacePath: process.cwd(),
+        spec: {
+          serverKind: "rust",
+          command: "node",
+          args: [FAKE_LSP],
+          rootPath: process.cwd(),
+        },
+        onDiagnostics: vi.fn(),
+        requestTimeoutMs: 100,
+        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      });
+
+      await expect(session.start()).resolves.toMatchObject({ status: "ready" });
+      await session.stop();
+    } finally {
+      if (previousInit === undefined) {
+        delete process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS;
+      } else {
+        process.env.CODER_STUDIO_FAKE_LSP_INIT_DELAY_MS = previousInit;
+      }
+    }
+  });
+
   it("drains child stderr output without breaking startup", async () => {
     const previous = process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT;
     process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT = "server boot log";

@@ -44,7 +44,19 @@ interface SessionDeps {
   workspacePath: string;
   spec: LspServerSpec;
   onDiagnostics: (event: LspDiagnosticsEvent) => void;
+  /**
+   * Per-request timeout for semantic queries (hover, definition, references,
+   * documentSymbols, …). Keep this short enough that the editor's hover
+   * popup doesn't show "loading" forever when the server is wedged.
+   */
   requestTimeoutMs: number;
+  /**
+   * Timeout for the LSP `initialize` request. Some servers (notably
+   * rust-analyzer) need to scan Cargo workspaces and load proc-macros on
+   * first boot, which can routinely take 20s+ in real projects. Defaults
+   * to `requestTimeoutMs * 10` so existing callers don't regress.
+   */
+  initializeTimeoutMs?: number;
   platform?: NodeJS.Platform;
   logger: {
     info: (...args: unknown[]) => void;
@@ -244,6 +256,7 @@ export class LspSession {
     }
 
     try {
+      const initTimeoutMs = this.deps.initializeTimeoutMs ?? this.deps.requestTimeoutMs * 10;
       const [initializeResult] = await Promise.all([
         this.withTimeout(
           this.connection.sendRequest("initialize", {
@@ -251,7 +264,8 @@ export class LspSession {
             rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
             capabilities: {},
             initializationOptions: this.deps.spec.initializationOptions,
-          })
+          }),
+          initTimeoutMs
         ),
         companion
           ? this.withTimeout(
@@ -260,7 +274,8 @@ export class LspSession {
                 rootUri: pathToFileURL(this.deps.spec.rootPath).toString(),
                 capabilities: {},
                 initializationOptions: this.deps.spec.companion?.initializationOptions,
-              })
+              }),
+              initTimeoutMs
             )
           : Promise.resolve(null),
       ]);
@@ -625,17 +640,15 @@ export class LspSession {
     return merged;
   }
 
-  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+  private async withTimeout<T>(promise: Promise<T>, overrideMs?: number): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
+    const timeoutMs = overrideMs ?? this.deps.requestTimeoutMs;
 
     try {
       return await Promise.race([
         promise,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new LspRequestTimeoutError()),
-            this.deps.requestTimeoutMs
-          );
+          timer = setTimeout(() => reject(new LspRequestTimeoutError()), timeoutMs);
         }),
       ]);
     } finally {

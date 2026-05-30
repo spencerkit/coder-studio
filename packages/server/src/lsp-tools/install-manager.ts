@@ -117,7 +117,11 @@ export class LspToolInstallManager {
     const missingPrerequisites: string[] = [];
     let pythonCommand: string | null = null;
     if (input.serverKind === "python") {
-      pythonCommand = await resolveManagedPythonCommand(commandExists, platform);
+      pythonCommand = await resolveManagedPythonCommand(
+        commandExists,
+        platform,
+        this.deps.runCommand
+      );
       if (!pythonCommand) {
         missingPrerequisites.push(...getManagedPrerequisites("python", platform));
       }
@@ -198,7 +202,9 @@ export class LspToolInstallManager {
     const commandExists =
       this.deps.commandExists ?? ((command: string) => checkCommandAvailable(command, this.deps));
     const pythonCommand =
-      serverKind === "python" ? await resolveManagedPythonCommand(commandExists, platform) : null;
+      serverKind === "python"
+        ? await resolveManagedPythonCommand(commandExists, platform, this.deps.runCommand)
+        : null;
 
     mkdirSync(dirname(executablePath), { recursive: true });
 
