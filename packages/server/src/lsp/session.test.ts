@@ -490,6 +490,108 @@ describe.sequential("LspSession", () => {
     await session.stop();
   });
 
+  it("kills the companion process when the primary exits", async () => {
+    // If Volar crashes we must not leave the TypeScript companion alive
+    // (otherwise idle-TTL cleanup leaks a process per session).
+    const previous = process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS;
+    process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS = "150";
+
+    try {
+      const session = new LspSession({
+        workspaceId: "ws-1",
+        workspacePath: process.cwd(),
+        spec: {
+          serverKind: "vue",
+          // Primary exits 150ms after initialize.
+          command: "node",
+          args: [FAKE_LSP],
+          rootPath: process.cwd(),
+          companion: {
+            // Companion stays alive normally.
+            command: "node",
+            args: [FAKE_LSP],
+          },
+          bridges: { tsserverRequest: true },
+        },
+        onDiagnostics: vi.fn(),
+        requestTimeoutMs: 2000,
+        logger: {
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+        },
+      });
+
+      // Pull the companion field via a typed accessor for inspection.
+      type WithCompanion = LspSession & {
+        companion: null | { child: { killed: boolean } };
+      };
+
+      await session.start();
+      // Companion was spawned alongside primary.
+      expect((session as WithCompanion).companion).not.toBeNull();
+      const companionChild = (session as WithCompanion).companion?.child;
+      expect(companionChild).toBeDefined();
+
+      // Wait long enough for the primary to exit and the termination handler
+      // to fire.
+      await vi.waitFor(
+        () => {
+          expect((session as WithCompanion).companion).toBeNull();
+        },
+        { timeout: 2000 }
+      );
+      // The companion's process should have received SIGTERM.
+      expect(companionChild?.killed).toBe(true);
+      expect(session.getSummary().status).toBe("stopped");
+
+      await session.stop();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS;
+      } else {
+        process.env.CODER_STUDIO_FAKE_LSP_EXIT_AFTER_INIT_MS = previous;
+      }
+    }
+  });
+
+  it("stops the companion when the session is explicitly stopped", async () => {
+    const session = new LspSession({
+      workspaceId: "ws-1",
+      workspacePath: process.cwd(),
+      spec: {
+        serverKind: "vue",
+        command: "node",
+        args: [FAKE_LSP],
+        rootPath: process.cwd(),
+        companion: {
+          command: "node",
+          args: [FAKE_LSP],
+        },
+        bridges: { tsserverRequest: true },
+      },
+      onDiagnostics: vi.fn(),
+      requestTimeoutMs: 2000,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    type WithCompanion = LspSession & {
+      companion: null | { child: { killed: boolean } };
+    };
+
+    await session.start();
+    const companionChild = (session as WithCompanion).companion?.child;
+    expect(companionChild).toBeDefined();
+
+    await session.stop();
+    expect(companionChild?.killed).toBe(true);
+    expect((session as WithCompanion).companion).toBeNull();
+  });
+
   it("drains child stderr output without breaking startup", async () => {
     const previous = process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT;
     process.env.CODER_STUDIO_FAKE_LSP_STDERR_ON_INIT = "server boot log";

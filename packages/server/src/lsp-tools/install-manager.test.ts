@@ -27,8 +27,12 @@ describe("LspToolInstallManager", () => {
   });
 
   it("returns missing_prerequisite when python3 is unavailable", async () => {
+    // Pin platform so the prerequisite list is deterministic (on win32 the
+    // manager also tries `python` as a fallback, which would otherwise leak
+    // into `missingCommands`).
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(mkdtempSync(join(tmpdir(), "lsp-tools-"))),
+      platform: "linux",
       commandExists: vi.fn(async () => false),
       runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
     });
@@ -330,7 +334,15 @@ describe("LspToolInstallManager", () => {
   it("downloads rust-analyzer into the managed tool directory and writes a manifest", async () => {
     const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
     let installed = false;
-    const executablePath = join(root, "rust", "2026-05-18", "bin", "rust-analyzer");
+    // The real manager picks `.exe` on Windows; mirror that here so the
+    // commandExists mock matches the path the verify step actually checks.
+    const executablePath = join(
+      root,
+      "rust",
+      "2026-05-18",
+      "bin",
+      process.platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer"
+    );
 
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(root),
