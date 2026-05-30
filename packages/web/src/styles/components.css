@@ -4090,6 +4090,10 @@ body.is-dragging-pane {
   flex-direction: row;
 }
 
+.agent-draft-panel + .agent-draft-panel {
+  border-left: 1px solid var(--border-default);
+}
+
 /* ========== Session Card ========== */
 .session-card {
   display: flex;
@@ -7298,6 +7302,11 @@ textarea.input {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--sp-3);
+  padding: var(--sp-5);
+}
+
+.agent-draft-panel + .agent-draft-panel {
+  border-left: 1px solid var(--border-default);
 }
 
 .agent-draft-panel-header {
@@ -7486,11 +7495,18 @@ textarea.input {
   color: var(--text-tertiary);
   padding-top: var(--sp-3);
   border-top: 1px solid var(--border-default);
+  margin-top: var(--sp-2);
 }
 
-@container (max-width: 36rem) {
+@container (max-width: 28rem) {
   .agent-draft-component-row {
     flex-direction: column;
+  }
+
+  .agent-draft-panel + .agent-draft-panel {
+    border-left: none;
+    border-top: 1px solid var(--border-default);
+    padding-left: var(--sp-5);
   }
 }
 

@@ -308,9 +308,6 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                           <span className="agent-provider-card-title-row">
                             <span className="agent-provider-card-title">{provider.title}</span>
                           </span>
-                          <span className="agent-provider-card-cta">
-                            {getProviderCta(provider.id)}
-                          </span>
                           {isBusy ? (
                             <span className="agent-provider-card-status">
                               {t("provider.install.status.installing")}
