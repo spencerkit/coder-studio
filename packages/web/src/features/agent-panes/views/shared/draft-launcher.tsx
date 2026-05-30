@@ -253,87 +253,141 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
 
       <div className="agent-draft-launcher">
         <div className="agent-draft-content">
-          <span className="agent-draft-kicker">SESSION LAUNCHER</span>
-          <p className="agent-draft-description">
-            选择一个 AI 会话，在当前 workspace 里继续查看文件、运行命令和推进代码修改。
-          </p>
-          <div className="agent-draft-providers">
-            {(
-              [
-                {
-                  id: "claude",
-                  title: "Claude",
-                  meta: "analysis",
-                  icon: <ThemedIcon semantic="agent.provider.claude" size={18} />,
-                  description: "更适合长上下文梳理、方案分析和代码审查。",
-                  className: "agent-provider-card-claude",
-                },
-                {
-                  id: "codex",
-                  title: "Codex",
-                  meta: "workspace",
-                  icon: <ThemedIcon semantic="agent.provider.codex" size={18} />,
-                  description: "更适合终端操作、直接改文件和逐步修复问题。",
-                  className: "agent-provider-card-codex",
-                },
-              ] as const
-            ).map((provider) => {
-              const state = states[provider.id];
-              const guide = getProviderGuide(provider.id);
-              const isBusy =
-                state.loading ||
-                state.installJob?.status === "queued" ||
-                state.installJob?.status === "running";
-
-              return (
-                <Button
-                  key={provider.id}
-                  className={`agent-provider-card ${provider.className}`}
-                  disabled={isAnyProviderBusy}
-                  leadingIcon={<span className="agent-provider-card-icon">{provider.icon}</span>}
-                  onClick={() => {
-                    void launch(provider.id);
-                  }}
-                  trailingIcon={<ArrowRight size={16} className="agent-provider-card-arrow" />}
-                  variant="secondary"
-                >
-                  <span className="agent-provider-card-body">
-                    <span className="agent-provider-card-title-row">
-                      <span className="agent-provider-card-title">{provider.title}</span>
-                      <span className="agent-provider-card-meta">{provider.meta}</span>
-                    </span>
-                    <span className="agent-provider-card-desc">{provider.description}</span>
-                    <span className="agent-provider-card-cta">{getProviderCta(provider.id)}</span>
-                    {isBusy ? (
-                      <span className="agent-provider-card-status">
-                        {t("provider.install.status.installing")}
-                      </span>
-                    ) : null}
-                    {guide.message ? (
-                      <span className="agent-provider-card-guide">
-                        <span>{guide.message}</span>
-                        {guide.docUrl ? (
-                          <a
-                            href={guide.docUrl}
-                            onClick={(event) => event.stopPropagation()}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            {t("provider.install.open_docs")}
-                          </a>
-                        ) : null}
-                        <a
-                          href={buildProviderDiagnosticsPath(provider.id)}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {t("diagnostics.actions.open_diagnostics")}
-                        </a>
-                      </span>
-                    ) : null}
+          <div className="agent-draft-component">
+            <div className="agent-draft-component-row">
+              {/* Agent panel */}
+              <div className="agent-draft-panel">
+                <div className="agent-draft-panel-header">
+                  <span className="agent-draft-panel-icon">
+                    <ThemedIcon semantic="agent.provider.claude" size={13} />
                   </span>
-                </Button>
-              );
-            })}
+                  <span className="agent-draft-panel-label">Agent</span>
+                </div>
+
+                <div className="agent-draft-panel-list">
+                  {(
+                    [
+                      {
+                        id: "claude",
+                        title: "Claude",
+                        icon: <ThemedIcon semantic="agent.provider.claude" size={18} />,
+                        className: "agent-provider-card-claude",
+                      },
+                      {
+                        id: "codex",
+                        title: "Codex",
+                        icon: <ThemedIcon semantic="agent.provider.codex" size={18} />,
+                        className: "agent-provider-card-codex",
+                      },
+                    ] as const
+                  ).map((provider) => {
+                    const state = states[provider.id];
+                    const guide = getProviderGuide(provider.id);
+                    const isBusy =
+                      state.loading ||
+                      state.installJob?.status === "queued" ||
+                      state.installJob?.status === "running";
+
+                    return (
+                      <Button
+                        key={provider.id}
+                        className={`agent-provider-card ${provider.className}`}
+                        disabled={isAnyProviderBusy}
+                        leadingIcon={
+                          <span className="agent-provider-card-icon">{provider.icon}</span>
+                        }
+                        onClick={() => {
+                          void launch(provider.id);
+                        }}
+                        trailingIcon={
+                          <ArrowRight size={16} className="agent-provider-card-arrow" />
+                        }
+                        variant="secondary"
+                      >
+                        <span className="agent-provider-card-body">
+                          <span className="agent-provider-card-title-row">
+                            <span className="agent-provider-card-title">{provider.title}</span>
+                          </span>
+                          <span className="agent-provider-card-cta">
+                            {getProviderCta(provider.id)}
+                          </span>
+                          {isBusy ? (
+                            <span className="agent-provider-card-status">
+                              {t("provider.install.status.installing")}
+                            </span>
+                          ) : null}
+                          {guide.message ? (
+                            <span className="agent-provider-card-guide">
+                              <span>{guide.message}</span>
+                              {guide.docUrl ? (
+                                <a
+                                  href={guide.docUrl}
+                                  onClick={(event) => event.stopPropagation()}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  {t("provider.install.open_docs")}
+                                </a>
+                              ) : null}
+                              <a
+                                href={buildProviderDiagnosticsPath(provider.id)}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                {t("diagnostics.actions.open_diagnostics")}
+                              </a>
+                            </span>
+                          ) : null}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* File Editor panel */}
+              <div className="agent-draft-panel">
+                <div className="agent-draft-panel-header">
+                  <span className="agent-draft-panel-icon">
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </span>
+                  <span className="agent-draft-panel-label">File Editor</span>
+                </div>
+
+                <div className="agent-draft-drop-zone">
+                  <div className="agent-draft-drop-zone-icon">
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </div>
+                  <span className="agent-draft-drop-zone-title">拖入文件打开</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="agent-draft-footer">点击启动 Agent 或直接拖拽文件到右侧区域打开</div>
           </div>
         </div>
       </div>
