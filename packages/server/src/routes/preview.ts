@@ -1,6 +1,11 @@
 import { posix } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  encodePathSegments,
+  rewritePreviewCssResourceUrls,
+  rewritePreviewHtmlResourceUrls,
+} from "../preview/html-resource-rewriter.js";
 import { renderMarkdownDocument } from "../preview/render-markdown.js";
 import { loadPreviewResource, resolvePreviewResourcePath } from "../preview/resource-loader.js";
 import { PreviewSessionStore } from "../preview/session-store.js";
@@ -24,13 +29,6 @@ type WorkspaceLookup = { path: string } | null | undefined;
 
 function getPreviewContentSecurityPolicy(): string {
   return "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'none'; base-uri 'none'; form-action 'none'";
-}
-
-function encodePathSegments(path: string): string {
-  return path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
 }
 
 function resolvePreviewAssetWorkspacePath(entryPath: string, rawPath: string): string {
@@ -123,13 +121,18 @@ export function registerPreviewRoutes(
     }
 
     if ((rawPath ?? "") === session.entryPath) {
-      const html =
+      const rawHtml =
         session.kind === "markdown"
           ? renderMarkdownDocument({
               markdown: session.content,
               title: session.entryPath,
             })
           : session.content;
+      const html = rewritePreviewHtmlResourceUrls(rawHtml, {
+        entryPath: session.entryPath,
+        sessionId: session.id,
+        workspaceRootPath: workspace.path,
+      });
       const contentSecurityPolicy = getPreviewContentSecurityPolicy();
 
       const response = reply
@@ -147,13 +150,24 @@ export function registerPreviewRoutes(
     try {
       const resourcePath = resolvePreviewAssetWorkspacePath(session.entryPath, rawPath);
       const resource = await loadPreviewResource(workspace.path, resourcePath);
+      const bytes =
+        resource.mime === "text/css"
+          ? Buffer.from(
+              rewritePreviewCssResourceUrls(resource.bytes.toString("utf-8"), {
+                baseWorkspacePath: resource.workspaceRelativePath,
+                sessionId: session.id,
+                workspaceRootPath: workspace.path,
+              }),
+              "utf-8"
+            )
+          : resource.bytes;
 
       return reply
         .header("Content-Type", resource.mime)
-        .header("Content-Length", String(resource.size))
+        .header("Content-Length", String(bytes.byteLength))
         .header("Cache-Control", "no-store")
         .header("X-Content-Type-Options", "nosniff")
-        .send(resource.bytes);
+        .send(bytes);
     } catch (error) {
       const code = (error as { code?: string })?.code ?? (error as Error).message;
       if (code === "path_escape") {
