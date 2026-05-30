@@ -82,7 +82,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     return Boolean(runtime?.autoInstallSupported && runtime.installReadiness === "ready");
   };
 
-  const getProviderCta = (providerId: ProviderId): string => {
+  const _getProviderCta = (providerId: ProviderId): string => {
     const state = states[providerId];
     if (
       state.loading ||
