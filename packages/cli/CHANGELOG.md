@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.9
+
+### Patch Changes
+
+- [#69](https://github.com/spencerkit/coder-studio/pull/69) [`a4df948`](https://github.com/spencerkit/coder-studio/commit/a4df9486d7dd560e0d489b565d530f215fae2d4c) Thanks [@pallyoung](https://github.com/pallyoung)! - Improve workspace, diagnostics, monitoring, and editor workflows with system
+  dependency installs, managed Vue LSP support, file history previews, and
+  refined settings and workspace surfaces.
+
 ## 0.4.8
 
 ### Patch Changes
