@@ -17,8 +17,10 @@ import {
   hydrateWorkspaceEditorState,
   normalizeWorkspaceEditorUiState,
 } from "../features/workspace/actions/open-editor-state";
+import { useTranslation } from "../lib/i18n";
 
 export function useBootstrap() {
+  const t = useTranslation();
   const bootstrapRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,7 +104,9 @@ export function useBootstrap() {
 
           if (!listResult.ok) {
             setWorkspacesLoadState("error");
-            setWorkspacesLoadError(listResult.error?.message ?? "Failed to fetch workspace list");
+            setWorkspacesLoadError(
+              listResult.error?.message ?? t("workspace.load_failed_description")
+            );
             return;
           }
 
@@ -137,7 +141,7 @@ export function useBootstrap() {
           }
           setWorkspacesLoadState("error");
           setWorkspacesLoadError(
-            error instanceof Error ? error.message : "Failed to fetch workspace list"
+            error instanceof Error ? error.message : t("workspace.load_failed_description")
           );
         });
       return;
@@ -171,6 +175,7 @@ export function useBootstrap() {
     setWorkspacesLoadError,
     setWorkspacesLoadState,
     store,
+    t,
     workspaces.length,
     workspacesLoadState,
   ]);

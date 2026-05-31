@@ -419,6 +419,7 @@ export function MobileTerminalInputBar({
             key={key.id}
             type="button"
             className="mobile-terminal-input-bar__key"
+            data-key-id={key.id}
             aria-label={getKeyAriaLabel(key.id, labels)}
             disabled={commandKeysDisabled}
             onPointerDown={(event) => {

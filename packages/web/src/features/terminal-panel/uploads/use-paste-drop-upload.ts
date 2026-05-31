@@ -1,5 +1,6 @@
 import { useSetAtom } from "jotai";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "../../../lib/i18n";
 import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
@@ -46,6 +47,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
   const completedTextsRef = useRef(new Map<number, string | null>());
   const flushChainRef = useRef(Promise.resolve());
   const pushToast = useSetAtom(pushToastAtom);
+  const t = useTranslation();
 
   const settleSequence = useCallback(
     async (sequence: number, text: string | null) => {
@@ -91,8 +93,8 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         const code = error instanceof UploadError ? error.code : "unknown";
         pushToast({
           kind: "error",
-          title: "Upload failed",
-          body: `Could not upload file(s): ${code}`,
+          title: t("terminal.upload.upload_failed"),
+          body: t("terminal.upload.upload_failed_body", { code }),
           duration: 5_000,
         });
       } finally {
@@ -102,7 +104,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         }
       }
     },
-    [pushToast, settleSequence]
+    [pushToast, settleSequence, t]
   );
 
   const handleFiles = useCallback(
@@ -145,8 +147,8 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       if (!payload) {
         pushToast({
           kind: "error",
-          title: "Drop failed",
-          body: "Could not read the dragged workspace path.",
+          title: t("terminal.upload.drop_failed"),
+          body: t("terminal.upload.drop_read_failed"),
           duration: 3_000,
         });
         return;
@@ -155,8 +157,8 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       if (payload.workspaceId !== workspaceId) {
         pushToast({
           kind: "error",
-          title: "Drop failed",
-          body: "You can only drop paths from the current workspace.",
+          title: t("terminal.upload.drop_failed"),
+          body: t("terminal.upload.drop_workspace_mismatch"),
           duration: 3_000,
         });
         return;
@@ -168,14 +170,14 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
           console.debug("Workspace path drop failed:", error);
           pushToast({
             kind: "error",
-            title: "Drop failed",
-            body: "Could not insert the dragged path into the terminal.",
+            title: t("terminal.upload.drop_failed"),
+            body: t("terminal.upload.drop_insert_failed"),
             duration: 3_000,
           });
         },
       });
     },
-    [pushToast, runSequence, workspaceId]
+    [pushToast, runSequence, t, workspaceId]
   );
 
   const handleClipboardPaste = useCallback(async () => {
@@ -225,8 +227,8 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       if (!text) {
         pushToast({
           kind: "info",
-          title: "Paste",
-          body: "Clipboard is empty",
+          title: t("terminal.upload.paste"),
+          body: t("terminal.upload.clipboard_empty"),
           duration: 2_000,
         });
         return;
@@ -236,13 +238,13 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
     } catch (error) {
       pushToast({
         kind: "error",
-        title: "Paste failed",
-        body: "Could not read from clipboard. Please check permissions.",
+        title: t("terminal.upload.paste_failed"),
+        body: t("terminal.upload.paste_permission_failed"),
         duration: 3_000,
       });
       throw error;
     }
-  }, [enabled, handleFiles, handleText, pushToast]);
+  }, [enabled, handleFiles, handleText, pushToast, t]);
 
   useEffect(() => {
     const element = containerRef.current;

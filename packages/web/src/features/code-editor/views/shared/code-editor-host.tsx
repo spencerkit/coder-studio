@@ -68,7 +68,11 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
   const editLabel = t("code_editor.mode_edit");
 
   return (
-    <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
+    <div
+      className="editor-surface__toolbar"
+      role="toolbar"
+      aria-label={t("code_editor.toolbar_actions")}
+    >
       {canDiff ? (
         <Tooltip content={diffLabel}>
           <button

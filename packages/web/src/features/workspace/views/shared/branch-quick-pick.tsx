@@ -111,7 +111,7 @@ function BranchQuickPickContent() {
           ref={inputRef}
           type="text"
           className="branch-quick-pick-input"
-          placeholder="Search branches or create new branch..."
+          placeholder={t("git.quick_pick.search_placeholder")}
           value={inputValue}
           onChange={(event) => {
             setInputValue(event.target.value);
@@ -124,7 +124,7 @@ function BranchQuickPickContent() {
 
       <div className="branch-quick-pick-list" ref={listRef}>
         {branchList.loading ? (
-          <BranchQuickPickEmptyState title="Loading branches..." />
+          <BranchQuickPickEmptyState title={t("git.quick_pick.loading")} />
         ) : displayItems.length > 0 ? (
           displayItems.map((item, index) => (
             <div
@@ -164,7 +164,7 @@ function BranchQuickPickContent() {
 
                   {item.branch.isRemote && (
                     <Tag color="neutral" caps={false} className="branch-quick-pick-badge">
-                      Remote
+                      {t("git.branch_remote")}
                     </Tag>
                   )}
                 </>
@@ -180,15 +180,15 @@ function BranchQuickPickContent() {
           ))
         ) : (
           <BranchQuickPickEmptyState
-            title={inputValue ? "No branches found" : "Type to search branches"}
+            title={inputValue ? t("git.quick_pick.empty_filtered") : t("git.quick_pick.empty_idle")}
           />
         )}
       </div>
 
       <div className="branch-quick-pick-hint">
-        <span>↑↓ Navigate</span>
-        <span>↵ Select</span>
-        <span>Esc Close</span>
+        <span>↑↓ {t("git.quick_pick.hint_navigate")}</span>
+        <span>↵ {t("git.quick_pick.hint_select")}</span>
+        <span>Esc {t("git.quick_pick.hint_close")}</span>
       </div>
     </>
   );

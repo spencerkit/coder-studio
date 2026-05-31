@@ -2969,7 +2969,7 @@ export function XtermHost({
           mode="status"
           surfaceClassName="xterm-replay-overlay__card"
         >
-          <div>Uploading…</div>
+          <div>{t("terminal.upload.uploading")}</div>
         </LocalOverlay>
       ) : null}
       {showPasteDialog ? (

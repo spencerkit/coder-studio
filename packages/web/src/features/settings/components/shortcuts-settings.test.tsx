@@ -3,19 +3,17 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { customShortcutsAtom } from "../../../lib/shortcuts";
 import { ShortcutsSettings } from "./shortcuts-settings";
-
-vi.mock("../../../lib/i18n", () => ({
-  useTranslation: () => (key: string) => key,
-}));
 
 function renderShortcutsSettings(
   sendCommand = vi.fn().mockResolvedValue({}),
   customBindings: Record<string, string> = {}
 ) {
   const store = createStore();
+  store.set(localeAtom, "zh");
   store.set(wsClientAtom, { sendCommand } as never);
   store.set(customShortcutsAtom, customBindings);
 

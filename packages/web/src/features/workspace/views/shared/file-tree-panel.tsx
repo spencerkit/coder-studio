@@ -757,7 +757,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         </span>
 
         {variant === "desktop" && selectedPath === node.path ? (
-          <span className="tree-active-meta">active</span>
+          <span className="tree-active-meta">{t("common.active")}</span>
         ) : null}
 
         {variant === "desktop" ? (

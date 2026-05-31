@@ -15,9 +15,9 @@ import type { PaneDropPlacement } from "../../actions/pane-drag-types";
 import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
 import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 
-function getEditorPaneTitle(path: string | null): string {
+function getEditorPaneTitle(path: string | null, fallbackTitle: string): string {
   if (!path) {
-    return "Editor";
+    return fallbackTitle;
   }
 
   const segments = path.split("/");
@@ -52,7 +52,7 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const editorState = useCodeEditorActions();
   const supportsPaneDrag = usePaneDragEnabled();
   const canDragPane = supportsPaneDrag && Boolean(onPaneDragStart);
-  const title = getEditorPaneTitle(activeFilePath);
+  const title = getEditorPaneTitle(activeFilePath, t("agent_panes.file_editor"));
   const activeOpenFile = activeFilePath ? openFiles[activeFilePath] : undefined;
   const isDirtyTextFile = activeOpenFile?.kind === "text" && activeOpenFile.isDirty === true;
   const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
@@ -85,7 +85,7 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
       {dragOverlayPlacement ? (
         <div className={`pane-drop-overlay pane-drop-overlay--${dragOverlayPlacement}`}>
           {dragOverlayPlacement === "center" ? (
-            <div className="pane-drop-overlay__center">Swap</div>
+            <div className="pane-drop-overlay__center">{t("agent_panes.swap")}</div>
           ) : null}
         </div>
       ) : null}
@@ -97,10 +97,11 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
         actions={
           <>
             {canDragPane ? (
-              <Tooltip content="Drag pane">
+              <Tooltip content={t("agent_panes.drag_pane")}>
                 <IconButton
-                  aria-label="Drag pane"
+                  aria-label={t("agent_panes.drag_pane")}
                   className="session-action-btn session-action-btn-drag"
+                  data-session-action="drag"
                   icon={<GripVertical size={13} />}
                   onPointerDown={(event) => {
                     event.preventDefault();
@@ -117,19 +118,21 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
               </Tooltip>
             ) : null}
             <CodeEditorDesktopHeaderActions state={editorState} showCloseAction={false} />
-            <Tooltip content="Split horizontal">
+            <Tooltip content={t("agent_panes.split_horizontal")}>
               <IconButton
-                aria-label="Split horizontal"
+                aria-label={t("agent_panes.split_horizontal")}
                 className="session-action-btn"
+                data-session-action="split-horizontal"
                 icon={<FlipHorizontal size={13} />}
                 onClick={() => onSplitPane(paneId, "horizontal")}
                 size="sm"
               />
             </Tooltip>
-            <Tooltip content="Split vertical">
+            <Tooltip content={t("agent_panes.split_vertical")}>
               <IconButton
-                aria-label="Split vertical"
+                aria-label={t("agent_panes.split_vertical")}
                 className="session-action-btn"
+                data-session-action="split-vertical"
                 icon={<FlipVertical size={13} />}
                 onClick={() => onSplitPane(paneId, "vertical")}
                 size="sm"
@@ -139,6 +142,7 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
               <IconButton
                 aria-label={t("action.close")}
                 className="session-action-btn session-action-btn-close"
+                data-session-action="close"
                 icon={<X size={14} />}
                 onClick={requestClosePane}
                 size="sm"

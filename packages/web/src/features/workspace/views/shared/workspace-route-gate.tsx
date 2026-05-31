@@ -6,10 +6,12 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../../../../atoms/workspaces";
+import { useTranslation } from "../../../../lib/i18n";
 import { WorkspaceEmptyState } from "./workspace-empty-state";
 import { WorkspaceLoadingState } from "./workspace-loading-state";
 
 export function WorkspaceRouteGate({ children }: { children: ReactNode }) {
+  const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const loadState = useAtomValue(workspacesLoadStateAtom);
   const loadError = useAtomValue(workspacesLoadErrorAtom);
@@ -22,7 +24,9 @@ export function WorkspaceRouteGate({ children }: { children: ReactNode }) {
       (isWorkspaceRoute && loadState === "ready"));
 
   if (!workspace && loadState === "error") {
-    return <WorkspaceEmptyState description={loadError ?? "Failed to fetch workspace list"} />;
+    return (
+      <WorkspaceEmptyState description={loadError ?? t("workspace.load_failed_description")} />
+    );
   }
 
   if (shouldHoldForResolution) {

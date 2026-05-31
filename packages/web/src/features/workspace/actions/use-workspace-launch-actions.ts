@@ -323,6 +323,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 }
 
 export function useWorktreeActions(workspaceId: string, worktree: WorktreeInfo | null) {
+  const t = useTranslation();
   const wsClient = useAtomValue(wsClientAtom);
   const [activeTab, setActiveTab] = useState<TabType>("status");
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -364,7 +365,7 @@ export function useWorktreeActions(workspaceId: string, worktree: WorktreeInfo |
           setTree(result.tree);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load data";
+        const message = err instanceof Error ? err.message : t("worktree.detail_load_failed");
         setError(message);
       } finally {
         setLoading(false);
@@ -372,7 +373,7 @@ export function useWorktreeActions(workspaceId: string, worktree: WorktreeInfo |
     };
 
     void fetchData();
-  }, [activeTab, workspaceId, worktree, wsClient]);
+  }, [activeTab, t, workspaceId, worktree, wsClient]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);

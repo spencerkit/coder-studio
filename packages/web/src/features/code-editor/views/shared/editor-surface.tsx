@@ -176,7 +176,11 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
               )}
             </span>
             {isCommitPreview ? (
-              <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
+              <div
+                className="editor-surface__toolbar"
+                role="toolbar"
+                aria-label={t("code_editor.toolbar_actions")}
+              >
                 <Tooltip content={t("action.close")}>
                   <IconButton
                     aria-label={t("action.close")}

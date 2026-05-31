@@ -10,6 +10,7 @@
 import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { EmptyState } from "../../../components/ui";
+import { useTranslation } from "../../../lib/i18n";
 
 interface ImagePreviewProps {
   url: string;
@@ -33,6 +34,7 @@ function mimeToLabel(mime: string): string {
 }
 
 export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBytes, alt }) => {
+  const t = useTranslation();
   const [dimensions, setDimensions] = useState<{ w: number; h: number } | null>(null);
   const [errored, setErrored] = useState(false);
   const src = `${url}${url.includes("?") ? "&" : "?"}v=${version}`;
@@ -51,12 +53,9 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
           <EmptyState
             className="git-diff-empty"
             description={
-              <p className="git-diff-empty-body">
-                The image could not be loaded. The file may have been moved or is larger than the
-                browser allows.
-              </p>
+              <p className="git-diff-empty-body">{t("code_editor.image_load_failed_body")}</p>
             }
-            title={<p className="git-diff-empty-title">Preview unavailable</p>}
+            title={<p className="git-diff-empty-title">{t("code_editor.preview_unavailable")}</p>}
           />
         ) : (
           <img

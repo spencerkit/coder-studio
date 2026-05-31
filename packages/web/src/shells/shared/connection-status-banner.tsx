@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import { activationReasonAtom, activationStatusAtom } from "../../atoms/activation";
 import { connectionStatusAtom, lastReconnectAttemptAtom } from "../../atoms/connection";
 import { useViewport } from "../../components/ui/_internal/use-viewport";
+import { useTranslation } from "../../lib/i18n";
 
 const SLOW_RECOVERY_HINT_MS = 25_000;
-const SLOW_RECOVERY_HINT_TEXT = "连接恢复较慢，可能是网络问题。如果长时间没有恢复，可以刷新页面。";
-const SLOW_RECOVERY_HINT_TEXT_MOBILE = "连接恢复较慢，长时间未恢复可刷新页面。";
 
 export function ConnectionStatusBanner() {
+  const t = useTranslation();
   const activationStatus = useAtomValue(activationStatusAtom);
   const activationReason = useAtomValue(activationReasonAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -54,7 +54,7 @@ export function ConnectionStatusBanner() {
         role="status"
         aria-live="polite"
       >
-        <span>另一个标签页已激活</span>
+        <span>{t("connection.another_tab_activated")}</span>
       </div>
     );
   }
@@ -64,7 +64,9 @@ export function ConnectionStatusBanner() {
     now - lastReconnectAttempt >= SLOW_RECOVERY_HINT_MS &&
     (connectionStatus === "reconnecting" || connectionStatus === "disconnected");
   const stacked = showSlowRecoveryHint && isMobile;
-  const slowRecoveryHintText = isMobile ? SLOW_RECOVERY_HINT_TEXT_MOBILE : SLOW_RECOVERY_HINT_TEXT;
+  const slowRecoveryHintText = isMobile
+    ? t("connection.slow_recovery_hint_mobile")
+    : t("connection.slow_recovery_hint");
   const className = [
     "connection-banner",
     isMobile ? "connection-banner--mobile" : null,
@@ -75,7 +77,7 @@ export function ConnectionStatusBanner() {
 
   return (
     <div className={className} role="status" aria-live="polite">
-      <span className="connection-banner__primary">连接已断开，正在重新连接...</span>
+      <span className="connection-banner__primary">{t("connection.reconnecting_banner")}</span>
       {showSlowRecoveryHint ? (
         <span className="connection-banner__hint">{slowRecoveryHintText}</span>
       ) : null}

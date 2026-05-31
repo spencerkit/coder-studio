@@ -3,12 +3,14 @@ import { useCallback, useState } from "react";
 import { fencingStateAtom } from "../../../../atoms/fencing";
 import { Button } from "../../../../components/ui";
 import { useFencing } from "../../../../hooks/use-fencing";
+import { useTranslation } from "../../../../lib/i18n";
 
 interface ObserverBannerProps {
   workspaceId: string;
 }
 
 export function ObserverBanner({ workspaceId }: ObserverBannerProps) {
+  const t = useTranslation();
   const fencingStates = useAtomValue(fencingStateAtom);
   const state = fencingStates.get(workspaceId);
   const { requestTakeover } = useFencing(workspaceId);
@@ -30,9 +32,9 @@ export function ObserverBanner({ workspaceId }: ObserverBannerProps) {
   return (
     <div className="observer-banner" role="alert">
       <span className="observer-banner-icon">👁</span>
-      <span className="observer-banner-text">只读模式 — 另一个标签页正在控制</span>
+      <span className="observer-banner-text">{t("fencing.observer_mode")}</span>
       <Button onClick={handleTakeover} disabled={takingOver} size="sm" variant="secondary">
-        {takingOver ? "接管中..." : "接管控制"}
+        {takingOver ? t("fencing.taking_over") : t("fencing.takeover")}
       </Button>
     </div>
   );

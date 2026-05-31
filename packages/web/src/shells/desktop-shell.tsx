@@ -21,6 +21,7 @@ import { WelcomePage } from "../features/welcome";
 import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
 import { WorkspaceRouteGate } from "../features/workspace/views/shared/workspace-route-gate";
 import { useBootstrap } from "../hooks/use-bootstrap";
+import { useTranslation } from "../lib/i18n";
 import { ConnectionStatusBanner } from "./shared/connection-status-banner";
 
 const appLoadingEmptyStateStyle = {
@@ -34,6 +35,7 @@ const appLoadingEmptyStateStyle = {
 
 export function DesktopShell() {
   useBootstrap();
+  const t = useTranslation();
   const authEnabled = useAtomValue(authEnabledAtom);
   const location = useLocation();
   const authUnknown = authEnabled === null;
@@ -55,14 +57,10 @@ export function DesktopShell() {
                 title={
                   <div>
                     <div className="app-loading-kicker">CODER STUDIO</div>
-                    <h1 className="app-loading-title">正在连接工作区...</h1>
+                    <h1 className="app-loading-title">{t("shell.loading_title")}</h1>
                   </div>
                 }
-                description={
-                  <p className="app-loading-desc">
-                    正在同步认证与连接状态，随后会自动进入当前 workspace。
-                  </p>
-                }
+                description={<p className="app-loading-desc">{t("shell.loading_description")}</p>}
               />
             </div>
           </div>

@@ -63,4 +63,21 @@ describe("shortcuts", () => {
       ])
     );
   });
+
+  it("stores translation keys for user-facing shortcut labels", () => {
+    expect(DEFAULT_SHORTCUTS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "command-palette.toggle",
+          nameKey: "shortcuts.command_palette_toggle.name",
+          descriptionKey: "shortcuts.command_palette_toggle.description",
+        }),
+        expect.objectContaining({
+          id: "session.navigate.left",
+          nameKey: "shortcuts.session_navigate_left.name",
+          descriptionKey: "shortcuts.session_navigate_left.description",
+        }),
+      ])
+    );
+  });
 });

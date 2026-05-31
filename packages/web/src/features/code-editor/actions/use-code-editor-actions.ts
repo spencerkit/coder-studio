@@ -3,6 +3,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
+import { useTranslation } from "../../../lib/i18n";
 import { useOpenEditorsActions } from "../../workspace/actions/use-open-editors-actions";
 import {
   activeFilePathAtomFamily,
@@ -47,6 +48,7 @@ type FileReadImagePayload = {
 type FileReadPayload = FileReadTextPayload | FileReadImagePayload;
 
 export function useCodeEditorActions() {
+  const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceRootPath = workspace?.path;
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -188,7 +190,7 @@ export function useCodeEditorActions() {
 
       if (!result.ok || !result.data) {
         finishPendingEditorLoad(workspaceId, path, requestId);
-        const message = result.error?.message ?? "Failed to open file";
+        const message = result.error?.message ?? t("code_editor.open_failed_title");
         console.error("Failed to open file:", message);
         setFileLoadError({ path, message });
         return;
@@ -205,7 +207,7 @@ export function useCodeEditorActions() {
 
           if (!response.ok) {
             finishPendingEditorLoad(workspaceId, path, requestId);
-            const message = `Failed to fetch text-backed image bytes: ${response.status}`;
+            const message = `${t("code_editor.text_backed_image_load_failed")}: ${response.status}`;
             console.error(message);
             setFileLoadError({ path, message });
             return;
@@ -239,7 +241,7 @@ export function useCodeEditorActions() {
         } catch (error) {
           finishPendingEditorLoad(workspaceId, path, requestId);
           const message =
-            error instanceof Error ? error.message : "Failed to fetch text-backed image bytes";
+            error instanceof Error ? error.message : t("code_editor.text_backed_image_load_failed");
           console.error("Failed to fetch text-backed image bytes:", error);
           setFileLoadError({ path, message });
         }
@@ -281,17 +283,20 @@ export function useCodeEditorActions() {
       setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
-    [dispatch, setOpenFiles, workspaceId, workspaceRootPath]
+    [dispatch, setOpenFiles, t, workspaceId, workspaceRootPath]
   );
 
-  const loadTextBackedImageContent = useCallback(async (url: string) => {
-    const response = await fetch(url, { credentials: "include" });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch text-backed image bytes: ${response.status}`);
-    }
+  const loadTextBackedImageContent = useCallback(
+    async (url: string) => {
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) {
+        throw new Error(`${t("code_editor.text_backed_image_load_failed")}: ${response.status}`);
+      }
 
-    return response.text();
-  }, []);
+      return response.text();
+    },
+    [t]
+  );
 
   const handleSave = useCallback(async () => {
     if (!workspaceId || !currentFile || currentFile.kind !== "text") {
@@ -342,7 +347,7 @@ export function useCodeEditorActions() {
       });
       setExternalStatus((current) => (current?.path === path ? null : current));
     } else {
-      setSaveError({ path, message: result.error?.message ?? "Failed to save file" });
+      setSaveError({ path, message: result.error?.message ?? t("code_editor.save_failed_title") });
     }
 
     activeSaveRequestIdByPathRef.current.delete(path);
@@ -350,7 +355,7 @@ export function useCodeEditorActions() {
     nextSavingPathsAfterSave.delete(path);
     savingPathsRef.current = nextSavingPathsAfterSave;
     setSavingPaths(nextSavingPathsAfterSave);
-  }, [currentFile, dispatch, setOpenFiles, workspaceId]);
+  }, [currentFile, dispatch, setOpenFiles, t, workspaceId]);
 
   const handleContentChange = useCallback(
     (newContent: string) => {

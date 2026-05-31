@@ -31,6 +31,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 const WorkspaceDesktopScene: FC = () => {
+  const t = useTranslation();
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const {
@@ -152,7 +153,7 @@ const WorkspaceDesktopScene: FC = () => {
               onMouseDown={handleLeftMouseDown}
               role="separator"
               aria-orientation="vertical"
-              aria-label="Resize left panel"
+              aria-label={t("workspace.resize_left_panel")}
             />
           </>
         )}
@@ -174,7 +175,7 @@ const WorkspaceDesktopScene: FC = () => {
               onMouseDown={handleBottomMouseDown}
               role="separator"
               aria-orientation="horizontal"
-              aria-label="Resize bottom panel"
+              aria-label={t("workspace.resize_bottom_panel")}
             />
           )}
 

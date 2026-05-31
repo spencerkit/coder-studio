@@ -67,7 +67,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
     <div className="workspace-git-view">
       <div className="code-editor workspace-git-editor">
         <PanelHeader
-          title={preview?.title ?? preview?.path ?? "Select a changed file to inspect"}
+          title={preview?.title ?? preview?.path ?? t("git.diff_select_title")}
           actions={
             preview && showCloseButton ? (
               <div className="code-mode-toggle">
@@ -98,11 +98,7 @@ export const GitDiffViewer: FC<GitDiffViewerProps> = ({
           ) : (
             <EmptyState
               className="git-diff-empty"
-              description={
-                <p className="git-diff-empty-body">
-                  Select a staged or modified file on the left to inspect its diff.
-                </p>
-              }
+              description={<p className="git-diff-empty-body">{t("git.diff_empty_body")}</p>}
               title={<p className="git-diff-empty-title">{t("label.git")}</p>}
             />
           )}

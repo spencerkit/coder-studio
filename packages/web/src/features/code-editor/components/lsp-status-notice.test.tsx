@@ -1,12 +1,26 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import type { PropsWithChildren, ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../atoms/app-ui";
 import { LspStatusNotice } from "./lsp-status-notice";
+
+function renderWithLocale(ui: ReactElement) {
+  const store = createStore();
+  store.set(localeAtom, "en");
+
+  function LocaleProvider({ children }: PropsWithChildren) {
+    return <Provider store={store}>{children}</Provider>;
+  }
+
+  return render(ui, { wrapper: LocaleProvider });
+}
 
 describe("LspStatusNotice", () => {
   it("renders an install action when the server is missing and auto-install is supported", () => {
     const onInstall = vi.fn();
 
-    render(
+    renderWithLocale(
       <LspStatusNotice
         state={{
           kind: "tool_missing",
@@ -29,7 +43,7 @@ describe("LspStatusNotice", () => {
   it("renders a retry action when installation failed", () => {
     const onRetry = vi.fn();
 
-    render(
+    renderWithLocale(
       <LspStatusNotice
         state={{
           kind: "failed",
@@ -50,7 +64,7 @@ describe("LspStatusNotice", () => {
   });
 
   it("does not render an install action when prerequisites are missing", () => {
-    render(
+    renderWithLocale(
       <LspStatusNotice
         state={{
           kind: "tool_missing",
@@ -70,7 +84,7 @@ describe("LspStatusNotice", () => {
   });
 
   it("renders a disabled notice without install or retry actions", () => {
-    render(
+    renderWithLocale(
       <LspStatusNotice
         state={{
           kind: "disabled",

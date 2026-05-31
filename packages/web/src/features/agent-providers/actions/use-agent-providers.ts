@@ -1,7 +1,8 @@
 import type { ProviderListItem } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
+import { useTranslation } from "../../../lib/i18n";
 
 interface UseAgentProvidersResult {
   providers: ProviderListItem[];
@@ -11,19 +12,20 @@ interface UseAgentProvidersResult {
 }
 
 export function useAgentProviders(): UseAgentProvidersResult {
+  const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const [providers, setProviders] = useState<ProviderListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     const result = await dispatch<ProviderListItem[]>("provider.list", {});
     if (!result.ok || !result.data) {
       setProviders([]);
-      setError(result.error?.message ?? "Failed to load providers");
+      setError(result.error?.message ?? t("provider.load_failed"));
       setIsLoading(false);
       return;
     }
@@ -31,11 +33,11 @@ export function useAgentProviders(): UseAgentProvidersResult {
     setProviders(result.data);
     setError(null);
     setIsLoading(false);
-  };
+  }, [dispatch, t]);
 
   useEffect(() => {
     void refresh();
-  }, [dispatch]);
+  }, [refresh]);
 
   return {
     providers,

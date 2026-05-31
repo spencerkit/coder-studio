@@ -53,7 +53,8 @@
     "yes": "是",
     "no": "否",
     "ok": "确定",
-    "all": "全部"
+    "all": "全部",
+    "active": "当前"
   },
   "action": {
     "open": "打开",
@@ -82,7 +83,8 @@
     "back": "返回",
     "expand": "展开",
     "collapse": "收起",
-    "close_all": "全部关闭"
+    "close_all": "全部关闭",
+    "retry": "重试"
   },
   "label": {
     "workspace": "工作区",
@@ -97,6 +99,7 @@
     "progress": "进度"
   },
   "provider": {
+    "load_failed": "Provider 加载失败",
     "install": {
       "cta": {
         "start": "启动会话",
@@ -155,6 +158,8 @@
     "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
     "load_failed_title": "工作区加载失败",
     "load_failed_description": "获取工作区列表失败",
+    "resize_left_panel": "调整左侧面板大小",
+    "resize_bottom_panel": "调整底部面板大小",
     "sidebar": {
       "label": "工作区活动栏",
       "explorer": "资源管理器",
@@ -306,6 +311,7 @@
     "no_session": "无活跃会话",
     "provider_select": "选择 Agent",
     "state": {
+      "draft": "草稿",
       "starting": "启动中...",
       "running": "运行中",
       "idle": "等待指令",
@@ -318,6 +324,70 @@
       "thinking": "正在思考...",
       "executing": "正在执行...",
       "waiting": "等待响应..."
+    }
+  },
+  "agent_panes": {
+    "open_in_editor": "在编辑器中打开",
+    "move_here": "移动到这里",
+    "swap": "交换",
+    "drag_pane": "拖动面板",
+    "split_horizontal": "水平分屏",
+    "split_vertical": "垂直分屏",
+    "close": "关闭",
+    "draft_panels": "草稿面板",
+    "agent_panel": "Agent",
+    "file_editor": "文件编辑器",
+    "drop_file_to_open": "拖入文件打开",
+    "draft_footer": "点击启动 Agent，或将文件拖到右侧区域直接打开。"
+  },
+  "shortcuts": {
+    "command_palette_toggle": {
+      "name": "命令面板",
+      "description": "打开或关闭命令面板"
+    },
+    "workspace_new": {
+      "name": "新建工作区",
+      "description": "打开新的工作区标签"
+    },
+    "workspace_previous": {
+      "name": "上一个工作区",
+      "description": "切换到上一个工作区标签"
+    },
+    "workspace_next": {
+      "name": "下一个工作区",
+      "description": "切换到下一个工作区标签"
+    },
+    "focus_mode_toggle": {
+      "name": "专注模式",
+      "description": "切换专注模式并隐藏非必要面板"
+    },
+    "agent_split_vertical": {
+      "name": "垂直分屏",
+      "description": "垂直分割 Agent 面板"
+    },
+    "session_navigate_left": {
+      "name": "切换到左侧会话",
+      "description": "将焦点切换到左侧会话"
+    },
+    "session_navigate_right": {
+      "name": "切换到右侧会话",
+      "description": "将焦点切换到右侧会话"
+    },
+    "session_navigate_up": {
+      "name": "切换到上方会话",
+      "description": "将焦点切换到上方会话"
+    },
+    "session_navigate_down": {
+      "name": "切换到下方会话",
+      "description": "将焦点切换到下方会话"
+    },
+    "agent_split_horizontal": {
+      "name": "水平分屏",
+      "description": "水平分割 Agent 面板"
+    },
+    "editor_save": {
+      "name": "保存",
+      "description": "保存当前编辑的文件"
     }
   },
   "terminal": {
@@ -366,6 +436,19 @@
       "down": "下方向键",
       "left": "左方向键",
       "right": "右方向键"
+    },
+    "upload": {
+      "upload_failed": "上传失败",
+      "upload_failed_body": "无法上传文件：{code}",
+      "uploading": "上传中...",
+      "drop_failed": "拖放失败",
+      "drop_read_failed": "无法读取拖入的工作区路径。",
+      "drop_workspace_mismatch": "只能拖入当前工作区中的路径。",
+      "drop_insert_failed": "无法将拖入路径插入终端。",
+      "paste": "粘贴",
+      "clipboard_empty": "剪贴板为空",
+      "paste_failed": "粘贴失败",
+      "paste_permission_failed": "无法读取剪贴板，请检查权限。"
     },
     "replay": {
       "queued_title": "等待队列中（前方还有 {count} 个）",
@@ -441,12 +524,28 @@
     "mode_preview": "预览",
     "mode_edit": "编辑",
     "mode_diff": "Diff",
+    "toolbar_actions": "编辑器操作",
+    "image_load_failed_body": "图片无法加载。文件可能已被移动，或大小超出浏览器限制。",
+    "image_diff_base": "基准",
+    "image_diff_current": "当前",
+    "image_diff_no_base": "没有基准图片",
+    "image_diff_no_current": "没有当前图片",
+    "lsp_disabled_title": "语言服务已关闭",
+    "lsp_disabled_message": "已在设置中关闭 LSP，以降低内存占用。",
+    "lsp_installing_step": "正在安装：{title}",
+    "lsp_install_failed_step": "安装失败于：{title}",
+    "lsp_install": "安装",
+    "lsp_unavailable": "{name} 不可用",
+    "lsp_install_in_progress": "安装进行中",
+    "lsp_install_failed": "安装失败",
     "diff_saved_only": "Diff 仅基于已保存到磁盘的文件内容。",
     "unsaved_changes": "未保存的更改",
     "close_unsaved_title": "放弃未保存的更改？",
     "close_unsaved_description": "{name} 有未保存的更改。关闭后这些编辑将被放弃。",
     "discard_and_close": "放弃并关闭",
     "open_failed_title": "打开文件失败",
+    "save_failed_title": "保存文件失败",
+    "text_backed_image_load_failed": "加载图片文本内容失败",
     "empty_hint": "从左侧选择一个文件以在编辑器中打开。",
     "modified_on_disk": "该文件在打开后已被磁盘上的其他操作修改。请谨慎保存或重新加载文件。",
     "deleted_on_disk": "该文件在打开后已被磁盘上的其他操作删除。"
@@ -539,7 +638,11 @@
       "empty_filtered": "未找到分支",
       "empty_idle": "输入以搜索分支",
       "in_use": "占用中",
+      "hint_navigate": "导航",
+      "hint_select": "选择",
+      "hint_close": "关闭",
       "worktree_in_use": "已在其他工作区中签出",
+      "load_failed": "加载分支失败",
       "checkout_failed_title": "切换分支失败",
       "checkout_failed_body": "无法切换到 {name}。",
       "create_failed_title": "创建分支失败",
@@ -553,7 +656,9 @@
       "changes": "未提交的文件变更",
       "ahead": "待推送的本地提交",
       "behind": "远端有新提交待拉取"
-    }
+    },
+    "diff_select_title": "选择一个已更改文件查看",
+    "diff_empty_body": "从左侧选择暂存或已修改文件查看 diff。"
   },
   "worktree": {
     "title": "工作树",
@@ -575,6 +680,7 @@
     "list_empty": "暂无工作树",
     "list_open_label": "查看工作树",
     "list_error": "加载失败：{error}",
+    "list_load_failed": "加载工作树失败",
     "manage": "管理",
     "new": "新建",
     "current": "当前",
@@ -583,17 +689,24 @@
     "summary_current": "当前：{name}",
     "summary_no_current": "当前：不可用",
     "create_title": "新建工作树",
+    "create_branch_placeholder": "feature/worktree-manager",
+    "create_path_placeholder": "/path/to/coder-studio-feature-worktree-manager",
     "create_submit": "创建",
     "create_path_hint": "路径必须是绝对路径。默认建议路径会基于当前工作区路径生成。",
     "create_path_absolute_required": "路径必须是绝对路径。",
     "create_failed_title": "创建工作树失败",
+    "create_failed_body": "无法创建工作树。",
     "create_success_title": "工作树已创建",
     "create_success_body": "{name} 已可用。",
     "remove_confirm": "确认删除这个工作树？",
     "remove_force_confirm": "强制删除有更改的工作树？",
     "remove_failed_title": "删除工作树失败",
+    "remove_failed_body": "无法删除工作树。",
     "remove_success_title": "工作树已删除",
     "remove_success_body": "工作树已删除。",
+    "open_failed_title": "打开工作树失败",
+    "open_failed_body": "无法打开所选工作树。",
+    "detail_load_failed": "加载工作树数据失败。",
     "force_remove": "强制删除",
     "remove_row_label": "删除 {name}",
     "selection_removed": "所选工作树已不可用。"
@@ -830,7 +943,12 @@
       "hint": "查看并调整常用键盘操作",
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
-      "reset_hint": "重置为默认"
+      "capture_placeholder": "按下快捷键...",
+      "reset_hint": "重置为默认",
+      "category_global": "全局",
+      "category_workspace": "工作区",
+      "category_editor": "编辑器",
+      "category_terminal": "终端"
     },
     "config_files": {
       "title": "配置文件",
@@ -849,7 +967,10 @@
       "collapse": "折叠",
       "format": "格式化",
       "format_hint": "格式化 JSON 代码",
-      "file_not_found_hint": "编辑并保存以创建配置文件。"
+      "file_not_found_hint": "编辑并保存以创建配置文件。",
+      "json_formatted": "JSON 已格式化",
+      "invalid_json": "无效 JSON",
+      "invalid_json_format_body": "无法格式化无效 JSON"
     },
     "permission_denied_hint": "浏览器或系统通知权限可能已阻止，请检查站点设置和设备通知设置",
     "permission_unavailable_hint": "当前环境无法请求浏览器通知权限"
@@ -979,6 +1100,7 @@
     "hint": "请输入当前部署配置的访问密码。",
     "blocked_until": "尝试次数过多，请于 {time} 后再试，或联系管理员解禁。",
     "blocked_generic": "尝试次数过多，请稍后再试，或联系管理员解禁。",
+    "login_failed": "登录失败",
     "status_title": "访问验证",
     "status_loading": "正在检查当前部署的访问状态。",
     "status_unavailable": "暂时无法连接鉴权服务，请稍后重试。",
@@ -995,9 +1117,17 @@
     "reconnecting": "正在重新连接...",
     "reconnect_failed": "重连失败",
     "another_tab": "另一个标签页已激活",
+    "another_tab_activated": "另一个标签页已激活",
     "takeover": "接管控制权",
     "server_shutdown": "服务器已关闭",
-    "backpressure_warning": "网络拥堵，部分输出可能丢失"
+    "backpressure_warning": "网络拥堵，部分输出可能丢失",
+    "reconnecting_banner": "连接已断开，正在重新连接...",
+    "slow_recovery_hint": "连接恢复较慢，可能是网络问题。如果长时间没有恢复，可以刷新页面。",
+    "slow_recovery_hint_mobile": "连接恢复较慢，长时间未恢复可刷新页面。"
+  },
+  "shell": {
+    "loading_title": "正在连接工作区...",
+    "loading_description": "正在同步认证与连接状态，随后会自动进入当前工作区。"
   },
   "supervisor": {
     "title": "Supervisor",
@@ -1137,6 +1267,8 @@
   "command": {
     "palette": "命令面板",
     "no_results": "未找到结果",
+    "quick_actions": "快速操作",
+    "actions_count": "{count} 个操作",
     "shortcut": {
       "save": "保存",
       "save_all": "保存全部",
@@ -1409,6 +1541,7 @@
   "fencing": {
     "observer_mode": "只读模式 — 另一个标签页正在控制",
     "takeover": "接管控制",
+    "taking_over": "接管中...",
     "takeover_failed": "接管失败 — 控制器仍然活跃"
   }
 }

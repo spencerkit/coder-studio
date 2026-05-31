@@ -26,20 +26,6 @@ const paneDragEnabledMock = vi.hoisted(() => ({
   value: true,
 }));
 
-vi.mock("../../../../lib/i18n", () => ({
-  useTranslation: () => (key: string, params?: Record<string, string>) => {
-    const dictionary: Record<string, string> = {
-      "action.close": "Close",
-      "code_editor.unsaved_changes": "Unsaved changes",
-      "code_editor.close_unsaved_title": "Discard unsaved changes?",
-      "code_editor.close_unsaved_description": `${params?.name ?? "File"} has unsaved changes.`,
-      "code_editor.discard_and_close": "Discard and Close",
-      "common.cancel": "Cancel",
-    };
-    return dictionary[key] ?? key;
-  },
-}));
-
 vi.mock("../../actions/use-pane-drag-enabled", () => ({
   usePaneDragEnabled: () => paneDragEnabledMock.value,
 }));

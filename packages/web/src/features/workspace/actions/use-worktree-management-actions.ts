@@ -94,7 +94,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       setList((prev) => ({
         ...prev,
         loading: false,
-        error: result.error?.message ?? "Failed to load worktrees",
+        error: result.error?.message ?? t("worktree.list_load_failed"),
       }));
       return false;
     }
@@ -126,7 +126,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       });
 
       if (!result.ok || !result.data?.worktree) {
-        const message = result.error?.message ?? "Failed to create worktree";
+        const message = result.error?.message ?? t("worktree.create_failed_body");
         pushToast({
           kind: "error",
           title: t("worktree.create_failed_title"),
@@ -155,7 +155,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       });
 
       if (!result.ok) {
-        const message = result.error?.message ?? "Failed to remove worktree";
+        const message = result.error?.message ?? t("worktree.remove_failed_body");
         pushToast({
           kind: "error",
           title: t("worktree.remove_failed_title"),
@@ -201,10 +201,10 @@ export function useWorktreeManagementActions(workspaceId: string) {
       const result = await dispatch<Workspace>("workspace.open", { path });
 
       if (!result.ok || !result.data?.id) {
-        const message = result.error?.message ?? "Failed to open worktree";
+        const message = result.error?.message ?? t("worktree.open_failed_body");
         pushToast({
           kind: "error",
-          title: t("workspace.launch.open_failed"),
+          title: t("worktree.open_failed_title"),
           body: message,
         });
         return { ok: false as const, error: message };

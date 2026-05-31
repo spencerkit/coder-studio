@@ -578,14 +578,14 @@ export function useGitPanelActions({
       setBranchList((prev) => ({
         ...prev,
         loading: false,
-        error: result.error?.message ?? "Failed to load branches",
+        error: result.error?.message ?? t("git.quick_pick.load_failed"),
       }));
       console.error("Failed to load git branches:", result.error?.message);
       return;
     }
 
     updateBranchList(result.data);
-  }, [dispatch, setBranchList, updateBranchList, workspaceId]);
+  }, [dispatch, setBranchList, t, updateBranchList, workspaceId]);
 
   const loadGitHistory = useCallback(
     async (limit = historyLimit) => {
@@ -1007,7 +1007,7 @@ export function useBranchQuickPickActions() {
           setBranchList((prev) => ({
             ...prev,
             loading: false,
-            error: result.error?.message ?? "Failed to load branches",
+            error: result.error?.message ?? t("git.quick_pick.load_failed"),
           }));
           console.error("Failed to load git branches:", result.error?.message);
           return;
@@ -1027,7 +1027,7 @@ export function useBranchQuickPickActions() {
         setBranchList((prev) => ({
           ...prev,
           loading: false,
-          error: error instanceof Error ? error.message : "Failed to load branches",
+          error: error instanceof Error ? error.message : t("git.quick_pick.load_failed"),
         }));
         console.error("Failed to load git branches:", error);
       });
@@ -1035,7 +1035,7 @@ export function useBranchQuickPickActions() {
     return () => {
       cancelled = true;
     };
-  }, [branchList.branches.length, dispatch, quickPickState.visible, setBranchList, workspaceId]);
+  }, [branchList.branches.length, dispatch, quickPickState.visible, setBranchList, t, workspaceId]);
 
   const trimmedInput = inputValue.trim();
 

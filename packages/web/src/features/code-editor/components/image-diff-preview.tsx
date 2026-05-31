@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { Button, EmptyState } from "../../../components/ui";
+import { useTranslation } from "../../../lib/i18n";
 
 interface ImageDiffPreviewProps {
   path: string;
@@ -27,6 +28,7 @@ function ImageDiffPane({
   url?: string;
   alt: string;
 }) {
+  const t = useTranslation();
   const [errored, setErrored] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -57,17 +59,14 @@ function ImageDiffPane({
                 size="sm"
                 variant="ghost"
               >
-                Retry
+                {t("code_editor.preview_retry")}
               </Button>
             }
             className="git-diff-empty"
             description={
-              <p className="git-diff-empty-body">
-                The image could not be loaded. The file may have been moved or is larger than the
-                browser allows.
-              </p>
+              <p className="git-diff-empty-body">{t("code_editor.image_load_failed_body")}</p>
             }
-            title={<p className="git-diff-empty-title">Preview unavailable</p>}
+            title={<p className="git-diff-empty-title">{t("code_editor.preview_unavailable")}</p>}
           />
         ) : (
           <img
@@ -91,6 +90,8 @@ export const ImageDiffPreview: FC<ImageDiffPreviewProps> = ({
   beforeUrl,
   afterUrl,
 }) => {
+  const t = useTranslation();
+
   return (
     <div className="image-diff-preview" data-testid="image-diff-preview">
       <div className="image-diff-preview__meta">
@@ -100,16 +101,16 @@ export const ImageDiffPreview: FC<ImageDiffPreviewProps> = ({
       </div>
       <div className="image-diff-preview__stack">
         <ImageDiffPane
-          label="Base"
-          emptyTitle="No base image"
+          label={t("code_editor.image_diff_base")}
+          emptyTitle={t("code_editor.image_diff_no_base")}
           url={beforeUrl}
-          alt={`${path} base`}
+          alt={`${path} ${t("code_editor.image_diff_base")}`}
         />
         <ImageDiffPane
-          label="Current"
-          emptyTitle="No current image"
+          label={t("code_editor.image_diff_current")}
+          emptyTitle={t("code_editor.image_diff_no_current")}
           url={afterUrl}
-          alt={`${path} current`}
+          alt={`${path} ${t("code_editor.image_diff_current")}`}
         />
       </div>
     </div>

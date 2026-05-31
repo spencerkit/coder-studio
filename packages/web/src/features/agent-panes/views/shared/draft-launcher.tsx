@@ -312,11 +312,11 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     >
       {isFileDropTarget ? (
         <div className="pane-drop-overlay pane-drop-overlay--draft">
-          <div className="pane-drop-overlay__center">Open in editor</div>
+          <div className="pane-drop-overlay__center">{t("agent_panes.open_in_editor")}</div>
         </div>
       ) : paneDropOverlayPlacement ? (
         <div className={`pane-drop-overlay pane-drop-overlay--${paneDropOverlayPlacement}`}>
-          <div className="pane-drop-overlay__center">Move here</div>
+          <div className="pane-drop-overlay__center">{t("agent_panes.move_here")}</div>
         </div>
       ) : null}
 
@@ -325,9 +325,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
           <StatusDot tone="neutral" className="session-dot session-dot-idle" />
           <div className="session-header-copy">
             <div className="session-title-row">
-              <span className="session-title">{t("session.provider_select") || "New Session"}</span>
+              <span className="session-title">{t("session.provider_select")}</span>
               <Tag color="neutral" className="session-state-badge">
-                DRAFT
+                {t("session.state.draft")}
               </Tag>
             </div>
           </div>
@@ -335,10 +335,11 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
 
         <div className="session-header-actions">
           {canDragPane ? (
-            <Tooltip content="Drag pane">
+            <Tooltip content={t("agent_panes.drag_pane")}>
               <IconButton
-                aria-label="Drag pane"
+                aria-label={t("agent_panes.drag_pane")}
                 className="session-action-btn session-action-btn-drag"
+                data-session-action="drag"
                 icon={<GripVertical size={13} />}
                 onPointerDown={(event) => {
                   event.preventDefault();
@@ -358,28 +359,31 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
               />
             </Tooltip>
           ) : null}
-          <Tooltip content="Split horizontal">
+          <Tooltip content={t("agent_panes.split_horizontal")}>
             <IconButton
-              aria-label="Split horizontal"
+              aria-label={t("agent_panes.split_horizontal")}
               className="session-action-btn"
+              data-session-action="split-horizontal"
               icon={<FlipHorizontal size={13} />}
               onClick={handleSplitHorizontal}
               size="sm"
             />
           </Tooltip>
-          <Tooltip content="Split vertical">
+          <Tooltip content={t("agent_panes.split_vertical")}>
             <IconButton
-              aria-label="Split vertical"
+              aria-label={t("agent_panes.split_vertical")}
               className="session-action-btn"
+              data-session-action="split-vertical"
               icon={<FlipVertical size={13} />}
               onClick={handleSplitVertical}
               size="sm"
             />
           </Tooltip>
-          <Tooltip content="Close">
+          <Tooltip content={t("action.close")}>
             <IconButton
-              aria-label="Close"
+              aria-label={t("action.close")}
               className="session-action-btn session-action-btn-close"
+              data-session-action="close"
               icon={<X size={14} />}
               onClick={handleClosePane}
               size="sm"
@@ -397,13 +401,12 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
               onPointerDown={handleCarouselPointerDown}
               onPointerUp={handleCarouselPointerUp}
             >
-              {/* Agent panel */}
               <div className="agent-draft-panel">
                 <div className="agent-draft-panel-header">
                   <span className="agent-draft-panel-icon">
                     <ThemedIcon semantic="agent.provider.claude" size={13} />
                   </span>
-                  <span className="agent-draft-panel-label">Agent</span>
+                  <span className="agent-draft-panel-label">{t("agent_panes.agent_panel")}</span>
                 </div>
 
                 <div className="agent-draft-panel-list">
@@ -483,7 +486,6 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                 </div>
               </div>
 
-              {/* File Editor panel */}
               <div className="agent-draft-panel">
                 <div className="agent-draft-panel-header">
                   <span className="agent-draft-panel-icon">
@@ -501,7 +503,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
                   </span>
-                  <span className="agent-draft-panel-label">File Editor</span>
+                  <span className="agent-draft-panel-label">{t("agent_panes.file_editor")}</span>
                 </div>
 
                 <div className="agent-draft-drop-zone">
@@ -521,15 +523,21 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                       <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                   </div>
-                  <span className="agent-draft-drop-zone-title">拖入文件打开</span>
+                  <span className="agent-draft-drop-zone-title">
+                    {t("agent_panes.drop_file_to_open")}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="agent-draft-carousel-dots" role="group" aria-label="Draft panels">
+            <div
+              className="agent-draft-carousel-dots"
+              role="group"
+              aria-label={t("agent_panes.draft_panels")}
+            >
               {[
-                { id: "agent" as const, label: "Agent" },
-                { id: "file" as const, label: "File Editor" },
+                { id: "agent" as const, label: t("agent_panes.agent_panel") },
+                { id: "file" as const, label: t("agent_panes.file_editor") },
               ].map((panel) => (
                 <button
                   key={panel.id}
@@ -542,9 +550,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
               ))}
             </div>
 
-            <div className="agent-draft-footer">
-              点击「启动 Agent」，或将文件拖到右侧区域直接打开。
-            </div>
+            <div className="agent-draft-footer">{t("agent_panes.draft_footer")}</div>
           </div>
         </div>
       </div>

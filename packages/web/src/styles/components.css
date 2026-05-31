@@ -2605,19 +2605,19 @@
 
 .mobile-terminal-input-bar__ctrl,
 .mobile-terminal-input-bar__shift,
-.mobile-terminal-input-bar__key[aria-label="Escape"],
-.mobile-terminal-input-bar__key[aria-label="Tab"] {
+.mobile-terminal-input-bar__key[data-key-id="escape"],
+.mobile-terminal-input-bar__key[data-key-id="tab"] {
   min-width: 28px;
 }
 
-.mobile-terminal-input-bar__key[aria-label="Enter"] {
+.mobile-terminal-input-bar__key[data-key-id="enter"] {
   min-width: 34px;
 }
 
-.mobile-terminal-input-bar__key[aria-label="Up arrow"],
-.mobile-terminal-input-bar__key[aria-label="Left arrow"],
-.mobile-terminal-input-bar__key[aria-label="Down arrow"],
-.mobile-terminal-input-bar__key[aria-label="Right arrow"] {
+.mobile-terminal-input-bar__key[data-key-id="arrow_up"],
+.mobile-terminal-input-bar__key[data-key-id="arrow_left"],
+.mobile-terminal-input-bar__key[data-key-id="arrow_down"],
+.mobile-terminal-input-bar__key[data-key-id="arrow_right"] {
   min-width: 20px;
   padding: 0;
 }
@@ -9693,20 +9693,20 @@ textarea.input {
   gap: var(--gap-control);
 }
 
-.session-header-actions button[aria-label="Start"],
-.session-header-actions button[aria-label="Stop"] {
+.session-header-actions button[data-session-action="start"],
+.session-header-actions button[data-session-action="stop"] {
   order: 0;
 }
 
-.session-header-actions button[aria-label="Split vertical"] {
+.session-header-actions button[data-session-action="split-vertical"] {
   order: 1;
 }
 
-.session-header-actions button[aria-label="Split horizontal"] {
+.session-header-actions button[data-session-action="split-horizontal"] {
   order: 2;
 }
 
-.session-header-actions button[aria-label="Close"] {
+.session-header-actions button[data-session-action="close"] {
   order: 3;
 }
 
@@ -13994,9 +13994,9 @@ body.is-dragging-pane .session-action-btn-drag {
   color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  line-height: 1.35;
-  font-weight: var(--font-bold);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   letter-spacing: 0;
 }
 
@@ -14011,9 +14011,9 @@ body.is-dragging-pane .session-action-btn-drag {
   border-radius: var(--radius-pill);
   background: var(--component-mix-status-info-fg-10pct-surface-panel);
   color: var(--status-info-fg);
-  font-size: 11px;
-  line-height: 1;
-  font-weight: var(--font-bold);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   font-variant-numeric: tabular-nums;
 }
 
@@ -14131,9 +14131,9 @@ body.is-dragging-pane .session-action-btn-drag {
   margin: 0;
   min-width: 0;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.35;
-  font-weight: var(--font-bold);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   letter-spacing: 0;
 }
 
@@ -14900,9 +14900,9 @@ body.is-dragging-pane .session-action-btn-drag {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.35;
-  font-weight: var(--font-bold);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   letter-spacing: 0;
   text-align: left;
 }
@@ -14921,9 +14921,9 @@ body.is-dragging-pane .session-action-btn-drag {
   border-radius: var(--radius-pill);
   background: var(--component-mix-status-info-fg-10pct-surface-panel);
   color: var(--status-info-fg);
-  font-size: 11px;
-  line-height: 1;
-  font-weight: var(--font-bold);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   font-variant-numeric: tabular-nums;
 }
 
@@ -16518,7 +16518,7 @@ body.is-dragging-pane .session-action-btn-drag {
   border-radius: 0;
   color: var(--text-tertiary);
   font-size: 10px;
-  font-weight: var(--font-medium);
+  font-weight: var(--font-normal);
   line-height: 1;
   background: transparent;
   transition:
@@ -16636,7 +16636,7 @@ body.is-dragging-pane .session-action-btn-drag {
   color: var(--text-tertiary);
   font-size: 10px;
   line-height: 1.2;
-  font-weight: var(--font-medium);
+  font-weight: var(--font-normal);
   letter-spacing: 0.02em;
 }
 
@@ -16798,7 +16798,7 @@ body.is-dragging-pane .session-action-btn-drag {
   text-align: left;
   font-size: var(--type-body-3-size);
   line-height: var(--type-body-3-line-height);
-  font-weight: var(--font-bold);
+  font-weight: var(--type-body-3-weight);
 }
 
 .workspace-search-panel__preview mark {

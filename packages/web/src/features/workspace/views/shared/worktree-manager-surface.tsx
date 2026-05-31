@@ -148,6 +148,9 @@ export function WorktreeManagerSurface({
   const canSubmit =
     branchDraft.trim().length > 0 && /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(pathDraft.trim());
   const pathHintId = `worktree-path-hint-${workspaceId}`;
+  const branchPlaceholder = t("worktree.create_branch_placeholder");
+  const pathPlaceholder =
+    suggestedPathForBranch(branchPlaceholder) || t("worktree.create_path_placeholder");
   const createOnlyMode = openView === "create";
   const closeDeleteConfirm = () => {
     setRemoveError(null);
@@ -219,7 +222,7 @@ export function WorktreeManagerSurface({
             ref={branchInputRef}
             value={branchDraft}
             onChange={(event) => setBranchDraft(event.target.value)}
-            placeholder="feature/worktree-manager"
+            placeholder={branchPlaceholder}
             autoFocus
           />
         </div>
@@ -235,7 +238,7 @@ export function WorktreeManagerSurface({
               setPathTouched(true);
               setPathDraft(event.target.value);
             }}
-            placeholder="/home/spencer/workspace/coder-studio-feature-worktree-manager"
+            placeholder={pathPlaceholder}
             aria-describedby={pathHintId}
           />
           <span id={pathHintId} className="worktree-manager__field-hint">
