@@ -30,6 +30,10 @@ import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
 import { LspToolManager } from "./lsp-tools/manager.js";
 import { FileManifestStore } from "./lsp-tools/manifest-store.js";
 import { resolveLspToolRoot } from "./lsp-tools/tool-root.js";
+import { HostCollector } from "./monitoring/host-collector.js";
+import { ManagedProcessRegistry } from "./monitoring/managed-process-registry.js";
+import { createProcessTableCollector } from "./monitoring/process-table/index.js";
+import { MonitoringService } from "./monitoring/service.js";
 import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { buildCustomProviderDefinition } from "./provider-runtime/custom-provider.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
@@ -50,6 +54,7 @@ import { UpdateStateRepo } from "./storage/repositories/update-state-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
+import { SystemDependencyInstallManager } from "./system-deps/install-manager.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
 import { UpdateService } from "./update/update-service.js";
@@ -95,6 +100,9 @@ export async function createServer(
   let workspaceMgr: WorkspaceManager;
   let commandContext: CommandContext;
   let lspMgr: LspManager | null = null;
+  const managedProcessRegistry = new ManagedProcessRegistry({
+    now: () => Date.now(),
+  });
 
   const terminalRepo = new TerminalRepo({
     filePath: join(stateRoot, "state", "terminals.json"),
@@ -176,6 +184,7 @@ export async function createServer(
 
   let supervisorMgr: SupervisorManager | undefined;
   let updateService: UpdateService | undefined;
+  let monitoringService: MonitoringService | undefined;
 
   workspaceMgr = new WorkspaceManager({
     workspaceRepo,
@@ -251,7 +260,15 @@ export async function createServer(
     workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
     eventBus,
     logger: app.log,
-    requestTimeoutMs: 2000,
+    // Semantic queries (hover/definition/references/...) should fail fast so
+    // the editor's "Loading..." popup doesn't linger. 8s is comfortable for
+    // any LSP that's actually responsive.
+    requestTimeoutMs: 8_000,
+    // The one-off `initialize` request is a different beast — rust-analyzer
+    // can take 20-30s to scan a Cargo workspace and load proc-macros on
+    // first boot, and the Vue companion can be slow to start tsserver too.
+    // 60s is generous but caps the wait when the server is truly dead.
+    initializeTimeoutMs: 60_000,
     idleTtlMs: 60_000,
     restartLimit: 2,
     lspToolMgr,
@@ -282,11 +299,18 @@ export async function createServer(
   const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
     ? {
         commandExists: providerMockOverrides.commandExists,
+        runCommand: providerMockOverrides.runCommand,
       }
     : {};
   const providerInstallMgr = new ProviderInstallManager(activeProviderRegistry, {
     ...providerRuntimeDeps,
     runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
+  });
+  const systemDependencyInstallMgr = new SystemDependencyInstallManager({
+    ...providerRuntimeDeps,
+    runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
+    ptyHost: createPtyHost(),
+    broadcaster: wsHub,
   });
 
   updateService = new UpdateService({
@@ -307,6 +331,17 @@ export async function createServer(
   });
   updateService.start();
 
+  monitoringService = new MonitoringService({
+    broadcaster: wsHub,
+    settingsRepo,
+    registry: managedProcessRegistry,
+    sessionMgr,
+    workspaceMgr,
+    terminalMgr,
+    hostCollector: new HostCollector(),
+    processCollector: createProcessTableCollector(),
+  });
+
   commandContext = {
     workspaceMgr,
     sessionMgr,
@@ -321,6 +356,7 @@ export async function createServer(
     autoFetch,
     providerRuntimeDeps,
     providerInstallMgr,
+    systemDependencyInstallMgr,
     activationMgr,
     config,
     lspMgr,
@@ -336,9 +372,11 @@ export async function createServer(
       sessionMgr.setProviderRegistry(providers);
       supervisorMgr?.setProviderRegistry(providers);
     },
+    monitoringService,
   };
 
   wsHub.setCommandContext(commandContext);
+  monitoringService.start();
 
   await app.listen({
     host: config.host,
@@ -381,6 +419,7 @@ export async function createServer(
     await lspMgr?.disposeAll();
     autoFetch.stop();
     supervisorMgr.stop();
+    monitoringService?.stop();
     updateService?.stop();
     terminalMgr.shutdown();
     wsHub.destroy();

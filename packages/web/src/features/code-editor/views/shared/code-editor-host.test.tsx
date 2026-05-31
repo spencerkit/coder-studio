@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CodeEditorHeaderActions, type CodeEditorState, CodeEditorView } from "./code-editor-host";
+import {
+  CodeEditorDesktopHeaderActions,
+  CodeEditorHeaderActions,
+  type CodeEditorState,
+  CodeEditorView,
+} from "./code-editor-host";
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
@@ -70,6 +75,7 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
       retry: vi.fn(),
     },
     mode: "edit",
+    openCommitFileDiff: vi.fn(),
     openInDiffMode: vi.fn(),
     saveError: null,
     setMode: vi.fn(),
@@ -130,6 +136,35 @@ describe("CodeEditorHeaderActions", () => {
 
     fireEvent.click(closeButton);
     expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("can suppress the desktop close action when pane chrome provides its own close control", () => {
+    const state = createState();
+
+    render(<CodeEditorDesktopHeaderActions state={state} showCloseAction={false} />);
+
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+  });
+
+  it("renders desktop mode actions as icon-only buttons without save chrome", () => {
+    const state = createState({
+      canDiff: true,
+      canEdit: true,
+      canPreview: true,
+      isSvgTextBacked: false,
+      mode: "preview",
+    });
+
+    render(<CodeEditorDesktopHeaderActions state={state} />);
+
+    expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Preview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Edit")).not.toBeInTheDocument();
   });
 
   it("renders semantic icons for save and external file alerts", () => {
@@ -196,13 +231,14 @@ describe("CodeEditorHeaderActions", () => {
       mode: "diff",
       canDiff: true,
       activeDiffChange: {
+        kind: "worktree-file-diff",
         path: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
         renderAs: "text",
         status: "modified",
         originalContent: "const app = 0;",
         modifiedContent: "const app = 1;",
-        source: "file",
+        staged: false,
       },
       currentFile: {
         kind: "text",
@@ -219,7 +255,7 @@ describe("CodeEditorHeaderActions", () => {
     expect(screen.getByTestId("monaco-diff-host-mock")).toBeInTheDocument();
   });
 
-  it("renders commit-history diff preview without an active file", () => {
+  it("renders commit file list preview without an active file", () => {
     const state = createState({
       workspace: {
         id: "ws-1",
@@ -237,16 +273,96 @@ describe("CodeEditorHeaderActions", () => {
       workspaceId: "ws-1",
       mode: "preview",
       activeDiffChange: {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
     });
 
     render(<CodeEditorView state={state} />);
 
     expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "src/app.tsx modified" })).toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-diff-host-mock")).not.toBeInTheDocument();
+  });
+
+  it("renders commit file diff preview without an active file", () => {
+    const state = createState({
+      workspace: {
+        id: "ws-1",
+        name: "Workspace",
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      workspaceId: "ws-1",
+      mode: "preview",
+      activeDiffChange: {
+        kind: "commit-file-diff",
+        path: "src/app.tsx",
+        title: "src/app.tsx",
+        diff: "diff --git a/src/app.tsx b/src/app.tsx",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;",
+        modifiedContent: "const app = 1;",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        file: {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+        parentList: {
+          kind: "commit-file-list",
+          path: "abc123",
+          title: "abc123 · commit subject",
+          commit: {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "commit subject",
+            authorName: "Spencer",
+            authoredAt: 1,
+          },
+          files: [
+            {
+              path: "src/app.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
+        },
+      },
+    });
+
+    render(<CodeEditorView state={state} />);
+
+    expect(screen.getByText("src/app.tsx")).toBeInTheDocument();
     expect(screen.getByTestId("monaco-diff-host-mock")).toBeInTheDocument();
   });
 });

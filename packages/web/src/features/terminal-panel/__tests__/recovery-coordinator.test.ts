@@ -519,4 +519,114 @@ describe("RecoveryCoordinator", () => {
       errorCode: "unknown_op",
     });
   });
+
+  it("defers silently when reconcile hits activation_required instead of surfacing a recovery failure", async () => {
+    // Regression: there is a ~1s window after a WS reconnect where the socket
+    // is healthy but the activation lease still points at the previous
+    // wsClientId. Hitting that window with `recovery.reconcile` produced a
+    // spurious "terminal recovery check failed" notice that stuck around even
+    // after the client re-claimed the lease. The coordinator must now treat
+    // activation_required as transient and wait for handleActivationStatus
+    // to drive a retry.
+    const setUiMode = vi.fn();
+    const sendCommand = vi.fn().mockResolvedValue({
+      ok: false,
+      error: {
+        code: "command_error",
+        message: "This tab is no longer the active session",
+      },
+    });
+
+    const coordinator = createRecoveryCoordinator({
+      wsClient: {
+        getStatus: vi.fn(() => "connected"),
+        probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+        onStatus: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      } as never,
+      sendCommand,
+      applyReplay: vi.fn(),
+      applySnapshot: vi.fn(),
+    });
+
+    coordinator.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 20,
+      setUiMode,
+    });
+
+    await coordinator.notifyReason("initial_mount", "term-1");
+
+    // No "error" UiMode call at all — we deliberately swallow the activation
+    // race instead of confusing the user with a recovery failure.
+    expect(setUiMode).not.toHaveBeenCalledWith("error", expect.anything());
+    expect(setUiMode).not.toHaveBeenCalledWith(
+      "error",
+      expect.objectContaining({ reason: "reconcile_failed" })
+    );
+  });
+
+  it("retries deferred reconcile once activation transitions back to active", async () => {
+    const setUiMode = vi.fn();
+    const applyReplay = vi.fn();
+    const sendCommand = vi
+      .fn()
+      // First reconcile attempt — server rejects because the activation lease
+      // belongs to the previous WS.
+      .mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: "command_error",
+          message: "This tab is no longer the active session",
+        },
+      })
+      // Replay attempt after activation comes back — server now accepts.
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          terminals: [{ terminalId: "term-1", action: "noop", headSeq: 20 }],
+        },
+      });
+
+    const coordinator = createRecoveryCoordinator({
+      wsClient: {
+        getStatus: vi.fn(() => "connected"),
+        probeConnection: vi.fn().mockResolvedValue({ ok: true }),
+        onStatus: vi.fn(() => () => {}),
+        subscribe: vi.fn(() => () => {}),
+      } as never,
+      sendCommand,
+      applyReplay,
+      applySnapshot: vi.fn(),
+    });
+
+    coordinator.registerTerminal({
+      terminalId: "term-1",
+      workspaceId: "ws-1",
+      getRenderedSeq: () => 20,
+      setUiMode,
+    });
+
+    await coordinator.notifyReason("foreground_resume", "term-1");
+
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(setUiMode).not.toHaveBeenCalledWith("error", expect.anything());
+
+    // Simulate activation going through claiming -> active. The transition
+    // out of "active" arms the pending flag; the transition back to "active"
+    // fires the deferred reconcile.
+    coordinator.handleActivationStatus("idle");
+    coordinator.handleActivationStatus("active");
+
+    // queueRecovery schedules work on a microtask chain — drain it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(sendCommand).toHaveBeenCalledTimes(2);
+    expect(sendCommand).toHaveBeenNthCalledWith(2, "recovery.reconcile", {
+      reason: "socket_reconnected",
+      terminals: [{ terminalId: "term-1", renderedSeq: 20 }],
+    });
+    expect(setUiMode).toHaveBeenCalledWith("silent");
+  });
 });

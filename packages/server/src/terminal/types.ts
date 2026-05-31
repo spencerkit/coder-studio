@@ -94,8 +94,15 @@ export class TerminalSpawnError extends Error {
  * PTY process interface (abstraction over node-pty)
  */
 export interface PtyProcess {
+  readonly pid: number;
   onData(callback: (data: string) => void): void;
-  onExit(callback: (event: { exitCode: number }) => void): void;
+  onExit(
+    callback: (event: {
+      exitCode: number;
+      signal?: number;
+      reason?: "exit" | "pty_disconnected";
+    }) => void
+  ): void;
   write(data: Buffer | string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: NodeJS.Signals): Promise<void>;

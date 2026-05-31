@@ -102,7 +102,10 @@ describe("resolveSpawnArgv", () => {
   it("parses an npm-style .cmd shim and spawns node + entry directly", () => {
     const shimPath = "C:\\Users\\u\\AppData\\Local\\fnm\\codex.cmd";
     const fs = createMockFs({
-      files: { [shimPath]: STANDARD_NPM_CMD_SHIM },
+      files: {
+        [shimPath]: STANDARD_NPM_CMD_SHIM,
+        "C:\\Users\\u\\AppData\\Local\\fnm\\node.exe": "",
+      },
     });
     const out = resolveSpawnArgv(["codex", "--model", "gpt-4"], {
       platform: "win32",
@@ -121,7 +124,10 @@ describe("resolveSpawnArgv", () => {
   it("parses the SETLOCAL/find_dp0 variant of cmd-shim", () => {
     const shimPath = "C:\\bin\\codex.cmd";
     const fs = createMockFs({
-      files: { [shimPath]: NPM_CMD_SHIM_VARIANT },
+      files: {
+        [shimPath]: NPM_CMD_SHIM_VARIANT,
+        "C:\\bin\\node.exe": "",
+      },
     });
     const out = resolveSpawnArgv(["codex"], {
       platform: "win32",
@@ -173,6 +179,7 @@ describe("resolveSpawnArgv", () => {
       files: {
         "C:\\bin\\foo.cmd": STANDARD_NPM_CMD_SHIM,
         "C:\\bin\\foo.exe": "",
+        "C:\\bin\\node.exe": "",
       },
     });
     const out = resolveSpawnArgv(["foo.cmd"], {
@@ -201,7 +208,12 @@ describe("resolveSpawnArgv", () => {
 
   it("when argv[0] is already an absolute .cmd, parses it directly", () => {
     const abs = "C:\\bin\\codex.cmd";
-    const fs = createMockFs({ files: { [abs]: STANDARD_NPM_CMD_SHIM } });
+    const fs = createMockFs({
+      files: {
+        [abs]: STANDARD_NPM_CMD_SHIM,
+        "C:\\bin\\node.exe": "",
+      },
+    });
     const out = resolveSpawnArgv([abs], {
       platform: "win32",
       pathEnv: "",
@@ -241,9 +253,57 @@ describe("resolveSpawnArgv", () => {
     expect(out).toEqual(["C:\\bin\\codex.exe"]);
   });
 
+  it("falls back to node on PATH when shim's node.exe does not exist", () => {
+    // Real-world case: the official Node MSI installer puts node.exe in
+    // `C:\Program Files\nodejs`, but npm-installed CLIs live as cmd-shims
+    // in `%APPDATA%\npm`. The shim's hard-coded `%~dp0\node.exe` does not
+    // exist, so we must fall back to whatever `node` is on PATH.
+    const shimPath = "C:\\Users\\u\\AppData\\Roaming\\npm\\codex.cmd";
+    const realNode = "C:\\Program Files\\nodejs\\node.exe";
+    const fs = createMockFs({
+      files: {
+        [shimPath]: STANDARD_NPM_CMD_SHIM,
+        [realNode]: "",
+      },
+    });
+    const out = resolveSpawnArgv(["codex", "--help"], {
+      platform: "win32",
+      pathEnv: "C:\\Users\\u\\AppData\\Roaming\\npm;C:\\Program Files\\nodejs",
+      pathExt: ".COM;.EXE;.CMD",
+      readFileSync: fs.readFileSync,
+      existsSync: fs.existsSync,
+    });
+    expect(out[0]).toBe(realNode);
+    expect(out[1].toLowerCase()).toBe(
+      "c:\\users\\u\\appdata\\roaming\\@openai\\codex\\bin\\codex.js".toLowerCase()
+    );
+    expect(out.slice(2)).toEqual(["--help"]);
+  });
+
+  it("falls back to cmd.exe when shim's node.exe is missing and node is not on PATH", () => {
+    // Worst case: no node anywhere we can find. Hand the shim to cmd.exe so
+    // cmd.exe can run the shim's own IF EXIST / ELSE dispatch (which may
+    // succeed via the environment in ways we can't see from here).
+    const shimPath = "C:\\Users\\u\\AppData\\Roaming\\npm\\codex.cmd";
+    const fs = createMockFs({
+      files: { [shimPath]: STANDARD_NPM_CMD_SHIM },
+    });
+    const out = resolveSpawnArgv(["codex", "arg1"], {
+      platform: "win32",
+      pathEnv: "C:\\Users\\u\\AppData\\Roaming\\npm",
+      pathExt: ".COM;.EXE;.CMD",
+      readFileSync: fs.readFileSync,
+      existsSync: fs.existsSync,
+    });
+    expect(out).toEqual(["cmd.exe", "/d", "/s", "/c", shimPath, "arg1"]);
+  });
+
   it("matches PATHEXT case-insensitively", () => {
     const fs = createMockFs({
-      files: { "C:\\bin\\codex.CMD": STANDARD_NPM_CMD_SHIM },
+      files: {
+        "C:\\bin\\codex.CMD": STANDARD_NPM_CMD_SHIM,
+        "C:\\bin\\node.exe": "",
+      },
     });
     const out = resolveSpawnArgv(["codex"], {
       platform: "win32",

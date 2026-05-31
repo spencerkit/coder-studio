@@ -1,13 +1,57 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
 import { getThemeById } from "../theme";
-import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
+import type { UiPreviewSceneTheme } from "./scene-metadata";
+
+vi.mock("../features/code-editor/views/shared/code-editor-host", () => ({
+  CodeEditorHost: () => <div data-testid="code-editor-host" />,
+  CodeEditorDesktopHeaderActions: () => (
+    <div data-testid="editor-toolbar-mock" role="toolbar" aria-label="Editor actions">
+      <button type="button" aria-label="Diff">
+        Diff
+      </button>
+      <button type="button" aria-label="Edit">
+        Edit
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("../features/code-editor/components/monaco-host", () => ({
+  MonacoHost: ({ content, readOnly }: { content?: string; readOnly?: boolean }) => (
+    <div data-testid="monaco-host" data-read-only={String(Boolean(readOnly))}>
+      {content ?? ""}
+    </div>
+  ),
+}));
+
+vi.mock("../features/code-editor/components/monaco-diff-host", () => ({
+  MonacoDiffHost: ({
+    filePath,
+    originalContent,
+    modifiedContent,
+  }: {
+    filePath?: string;
+    originalContent: string;
+    modifiedContent: string;
+  }) => (
+    <div data-testid="monaco-diff-host" data-file-path={filePath ?? ""}>
+      <pre>{originalContent}</pre>
+      <pre>{modifiedContent}</pre>
+    </div>
+  ),
+}));
 
 const VIEWPORT_QUERY = "(max-width: 899px), (pointer: coarse)";
+const originalClipboard = navigator.clipboard;
+const originalClipboardItem = globalThis.ClipboardItem;
+const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+let catalogModule: typeof import("./catalog");
 
 function installMatchMedia(device: "desktop" | "mobile") {
   Object.defineProperty(window, "matchMedia", {
@@ -26,12 +70,20 @@ function installMatchMedia(device: "desktop" | "mobile") {
   });
 }
 
+function getCatalogModule() {
+  if (!catalogModule) {
+    throw new Error("UI preview catalog not loaded");
+  }
+
+  return catalogModule;
+}
+
 function renderScene(
   sceneId: string,
   device: "desktop" | "mobile" = "desktop",
-  theme: "mint-dark" | "mint-light" = "mint-dark"
+  theme: UiPreviewSceneTheme = "mint-dark"
 ) {
-  const scene = getUiPreviewScene(sceneId);
+  const scene = getCatalogModule().getUiPreviewScene(sceneId);
   if (!scene) {
     throw new Error(`Missing scene ${sceneId}`);
   }
@@ -59,26 +111,71 @@ function renderScene(
 describe("UI preview catalog", () => {
   const originalMatchMedia = window.matchMedia;
 
+  beforeAll(async () => {
+    installMatchMedia("desktop");
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value: vi.fn(() => ({})),
+    });
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        write: vi.fn().mockResolvedValue(undefined),
+        writeText: vi.fn().mockResolvedValue(undefined),
+        readText: vi.fn().mockResolvedValue(""),
+      },
+    });
+    Object.defineProperty(globalThis, "ClipboardItem", {
+      configurable: true,
+      writable: true,
+      value: class ClipboardItemMock {
+        constructor(public readonly items: Record<string, Blob | Promise<Blob>>) {}
+      },
+    });
+    catalogModule = await import("./catalog");
+  }, 30_000);
+
+  afterAll(() => {
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      value: originalGetContext,
+    });
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+    Object.defineProperty(globalThis, "ClipboardItem", {
+      configurable: true,
+      writable: true,
+      value: originalClipboardItem,
+    });
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     installMatchMedia("desktop");
   });
 
   afterEach(() => {
-    window.matchMedia = originalMatchMedia;
+    if (originalMatchMedia) {
+      window.matchMedia = originalMatchMedia;
+    } else {
+      installMatchMedia("desktop");
+    }
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.removeAttribute("lang");
     delete document.body.dataset.uiPreviewDevice;
   });
 
   it("registers unique first-batch page scene ids", () => {
-    const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
+    const ids = getCatalogModule().UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(
       expect.arrayContaining([
         "welcome",
         "settings-general",
         "settings-appearance",
+        "settings-monitoring",
         "settings-providers",
         "settings-shortcuts",
         "settings-mobile-root",
@@ -86,6 +183,7 @@ describe("UI preview catalog", () => {
         "workspace-load-error",
         "workspace-desktop",
         "workspace-mobile",
+        "workspace-draft-pane-editor-review",
         "auth-preview",
         "session-gate",
         "not-found",
@@ -94,7 +192,7 @@ describe("UI preview catalog", () => {
   });
 
   it("marks settings section scenes for capture-time navigation", () => {
-    const scene = getUiPreviewScene("settings-appearance");
+    const scene = getCatalogModule().getUiPreviewScene("settings-appearance");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/settings"]);
@@ -102,12 +200,33 @@ describe("UI preview catalog", () => {
   });
 
   it("marks the shortcuts settings scene for capture-time navigation", () => {
-    const scene = getUiPreviewScene("settings-shortcuts");
+    const scene = getCatalogModule().getUiPreviewScene("settings-shortcuts");
     expect(scene?.capture?.settingsSection).toBe("shortcuts");
   });
 
+  it("deep-links the monitoring settings scene directly into the monitoring section", () => {
+    const scene = getCatalogModule().getUiPreviewScene("settings-monitoring");
+    expect(
+      scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
+    ).toEqual(["/settings?section=monitoring"]);
+    expect(scene?.capture?.selector).toBe(".settings-monitoring-shell");
+  });
+
+  it("seeds the monitoring review scene with attribution, detail, and subprocess content", () => {
+    const scene = getCatalogModule().getUiPreviewScene("settings-monitoring");
+    const seed = scene?.seed({ theme: "mint-light", locale: "en", device: "desktop" });
+    const monitoringResponse = seed?.commands?.monitoringGet;
+
+    expect(monitoringResponse?.snapshot.workspaces.length).toBeGreaterThan(0);
+    expect(monitoringResponse?.snapshot.sessions.length).toBeGreaterThan(0);
+    expect(monitoringResponse?.snapshot.subprocessGroups.length).toBeGreaterThan(0);
+    expect(Object.keys(monitoringResponse?.history.workspaces ?? {})).not.toHaveLength(0);
+    expect(Object.keys(monitoringResponse?.history.sessions ?? {})).not.toHaveLength(0);
+    expect(Object.keys(monitoringResponse?.history.subprocessGroups ?? {})).not.toHaveLength(0);
+  });
+
   it("limits the mobile settings root scene to mobile variants only", () => {
-    const scene = getUiPreviewScene("settings-mobile-root");
+    const scene = getCatalogModule().getUiPreviewScene("settings-mobile-root");
     expect(scene?.devices).toEqual(["mobile"]);
   });
 
@@ -119,7 +238,7 @@ describe("UI preview catalog", () => {
   });
 
   it("registers the first showcase scene ids", () => {
-    const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
+    const ids = getCatalogModule().UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(ids).toEqual(
       expect.arrayContaining([
         "readme-desktop-hero",
@@ -187,14 +306,26 @@ describe("UI preview catalog", () => {
     expect(document.querySelector(".mobile-sheet--terminal .terminal-toolbar-left")).toBeNull();
   });
 
+  it("renders seeded content search results inside the mobile files sheet search tab", async () => {
+    renderScene("mobile-files-sheet", "mobile");
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Search|搜索/i }));
+    fireEvent.change(await screen.findByRole("searchbox", { name: /Search|搜索/i }), {
+      target: { value: "search" },
+    });
+
+    expect(await screen.findByText("mobile-files-sheet.tsx")).toBeInTheDocument();
+    expect(screen.getByText("packages/web/src/styles/components.css")).toBeInTheDocument();
+  });
+
   it("captures the mobile terminal showcase from the fullscreen terminal sheet root", () => {
-    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    const scene = getCatalogModule().getUiPreviewScene("mobile-terminal-sheet");
     expect(scene?.capture?.selector).toBe(".mobile-sheet--terminal");
     expect(scene?.devices).toEqual(["mobile"]);
   });
 
   it("keeps mobile terminal showcase history in replay state instead of preloading live output", () => {
-    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    const scene = getCatalogModule().getUiPreviewScene("mobile-terminal-sheet");
     if (!scene) {
       throw new Error("Missing mobile-terminal-sheet scene");
     }
@@ -294,6 +425,54 @@ describe("UI preview catalog", () => {
 
     expect(await screen.findByText(/changes|更改/i)).toBeInTheDocument();
     expect(document.querySelector(".desktop-review-card--sidebar .git-panel")).toBeTruthy();
+  });
+
+  it("renders seeded content search results in the workspace desktop scene", async () => {
+    renderScene("workspace-desktop");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
+    fireEvent.change(await screen.findByRole("searchbox", { name: /Search|搜索/i }), {
+      target: { value: "needle" },
+    });
+
+    expect(await screen.findByText("app.tsx")).toBeInTheDocument();
+    expect(screen.getByText("packages/web/src/app.tsx")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /app\.tsx.*packages\/web\/src\/app\.tsx.*4.*(?:matches|匹配)/i,
+      })
+    ).toBeInTheDocument();
+    expect(document.querySelector(".workspace-search-panel__group-count")).toHaveTextContent("4");
+  });
+
+  it("renders the draft-pane editor review scene with a split draft layout", async () => {
+    renderScene("workspace-draft-pane-editor-review");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+    expect(await screen.findByText("README.md")).toBeInTheDocument();
+    expect(document.querySelectorAll(".agent-pane-leaf")).toHaveLength(2);
+    expect(screen.getAllByText("Draft")).toHaveLength(2);
+  });
+
+  it("renders the editor-pane review scene with pane-local editor toolbar chrome", async () => {
+    renderScene("workspace-editor-pane-review");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("editor-pane-left")).toBeInTheDocument();
+    expect(screen.getAllByText("packages/web/src/app.tsx").length).toBeGreaterThan(0);
+    const toolbar = screen.getByRole("toolbar", { name: "Editor actions" });
+    expect(toolbar).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: /Diff|差异/i })).toBeInTheDocument();
+    expect(within(toolbar).getByRole("button", { name: /Edit|编辑/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Draft")).toHaveLength(1);
   });
 
   it("renders the workspace editor review scene", async () => {
@@ -414,7 +593,7 @@ describe("UI preview catalog", () => {
   it("renders the desktop overlay review scene", async () => {
     renderScene("desktop-overlay-review");
 
-    expect(await screen.findByText("Open Workspace")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
     expect(document.querySelector(".desktop-review-grid")).toBeTruthy();
     expect(document.body.querySelector(".workbench-layer-backdrop")).toBeTruthy();
     expect(document.body.querySelector(".command-palette")).toBeTruthy();

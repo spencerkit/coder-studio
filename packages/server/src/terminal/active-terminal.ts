@@ -37,10 +37,13 @@ export class ActiveTerminal {
    * Convert to DTO (Data Transfer Object) for external use
    */
   toDTO(): Terminal {
+    const pid = this.pty.pid > 0 ? this.pty.pid : undefined;
+
     return {
       id: this.id,
       workspaceId: this.spec.workspaceId,
       kind: this.spec.kind,
+      pid,
       title: this.spec.title ?? this.spec.argv.join(" "),
       cwd: this.spec.cwd,
       argv: this.spec.argv,

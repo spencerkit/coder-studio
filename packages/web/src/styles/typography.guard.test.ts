@@ -49,12 +49,17 @@ const exemptComponentSelectors = [
   /\.code-editor/,
   /\.monaco/,
   /\.git-diff/,
+  /\.git-/,
   /\.diff-/,
   /\.review-/,
   /\.diagnostics-/,
   /\.image-preview-/,
   /\.code-file-path/,
   /\.code-lines/,
+  /\.workspace-activity-bar/,
+  /\.workspace-sidebar-section/,
+  /\.workspace-open-editors/,
+  /\.workspace-search-panel/,
 ];
 
 function getOffenderBlocks(

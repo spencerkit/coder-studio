@@ -96,6 +96,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".settings-page", settingsSection: "shortcuts" },
   },
   {
+    id: "settings-monitoring",
+    title: "Settings / Monitoring",
+    category: "page",
+    source: "real-route",
+    description:
+      "Settings monitoring section with deterministic monitoring data for desktop and mobile review.",
+    devices: ["desktop", "mobile"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".settings-monitoring-shell" },
+  },
+  {
     id: "settings-mobile-root",
     title: "Settings / Mobile Root",
     category: "page",
@@ -140,6 +152,30 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     themes: allThemeIds(),
     locales: ["zh", "en"],
     capture: { selector: "[data-testid='mobile-shell']" },
+  },
+  {
+    id: "workspace-draft-pane-editor-review",
+    title: "Workspace / Draft Pane Editor Review",
+    category: "page",
+    source: "real-route",
+    description:
+      "Desktop workspace review scene for validating draft-pane file drop conversion, editor pane routing, and close-back-to-draft behavior.",
+    devices: ["desktop"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".workspace-page" },
+  },
+  {
+    id: "workspace-editor-pane-review",
+    title: "Workspace / Editor Pane Review",
+    category: "page",
+    source: "real-route",
+    description:
+      "Desktop workspace scene with an active agent editor pane leaf, toolbar chrome, and neighboring draft pane for acceptance review.",
+    devices: ["desktop"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".workspace-page" },
   },
   {
     id: "auth-preview",

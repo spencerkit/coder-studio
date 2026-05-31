@@ -1,6 +1,7 @@
 import type {
   FileNode,
   GitStatus,
+  SearchSessionStartResult,
   Supervisor,
   UpdateStateView,
   Workspace,
@@ -163,6 +164,88 @@ const fileTreePackages: FileNode[] = [
   { name: "web", path: "packages/web", kind: "dir" },
   { name: "core", path: "packages/core", kind: "dir" },
 ];
+
+const mobileSearchContentResults: SearchSessionStartResult = {
+  sessionId: "mobile-preview-search-session",
+  files: [
+    {
+      path: "packages/web/src/features/workspace/views/mobile/mobile-files-sheet.tsx",
+      name: "mobile-files-sheet.tsx",
+      matchCount: 2,
+      hasMoreMatches: false,
+      baseHash: "preview:mobile-files-sheet",
+      matches: [
+        {
+          id: "mobile-search-match-1",
+          line: 64,
+          column: 11,
+          endColumn: 17,
+          preview: '      <SearchPanel workspaceId={workspaceId} variant="mobile" />',
+          previewColumnStart: 8,
+          previewColumnEnd: 14,
+          replacementPreview: '      <SearchPanel workspaceId={workspaceId} variant="mobile" />',
+          replacementPreviewColumnStart: 8,
+          replacementPreviewColumnEnd: 14,
+          isReplacementPreviewTruncated: false,
+        },
+        {
+          id: "mobile-search-match-2",
+          line: 88,
+          column: 15,
+          endColumn: 21,
+          preview: '              aria-label={t("workspace.sidebar.search")}',
+          previewColumnStart: 13,
+          previewColumnEnd: 19,
+          replacementPreview: '              aria-label={t("workspace.sidebar.search")}',
+          replacementPreviewColumnStart: 13,
+          replacementPreviewColumnEnd: 19,
+          isReplacementPreviewTruncated: false,
+        },
+      ],
+    },
+    {
+      path: "packages/web/src/styles/components.css",
+      name: "components.css",
+      matchCount: 2,
+      hasMoreMatches: false,
+      baseHash: "preview:components-css",
+      matches: [
+        {
+          id: "mobile-search-match-3",
+          line: 13812,
+          column: 28,
+          endColumn: 34,
+          preview: ".workspace-search-panel__summary {",
+          previewColumnStart: 12,
+          previewColumnEnd: 18,
+          replacementPreview: ".workspace-search-panel__summary {",
+          replacementPreviewColumnStart: 12,
+          replacementPreviewColumnEnd: 18,
+          isReplacementPreviewTruncated: false,
+        },
+        {
+          id: "mobile-search-match-4",
+          line: 13994,
+          column: 12,
+          endColumn: 18,
+          preview: ".workspace-search-panel__line {",
+          previewColumnStart: 12,
+          previewColumnEnd: 18,
+          replacementPreview: ".workspace-search-panel__line {",
+          replacementPreviewColumnStart: 12,
+          replacementPreviewColumnEnd: 18,
+          isReplacementPreviewTruncated: false,
+        },
+      ],
+    },
+  ],
+  totalMatchCount: 4,
+  totalFileCount: 2,
+  hasMoreFiles: false,
+  truncatedMatchFileCount: 0,
+  skippedBinaryFileCount: 0,
+  skippedLargeFileCount: 0,
+};
 
 const readmeDesktopGitStatus: GitStatus = {
   branch: "feature/readme-refresh",
@@ -549,6 +632,7 @@ function buildReadmeDesktopReviewSeed(context: {
     },
     gitDiffPreviewByWorkspaceId: {
       [workspace.id]: {
+        kind: "worktree-file-diff",
         path: "packages/web/src/features/topbar/index.tsx",
         title: "README capture polish",
         diff: [
@@ -561,7 +645,8 @@ function buildReadmeDesktopReviewSeed(context: {
           "@@ screenshot staging",
           "+      <WorkspaceLaunchModal onClose={() => setWorkspaceLaunchOpen(false)} />",
         ].join("\n"),
-        source: "file" as const,
+        renderAs: "text" as const,
+        status: "modified" as const,
       },
     },
     commands: {
@@ -583,11 +668,23 @@ function buildReadmeDesktopReviewSeed(context: {
             '+  <span className="topbar-btn-hint">Review README capture targets</span>',
             '+  <span className="topbar-btn-hint">Keep the workspace hero readable at README width</span>',
           ].join("\n"),
+          renderAs: "text",
+          status: "modified",
         },
       },
-      gitShowByWorkspaceId: {
+      gitCommitDetailByWorkspaceId: {
         [workspace.id]: {
-          diff: "@@ latest commit\n+ refresh README desktop review capture",
+          commit: {
+            ...readmeDesktopHistory[0],
+            parentSha: "4d6fd0bbce5100f39277c9c9c92677b87de17b73",
+          },
+          files: [
+            {
+              path: "packages/web/src/features/topbar/index.tsx",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
         },
       },
       supervisorBySessionId: {
@@ -788,6 +885,25 @@ function scene(
     ...metadata,
     ...config,
   };
+}
+
+function MobileFilesSheetPreview() {
+  const [activeView, setActiveView] = useState<"explorer" | "search" | "source-control">(
+    "explorer"
+  );
+  const [route, setRoute] = useState<{ kind: "root" } | { kind: "detail"; path?: string }>({
+    kind: "root",
+  });
+
+  return (
+    <MobileFilesSheet
+      workspaceId={workspace.id}
+      route={route}
+      activeView={activeView}
+      onRouteChange={setRoute}
+      onTabChange={setActiveView}
+    />
+  );
 }
 
 function FooterUpdateRailPreviewShell({
@@ -1280,6 +1396,9 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           terminalListByWorkspaceId: {
             [workspace.id]: [],
           },
+          fileSearchSessionByWorkspaceId: {
+            [workspace.id]: mobileSearchContentResults,
+          },
         },
       }),
       render: () => (
@@ -1290,13 +1409,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
           contentClassName="mobile-sheet--files"
           onClose={() => {}}
-          body={
-            <MobileFilesSheet
-              workspaceId={workspace.id}
-              route={{ kind: "root" }}
-              activeView="explorer"
-            />
-          }
+          body={<MobileFilesSheetPreview />}
         />
       ),
     }),

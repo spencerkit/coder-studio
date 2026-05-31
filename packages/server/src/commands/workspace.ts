@@ -4,8 +4,10 @@
 
 import { readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import type { WorkspacePaneNode } from "@coder-studio/core";
 import { z } from "zod";
+import { createDirectory } from "../fs/file-io.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -43,6 +45,51 @@ async function buildRootPaths(currentPath: string): Promise<string[]> {
   return Array.from(roots);
 }
 
+const workspacePaneLeafSchema = z.union([
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.undefined().optional(),
+      sessionId: z.string().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.literal("draft"),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.literal("session"),
+      sessionId: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string(),
+      type: z.literal("leaf"),
+      leafKind: z.literal("editor"),
+    })
+    .strict(),
+]);
+
+const workspacePaneNodeSchema: z.ZodType<WorkspacePaneNode> = z.lazy(() =>
+  z.union([
+    workspacePaneLeafSchema,
+    z.object({
+      id: z.string(),
+      type: z.literal("split"),
+      direction: z.enum(["horizontal", "vertical"]).optional(),
+      children: z.array(workspacePaneNodeSchema).optional(),
+    }),
+  ])
+);
+
 // workspace.list
 registerCommand("workspace.list", z.object({}), async (_args, ctx) => {
   return ctx.workspaceMgr.list();
@@ -72,6 +119,31 @@ registerCommand(
       directories,
       rootPaths: await buildRootPaths(basePath),
     };
+  }
+);
+
+registerCommand(
+  "workspace.mkdir",
+  z.object({
+    path: z.string(),
+  }),
+  async (args) => {
+    const requestedName = basename(args.path);
+
+    if (!requestedName || requestedName === "." || requestedName === "..") {
+      throw { code: "invalid_path", message: "Folder name is required" };
+    }
+
+    const targetPath = resolveBrowsePath(args.path);
+    const parentPath = dirname(targetPath);
+    const dirName = basename(targetPath);
+
+    if (!dirName || dirName === "." || dirName === "..") {
+      throw { code: "invalid_path", message: "Folder name is required" };
+    }
+
+    await createDirectory(parentPath, dirName);
+    return { ok: true };
   }
 );
 
@@ -127,27 +199,9 @@ registerCommand(
       focusMode: z.boolean(),
       activeSessionId: z.string().optional(),
       fileTreeExpandedDirs: z.array(z.string()).optional(),
-      paneLayout: z
-        .object({
-          id: z.string(),
-          type: z.enum(["leaf", "split"]),
-          sessionId: z.string().optional(),
-          direction: z.enum(["horizontal", "vertical"]).optional(),
-          children: z
-            .lazy(() =>
-              z.array(
-                z.object({
-                  id: z.string(),
-                  type: z.enum(["leaf", "split"]),
-                  sessionId: z.string().optional(),
-                  direction: z.enum(["horizontal", "vertical"]).optional(),
-                  children: z.any().optional(),
-                })
-              )
-            )
-            .optional(),
-        })
-        .optional(),
+      paneLayout: workspacePaneNodeSchema.optional(),
+      openEditorPaths: z.array(z.string()).optional(),
+      activeEditorPath: z.string().nullable().optional(),
     }),
   }),
   async (args, ctx) => {

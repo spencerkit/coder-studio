@@ -871,7 +871,7 @@ describe("XtermHost", () => {
       </JotaiProvider>
     );
 
-    expect(screen.getByText("Uploading…")).toBeInTheDocument();
+    expect(screen.getByText("上传中...")).toBeInTheDocument();
     expect(document.querySelector(".local-overlay")).toBeTruthy();
     expect(document.querySelector(".terminal-upload-overlay")).toBeTruthy();
     expect(document.querySelector(".paste-dialog-overlay")).toBeNull();
@@ -910,7 +910,7 @@ describe("XtermHost", () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByText("Uploading…")).not.toBeInTheDocument();
+      expect(screen.queryByText("上传中...")).not.toBeInTheDocument();
       expect(mockTerminal.options).toEqual(
         expect.objectContaining({
           disableStdin: false,

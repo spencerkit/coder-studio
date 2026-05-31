@@ -38,6 +38,7 @@ class FakeLspManager {
           references: true,
           hover: true,
           documentSymbols: true,
+          semanticTokens: true,
           diagnostics: true,
         },
       },
@@ -79,15 +80,22 @@ class FakeLspManager {
   async documentSymbols() {
     return [];
   }
+
+  async semanticTokens() {
+    return {
+      resultId: "semantic-1",
+      data: [0, 13, 11, 8, 1],
+    };
+  }
 }
 
 class FakeLspToolInstallManager {
-  async start() {
+  async start(input: { serverKind: "typescript" | "python" | "go" | "rust" | "vue" }) {
     return {
       jobId: "job-1",
-      serverKind: "python" as const,
+      serverKind: input.serverKind,
       status: "queued" as const,
-      currentStepId: "install-python-lsp",
+      currentStepId: `install-${input.serverKind}-lsp`,
       steps: [],
     };
   }
@@ -206,6 +214,27 @@ describe("LSP commands", () => {
         expect.objectContaining({ path: "e2e/fixtures/lsp-workspace/shared.ts" }),
       ])
     );
+
+    const semanticTokens = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.semanticTokens",
+        args: {
+          workspaceId,
+          path: "e2e/fixtures/lsp-workspace/shared.ts",
+        },
+      },
+      ctx
+    );
+
+    expect(semanticTokens.ok).toBe(true);
+    expect(semanticTokens.data).toEqual(
+      expect.objectContaining({
+        resultId: "semantic-1",
+        data: [0, 13, 11, 8, 1],
+      })
+    );
   });
 
   it("exposes lsp runtime status and install commands", async () => {
@@ -257,6 +286,24 @@ describe("LSP commands", () => {
     expect(start.data).toMatchObject({
       jobId: "job-1",
       serverKind: "python",
+    });
+
+    const startVue = await dispatch(
+      {
+        kind: "command",
+        id: crypto.randomUUID(),
+        op: "lsp.install.start",
+        args: { workspaceId, serverKind: "vue" },
+      },
+      ctx
+    );
+
+    expect(startVue.ok).toBe(true);
+    expect(startVue.data).toMatchObject({
+      jobId: "job-1",
+      serverKind: "vue",
+      status: "queued",
+      currentStepId: "install-vue-lsp",
     });
 
     const get = await dispatch(

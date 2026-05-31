@@ -316,10 +316,7 @@ describe("WorktreeManagerSurface", () => {
     expect(branchInput).toHaveAttribute("placeholder", "feature/worktree-manager");
 
     expect(pathInput).toHaveClass("input");
-    expect(pathInput).toHaveAttribute(
-      "placeholder",
-      "/home/spencer/workspace/coder-studio-feature-worktree-manager"
-    );
+    expect(pathInput).toHaveAttribute("placeholder", "/repo/main-feature-worktree-manager");
     expect(pathInput).toHaveAttribute("aria-describedby", "worktree-path-hint-ws-1");
   });
 
@@ -406,7 +403,7 @@ describe("WorktreeManagerSurface", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Delete" });
     expect(dialog).toBeInTheDocument();
-    expect(screen.getByText("permission denied")).toBeInTheDocument();
+    expect(await screen.findByText("permission denied")).toBeInTheDocument();
     expect(screen.getByText("Force remove dirty worktree?")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

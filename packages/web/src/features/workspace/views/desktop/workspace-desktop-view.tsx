@@ -5,7 +5,6 @@ import { EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
-import { PanelHeader } from "../../../shared/components/panel-header";
 import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
@@ -32,9 +31,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 const WorkspaceDesktopScene: FC = () => {
+  const t = useTranslation();
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
-  const t = useTranslation();
   const {
     createRequest,
     desktopSidebarView,
@@ -55,6 +54,7 @@ const WorkspaceDesktopScene: FC = () => {
     workspace,
     bottomPanelHeight,
     bottomPanelRef,
+    panelRefreshToken,
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
   const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
@@ -125,18 +125,22 @@ const WorkspaceDesktopScene: FC = () => {
                       onCreateRequestConsumed={handleConsumeCreateRequest}
                       onOpenFileCreate={handleOpenFileCreate}
                       onOpenFolderCreate={handleOpenFolderCreate}
+                      refreshToken={panelRefreshToken}
                     />
                   ) : null}
 
                   {activeSidebarView === "search" ? (
-                    <SearchPanel workspaceId={workspace.id} />
+                    <SearchPanel workspaceId={workspace.id} refreshToken={panelRefreshToken} />
                   ) : null}
 
                   {activeSidebarView === "source-control" ? (
                     <div className="workspace-sidebar-view">
-                      <PanelHeader title={t("workspace.sidebar.source_control")} />
                       <div className="workspace-sidebar-panel__body">
-                        <GitPanel workspaceId={workspace.id} variant="desktop" />
+                        <GitPanel
+                          workspaceId={workspace.id}
+                          refreshToken={panelRefreshToken}
+                          variant="desktop"
+                        />
                       </div>
                     </div>
                   ) : null}
@@ -149,7 +153,7 @@ const WorkspaceDesktopScene: FC = () => {
               onMouseDown={handleLeftMouseDown}
               role="separator"
               aria-orientation="vertical"
-              aria-label="Resize left panel"
+              aria-label={t("workspace.resize_left_panel")}
             />
           </>
         )}
@@ -171,7 +175,7 @@ const WorkspaceDesktopScene: FC = () => {
               onMouseDown={handleBottomMouseDown}
               role="separator"
               aria-orientation="horizontal"
-              aria-label="Resize bottom panel"
+              aria-label={t("workspace.resize_bottom_panel")}
             />
           )}
 

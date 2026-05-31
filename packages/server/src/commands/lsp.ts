@@ -54,7 +54,7 @@ registerCommand(
   "lsp.install.start",
   z.object({
     workspaceId: z.string(),
-    serverKind: z.enum(["typescript", "python", "go", "rust"]),
+    serverKind: z.enum(["typescript", "python", "go", "rust", "vue"]),
   }),
   async (args, ctx) => {
     if (!ctx.lspToolInstallMgr) {
@@ -196,4 +196,13 @@ registerCommand(
     path: z.string(),
   }),
   async (args, ctx) => ctx.lspMgr.documentSymbols(args)
+);
+
+registerCommand(
+  "lsp.semanticTokens",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) => ctx.lspMgr.semanticTokens(args)
 );

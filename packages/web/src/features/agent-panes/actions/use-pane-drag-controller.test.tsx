@@ -47,7 +47,7 @@ describe("usePaneDragController", () => {
     expect(result.current.state.previewPosition).toEqual({ x: 130, y: 180 });
   });
 
-  it("treats draft panes as center-only targets and dispatches a center drop intent", () => {
+  it("treats draft panes like other pane targets and dispatches edge drop intents", () => {
     const onDrop = vi.fn();
     const { result } = renderHook(() => usePaneDragController({ onDrop }));
 
@@ -60,7 +60,7 @@ describe("usePaneDragController", () => {
       result.current.handlePointerMove({ clientX: 310, clientY: 140 } as PointerEvent);
     });
 
-    expect(result.current.state.hoverPlacement).toBe("center");
+    expect(result.current.state.hoverPlacement).toBe("left");
 
     act(() => {
       result.current.handlePointerUp();
@@ -69,7 +69,7 @@ describe("usePaneDragController", () => {
     expect(onDrop).toHaveBeenCalledWith({
       sourcePaneId: "source-pane",
       targetPaneId: "draft-pane",
-      placement: "center",
+      placement: "left",
       targetType: "draft",
     });
     expect(result.current.state.isDragging).toBe(false);

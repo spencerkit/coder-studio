@@ -25,6 +25,10 @@ vi.mock("../features/diagnostics", () => ({
   DiagnosticsPage: () => <div>DiagnosticsPage</div>,
 }));
 
+vi.mock("../features/monitoring", () => ({
+  MonitoringPage: () => <div>MonitoringPage</div>,
+}));
+
 vi.mock("../features/workspace/views/desktop/workspace-desktop-view", () => ({
   WorkspaceDesktopView: () => <div>WorkspacePage</div>,
 }));
@@ -124,6 +128,36 @@ describe("DesktopShell auth gating", () => {
     renderShell(store);
 
     expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
+  it("shows the loading shell instead of MonitoringPage on /monitoring while auth status is still unknown", () => {
+    window.history.replaceState({}, "", "/monitoring");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+  });
+
+  it("renders not-found instead of MonitoringPage on /monitoring once auth status is resolved", () => {
+    window.history.replaceState({}, "", "/monitoring");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    renderShell(store);
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
@@ -413,7 +447,20 @@ describe("DesktopShell auth gating", () => {
   it("redirects / to /workspace after auth resolves and workspace.list is non-empty", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "workspace.list") {
-        return [{ id: "ws-1", path: "/tmp/ws-1", targetRuntime: "native" }];
+        return [
+          {
+            id: "ws-1",
+            path: "/tmp/ws-1",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
       }
       return [];
     });
@@ -421,6 +468,7 @@ describe("DesktopShell auth gating", () => {
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, "en");
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
     store.set(workspacesLoadStateAtom, "idle");

@@ -1,11 +1,10 @@
 import type { FileNode } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { useOpenLocation } from "../../../code-editor/actions/use-open-location";
-import { deriveEditorModeForPath, editorModeAtomFamily } from "../../atoms";
+import { useOpenWorkspaceFile } from "../../actions/use-open-workspace-file";
 
 interface SearchFilesResult {
   files: FileNode[];
@@ -19,8 +18,7 @@ interface QuickJumpSectionProps {
 export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSectionProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
-  const { openLocation } = useOpenLocation(workspaceId);
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,8 +80,18 @@ export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSection
 
   return (
     <section className="workspace-sidebar-section workspace-quick-jump">
-      <h2 className="workspace-sidebar-section__title">{t("workspace.quick_jump.title")}</h2>
-      <label className="workspace-quick-jump__search" htmlFor={`quick-jump-${workspaceId}`}>
+      <div className="workspace-sidebar-section__header">
+        <div className="workspace-sidebar-section__header-main">
+          <span className="workspace-sidebar-section__chevron" aria-hidden="true">
+            ▾
+          </span>
+          <h2 className="workspace-sidebar-section__title">{t("workspace.quick_jump.title")}</h2>
+        </div>
+      </div>
+      <label
+        className="workspace-quick-jump__search workspace-sidebar-control"
+        htmlFor={`quick-jump-${workspaceId}`}
+      >
         <ThemedIcon semantic="nav.search" size={14} aria-hidden="true" />
         <input
           id={`quick-jump-${workspaceId}`}
@@ -109,11 +117,10 @@ export function QuickJumpSection({ workspaceId, onSelectFile }: QuickJumpSection
               <button
                 key={file.path}
                 type="button"
-                className="workspace-quick-jump__item"
+                className="workspace-quick-jump__item workspace-sidebar-row"
                 aria-label={file.path}
                 onClick={() => {
-                  setEditorMode(deriveEditorModeForPath(file.path));
-                  void openLocation({
+                  void openWorkspaceFile({
                     workspaceId,
                     path: file.path,
                     source: "manual",

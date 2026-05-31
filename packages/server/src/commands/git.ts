@@ -20,6 +20,7 @@ import {
   unstageFiles,
 } from "../git/cli.js";
 import { getFileDiff } from "../git/diff.js";
+import { getGitCommitDetail, getGitCommitFileDiff } from "../git/history.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { registerCommand } from "../ws/dispatch.js";
 import { emitGitStateChanged } from "./git-events.js";
@@ -134,6 +135,42 @@ registerCommand(
     return {
       diff: await getGitCommitDiff(workspace.path, args.sha),
     };
+  }
+);
+
+// git.commitDetail
+registerCommand(
+  "git.commitDetail",
+  z.object({
+    workspaceId: z.string(),
+    sha: gitCommitRevisionSchema,
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return getGitCommitDetail(workspace.path, args.sha);
+  }
+);
+
+// git.commitFileDiff
+registerCommand(
+  "git.commitFileDiff",
+  z.object({
+    workspaceId: z.string(),
+    sha: gitCommitRevisionSchema,
+    path: z.string(),
+    oldPath: z.string().optional(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    return getGitCommitFileDiff(workspace.path, args);
   }
 );
 

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { THEME_IDS } from "../theme";
 
 const stylesheet = readFileSync(`${process.cwd()}/src/styles/tokens.css`, "utf8");
 
@@ -51,16 +52,7 @@ function getDeclaredCustomProperties(block: string): string[] {
 }
 
 describe("tokens.css touch tokens", () => {
-  const builtInThemes = [
-    "mint-dark",
-    "mint-light",
-    "graphite-dark",
-    "graphite-light",
-    "nord-dark",
-    "nord-light",
-    "hc-dark",
-    "hc-light",
-  ] as const;
+  const builtInThemes = THEME_IDS;
 
   const requiredIconTokens = [
     "--icon-primary",
@@ -199,15 +191,79 @@ describe("tokens.css touch tokens", () => {
     /^--accent-purple$/,
   ] as const;
 
+  const seasonalExpectations = [
+    {
+      theme: "spring-dark",
+      focus: "#d95f7e",
+      overlay: "color-mix(in srgb, #21161c 96%, transparent)",
+      iconFolder: "#d98c96",
+      shadowGlow: "0 0 12px rgba(217, 95, 126, 0.26)",
+      accentPurple: "#cf7eb3",
+    },
+    {
+      theme: "spring-light",
+      focus: "#c84b6a",
+      overlay: "color-mix(in srgb, #fffafc 96%, transparent)",
+      iconFolder: "#c85d74",
+      shadowGlow: "0 0 12px rgba(200, 75, 106, 0.18)",
+      accentPurple: "#b85c9b",
+    },
+    {
+      theme: "summer-dark",
+      focus: "#4db57a",
+      overlay: "color-mix(in srgb, #18211c 96%, transparent)",
+      iconFolder: "#7fb886",
+      shadowGlow: "0 0 12px rgba(77, 181, 122, 0.24)",
+      accentPurple: "#8d7ccf",
+    },
+    {
+      theme: "summer-light",
+      focus: "#2f9560",
+      overlay: "color-mix(in srgb, #fbfefc 96%, transparent)",
+      iconFolder: "#429b63",
+      shadowGlow: "0 0 12px rgba(47, 149, 96, 0.18)",
+      accentPurple: "#7e73b2",
+    },
+    {
+      theme: "autumn-dark",
+      focus: "#c08a3c",
+      overlay: "color-mix(in srgb, #201913 96%, transparent)",
+      iconFolder: "#c0954d",
+      shadowGlow: "0 0 12px rgba(192, 138, 60, 0.24)",
+      accentPurple: "#a26e90",
+    },
+    {
+      theme: "autumn-light",
+      focus: "#b7791f",
+      overlay: "color-mix(in srgb, #fffbf5 96%, transparent)",
+      iconFolder: "#b77c32",
+      shadowGlow: "0 0 12px rgba(183, 121, 31, 0.18)",
+      accentPurple: "#9a5f80",
+    },
+    {
+      theme: "winter-dark",
+      focus: "#8aa4c8",
+      overlay: "color-mix(in srgb, #161e27 96%, transparent)",
+      iconFolder: "#94aac1",
+      shadowGlow: "0 0 12px rgba(138, 164, 200, 0.22)",
+      accentPurple: "#9a8cc0",
+    },
+    {
+      theme: "winter-light",
+      focus: "#6f89ad",
+      overlay: "color-mix(in srgb, #fbfdff 96%, transparent)",
+      iconFolder: "#8098b5",
+      shadowGlow: "0 0 12px rgba(111, 137, 173, 0.16)",
+      accentPurple: "#8d7fa8",
+    },
+  ] as const;
+
   it("defines named theme blocks for all built-in themes", () => {
     expect(stylesheet).toContain(':root,\n[data-theme="mint-dark"]');
-    expect(stylesheet).toContain('[data-theme="mint-light"]');
-    expect(stylesheet).toContain('[data-theme="graphite-dark"]');
-    expect(stylesheet).toContain('[data-theme="graphite-light"]');
-    expect(stylesheet).toContain('[data-theme="nord-dark"]');
-    expect(stylesheet).toContain('[data-theme="nord-light"]');
-    expect(stylesheet).toContain('[data-theme="hc-dark"]');
-    expect(stylesheet).toContain('[data-theme="hc-light"]');
+
+    for (const theme of builtInThemes) {
+      expect(stylesheet).toContain(`[data-theme="${theme}"]`);
+    }
   });
 
   it("defines desktop-default touch target tokens on :root", () => {
@@ -409,11 +465,83 @@ describe("tokens.css touch tokens", () => {
     expect(root).toContain("--radius-overlay:");
     expect(root).toContain("--radius-local-overlay:");
     expect(root).toContain("--radius-flush:");
+    expect(root).toContain("--monitoring-surface-radius:");
+    expect(root).toContain("--monitoring-card-radius:");
+    expect(root).toContain("--monitoring-item-radius:");
+    expect(root).toContain("--monitoring-chip-radius:");
+    expect(root).toContain("--monitoring-hero-gap:");
+    expect(root).toContain("--monitoring-hero-padding:");
+    expect(root).toContain("--monitoring-hero-copy-gap:");
+    expect(root).toContain("--monitoring-hero-meta-margin-top:");
+    expect(root).toContain("--monitoring-hero-side-gap:");
+    expect(root).toContain("--monitoring-status-card-gap:");
+    expect(root).toContain("--monitoring-status-card-padding:");
+    expect(root).toContain("--monitoring-hero-action-gap:");
+    expect(root).toContain("--monitoring-hero-action-padding:");
+    expect(root).toContain("--monitoring-hero-title-size:");
+    expect(root).toContain("--monitoring-hero-title-size-mobile:");
+    expect(root).toContain("--monitoring-hero-title-line-height:");
+    expect(root).toContain("--monitoring-hero-title-line-height-mobile:");
+    expect(root).toContain("--monitoring-kpi-value-size:");
+    expect(root).toContain("--monitoring-kpi-value-size-mobile:");
+    expect(root).toContain("--monitoring-hero-action-value-size:");
+    expect(root).toContain("--monitoring-hero-action-value-size-mobile:");
+    expect(root).toContain("--monitoring-sparkline-height:");
+    expect(root).toContain("--monitoring-sparkline-height-compact:");
+    expect(root).toContain("--monitoring-sparkline-width-compact:");
+    expect(root).toContain("--monitoring-sparkline-stroke-width:");
     expect(getCustomProperty(root, "--radius-sm")).toBe("2px");
     expect(getCustomProperty(root, "--radius-md")).toBe("4px");
     expect(getCustomProperty(root, "--radius-lg")).toBe("6px");
     expect(getCustomProperty(root, "--radius-xl")).toBe("8px");
     expect(getCustomProperty(root, "--radius-full")).toBe("9999px");
+    expect(getCustomProperty(root, "--monitoring-surface-radius")).toBe("var(--radius-panel)");
+    expect(getCustomProperty(root, "--monitoring-card-radius")).toBe("var(--radius-control-lg)");
+    expect(getCustomProperty(root, "--monitoring-item-radius")).toBe("var(--radius-control-lg)");
+    expect(getCustomProperty(root, "--monitoring-chip-radius")).toBe("var(--radius-pill)");
+    expect(getCustomProperty(root, "--monitoring-hero-gap")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--monitoring-hero-padding")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--monitoring-hero-copy-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-hero-meta-margin-top")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--monitoring-hero-side-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-status-card-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-status-card-padding")).toBe("var(--sp-3)");
+    expect(getCustomProperty(root, "--monitoring-hero-action-gap")).toBe("var(--sp-1)");
+    expect(getCustomProperty(root, "--monitoring-hero-action-padding")).toBe("var(--sp-2)");
+    expect(getCustomProperty(root, "--monitoring-hero-title-size")).toBe(
+      "var(--type-heading-3-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-title-size-mobile")).toBe(
+      "var(--type-heading-5-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-title-line-height")).toBe(
+      "var(--type-heading-3-line-height)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-title-line-height-mobile")).toBe(
+      "var(--type-heading-5-line-height)"
+    );
+    expect(getCustomProperty(root, "--monitoring-kpi-value-size")).toBe(
+      "var(--type-heading-3-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-kpi-value-size-mobile")).toBe(
+      "var(--type-heading-4-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-action-value-size")).toBe(
+      "var(--type-heading-5-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-hero-action-value-size-mobile")).toBe(
+      "var(--type-body-3-size)"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-height")).toBe(
+      "calc(var(--sp-16) + var(--sp-2))"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-height-compact")).toBe(
+      "var(--control-height-sm)"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-width-compact")).toBe(
+      "calc(var(--sp-16) + var(--sp-8))"
+    );
+    expect(getCustomProperty(root, "--monitoring-sparkline-stroke-width")).toBe("1.5");
 
     expect(root).toContain("--terminal-panel-inset:");
     expect(getCustomProperty(root, "--terminal-panel-inset")).toBe("2px");
@@ -730,6 +858,41 @@ describe("tokens.css touch tokens", () => {
         disallowedOverrides,
         `${theme} should only override sanctioned theme-local token categories`
       ).toEqual([]);
+    }
+  });
+
+  it("keeps seasonal theme overrides on the semantic token layer only", () => {
+    for (const {
+      theme,
+      focus,
+      overlay,
+      iconFolder,
+      shadowGlow,
+      accentPurple,
+    } of seasonalExpectations) {
+      const blocks = getRuleBlocks(`[data-theme="${theme}"]`);
+      const themeSpecificBlock = blocks.at(-1) ?? "";
+
+      expect(
+        blocks.length,
+        `${theme} should have a dedicated theme override block`
+      ).toBeGreaterThan(1);
+      expect(getCustomProperty(themeSpecificBlock, "--ref-fg-0")).not.toBeNull();
+      expect(getCustomProperty(themeSpecificBlock, "--ref-bg-0")).not.toBeNull();
+      expect(getCustomProperty(themeSpecificBlock, "--ref-border-focus")).toBe(focus);
+      expect(getCustomProperty(themeSpecificBlock, "--ref-status-info")).not.toBeNull();
+      expect(getCustomProperty(themeSpecificBlock, "--state-focus-ring-color")).toBe(focus);
+      expect(getCustomProperty(themeSpecificBlock, "--surface-overlay-bg")).toBe(overlay);
+      expect(getCustomProperty(themeSpecificBlock, "--icon-file-folder")).toBe(iconFolder);
+      expect(getCustomProperty(themeSpecificBlock, "--shadow-glow")).toBe(shadowGlow);
+      expect(getCustomProperty(themeSpecificBlock, "--accent-purple")).toBe(accentPurple);
+
+      for (const token of ["--bg-page", "--border", "--color-success", "--accent-blue"] as const) {
+        expect(
+          getCustomProperty(themeSpecificBlock, token),
+          `${theme} should not reintroduce legacy alias ${token}`
+        ).toBeNull();
+      }
     }
   });
 

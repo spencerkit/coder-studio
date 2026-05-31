@@ -1,4 +1,11 @@
-import type { GitBranch, GitCommitSummary, GitFileChange, GitStatus } from "@coder-studio/core";
+import type {
+  GitBranch,
+  GitCommitDetail,
+  GitCommitSummary,
+  GitFileChange,
+  GitFileDiffPayload,
+  GitStatus,
+} from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
@@ -17,16 +24,6 @@ import {
   gitFetchAtomFamily,
   gitStateAtomFamily,
 } from "../atoms";
-
-type GitDiffCommandPayload = {
-  diff: string;
-  renderAs?: "text" | "image";
-  status?: "modified" | "added" | "deleted";
-  originalContent?: string;
-  modifiedContent?: string;
-  originalRevision?: "HEAD" | "INDEX";
-  modifiedRevision?: "INDEX" | "WORKTREE";
-};
 
 export type GitChangeType = "staged" | "modified" | "untracked" | "deleted";
 
@@ -80,8 +77,8 @@ export interface GitSyncAuthPromptState {
 
 function isCommitPreview(
   preview: GitDiffPreview | null
-): preview is GitDiffPreview & { source: "commit" } {
-  return preview?.source === "commit";
+): preview is Extract<GitDiffPreview, { kind: "commit-file-list" | "commit-file-diff" }> {
+  return preview?.kind === "commit-file-list" || preview?.kind === "commit-file-diff";
 }
 
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
@@ -479,7 +476,7 @@ export function useGitPanelActions({
 
   const requestDiff = useCallback(
     async (change: GitFileChange, type: GitChangeType): Promise<GitDiffPreview | null> => {
-      const result = await dispatch<GitDiffCommandPayload>("git.diff", {
+      const result = await dispatch<GitFileDiffPayload>("git.diff", {
         workspaceId,
         path: change.path,
         staged: type === "staged",
@@ -490,13 +487,16 @@ export function useGitPanelActions({
         return null;
       }
 
-      const preview = {
+      const preview: GitDiffPreview = {
+        kind: "worktree-file-diff" as const,
         path: change.path,
         diff: result.data.diff,
         staged: type === "staged",
-        source: "file" as const,
         ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
         ...(result.data.status ? { status: result.data.status } : {}),
+        ...(result.data.mime ? { mime: result.data.mime } : {}),
+        ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
+        ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
         ...(result.data.originalContent !== undefined
           ? { originalContent: result.data.originalContent }
           : {}),
@@ -524,21 +524,22 @@ export function useGitPanelActions({
 
   const openHistoryDiff = useCallback(
     async (entry: GitCommitSummary) => {
-      const result = await dispatch<{ diff: string }>("git.show", {
+      const result = await dispatch<GitCommitDetail>("git.commitDetail", {
         workspaceId,
         sha: entry.sha,
       });
 
       if (!result.ok || !result.data) {
-        console.error("Failed to get commit diff:", result.error?.message);
+        console.error("Failed to get commit detail:", result.error?.message);
         return null;
       }
 
       const preview = {
+        kind: "commit-file-list" as const,
         path: entry.sha,
         title: `${entry.shortSha} · ${entry.subject}`,
-        diff: result.data.diff,
-        source: "commit" as const,
+        commit: result.data.commit,
+        files: result.data.files,
       };
       setDiffPreviewDismissed(false);
       updatePreview(preview);
@@ -577,14 +578,14 @@ export function useGitPanelActions({
       setBranchList((prev) => ({
         ...prev,
         loading: false,
-        error: result.error?.message ?? "Failed to load branches",
+        error: result.error?.message ?? t("git.quick_pick.load_failed"),
       }));
       console.error("Failed to load git branches:", result.error?.message);
       return;
     }
 
     updateBranchList(result.data);
-  }, [dispatch, setBranchList, updateBranchList, workspaceId]);
+  }, [dispatch, setBranchList, t, updateBranchList, workspaceId]);
 
   const loadGitHistory = useCallback(
     async (limit = historyLimit) => {
@@ -801,7 +802,6 @@ export function useGitPanelActions({
 
   const handleDiscardAll = useCallback(() => {
     const paths = [
-      ...(gitState?.staged.map((file) => file.path) ?? []),
       ...(gitState?.modified.map((file) => file.path) ?? []),
       ...(gitState?.deleted.map((file) => file.path) ?? []),
       ...(gitState?.untracked.map((file) => file.path) ?? []),
@@ -1007,7 +1007,7 @@ export function useBranchQuickPickActions() {
           setBranchList((prev) => ({
             ...prev,
             loading: false,
-            error: result.error?.message ?? "Failed to load branches",
+            error: result.error?.message ?? t("git.quick_pick.load_failed"),
           }));
           console.error("Failed to load git branches:", result.error?.message);
           return;
@@ -1027,7 +1027,7 @@ export function useBranchQuickPickActions() {
         setBranchList((prev) => ({
           ...prev,
           loading: false,
-          error: error instanceof Error ? error.message : "Failed to load branches",
+          error: error instanceof Error ? error.message : t("git.quick_pick.load_failed"),
         }));
         console.error("Failed to load git branches:", error);
       });
@@ -1035,7 +1035,7 @@ export function useBranchQuickPickActions() {
     return () => {
       cancelled = true;
     };
-  }, [branchList.branches.length, dispatch, quickPickState.visible, setBranchList, workspaceId]);
+  }, [branchList.branches.length, dispatch, quickPickState.visible, setBranchList, t, workspaceId]);
 
   const trimmedInput = inputValue.trim();
 

@@ -1,8 +1,16 @@
 import { X } from "lucide-react";
 import type { FC } from "react";
-import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
+import { useState } from "react";
+import {
+  ConfirmDialog,
+  EmptyState,
+  IconButton,
+  ThemedIcon,
+  Tooltip,
+} from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { deriveDocumentPreviewKind } from "../../../workspace/atoms";
+import { CommitFileListPreview } from "../../components/commit-file-list-preview";
 import { DocumentPreview } from "../../components/document-preview";
 import { ImageDiffPreview } from "../../components/image-diff-preview";
 import { ImagePreview } from "../../components/image-preview";
@@ -16,8 +24,13 @@ interface EditorSurfaceProps {
   chrome?: CodeEditorChrome;
 }
 
+function getFileName(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
 export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }) => {
   const t = useTranslation();
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const {
     activeFilePath,
     activeDiffChange,
@@ -30,7 +43,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     handleSave,
     hasUnsavedChangesOutsideDiff,
     mode,
-    openInDiffMode,
     saveError,
     workspace,
   } = state;
@@ -50,39 +62,113 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     );
   }
 
+  const activePreviewKind = activeDiffChange?.kind;
   const currentTextFile = currentFile?.kind === "text" ? currentFile : null;
   const currentImageFile = currentFile?.kind === "image" ? currentFile : null;
   const showHeader = chrome === "full";
-  const isCommitPreview = activeDiffChange?.source === "commit";
-  const dirtyIndicator =
-    !isCommitPreview && currentTextFile?.isDirty ? (
-      <span className="dirty-indicator">*</span>
-    ) : null;
-  const canRenderTextDiff =
-    (mode === "diff" || isCommitPreview) &&
-    Boolean(activeDiffChange) &&
-    (activeDiffChange?.renderAs === "text" || activeDiffChange?.source === "commit");
-  const canRenderImageDiff =
-    mode === "diff" && Boolean(activeDiffChange) && activeDiffChange?.renderAs === "image";
+  const commitFileListPreview = activePreviewKind === "commit-file-list" ? activeDiffChange : null;
+  const commitFileDiffPreview = activePreviewKind === "commit-file-diff" ? activeDiffChange : null;
+  const searchReplaceDiffPreview =
+    activePreviewKind === "search-replace-file-diff" ? activeDiffChange : null;
+  const worktreeFileDiffPreview =
+    activePreviewKind === "worktree-file-diff" ? activeDiffChange : null;
+  const isCommitFileListPreview = commitFileListPreview !== null;
+  const isCommitFileDiffPreview = commitFileDiffPreview !== null;
+  const isCommitPreview = isCommitFileListPreview || isCommitFileDiffPreview;
+  const commitPreview = commitFileListPreview ?? commitFileDiffPreview;
+  const isDirtyTextFile = !isCommitPreview && currentTextFile?.isDirty === true;
+  const dirtyIndicator = isDirtyTextFile ? (
+    <span
+      className="dirty-indicator"
+      aria-label={t("code_editor.unsaved_changes")}
+      title={t("code_editor.unsaved_changes")}
+    />
+  ) : null;
+  const textDiffPreview =
+    worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "text"
+      ? worktreeFileDiffPreview
+      : searchReplaceDiffPreview && mode === "diff"
+        ? searchReplaceDiffPreview
+        : commitFileDiffPreview?.renderAs === "text"
+          ? commitFileDiffPreview
+          : null;
+  const imageDiffPreview =
+    worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "image"
+      ? worktreeFileDiffPreview
+      : commitFileDiffPreview?.renderAs === "image"
+        ? commitFileDiffPreview
+        : null;
+  const canRenderTextDiff = textDiffPreview !== null;
+  const canRenderImageDiff = imageDiffPreview !== null;
   const shouldRenderDocumentPreview =
     mode === "preview" &&
     currentTextFile !== null &&
     deriveDocumentPreviewKind(currentTextFile.path) !== null;
-  const titleText = isCommitPreview
-    ? (activeDiffChange.title ?? activeDiffChange.path)
+  const titleText = commitPreview
+    ? (commitPreview.title ?? commitPreview.path)
     : currentFile
-      ? currentFile.path
+      ? getFileName(currentFile.path)
       : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
+  const closeConfirmFileName =
+    currentTextFile?.path !== undefined ? getFileName(currentTextFile.path) : t("file.title");
+  const requestClose = () => {
+    if (isDirtyTextFile) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+
+    void handleClose();
+  };
+  const confirmClose = () => {
+    setCloseConfirmOpen(false);
+    void handleClose();
+  };
+  const buildRevisionUrl = (path: string, revision?: string) => {
+    const query = new URLSearchParams({
+      workspaceId: workspace.id,
+      path,
+    });
+    if (revision) {
+      query.set("revision", revision);
+    }
+    return `/api/file?${query.toString()}`;
+  };
+  const imageDiffPath = imageDiffPreview
+    ? (imageDiffPreview.modifiedPath ?? imageDiffPreview.originalPath ?? imageDiffPreview.path)
+    : null;
+  const imageDiffMime = imageDiffPreview
+    ? (imageDiffPreview.mime ?? currentImageFile?.mime ?? "application/octet-stream")
+    : null;
+  const imageDiffBeforeUrl = imageDiffPreview?.originalPath
+    ? buildRevisionUrl(
+        imageDiffPreview.originalPath,
+        imageDiffPreview.originalRevision === "WORKTREE"
+          ? undefined
+          : imageDiffPreview.originalRevision
+      )
+    : undefined;
+  const imageDiffAfterUrl =
+    imageDiffPreview?.modifiedPath && imageDiffPreview.status !== "deleted"
+      ? buildRevisionUrl(
+          imageDiffPreview.modifiedPath,
+          imageDiffPreview.modifiedRevision === "WORKTREE"
+            ? undefined
+            : imageDiffPreview.modifiedRevision
+        )
+      : undefined;
 
   return (
     <div className="workspace-git-view">
       <div className="code-editor workspace-git-editor">
         {showHeader ? (
           <div className="code-editor-header editor-surface__header">
-            <span className="code-file-path">
+            <span
+              className="code-file-path"
+              title={commitPreview ? titleText : (currentFile?.path ?? titleText)}
+            >
               {currentFile && !isCommitPreview ? (
                 <>
-                  {titleText}
+                  <span className="code-file-path__name">{titleText}</span>
                   {dirtyIndicator}
                 </>
               ) : (
@@ -90,19 +176,23 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
               )}
             </span>
             {isCommitPreview ? (
-              <div className="editor-surface__toolbar" role="toolbar" aria-label="Editor actions">
+              <div
+                className="editor-surface__toolbar"
+                role="toolbar"
+                aria-label={t("code_editor.toolbar_actions")}
+              >
                 <Tooltip content={t("action.close")}>
                   <IconButton
                     aria-label={t("action.close")}
                     className="code-mode-btn editor-surface__action-btn"
-                    icon={<X size={12} />}
+                    icon={<X size={14} />}
                     onClick={handleClose}
                     size="sm"
                   />
                 </Tooltip>
               </div>
             ) : (
-              <CodeEditorDesktopHeaderActions state={state} />
+              <CodeEditorDesktopHeaderActions state={state} onRequestClose={requestClose} />
             )}
           </div>
         ) : null}
@@ -138,31 +228,29 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
         ) : null}
 
         <div className="code-editor-body">
-          {canRenderTextDiff ? (
-            <MonacoDiffHost
-              filePath={activeDiffChange?.path ?? currentFile?.path ?? "diff.patch"}
-              originalContent={activeDiffChange?.originalContent ?? ""}
-              modifiedContent={activeDiffChange?.modifiedContent ?? activeDiffChange?.diff ?? ""}
+          {isCommitFileListPreview ? (
+            <CommitFileListPreview
+              preview={commitFileListPreview}
+              onOpenFile={(file) => void state.openCommitFileDiff(file)}
             />
-          ) : canRenderImageDiff && currentImageFile ? (
+          ) : canRenderTextDiff ? (
+            <MonacoDiffHost
+              filePath={
+                textDiffPreview.modifiedPath ??
+                textDiffPreview.path ??
+                currentFile?.path ??
+                "diff.patch"
+              }
+              originalContent={textDiffPreview.originalContent ?? ""}
+              modifiedContent={textDiffPreview.modifiedContent ?? textDiffPreview.diff ?? ""}
+            />
+          ) : canRenderImageDiff && imageDiffPath && imageDiffMime ? (
             <ImageDiffPreview
-              path={currentImageFile.path}
-              mime={currentImageFile.mime}
-              status={activeDiffChange?.status ?? "modified"}
-              beforeUrl={
-                activeDiffChange?.originalRevision
-                  ? `${currentImageFile.url}&revision=${activeDiffChange.originalRevision}`
-                  : undefined
-              }
-              afterUrl={
-                activeDiffChange?.status === "deleted"
-                  ? undefined
-                  : activeDiffChange?.modifiedRevision === "WORKTREE"
-                    ? currentImageFile.url
-                    : activeDiffChange?.modifiedRevision
-                      ? `${currentImageFile.url}&revision=${activeDiffChange.modifiedRevision}`
-                      : currentImageFile.url
-              }
+              path={imageDiffPath}
+              mime={imageDiffMime}
+              status={imageDiffPreview.status ?? "modified"}
+              beforeUrl={imageDiffBeforeUrl}
+              afterUrl={imageDiffAfterUrl}
             />
           ) : shouldRenderDocumentPreview && currentTextFile ? (
             <DocumentPreview
@@ -211,6 +299,16 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={closeConfirmOpen}
+        onOpenChange={setCloseConfirmOpen}
+        title={t("code_editor.close_unsaved_title")}
+        description={t("code_editor.close_unsaved_description", { name: closeConfirmFileName })}
+        cancelText={t("common.cancel")}
+        confirmText={t("code_editor.discard_and_close")}
+        tone="danger"
+        onConfirm={confirmClose}
+      />
     </div>
   );
 };

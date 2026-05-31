@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CreateRequest } from "../../actions/use-file-actions";
 import { FileTreePanel } from "../shared/file-tree-panel";
 import { OpenEditorsSection } from "../shared/open-editors-section";
@@ -25,25 +26,45 @@ export function MobileExplorerPanel({
   onCollapseAll,
   routeToDetail,
 }: MobileExplorerPanelProps) {
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const fileTreePanelId = `workspace-file-tree-${workspaceId}-mobile`;
+
+  const handleOpenFileCreate = () => {
+    setWorkspaceCollapsed(false);
+    onOpenFileCreate?.();
+  };
+
+  const handleOpenFolderCreate = () => {
+    setWorkspaceCollapsed(false);
+    onOpenFolderCreate?.();
+  };
+
   return (
     <div className="mobile-explorer-panel">
       <QuickJumpSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
       <OpenEditorsSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
       <section className="workspace-sidebar-section workspace-sidebar-section--fill">
         <WorkspaceSectionHeader
-          onOpenFileCreate={onOpenFileCreate}
-          onOpenFolderCreate={onOpenFolderCreate}
+          isExpanded={!workspaceCollapsed}
+          panelId={fileTreePanelId}
+          onToggleExpanded={() => setWorkspaceCollapsed((value) => !value)}
+          onOpenFileCreate={handleOpenFileCreate}
+          onOpenFolderCreate={handleOpenFolderCreate}
           onCollapseAll={onCollapseAll}
+          showCollapseAction={false}
         />
-        <FileTreePanel
-          workspaceId={workspaceId}
-          createRequest={createRequest}
-          onCreateRequestConsumed={onCreateRequestConsumed}
-          onSelectFile={routeToDetail}
-          collapseVersion={collapseVersion}
-          variant="mobile"
-          showSearch={false}
-        />
+        {!workspaceCollapsed ? (
+          <FileTreePanel
+            workspaceId={workspaceId}
+            createRequest={createRequest}
+            onCreateRequestConsumed={onCreateRequestConsumed}
+            onSelectFile={routeToDetail}
+            collapseVersion={collapseVersion}
+            variant="mobile"
+            showSearch={false}
+            panelId={fileTreePanelId}
+          />
+        ) : null}
       </section>
     </div>
   );

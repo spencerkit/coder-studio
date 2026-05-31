@@ -1,6 +1,6 @@
 import type { FileNode, GitStatus, Workspace, WorktreeInfo } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
 import { buildDiagnosticsPath } from "../../diagnostics";
+import { hydrateWorkspaceEditorState } from "./open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 export interface DirectoryInfo {
@@ -27,13 +28,22 @@ interface BrowseResult {
   rootPaths?: string[];
 }
 
+interface CreateDirectoryResult {
+  ok: true;
+}
+
 type TabType = "status" | "diff" | "tree";
+
+function joinChildPath(parentPath: string, childName: string): string {
+  return parentPath === "/" ? `/${childName}` : `${parentPath}/${childName}`;
+}
 
 export function useWorkspaceLaunchActions(onClose: () => void) {
   const t = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const store = useStore();
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
   const setWorkspaces = useSetAtom(workspacesAtom);
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
@@ -50,20 +60,14 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [error, setError] = useState<string | null>(null);
   const [rootPaths, setRootPaths] = useState<string[]>(["/"]);
   const [homePath, setHomePath] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const createRequestIdRef = useRef(0);
 
   const launchTitle = t("workspace.launch.title");
   const launchHint = t("workspace.launch.hint");
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   const loadDirectory = useCallback(
     async (path?: string) => {
@@ -100,7 +104,12 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
   const handleNavigate = useCallback(
     (path: string) => {
+      createRequestIdRef.current += 1;
       setSelectedPath(null);
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      setCreateFolderError(null);
+      setCreatingFolder(false);
       void loadDirectory(path);
     },
     [loadDirectory]
@@ -109,6 +118,99 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const handleSelect = useCallback((path: string) => {
     setSelectedPath(path);
   }, []);
+
+  const openCreateFolder = useCallback(() => {
+    setIsCreatingFolder(true);
+    setCreateFolderError(null);
+  }, []);
+
+  const closeCreateFolder = useCallback(() => {
+    createRequestIdRef.current += 1;
+    setIsCreatingFolder(false);
+    setNewFolderName("");
+    setCreateFolderError(null);
+    setCreatingFolder(false);
+  }, []);
+
+  const updateNewFolderName = useCallback((value: string) => {
+    setNewFolderName(value);
+    setCreateFolderError(null);
+  }, []);
+
+  const submitCreateFolder = useCallback(async () => {
+    const trimmedName = newFolderName.trim();
+
+    if (!trimmedName) {
+      setCreateFolderError(t("workspace.launch.folder_name_required"));
+      return;
+    }
+
+    if (trimmedName.includes("/") || trimmedName.includes("\\")) {
+      setCreateFolderError(t("workspace.launch.folder_name_invalid"));
+      return;
+    }
+
+    if (!currentPath) {
+      setCreateFolderError(t("workspace.launch.create_folder_failed"));
+      return;
+    }
+
+    setCreatingFolder(true);
+    setCreateFolderError(null);
+    const requestId = createRequestIdRef.current + 1;
+    createRequestIdRef.current = requestId;
+
+    try {
+      const createResult = await dispatch<CreateDirectoryResult>("workspace.mkdir", {
+        path: joinChildPath(currentPath, trimmedName),
+      });
+
+      if (createRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (!createResult.ok) {
+        setCreateFolderError(
+          createResult.error?.message || t("workspace.launch.create_folder_failed")
+        );
+        return;
+      }
+
+      const browseResult = await dispatch<BrowseResult>("workspace.browse", { path: currentPath });
+
+      if (createRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (!browseResult.ok || !browseResult.data) {
+        setCreateFolderError(
+          browseResult.error?.message || t("workspace.launch.create_folder_failed")
+        );
+        return;
+      }
+
+      setCurrentPath(browseResult.data.currentPath);
+      setDirectories(browseResult.data.directories);
+      setParentPath(browseResult.data.parentPath);
+      const nextRootPaths = browseResult.data.rootPaths?.filter(Boolean) ?? ["/"];
+      setRootPaths(nextRootPaths);
+      const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
+      setHomePath(detectedHomePath);
+      setSelectedPath(joinChildPath(browseResult.data.currentPath, trimmedName));
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      setCreateFolderError(null);
+    } catch (_err) {
+      if (createRequestIdRef.current !== requestId) {
+        return;
+      }
+      setCreateFolderError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (createRequestIdRef.current === requestId) {
+        setCreatingFolder(false);
+      }
+    }
+  }, [currentPath, dispatch, newFolderName, t]);
 
   const handleOpen = useCallback(async () => {
     if (!selectedPath) {
@@ -131,6 +233,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
           ...prev,
           [result.data!.id]: result.data!,
         }));
+        hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
         setWorkspaceOrder((prev) => {
           if (prev.includes(result.data!.id)) {
             return prev;
@@ -153,7 +256,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
           })
         );
       }
-    } catch (err) {
+    } catch (_err) {
       navigate(
         buildDiagnosticsPath({
           context: "workspace_open",
@@ -175,6 +278,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     setWorkspaces,
     setWorkspacesLoadError,
     setWorkspacesLoadState,
+    store,
     t,
   ]);
 
@@ -197,20 +301,29 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     currentPath,
     directories,
     error,
+    createFolderError,
+    creatingFolder,
     getShortPath,
     handleNavigate,
     handleOpen,
     handleSelect,
+    isCreatingFolder,
     launchHint,
     launchTitle,
     loading,
+    newFolderName,
+    openCreateFolder,
     parentPath,
     rootPaths,
+    closeCreateFolder,
     selectedPath,
+    submitCreateFolder,
+    updateNewFolderName,
   };
 }
 
 export function useWorktreeActions(workspaceId: string, worktree: WorktreeInfo | null) {
+  const t = useTranslation();
   const wsClient = useAtomValue(wsClientAtom);
   const [activeTab, setActiveTab] = useState<TabType>("status");
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -252,7 +365,7 @@ export function useWorktreeActions(workspaceId: string, worktree: WorktreeInfo |
           setTree(result.tree);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load data";
+        const message = err instanceof Error ? err.message : t("worktree.detail_load_failed");
         setError(message);
       } finally {
         setLoading(false);
@@ -260,7 +373,7 @@ export function useWorktreeActions(workspaceId: string, worktree: WorktreeInfo |
     };
 
     void fetchData();
-  }, [activeTab, workspaceId, worktree, wsClient]);
+  }, [activeTab, t, workspaceId, worktree, wsClient]);
 
   const handleTabChange = useCallback((tab: TabType) => {
     setActiveTab(tab);

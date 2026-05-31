@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Workspace } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { VUE_MANAGED_VERSION } from "./definitions.js";
 import { LspToolManager } from "./manager.js";
 import { FileManifestStore } from "./manifest-store.js";
 
@@ -92,6 +93,9 @@ describe("LspToolManager.resolve", () => {
 
     const manager = new LspToolManager({
       manifestStore: new FileManifestStore(root),
+      // Pin platform so the win32-only Microsoft Store stub probe doesn't
+      // reach for the real `python --version` on the host.
+      platform: "linux",
       commandExists: vi.fn(async (command: string) => command === "python3"),
       resolveBundledCommand: vi.fn(() => null),
     });
@@ -128,6 +132,7 @@ describe("LspToolManager.resolve", () => {
 
     const manager = new LspToolManager({
       manifestStore: new FileManifestStore(root),
+      platform: "linux",
       commandExists: vi.fn(async (command: string) => command === "python3"),
       resolveBundledCommand: vi.fn(() => null),
     });
@@ -195,10 +200,100 @@ describe("LspToolManager.resolve", () => {
     expect(result.args.slice(1)).toEqual(["--stdio"]);
   });
 
+  it("rejects a Windows system PATH command whose `--version` prints nothing (e.g. broken rustup shim)", async () => {
+    // Regression test: `~/.cargo/bin/rust-analyzer.exe` exists on PATH as a
+    // rustup proxy even when the `rust-analyzer` component is not installed.
+    // Running it prints "Unknown binary 'rust-analyzer.exe' in official
+    // toolchain" to stderr and exits — the manager must fall through to the
+    // managed install path instead of pretending the system has a working
+    // rust-analyzer (which causes opaque LSP initialize timeouts).
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      platform: "win32",
+      commandExists: vi.fn(async () => true),
+      runCommand: vi.fn(async () => {
+        // Simulate the rustup proxy: throws because of the non-zero exit.
+        const err = Object.assign(new Error("Command failed with exit code 1"), {
+          exitCode: 1,
+          stdout: "",
+          stderr: "",
+        });
+        throw err;
+      }),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "rust",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "tool_missing",
+      serverKind: "rust",
+      autoInstallSupported: true,
+    });
+  });
+
+  it("accepts a Windows system command whose `--version` produces output", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      platform: "win32",
+      commandExists: vi.fn(async () => true),
+      runCommand: vi.fn(async () => ({
+        stdout: "rust-analyzer 1.92.0 (ded5c06c 2025-12-08)\n",
+        stderr: "",
+      })),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "rust",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "system",
+      command: "rust-analyzer",
+    });
+  });
+
+  it("skips the `--version` probe on POSIX hosts because broken proxies are uncommon there", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const runCommand = vi.fn();
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      platform: "linux",
+      commandExists: vi.fn(async () => true),
+      runCommand,
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "rust",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "system",
+    });
+    // POSIX must NOT incur the extra `--version` spawn for every LSP we
+    // resolve — it adds startup latency without any meaningful protection.
+    expect(runCommand).not.toHaveBeenCalled();
+  });
+
   it("returns tool_missing when no source is available", async () => {
     const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
     const manager = new LspToolManager({
       manifestStore: new FileManifestStore(root),
+      platform: "linux",
       commandExists: vi.fn(async (command: string) => command === "python3"),
       resolveBundledCommand: vi.fn(() => null),
     });
@@ -239,6 +334,50 @@ describe("LspToolManager.resolve", () => {
       autoInstallSupported: false,
       installReadiness: "unsupported_platform",
       missingCommands: ["rust-analyzer"],
+    });
+  });
+
+  it("prefers a managed vue install over system PATH", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    const executablePath = join(
+      root,
+      "vue",
+      VUE_MANAGED_VERSION,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
+    );
+    mkdirSync(dirname(executablePath), { recursive: true });
+    writeFileSync(executablePath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    writeFileSync(
+      join(root, "vue", "manifest.json"),
+      JSON.stringify({
+        serverKind: "vue",
+        version: VUE_MANAGED_VERSION,
+        executablePath,
+        installedAt: 1,
+        source: "managed",
+        platform: process.platform,
+      })
+    );
+
+    const manager = new LspToolManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async () => true),
+      resolveBundledCommand: vi.fn(() => null),
+    });
+
+    const result = await manager.resolve({
+      workspace,
+      serverKind: "vue",
+      env: {},
+    });
+
+    expect(result).toMatchObject({
+      kind: "ready",
+      source: "managed",
+      command: executablePath,
+      args: ["--stdio"],
     });
   });
 });

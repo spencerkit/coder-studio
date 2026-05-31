@@ -37,6 +37,7 @@ import {
 import { updateStateAtom } from "../../features/updates/atoms";
 import {
   branchQuickPickAtom,
+  type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
 } from "../../features/workspace/atoms";
@@ -74,6 +75,10 @@ vi.mock("../../features/diagnostics", async () => {
     DiagnosticsPage: () => <div>DiagnosticsPage</div>,
   };
 });
+
+vi.mock("../../features/monitoring", () => ({
+  MonitoringPage: () => <div>MonitoringPage</div>,
+}));
 
 vi.mock("../../features/command-palette", () => ({
   CommandPalette: () => null,
@@ -151,26 +156,20 @@ vi.mock("../../features/workspace/views/shared/file-tree-panel", () => ({
 }));
 
 vi.mock("../../features/workspace/views/shared/git-panel", () => ({
-  GitPanel: ({
-    onPreviewOpen,
-  }: {
-    onPreviewOpen?: (preview: {
-      path: string;
-      diff: string;
-      staged?: boolean;
-      source?: "file" | "commit";
-      title?: string;
-    }) => void;
-  }) => (
+  GitPanel: ({ onPreviewOpen }: { onPreviewOpen?: (preview: GitDiffPreview) => void }) => (
     <div>
       <button
         type="button"
         onClick={() =>
           onPreviewOpen?.({
+            kind: "worktree-file-diff",
             path: "src/app.tsx",
             diff: "diff --git a/src/app.tsx b/src/app.tsx",
             staged: false,
-            source: "file",
+            renderAs: "text",
+            status: "modified",
+            originalContent: "const app = 0;",
+            modifiedContent: "const app = 1;",
           })
         }
       >
@@ -180,10 +179,23 @@ vi.mock("../../features/workspace/views/shared/git-panel", () => ({
         type="button"
         onClick={() =>
           onPreviewOpen?.({
+            kind: "commit-file-list",
             path: "abc123",
             title: "abc123 · commit subject",
-            diff: "diff --git a/src/app.tsx b/src/app.tsx",
-            source: "commit",
+            commit: {
+              sha: "abc123",
+              shortSha: "abc123",
+              subject: "commit subject",
+              authorName: "Spencer",
+              authoredAt: 1,
+            },
+            files: [
+              {
+                path: "src/app.tsx",
+                status: "modified",
+                renderAs: "text",
+              },
+            ],
           })
         }
       >
@@ -1135,6 +1147,48 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/diagnostics");
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
+  it("shows the loading shell instead of MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/monitoring"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+  });
+
+  it("renders not-found instead of MonitoringPage on mobile /monitoring once auth status is resolved", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/monitoring"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
+    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
@@ -3337,6 +3391,7 @@ describe("MobileShell Phase 2 workspace", () => {
   it("renders a reconnecting banner inside the mobile workspace scaffold", async () => {
     renderMobileShell({
       connectionStatus: "reconnecting",
+      locale: "zh",
       reconnectAttempts: 2,
     });
 

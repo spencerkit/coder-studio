@@ -47,6 +47,44 @@ function isIgnoredByGitignore(ig: ReturnType<typeof ignore>, path: string): bool
   return ig.ignores(path) || ig.ignores(`${path}/`);
 }
 
+export interface GitignoreMatcher {
+  hasRootGitignore: boolean;
+  rootPath: string;
+  rules: ReturnType<typeof ignore> | null;
+}
+
+export function createGitignoreMatcher(rootPath: string): GitignoreMatcher {
+  const gitignorePath = join(rootPath, ".gitignore");
+  if (!existsSync(gitignorePath)) {
+    return {
+      hasRootGitignore: false,
+      rootPath,
+      rules: null,
+    };
+  }
+
+  return {
+    hasRootGitignore: true,
+    rootPath,
+    rules: ignore().add(readFileSync(gitignorePath, "utf-8")),
+  };
+}
+
+export function isPathGitignored(matcher: GitignoreMatcher, relativePath: string): boolean {
+  const normalizedPath = normalizePath(relativePath);
+  if (
+    !matcher.rules ||
+    !normalizedPath ||
+    normalizedPath.startsWith("..") ||
+    normalizedPath === ".git" ||
+    normalizedPath.startsWith(".git/")
+  ) {
+    return false;
+  }
+
+  return isIgnoredByGitignore(matcher.rules, normalizedPath);
+}
+
 /**
  * Creates a filter function that respects .gitignore rules for a given directory.
  * Returns false if the entry should be skipped (ignored), true if it should be included.
@@ -59,15 +97,12 @@ export function createGitignoreFilter(
   rootPath: string,
   dirPath: string
 ): (name: string) => boolean {
-  const gitignorePath = join(rootPath, ".gitignore");
+  const matcher = createGitignoreMatcher(rootPath);
 
-  if (!existsSync(gitignorePath)) {
+  if (!matcher.hasRootGitignore) {
     // No .gitignore: default to skipping dotfiles, node_modules, .git
     return (name: string) => !isDefaultTreeIgnored(name);
   }
-
-  const gitignoreContent = readFileSync(gitignorePath, "utf-8");
-  const ig = ignore().add(gitignoreContent);
 
   return (name: string) => {
     if (isAlwaysTreeIgnored(name)) {
@@ -75,7 +110,7 @@ export function createGitignoreFilter(
     }
 
     const relativePath = relativeToRoot(rootPath, join(dirPath, name));
-    return !isIgnoredByGitignore(ig, relativePath);
+    return !isPathGitignored(matcher, relativePath);
   };
 }
 

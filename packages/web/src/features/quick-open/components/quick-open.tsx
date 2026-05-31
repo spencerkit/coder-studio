@@ -6,7 +6,7 @@ import { dispatchCommandAtom } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { EmptyState, ThemedIcon, WorkbenchLayer } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
-import { useOpenLocation } from "../../code-editor/actions/use-open-location";
+import { useOpenWorkspaceFile } from "../../workspace/actions/use-open-workspace-file";
 
 interface SearchFilesResult {
   files: FileNode[];
@@ -17,7 +17,7 @@ export function QuickOpen() {
   const [open, setOpen] = useAtom(quickOpenOpenAtom);
   const workspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const { openLocation } = useOpenLocation(workspaceId ?? "__workspace_placeholder__");
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId ?? "__workspace_placeholder__");
   const inputRef = useRef<HTMLInputElement>(null);
   const dispatchRef = useRef(dispatch);
   const [query, setQuery] = useState("");
@@ -148,7 +148,7 @@ export function QuickOpen() {
 
           if (event.key === "Enter" && activeResult && workspaceId) {
             event.preventDefault();
-            void openLocation({
+            void openWorkspaceFile({
               workspaceId,
               path: activeResult.path,
               source: "manual",
@@ -201,7 +201,7 @@ export function QuickOpen() {
                       return;
                     }
 
-                    void openLocation({
+                    void openWorkspaceFile({
                       workspaceId,
                       path: file.path,
                       source: "manual",

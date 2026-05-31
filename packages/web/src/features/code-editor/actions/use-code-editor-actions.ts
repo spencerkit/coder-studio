@@ -1,7 +1,9 @@
+import type { GitCommitFileEntry, GitFileDiffPayload } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
+import { useTranslation } from "../../../lib/i18n";
 import { useOpenEditorsActions } from "../../workspace/actions/use-open-editors-actions";
 import {
   activeFilePathAtomFamily,
@@ -45,17 +47,8 @@ type FileReadImagePayload = {
 
 type FileReadPayload = FileReadTextPayload | FileReadImagePayload;
 
-type GitDiffPayload = {
-  diff: string;
-  renderAs: "text" | "image";
-  status: "modified" | "added" | "deleted";
-  originalContent?: string;
-  modifiedContent?: string;
-  originalRevision?: "HEAD" | "INDEX";
-  modifiedRevision?: "INDEX" | "WORKTREE";
-};
-
 export function useCodeEditorActions() {
+  const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceRootPath = workspace?.path;
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -65,6 +58,7 @@ export function useCodeEditorActions() {
   );
 
   const [savingPaths, setSavingPaths] = useState<Set<string>>(() => new Set());
+  const savingPathsRef = useRef<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<{ path: string; message: string } | null>(null);
   const [fileLoadError, setFileLoadError] = useState<{ path: string; message: string } | null>(
     null
@@ -75,7 +69,7 @@ export function useCodeEditorActions() {
   } | null>(null);
 
   const workspaceId = workspace?.id;
-  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
+  const [activeFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
   const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
@@ -85,6 +79,7 @@ export function useCodeEditorActions() {
   const pendingActivePathRef = useRef<string | null>(null);
   const nextSaveRequestIdRef = useRef(0);
   const activeSaveRequestIdByPathRef = useRef<Map<string, number>>(new Map());
+  const nextCommitDiffRequestIdRef = useRef(0);
   const previousOpenFilePathsRef = useRef<string[] | null>(null);
   const { closePath } = useOpenEditorsActions(workspaceId ?? "", {
     workspaceRootPath,
@@ -106,7 +101,10 @@ export function useCodeEditorActions() {
 
     lastSeededModePathRef.current = activeFilePath;
     const shouldPreserveDiffMode =
-      mode === "diff" && diffPreview?.source === "file" && diffPreview.path === activeFilePath;
+      mode === "diff" &&
+      (diffPreview?.kind === "worktree-file-diff" ||
+        diffPreview?.kind === "search-replace-file-diff") &&
+      diffPreview.path === activeFilePath;
     const nextMode = shouldPreserveDiffMode ? "diff" : deriveEditorModeForOpenFile(currentFile);
     if (nextMode !== mode) {
       setMode(nextMode);
@@ -138,6 +136,7 @@ export function useCodeEditorActions() {
         }
       }
 
+      savingPathsRef.current = changed ? next : current;
       return changed ? next : current;
     });
     setSaveError((current) => (current && removedPaths.has(current.path) ? null : current));
@@ -191,7 +190,7 @@ export function useCodeEditorActions() {
 
       if (!result.ok || !result.data) {
         finishPendingEditorLoad(workspaceId, path, requestId);
-        const message = result.error?.message ?? "Failed to open file";
+        const message = result.error?.message ?? t("code_editor.open_failed_title");
         console.error("Failed to open file:", message);
         setFileLoadError({ path, message });
         return;
@@ -208,7 +207,7 @@ export function useCodeEditorActions() {
 
           if (!response.ok) {
             finishPendingEditorLoad(workspaceId, path, requestId);
-            const message = `Failed to fetch text-backed image bytes: ${response.status}`;
+            const message = `${t("code_editor.text_backed_image_load_failed")}: ${response.status}`;
             console.error(message);
             setFileLoadError({ path, message });
             return;
@@ -242,7 +241,7 @@ export function useCodeEditorActions() {
         } catch (error) {
           finishPendingEditorLoad(workspaceId, path, requestId);
           const message =
-            error instanceof Error ? error.message : "Failed to fetch text-backed image bytes";
+            error instanceof Error ? error.message : t("code_editor.text_backed_image_load_failed");
           console.error("Failed to fetch text-backed image bytes:", error);
           setFileLoadError({ path, message });
         }
@@ -284,17 +283,20 @@ export function useCodeEditorActions() {
       setExternalStatus((current) => (current?.path === path ? null : current));
       setFileLoadError((current) => (current?.path === path ? null : current));
     },
-    [dispatch, setOpenFiles, workspaceId, workspaceRootPath]
+    [dispatch, setOpenFiles, t, workspaceId, workspaceRootPath]
   );
 
-  const loadTextBackedImageContent = useCallback(async (url: string) => {
-    const response = await fetch(url, { credentials: "include" });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch text-backed image bytes: ${response.status}`);
-    }
+  const loadTextBackedImageContent = useCallback(
+    async (url: string) => {
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) {
+        throw new Error(`${t("code_editor.text_backed_image_load_failed")}: ${response.status}`);
+      }
 
-    return response.text();
-  }, []);
+      return response.text();
+    },
+    [t]
+  );
 
   const handleSave = useCallback(async () => {
     if (!workspaceId || !currentFile || currentFile.kind !== "text") {
@@ -302,13 +304,16 @@ export function useCodeEditorActions() {
     }
 
     const { path, content, baseHash } = currentFile;
-    if (savingPaths.has(path)) {
+    if (savingPathsRef.current.has(path)) {
       return;
     }
 
     const requestId = ++nextSaveRequestIdRef.current;
     activeSaveRequestIdByPathRef.current.set(path, requestId);
-    setSavingPaths((current) => new Set(current).add(path));
+    const nextSavingPaths = new Set(savingPathsRef.current);
+    nextSavingPaths.add(path);
+    savingPathsRef.current = nextSavingPaths;
+    setSavingPaths(nextSavingPaths);
     setSaveError((current) => (current?.path === path ? null : current));
 
     const result = await dispatch<{ newHash: string }>("file.write", {
@@ -342,16 +347,15 @@ export function useCodeEditorActions() {
       });
       setExternalStatus((current) => (current?.path === path ? null : current));
     } else {
-      setSaveError({ path, message: result.error?.message ?? "Failed to save file" });
+      setSaveError({ path, message: result.error?.message ?? t("code_editor.save_failed_title") });
     }
 
     activeSaveRequestIdByPathRef.current.delete(path);
-    setSavingPaths((current) => {
-      const next = new Set(current);
-      next.delete(path);
-      return next;
-    });
-  }, [currentFile, dispatch, savingPaths, setOpenFiles, workspaceId]);
+    const nextSavingPathsAfterSave = new Set(savingPathsRef.current);
+    nextSavingPathsAfterSave.delete(path);
+    savingPathsRef.current = nextSavingPathsAfterSave;
+    setSavingPaths(nextSavingPathsAfterSave);
+  }, [currentFile, dispatch, setOpenFiles, t, workspaceId]);
 
   const handleContentChange = useCallback(
     (newContent: string) => {
@@ -630,8 +634,13 @@ export function useCodeEditorActions() {
     workspaceRootPath,
   ]);
 
-  const handleClose = useCallback(() => {
-    if (diffPreview?.source === "commit") {
+  const handleClose = useCallback(async () => {
+    if (diffPreview?.kind === "commit-file-diff") {
+      setDiffPreview(diffPreview.parentList);
+      return;
+    }
+
+    if (diffPreview?.kind === "commit-file-list") {
       setDiffPreview(null);
       if (currentFile) {
         const nextMode = deriveEditorModeForOpenFile(currentFile);
@@ -643,7 +652,7 @@ export function useCodeEditorActions() {
     }
 
     if (currentFile?.path || activeFilePath) {
-      closePath(currentFile?.path ?? activeFilePath);
+      closePath(currentFile?.path ?? activeFilePath ?? undefined);
     }
 
     setSaveError(null);
@@ -675,7 +684,7 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    const result = await dispatch<GitDiffPayload>("git.diff", {
+    const result = await dispatch<GitFileDiffPayload>("git.diff", {
       workspaceId,
       path: currentFile.path,
       staged: false,
@@ -685,13 +694,16 @@ export function useCodeEditorActions() {
       return false;
     }
 
-    const nextPreview: GitDiffPreview = {
+    const nextPreview = {
+      kind: "worktree-file-diff",
       path: currentFile.path,
       diff: result.data.diff,
       staged: false,
-      source: "file",
       ...(result.data.renderAs ? { renderAs: result.data.renderAs } : {}),
       ...(result.data.status ? { status: result.data.status } : {}),
+      ...(result.data.mime ? { mime: result.data.mime } : {}),
+      ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
+      ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
       ...(result.data.originalContent !== undefined
         ? { originalContent: result.data.originalContent }
         : {}),
@@ -700,12 +712,79 @@ export function useCodeEditorActions() {
         : {}),
       ...(result.data.originalRevision ? { originalRevision: result.data.originalRevision } : {}),
       ...(result.data.modifiedRevision ? { modifiedRevision: result.data.modifiedRevision } : {}),
-    };
+    } as GitDiffPreview;
     setDiffPreviewDismissed(false);
     setDiffPreview(nextPreview);
     setMode("diff");
     return true;
   }, [currentFile, dispatch, setDiffPreview, setDiffPreviewDismissed, setMode, workspaceId]);
+
+  const openCommitFileDiff = useCallback(
+    async (file: GitCommitFileEntry) => {
+      if (!workspaceId || diffPreview?.kind !== "commit-file-list") {
+        return false;
+      }
+
+      const parentList = diffPreview;
+      const requestId = nextCommitDiffRequestIdRef.current + 1;
+      nextCommitDiffRequestIdRef.current = requestId;
+
+      const result = await dispatch<GitFileDiffPayload>("git.commitFileDiff", {
+        workspaceId,
+        sha: parentList.commit.sha,
+        path: file.path,
+        ...(file.oldPath ? { oldPath: file.oldPath } : {}),
+      });
+
+      if (!result.ok || !result.data) {
+        return false;
+      }
+
+      const payload = result.data;
+
+      let applied = false;
+      setDiffPreview((current) => {
+        if (requestId !== nextCommitDiffRequestIdRef.current) {
+          return current;
+        }
+
+        if (
+          current?.kind !== "commit-file-list" ||
+          current !== parentList ||
+          current.path !== parentList.path ||
+          current.commit.sha !== parentList.commit.sha
+        ) {
+          return current;
+        }
+
+        applied = true;
+        return {
+          kind: "commit-file-diff",
+          path: file.path,
+          title: file.path,
+          commit: parentList.commit,
+          file,
+          parentList,
+          diff: payload.diff,
+          renderAs: payload.renderAs,
+          status: payload.status,
+          ...(payload.mime ? { mime: payload.mime } : {}),
+          ...(payload.originalPath ? { originalPath: payload.originalPath } : {}),
+          ...(payload.modifiedPath ? { modifiedPath: payload.modifiedPath } : {}),
+          ...(payload.originalContent !== undefined
+            ? { originalContent: payload.originalContent }
+            : {}),
+          ...(payload.modifiedContent !== undefined
+            ? { modifiedContent: payload.modifiedContent }
+            : {}),
+          ...(payload.originalRevision ? { originalRevision: payload.originalRevision } : {}),
+          ...(payload.modifiedRevision ? { modifiedRevision: payload.modifiedRevision } : {}),
+        };
+      });
+      return applied;
+    },
+    [diffPreview, dispatch, setDiffPreview, workspaceId]
+  );
 
   const isTextFile = currentFile?.kind === "text";
   const isImageFile = currentFile?.kind === "image";
@@ -729,12 +808,39 @@ export function useCodeEditorActions() {
   );
   const activeDiffChange =
     diffPreview &&
-    ((diffPreview.source === "file" && diffPreview.path === activeFilePath) ||
-      diffPreview.source === "commit")
+    (((diffPreview.kind === "worktree-file-diff" ||
+      diffPreview.kind === "search-replace-file-diff") &&
+      diffPreview.path === activeFilePath) ||
+      diffPreview.kind === "commit-file-list" ||
+      diffPreview.kind === "commit-file-diff")
       ? diffPreview
       : null;
   const isSaving = Boolean(isTextFile && savingPaths.has(currentFile.path));
   const canSave = Boolean(isTextFile && currentFile.isDirty && !isSaving);
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      const isSaveShortcut =
+        event.key.toLowerCase() === "s" && (event.ctrlKey || event.metaKey) && !event.altKey;
+      if (!isSaveShortcut) {
+        return;
+      }
+
+      if (!isTextFile) {
+        return;
+      }
+
+      event.preventDefault();
+      if (canSave) {
+        void handleSave();
+      }
+    };
+
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleSaveShortcut);
+    };
+  }, [canSave, handleSave, isTextFile]);
+
   const activeLoadError =
     activeFilePath && fileLoadError?.path === activeFilePath ? fileLoadError.message : null;
   const activeExternalStatus =
@@ -771,6 +877,7 @@ export function useCodeEditorActions() {
     isSvgTextBacked,
     isTextFile,
     mode,
+    openCommitFileDiff,
     openInDiffMode,
     saveError: activeSaveError,
     setMode: (nextMode: WorkspaceEditorMode) => {

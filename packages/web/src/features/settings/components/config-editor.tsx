@@ -158,7 +158,7 @@ export function ConfigEditor({
         setError(null);
       } else {
         const errorMsg = result.error?.message ?? result.data?.error;
-        setError(errorMsg ?? "Save failed");
+        setError(errorMsg ?? t("settings.config_files.save_failed"));
         pushToast({
           kind: "error",
           title: t("settings.config_files.save_failed"),
@@ -166,7 +166,7 @@ export function ConfigEditor({
         });
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Save failed";
+      const errorMsg = err instanceof Error ? err.message : t("settings.config_files.save_failed");
       setError(errorMsg);
       pushToast({
         kind: "error",
@@ -190,18 +190,18 @@ export function ConfigEditor({
         setContent(formatted);
         pushToast({
           kind: "success",
-          title: "JSON formatted",
+          title: t("settings.config_files.json_formatted"),
         });
       } catch {
         pushToast({
           kind: "error",
-          title: "Invalid JSON",
-          body: "Cannot format invalid JSON",
+          title: t("settings.config_files.invalid_json"),
+          body: t("settings.config_files.invalid_json_format_body"),
         });
       }
     }
     // TOML formatting not implemented
-  }, [configType, content, pushToast]);
+  }, [configType, content, pushToast, t]);
 
   const handleContentChange = useCallback((newContent: string) => {
     setContent(newContent);

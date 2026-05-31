@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -191,6 +191,96 @@ describe("Workspace Commands", () => {
     });
   });
 
+  describe("workspace.mkdir", () => {
+    it("creates a directory at an absolute browse path", async () => {
+      const dir = join(tmpdir(), `workspace-mkdir-test-${Date.now()}`);
+      await mkdir(dir, { recursive: true });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-mkdir-success",
+          op: "workspace.mkdir",
+          args: {
+            path: join(dir, "demo"),
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      const createdEntry = await stat(join(dir, "demo"));
+      expect(createdEntry.isDirectory()).toBe(true);
+    });
+
+    it("rejects creating a directory that already exists", async () => {
+      const dir = join(tmpdir(), `workspace-mkdir-exists-${Date.now()}`);
+      await mkdir(join(dir, "demo"), { recursive: true });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-mkdir-exists",
+          op: "workspace.mkdir",
+          args: {
+            path: join(dir, "demo"),
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "already_exists",
+      });
+    });
+
+    it.each(["", ".", ".."])('rejects invalid requested folder path "%s"', async (path) => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `workspace-mkdir-invalid-${path || "empty"}`,
+          op: "workspace.mkdir",
+          args: {
+            path,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "invalid_path",
+        message: "Folder name is required",
+      });
+    });
+
+    it.each([
+      "~/.",
+      "~/..",
+      "foo/.",
+      "foo/..",
+    ])('rejects invalid requested folder path with trailing segment "%s"', async (path) => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `workspace-mkdir-invalid-trailing-${path.replaceAll("/", "-")}`,
+          op: "workspace.mkdir",
+          args: {
+            path,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "invalid_path",
+        message: "Folder name is required",
+      });
+    });
+  });
+
   describe("workspace.close", () => {
     it("should error if workspace not found", async () => {
       const result = await dispatch(
@@ -268,6 +358,154 @@ describe("Workspace Commands", () => {
       });
     });
 
+    it("persists typed pane leaves with draft and editor kinds", async () => {
+      const dir = join(tmpdir(), `workspace-command-typed-pane-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-typed-pane-layout",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+
+      const workspaceId = (openResult.data as { id: string }).id;
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-typed-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "split",
+                direction: "horizontal",
+                children: [
+                  { id: "left", type: "leaf", leafKind: "draft" },
+                  { id: "right", type: "leaf", leafKind: "editor" },
+                ],
+              },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { uiState: { paneLayout: unknown } }).uiState.paneLayout).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", leafKind: "draft" },
+          { id: "right", type: "leaf", leafKind: "editor" },
+        ],
+      });
+    });
+
+    it("rejects invalid typed pane leaves", async () => {
+      const dir = join(tmpdir(), `workspace-command-invalid-pane-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-invalid-pane-layout",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const draftWithSessionId = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-invalid-draft-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "draft",
+                sessionId: "sess-invalid",
+              },
+            },
+          },
+        },
+        ctx
+      );
+      expect(draftWithSessionId.ok).toBe(false);
+
+      const sessionWithoutSessionId = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-invalid-session-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "session",
+              },
+            },
+          },
+        },
+        ctx
+      );
+      expect(sessionWithoutSessionId.ok).toBe(false);
+
+      const editorWithSessionId = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-invalid-editor-pane-layout",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "editor",
+                sessionId: "sess-invalid",
+              },
+            },
+          },
+        },
+        ctx
+      );
+      expect(editorWithSessionId.ok).toBe(false);
+    });
+
     it("persists fileTreeExpandedDirs into workspace ui state", async () => {
       const dir = join(tmpdir(), `workspace-expanded-dirs-test-${Date.now()}`);
       await mkdir(dir);
@@ -308,6 +546,51 @@ describe("Workspace Commands", () => {
         (result.data as { uiState: { fileTreeExpandedDirs?: string[] } }).uiState
           .fileTreeExpandedDirs
       ).toEqual(["packages", "packages/web"]);
+    });
+
+    it("persists open editor paths and the active editor into workspace ui state", async () => {
+      const dir = join(tmpdir(), `workspace-open-editors-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-open-editors",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-open-editors",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              openEditorPaths: ["README.md", "src/app.tsx"],
+              activeEditorPath: "src/app.tsx",
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { openEditorPaths?: string[] } }).uiState.openEditorPaths
+      ).toEqual(["README.md", "src/app.tsx"]);
+      expect(
+        (result.data as { uiState: { activeEditorPath?: string | null } }).uiState.activeEditorPath
+      ).toBe("src/app.tsx");
     });
   });
 

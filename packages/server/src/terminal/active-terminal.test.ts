@@ -7,6 +7,7 @@ import type { PtyProcess, TerminalSpec } from "./types";
 
 describe("ActiveTerminal", () => {
   const mockPty: PtyProcess = {
+    pid: 43210,
     onData: () => {},
     onExit: () => {},
     write: () => {},
@@ -52,6 +53,7 @@ describe("ActiveTerminal", () => {
       id,
       workspaceId: spec.workspaceId,
       kind: spec.kind,
+      pid: 43210,
       title: spec.title,
       cwd: spec.cwd,
       argv: spec.argv,

@@ -25,6 +25,7 @@ import { globalLspBridge, type LspBridgeState } from "../lsp/bridge";
 import { lspRuntimeModeAtom } from "../lsp/runtime-mode";
 import { monacoModelRegistry } from "../monaco/model-registry";
 import { fromWorkspaceFileUri } from "../monaco/uri";
+import { ensureVueLanguageRegistered } from "../monaco/vue-language";
 import { LspStatusNotice } from "./lsp-status-notice";
 
 const monacoGlobal = globalThis as typeof globalThis & {
@@ -52,6 +53,7 @@ monacoGlobal.MonacoEnvironment ??= {
 let javaScriptTypeScriptDefaultsConfigured = false;
 
 configureJavaScriptTypeScriptDefaults();
+ensureVueLanguageRegistered();
 
 interface MonacoTypeScriptLanguage {
   JsxEmit: {
@@ -184,6 +186,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
       minimap: { enabled: false },
       readOnly,
       scrollBeyondLastLine: false,
+      "semanticHighlighting.enabled": true,
       padding: { top: 12, bottom: 12 },
       automaticLayout: true,
     });
@@ -434,6 +437,7 @@ function detectEditorLanguage(filePath: string): string {
     py: "python",
     go: "go",
     rs: "rust",
+    vue: "vue",
     java: "java",
     cpp: "cpp",
     c: "c",

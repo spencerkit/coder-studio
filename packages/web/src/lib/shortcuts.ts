@@ -8,8 +8,8 @@ import { atomWithStorage } from "jotai/utils";
 
 export interface ShortcutDefinition {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   defaultBinding: string;
   category: "global" | "workspace" | "editor" | "terminal";
 }
@@ -19,87 +19,87 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
   // Global
   {
     id: "command-palette.toggle",
-    name: "命令面板",
-    description: "打开/关闭命令面板",
+    nameKey: "shortcuts.command_palette_toggle.name",
+    descriptionKey: "shortcuts.command_palette_toggle.description",
     defaultBinding: "Mod+K",
     category: "global",
   },
   {
     id: "workspace.new",
-    name: "新建工作区",
-    description: "打开新的工作区标签",
+    nameKey: "shortcuts.workspace_new.name",
+    descriptionKey: "shortcuts.workspace_new.description",
     defaultBinding: "Mod+N",
     category: "global",
   },
   {
     id: "workspace.previous",
-    name: "上一个工作区",
-    description: "切换到上一个工作区标签",
+    nameKey: "shortcuts.workspace_previous.name",
+    descriptionKey: "shortcuts.workspace_previous.description",
     defaultBinding: "Ctrl+Shift+ArrowLeft",
     category: "workspace",
   },
   {
     id: "workspace.next",
-    name: "下一个工作区",
-    description: "切换到下一个工作区标签",
+    nameKey: "shortcuts.workspace_next.name",
+    descriptionKey: "shortcuts.workspace_next.description",
     defaultBinding: "Ctrl+Shift+ArrowRight",
     category: "workspace",
   },
   {
     id: "focus-mode.toggle",
-    name: "专注模式",
-    description: "切换专注模式（隐藏非必要面板）",
+    nameKey: "shortcuts.focus_mode_toggle.name",
+    descriptionKey: "shortcuts.focus_mode_toggle.description",
     defaultBinding: "F",
     category: "global",
   },
   // Workspace
   {
     id: "agent.split-vertical",
-    name: "垂直分屏",
-    description: "垂直分割 Agent 面板",
+    nameKey: "shortcuts.agent_split_vertical.name",
+    descriptionKey: "shortcuts.agent_split_vertical.description",
     defaultBinding: "Mod+D",
     category: "workspace",
   },
   {
     id: "session.navigate.left",
-    name: "切换到左侧会话",
-    description: "将焦点切换到左侧会话",
+    nameKey: "shortcuts.session_navigate_left.name",
+    descriptionKey: "shortcuts.session_navigate_left.description",
     defaultBinding: "Ctrl+ArrowLeft",
     category: "workspace",
   },
   {
     id: "session.navigate.right",
-    name: "切换到右侧会话",
-    description: "将焦点切换到右侧会话",
+    nameKey: "shortcuts.session_navigate_right.name",
+    descriptionKey: "shortcuts.session_navigate_right.description",
     defaultBinding: "Ctrl+ArrowRight",
     category: "workspace",
   },
   {
     id: "session.navigate.up",
-    name: "切换到上方会话",
-    description: "将焦点切换到上方会话",
+    nameKey: "shortcuts.session_navigate_up.name",
+    descriptionKey: "shortcuts.session_navigate_up.description",
     defaultBinding: "Ctrl+ArrowUp",
     category: "workspace",
   },
   {
     id: "session.navigate.down",
-    name: "切换到下方会话",
-    description: "将焦点切换到下方会话",
+    nameKey: "shortcuts.session_navigate_down.name",
+    descriptionKey: "shortcuts.session_navigate_down.description",
     defaultBinding: "Ctrl+ArrowDown",
     category: "workspace",
   },
   {
     id: "agent.split-horizontal",
-    name: "水平分屏",
-    description: "水平分割 Agent 面板",
+    nameKey: "shortcuts.agent_split_horizontal.name",
+    descriptionKey: "shortcuts.agent_split_horizontal.description",
     defaultBinding: "Mod+Shift+D",
     category: "workspace",
   },
   // Editor
   {
     id: "editor.save",
-    name: "保存",
-    description: "保存当前编辑的文件",
+    nameKey: "shortcuts.editor_save.name",
+    descriptionKey: "shortcuts.editor_save.description",
     defaultBinding: "Mod+S",
     category: "editor",
   },

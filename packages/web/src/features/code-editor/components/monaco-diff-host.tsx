@@ -9,6 +9,7 @@ import type { FC } from "react";
 import { useEffect, useRef } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
 import { createWorkspaceMonacoTheme, getThemeById } from "../../../theme";
+import { ensureVueLanguageRegistered } from "../monaco/vue-language";
 
 const monacoGlobal = globalThis as typeof globalThis & {
   MonacoEnvironment?: monaco.Environment;
@@ -23,6 +24,8 @@ monacoGlobal.MonacoEnvironment ??= {
     return new editorWorker();
   },
 };
+
+ensureVueLanguageRegistered();
 
 interface MonacoDiffHostProps {
   originalContent: string;
@@ -58,7 +61,7 @@ export const MonacoDiffHost: FC<MonacoDiffHostProps> = ({
       return;
     }
 
-    editorRef.current = monaco.editor.createDiffEditor(containerRef.current, {
+    const options = {
       automaticLayout: true,
       fontFamily: "JetBrains Mono, monospace",
       fontSize: 13,
@@ -67,8 +70,13 @@ export const MonacoDiffHost: FC<MonacoDiffHostProps> = ({
       readOnly,
       renderSideBySide: false,
       scrollBeyondLastLine: false,
+      "semanticHighlighting.enabled": true,
       theme: editorTheme,
-    });
+    } satisfies monaco.editor.IStandaloneDiffEditorConstructionOptions & {
+      "semanticHighlighting.enabled": boolean;
+    };
+
+    editorRef.current = monaco.editor.createDiffEditor(containerRef.current, options);
 
     return () => {
       editorRef.current?.dispose();
@@ -127,6 +135,7 @@ function detectEditorLanguage(filePath: string): string {
     py: "python",
     go: "go",
     rs: "rust",
+    vue: "vue",
     java: "java",
     cpp: "cpp",
     c: "c",

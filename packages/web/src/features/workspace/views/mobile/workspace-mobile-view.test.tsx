@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,12 +9,34 @@ import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
 import {
   activeFilePathAtomFamily,
+  type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   type OpenFile,
   openFilesAtomFamily,
 } from "../../atoms";
 import { OpenEditorsSection } from "../shared/open-editors-section";
 import { WorkspaceMobileView } from "./workspace-mobile-view";
+
+vi.hoisted(() => {
+  const matchMedia = vi.fn((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  }));
+
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: matchMedia,
+  });
+});
+
+let currentStore: ReturnType<typeof createStore> | null = null;
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string>) => {
@@ -36,9 +58,9 @@ vi.mock("../../../../lib/i18n", () => ({
       "mobile.sheet.dismiss": "Dismiss sheet",
       "action.close_all": "Close all",
       "workspace.sidebar.explorer": "Explorer",
-      "workspace.sidebar.open_editors": "Open Editors",
-      "workspace.open_editors.collapse_label": "Collapse Open Editors",
-      "workspace.open_editors.expand_label": "Expand Open Editors",
+      "workspace.sidebar.open_editors": "Open Files",
+      "workspace.open_editors.collapse_label": "Collapse Open Files",
+      "workspace.open_editors.expand_label": "Expand Open Files",
       "workspace.sidebar.search": "Search",
       "workspace.sidebar.source_control": "Source Control",
     };
@@ -48,7 +70,7 @@ vi.mock("../../../../lib/i18n", () => ({
     }
 
     if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Editors"} (${params?.count ?? "0"})`;
+      return `${params?.title ?? "Open Files"} (${params?.count ?? "0"})`;
     }
 
     if (key === "workspace.open_editors.close_path") {
@@ -105,6 +127,88 @@ vi.mock("../../actions/use-workspace-ui-state-persistence", () => ({
   useWorkspaceUiStatePersistence: () => ({
     persistUiState: vi.fn().mockResolvedValue(true),
   }),
+}));
+
+vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
+  CodeEditorHeaderActions: ({
+    state,
+    variant = "full",
+  }: {
+    state: {
+      activeDiffChange?: GitDiffPreview | null;
+      activeFilePath?: string | null;
+      handleClose: () => Promise<void> | void;
+    };
+    variant?: "full" | "mobile";
+  }) =>
+    variant === "mobile" && (state.activeFilePath || state.activeDiffChange) ? (
+      <div className="mobile-sheet__header-actions">
+        <button
+          type="button"
+          className="mobile-sheet__action"
+          onClick={() => void state.handleClose()}
+          aria-label="Close"
+        >
+          Close
+        </button>
+      </div>
+    ) : null,
+  CodeEditorHost: () => null,
+}));
+
+vi.mock("../../../code-editor/actions/use-code-editor-actions", () => ({
+  useCodeEditorActions: () => {
+    const store = currentStore;
+    const activeFilePath = store?.get(activeFilePathAtomFamily("ws-test")) ?? null;
+    const diffPreview = store?.get(gitDiffPreviewAtomFamily("ws-test")) ?? null;
+    const activeDiffChange =
+      diffPreview &&
+      (((diffPreview.kind === "worktree-file-diff" ||
+        diffPreview.kind === "search-replace-file-diff") &&
+        diffPreview.path === activeFilePath) ||
+        diffPreview.kind === "commit-file-list" ||
+        diffPreview.kind === "commit-file-diff")
+        ? diffPreview
+        : null;
+
+    return {
+      activeFilePath,
+      activeDiffChange,
+      canDiff: false,
+      canEdit: false,
+      canPreview: false,
+      canSave: false,
+      handleClose: async () => {
+        if (!store) {
+          return;
+        }
+
+        const currentDiffPreview = store.get(gitDiffPreviewAtomFamily("ws-test"));
+        if (currentDiffPreview?.kind === "commit-file-diff") {
+          store.set(gitDiffPreviewAtomFamily("ws-test"), currentDiffPreview.parentList);
+          return;
+        }
+
+        if (currentDiffPreview?.kind === "commit-file-list") {
+          store.set(gitDiffPreviewAtomFamily("ws-test"), null);
+          return;
+        }
+
+        const currentActiveFilePath = store.get(activeFilePathAtomFamily("ws-test"));
+        if (currentActiveFilePath) {
+          store.set(activeFilePathAtomFamily("ws-test"), null);
+        }
+      },
+      handleSave: vi.fn(),
+      isImageFile: false,
+      isSaving: false,
+      isSvgTextBacked: false,
+      mode: "edit",
+      openInDiffMode: vi.fn(),
+      setMode: vi.fn(),
+      toggleSvgTextMode: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("./mobile-agent-sheet", () => ({
@@ -203,14 +307,10 @@ function createSendCommandMock() {
 function renderMobileView(options: {
   activePath: string | null;
   openFiles: Record<string, OpenFile>;
-  diffPreview?: {
-    path: string;
-    title?: string;
-    diff: string;
-    source: "commit";
-  } | null;
+  diffPreview?: GitDiffPreview | null;
 }) {
   const store = createStore();
+  currentStore = store;
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, { sendCommand: createSendCommandMock() } as never);
   seedReadyWorkspaceState(store, {
@@ -247,6 +347,7 @@ function renderMobileView(options: {
 
 describe("WorkspaceMobileView", () => {
   afterEach(() => {
+    currentStore = null;
     vi.restoreAllMocks();
   });
 
@@ -330,10 +431,23 @@ describe("WorkspaceMobileView", () => {
         },
       },
       diffPreview: {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.tsx b/src/app.tsx",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.tsx",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
     });
 
@@ -363,10 +477,23 @@ describe("WorkspaceMobileView", () => {
 
   it("preserves an active commit preview when close all clears open editors", async () => {
     const diffPreview = {
+      kind: "commit-file-list" as const,
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit" as const,
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified" as const,
+          renderAs: "text" as const,
+        },
+      ],
     };
     const store = renderMobileView({
       activePath: "src/a.ts",
@@ -384,17 +511,8 @@ describe("WorkspaceMobileView", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Files" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open commit preview" }));
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
-      ).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     const openEditorsSection = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (1)" })
+      .getByRole("heading", { level: 2, name: "Open Files (1)" })
       .closest("section") as HTMLElement;
     fireEvent.click(within(openEditorsSection).getByRole("button", { name: "Close all" }));
 
@@ -403,5 +521,35 @@ describe("WorkspaceMobileView", () => {
       expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
       expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual(diffPreview);
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open commit preview" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { level: 2, name: "abc123 · commit subject" })
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows the explorer title for the root files sheet", () => {
+    renderMobileView({
+      activePath: null,
+      openFiles: {
+        "src/a.ts": {
+          kind: "text",
+          path: "src/a.ts",
+          content: "alpha",
+          savedContent: "alpha",
+          baseHash: "hash-a",
+          isDirty: false,
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+
+    expect(screen.getByTestId("mobile-files-sheet-root")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Sheet Explorer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Explorer" })).toBeInTheDocument();
   });
 });

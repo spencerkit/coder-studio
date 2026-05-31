@@ -272,6 +272,267 @@ describe("LspManager", () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a vue session for vue files when the tool manager resolves ready", async () => {
+    const vueSummary = {
+      workspaceId: "ws-1",
+      serverKind: "vue" as const,
+      status: "ready" as const,
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    };
+    const fakeSession = {
+      start: vi.fn(async () => vueSummary),
+      stop: vi.fn(async () => {}),
+      getSummary: () => vueSummary,
+      openDocument: async () => 1,
+      changeDocument: async () => 2,
+      closeDocument: async () => {},
+      definition: async () => [],
+      declaration: async () => [],
+      typeDefinition: async () => [],
+      references: async () => [],
+      hover: async () => null,
+      documentSymbols: async () => [],
+    };
+
+    const manager = new LspManager({
+      workspaceMgr: {
+        get: () => ({
+          id: "ws-1",
+          path: process.cwd(),
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: { leftPanelWidth: 250, bottomPanelHeight: 200, focusMode: false },
+        }),
+      },
+      eventBus: { emit: vi.fn() },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      requestTimeoutMs: 1000,
+      idleTtlMs: 1000,
+      restartLimit: 2,
+      lspToolMgr: {
+        resolve: vi.fn(async () => ({
+          kind: "ready" as const,
+          serverKind: "vue" as const,
+          displayName: "Vue language server",
+          source: "managed" as const,
+          command: "/tools/vue-language-server",
+          args: ["--stdio"],
+        })),
+      } as never,
+      createSession: vi.fn(() => fakeSession),
+    });
+
+    await expect(
+      manager.ensureSession({
+        workspaceId: "ws-1",
+        path: "src/App.vue",
+      })
+    ).resolves.toMatchObject({
+      kind: "ready",
+      summary: { serverKind: "vue" },
+    });
+  });
+
+  it("attaches a typescript companion + tsserver bridge to vue sessions when both ends resolve", async () => {
+    const vueSummary = {
+      workspaceId: "ws-1",
+      serverKind: "vue" as const,
+      status: "ready" as const,
+      capabilities: {
+        definition: true,
+        references: true,
+        hover: true,
+        documentSymbols: true,
+        diagnostics: true,
+      },
+    };
+    const sessionDeps: Array<unknown> = [];
+    const createSession = vi.fn((deps) => {
+      sessionDeps.push(deps);
+      return {
+        start: vi.fn(async () => vueSummary),
+        stop: vi.fn(async () => {}),
+        getSummary: () => vueSummary,
+        openDocument: async () => 1,
+        changeDocument: async () => 2,
+        closeDocument: async () => {},
+        definition: async () => [],
+        declaration: async () => [],
+        typeDefinition: async () => [],
+        references: async () => [],
+        hover: async () => null,
+        documentSymbols: async () => [],
+      };
+    });
+    const resolve = vi.fn(async (input: { serverKind: "vue" | "typescript" }) =>
+      input.serverKind === "vue"
+        ? {
+            kind: "ready" as const,
+            serverKind: "vue" as const,
+            displayName: "Vue language server",
+            source: "managed" as const,
+            command: "/tmp/coder-studio/lsp-tools/vue/3.3.2/node_modules/.bin/vue-language-server",
+            args: ["--stdio"],
+          }
+        : {
+            kind: "ready" as const,
+            serverKind: "typescript" as const,
+            displayName: "TypeScript language server",
+            source: "bundled" as const,
+            command: "/usr/local/bin/node",
+            args: ["/bundled/lib/cli.mjs", "--stdio"],
+          }
+    );
+
+    const manager = new LspManager({
+      workspaceMgr: {
+        get: () => ({
+          id: "ws-1",
+          path: process.cwd(),
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: { leftPanelWidth: 250, bottomPanelHeight: 200, focusMode: false },
+        }),
+      },
+      eventBus: { emit: vi.fn() },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      requestTimeoutMs: 1000,
+      idleTtlMs: 1000,
+      restartLimit: 2,
+      lspToolMgr: { resolve } as never,
+      createSession,
+      vueBridgeMode: "auto",
+    });
+
+    await expect(
+      manager.ensureSession({ workspaceId: "ws-1", path: "src/App.vue" })
+    ).resolves.toMatchObject({ kind: "ready", summary: { serverKind: "vue" } });
+
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ serverKind: "vue" }));
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ serverKind: "typescript" }));
+
+    const created = sessionDeps[0] as { spec: { companion?: { initializationOptions?: unknown } } };
+    expect(created).toMatchObject({
+      spec: {
+        serverKind: "vue",
+        command: "/tmp/coder-studio/lsp-tools/vue/3.3.2/node_modules/.bin/vue-language-server",
+        bridges: { tsserverRequest: true },
+        companion: {
+          command: "/usr/local/bin/node",
+          args: ["/bundled/lib/cli.mjs", "--stdio"],
+        },
+      },
+    });
+    // Plugin location comes back in the host's path style; normalize for the
+    // assertion so it works on both POSIX and Windows.
+    const plugins = (
+      created.spec.companion?.initializationOptions as {
+        plugins?: Array<{ name: string; location: string; languages: string[] }>;
+      }
+    )?.plugins;
+    expect(plugins).toHaveLength(1);
+    expect(plugins?.[0]?.name).toBe("@vue/typescript-plugin");
+    expect(plugins?.[0]?.languages).toEqual(["vue"]);
+    expect(plugins?.[0]?.location.replace(/\\/g, "/")).toMatch(
+      /tmp.coder-studio.lsp-tools.vue.3\.3\.2.node_modules.@vue.language-server$/
+    );
+  });
+
+  it("omits the vue tsserver bridge when CODER_STUDIO_VUE_TSSERVER_BRIDGE is off", async () => {
+    const sessionDeps: Array<unknown> = [];
+    const createSession = vi.fn((deps) => {
+      sessionDeps.push(deps);
+      return {
+        start: vi.fn(async () => ({
+          workspaceId: "ws-1",
+          serverKind: "vue" as const,
+          status: "ready" as const,
+          capabilities: {
+            definition: true,
+            references: true,
+            hover: true,
+            documentSymbols: true,
+            diagnostics: true,
+          },
+        })),
+        stop: vi.fn(async () => {}),
+        getSummary: () =>
+          ({
+            workspaceId: "ws-1",
+            serverKind: "vue",
+            status: "ready",
+            capabilities: {
+              definition: true,
+              references: true,
+              hover: true,
+              documentSymbols: true,
+              diagnostics: true,
+            },
+          }) as never,
+        openDocument: async () => 1,
+        changeDocument: async () => 2,
+        closeDocument: async () => {},
+        definition: async () => [],
+        declaration: async () => [],
+        typeDefinition: async () => [],
+        references: async () => [],
+        hover: async () => null,
+        documentSymbols: async () => [],
+      };
+    });
+    const resolve = vi.fn(async () => ({
+      kind: "ready" as const,
+      serverKind: "vue" as const,
+      displayName: "Vue language server",
+      source: "managed" as const,
+      command: "/install/node_modules/.bin/vue-language-server",
+      args: ["--stdio"],
+    }));
+
+    const manager = new LspManager({
+      workspaceMgr: {
+        get: () => ({
+          id: "ws-1",
+          path: process.cwd(),
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: { leftPanelWidth: 250, bottomPanelHeight: 200, focusMode: false },
+        }),
+      },
+      eventBus: { emit: vi.fn() },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      requestTimeoutMs: 1000,
+      idleTtlMs: 1000,
+      restartLimit: 2,
+      lspToolMgr: { resolve } as never,
+      createSession,
+      vueBridgeMode: "off",
+    });
+
+    await manager.ensureSession({ workspaceId: "ws-1", path: "src/App.vue" });
+
+    // Only the vue resolve call — no typescript companion resolution either.
+    expect(resolve).toHaveBeenCalledTimes(1);
+
+    const [created] = sessionDeps;
+    expect(created).toMatchObject({
+      spec: {
+        serverKind: "vue",
+        bridges: undefined,
+        companion: undefined,
+      },
+    });
+  });
+
   it("coalesces concurrent ensureSession calls for the same workspace and server kind", async () => {
     let resolveStart: ((summary: typeof readySummary) => void) | null = null;
     const startPromise = new Promise<typeof readySummary>((resolve) => {

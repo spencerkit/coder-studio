@@ -34,7 +34,9 @@ export const Topics = {
 
   // Notification
   notificationToast: "notification.toast",
+  monitoringSnapshotUpdated: "monitoring.snapshot.updated",
   updateStateChanged: "update.state.changed",
+  systemDependencyInstallOutput: (jobId: string) => `systemDeps.install.${jobId}.output`,
 
   // Supervisor-level (Phase 3)
   supervisorState: (workspaceId: string, sessionId: string) =>

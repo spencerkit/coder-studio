@@ -4,7 +4,15 @@
  * Server-state projection atoms. Written only by WS event handlers.
  */
 
-import type { GitBranch, GitStatus, WorktreeInfo } from "@coder-studio/core";
+import type {
+  GitBranch,
+  GitCommitDetail,
+  GitCommitFileEntry,
+  GitFileDiffPayload,
+  GitStatus,
+  SearchSessionFilePreview,
+  WorktreeInfo,
+} from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { atomFamily } from "jotai-family";
@@ -37,19 +45,52 @@ export const gitStateAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitStatus | null>(null)
 );
 
-export interface GitDiffPreview {
-  path: string;
-  diff: string;
+export interface LegacyGitDiffPreviewShape {
   renderAs?: "text" | "image";
   status?: "modified" | "added" | "deleted";
   originalContent?: string;
   modifiedContent?: string;
-  originalRevision?: "HEAD" | "INDEX";
-  modifiedRevision?: "INDEX" | "WORKTREE";
+  originalRevision?: GitFileDiffPayload["originalRevision"];
+  modifiedRevision?: GitFileDiffPayload["modifiedRevision"];
+}
+
+export interface GitWorktreeFileDiffPreview extends LegacyGitDiffPreviewShape {
+  kind: "worktree-file-diff";
+  path: string;
+  diff: string;
+  mime?: GitFileDiffPayload["mime"];
+  originalPath?: GitFileDiffPayload["originalPath"];
+  modifiedPath?: GitFileDiffPayload["modifiedPath"];
   staged?: boolean;
-  source?: "file" | "commit";
   title?: string;
 }
+
+export interface GitCommitFileListPreview {
+  kind: "commit-file-list";
+  path: string;
+  title?: string;
+  commit: GitCommitDetail["commit"];
+  files: GitCommitFileEntry[];
+}
+
+export interface GitCommitFileDiffPreview extends GitFileDiffPayload {
+  kind: "commit-file-diff";
+  path: string;
+  title?: string;
+  commit: GitCommitDetail["commit"];
+  file: GitCommitFileEntry;
+  parentList: GitCommitFileListPreview;
+}
+
+export interface SearchReplaceFileDiffPreview extends SearchSessionFilePreview {
+  kind: "search-replace-file-diff";
+}
+
+export type GitDiffPreview =
+  | GitWorktreeFileDiffPreview
+  | GitCommitFileListPreview
+  | GitCommitFileDiffPreview
+  | SearchReplaceFileDiffPreview;
 
 export const gitDiffPreviewAtomFamily = atomFamily((_workspaceId: string) =>
   atom<GitDiffPreview | null>(null)

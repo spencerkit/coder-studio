@@ -1,5 +1,5 @@
 import type { Workspace, WorktreeInfo } from "@coder-studio/core";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useMemo } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import {
@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import { worktreeListAtomFamily } from "../atoms";
+import { hydrateWorkspaceEditorState } from "./open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 
 function slugifyBranchName(branch: string) {
@@ -70,6 +71,7 @@ function isAbsoluteWorktreePath(path: string) {
 export function useWorktreeManagementActions(workspaceId: string) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const store = useStore();
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
   const [list, setList] = useAtom(worktreeListAtomFamily(workspaceId));
   const setActiveWorkspaceId = useSetAtom(activeWorkspaceIdAtom);
@@ -92,7 +94,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       setList((prev) => ({
         ...prev,
         loading: false,
-        error: result.error?.message ?? "Failed to load worktrees",
+        error: result.error?.message ?? t("worktree.list_load_failed"),
       }));
       return false;
     }
@@ -124,7 +126,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       });
 
       if (!result.ok || !result.data?.worktree) {
-        const message = result.error?.message ?? "Failed to create worktree";
+        const message = result.error?.message ?? t("worktree.create_failed_body");
         pushToast({
           kind: "error",
           title: t("worktree.create_failed_title"),
@@ -153,7 +155,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       });
 
       if (!result.ok) {
-        const message = result.error?.message ?? "Failed to remove worktree";
+        const message = result.error?.message ?? t("worktree.remove_failed_body");
         pushToast({
           kind: "error",
           title: t("worktree.remove_failed_title"),
@@ -199,10 +201,10 @@ export function useWorktreeManagementActions(workspaceId: string) {
       const result = await dispatch<Workspace>("workspace.open", { path });
 
       if (!result.ok || !result.data?.id) {
-        const message = result.error?.message ?? "Failed to open worktree";
+        const message = result.error?.message ?? t("worktree.open_failed_body");
         pushToast({
           kind: "error",
-          title: t("workspace.launch.open_failed"),
+          title: t("worktree.open_failed_title"),
           body: message,
         });
         return { ok: false as const, error: message };
@@ -213,6 +215,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
         ...prev,
         [result.data!.id]: result.data!,
       }));
+      hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
       setWorkspaceOrder((prev) => {
         if (prev.includes(result.data!.id)) {
           return prev;
@@ -234,6 +237,7 @@ export function useWorktreeManagementActions(workspaceId: string) {
       setWorkspaces,
       setWorkspacesLoadError,
       setWorkspacesLoadState,
+      store,
       t,
     ]
   );

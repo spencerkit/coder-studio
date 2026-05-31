@@ -233,7 +233,7 @@ export function CommandPalette() {
   if (isMobile) {
     return (
       <Sheet
-        title="Quick Actions"
+        title={t("command.quick_actions")}
         kicker={t("command.palette").toUpperCase()}
         onClose={() => setIsOpen(false)}
         bodyClassName="mobile-sheet__body--flush"
@@ -245,7 +245,9 @@ export function CommandPalette() {
                 {paletteSearchField}
                 <div className="command-palette-sheet__meta">
                   <span className="command-palette-hint">{t("placeholder.command")}</span>
-                  <span className="command-palette-meta">{filteredCommands.length} actions</span>
+                  <span className="command-palette-meta">
+                    {t("command.actions_count", { count: filteredCommands.length })}
+                  </span>
                 </div>
               </div>
               {paletteList}
@@ -344,6 +346,14 @@ function buildCommands(context: {
       shortcut: "Ctrl+,",
       action: () => {
         navigate("/settings");
+      },
+    },
+    {
+      id: "open-monitoring",
+      label: t("monitoring.command_label"),
+      description: t("monitoring.command_description"),
+      action: () => {
+        navigate("/settings?section=monitoring");
       },
     },
   ];

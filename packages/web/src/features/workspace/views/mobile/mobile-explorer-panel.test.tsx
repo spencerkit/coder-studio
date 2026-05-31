@@ -17,7 +17,9 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.quick_jump.no_results": "No results",
       "workspace.quick_jump.failed": "Search failed",
       "workspace.sidebar.workspace": "Workspace",
-      "workspace.sidebar.open_editors": "Open Editors",
+      "workspace.sidebar.workspace_expand_label": "Expand Workspace",
+      "workspace.sidebar.workspace_collapse_label": "Collapse Workspace",
+      "workspace.sidebar.open_editors": "Open Files",
       "file.new_file": "New File",
       "file.new_folder": "New Folder",
       "file.collapse_all": "Collapse All",
@@ -27,15 +29,15 @@ vi.mock("../../../../lib/i18n", () => ({
     };
 
     if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Editors"} (${params?.count ?? 0})`;
+      return `${params?.title ?? "Open Files"} (${params?.count ?? 0})`;
     }
 
     if (key === "workspace.open_editors.expand_label") {
-      return "Expand Open Editors";
+      return "Expand Open Files";
     }
 
     if (key === "workspace.open_editors.collapse_label") {
-      return "Collapse Open Editors";
+      return "Collapse Open Files";
     }
 
     if (key === "workspace.open_editors.close_path") {
@@ -118,14 +120,16 @@ describe("MobileExplorerPanel", () => {
 
     const headings = screen.getAllByRole("heading", { level: 2 });
     expect(headings[0]).toHaveTextContent(/Quick Jump|快速跳转/i);
-    expect(headings[1]).toHaveTextContent(/Open Editors|打开的编辑器/i);
+    expect(headings[1]).toHaveTextContent(/Open Files|打开的文件/i);
     expect(headings[2]).toHaveTextContent(/Workspace|工作区/i);
 
     expect(screen.getByRole("button", { name: "README.md" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "src/mobile-files-sheet.tsx" })).toHaveClass(
       "workspace-open-editors__item--active"
     );
-    expect(screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i })).toBeInTheDocument();
+    const quickJumpSearch = screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i });
+    expect(quickJumpSearch).toBeInTheDocument();
+    expect(quickJumpSearch.closest("label")).toHaveClass("workspace-sidebar-control");
     expect(
       screen.getByPlaceholderText(/Type a filename or path|输入文件名或路径/i)
     ).toBeInTheDocument();
@@ -137,7 +141,7 @@ describe("MobileExplorerPanel", () => {
       })
     );
 
-    fireEvent.change(screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i }), {
+    fireEvent.change(quickJumpSearch, {
       target: { value: "read" },
     });
 
@@ -201,14 +205,15 @@ describe("MobileExplorerPanel", () => {
       </Provider>
     );
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
-    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(2\)/i);
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
+    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
 
     const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("2")).toBeInTheDocument();
 
     expect(
       within(section).getByRole("button", {
-        name: /Collapse Open Editors|Expand Open Editors|收起打开的编辑器|展开打开的编辑器/i,
+        name: /Collapse Open Files|Expand Open Files|收起打开的文件|展开打开的文件/i,
       })
     ).toHaveAttribute("aria-expanded", "true");
     expect(
@@ -231,7 +236,8 @@ describe("MobileExplorerPanel", () => {
       "workspace-open-editors__item--active"
     );
     expect(within(section).queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
-    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
+    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
+    expect(within(section).getByText("1")).toBeInTheDocument();
     expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual(["src/beta.tsx"]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(onSelectFile).not.toHaveBeenCalled();
@@ -272,10 +278,9 @@ describe("MobileExplorerPanel", () => {
 
     fireEvent.click(within(workspaceSection).getByRole("button", { name: "New File" }));
     fireEvent.click(within(workspaceSection).getByRole("button", { name: "New Folder" }));
-    fireEvent.click(within(workspaceSection).getByRole("button", { name: "Collapse All" }));
 
     expect(onOpenFileCreate).toHaveBeenCalledTimes(1);
     expect(onOpenFolderCreate).toHaveBeenCalledTimes(1);
-    expect(onCollapseAll).toHaveBeenCalledTimes(1);
+    expect(onCollapseAll).not.toHaveBeenCalled();
   });
 });

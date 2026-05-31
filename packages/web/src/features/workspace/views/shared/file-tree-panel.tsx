@@ -112,6 +112,8 @@ interface FileTreePanelProps {
   collapseVersion?: number;
   variant?: "desktop" | "mobile";
   showSearch?: boolean;
+  preserveSourceOrder?: boolean;
+  panelId?: string;
 }
 
 interface FileTreePanelState {
@@ -160,6 +162,8 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   collapseVersion = 0,
   variant = "desktop",
   showSearch = true,
+  preserveSourceOrder = false,
+  panelId,
 }) => {
   const [panelState, setPanelState] = useAtom(
     fileTreePanelStateAtomFamily(getFileTreePanelStateKey(workspaceId, variant, showSearch))
@@ -203,8 +207,8 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     panelState;
   const searchQuery = searchValue.trim();
   const treeNodes = useMemo(
-    () => (fileTree ? sortNodes(buildNestedTree(fileTree)) : []),
-    [fileTree]
+    () => (fileTree ? sortNodes(buildNestedTree(fileTree), { preserveSourceOrder }) : []),
+    [fileTree, preserveSourceOrder]
   );
   const searchRequestIdRef = useRef(0);
   const {
@@ -220,7 +224,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
   } = useFileTreeContextMenu();
   const hasSearch = searchQuery.length > 0;
   const visibleFileCount = useMemo(
-    () => (hasSearch ? searchResults.length : countVisibleFiles(treeNodes)),
+    () => (hasSearch ? searchResults.length : countVisibleItems(treeNodes)),
     [hasSearch, searchResults.length, treeNodes]
   );
   const defaultExpandedRootPaths = useMemo(
@@ -392,10 +396,12 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
 
   return (
     <>
-      <div className={`file-tree-shell file-tree-shell--${variant}`}>
+      <div className={`file-tree-shell file-tree-shell--${variant}`} id={panelId}>
         {showSearch ? (
           <label
-            className={`file-tree-search ${variant === "desktop" ? "file-tree-search--desktop" : ""}`}
+            className={`file-tree-search workspace-sidebar-control ${
+              variant === "desktop" ? "file-tree-search--desktop" : ""
+            }`}
             htmlFor={`file-tree-search-${workspaceId}`}
           >
             <ThemedIcon
@@ -559,9 +565,9 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
 
   return (
     <div
-      className={`tree-item tree-item--file ${selectedPath === node.path ? "selected" : ""} ${
-        isContextTarget ? "tree-item--context-target" : ""
-      }`}
+      className={`tree-item workspace-sidebar-row tree-item--file ${
+        selectedPath === node.path ? "selected workspace-sidebar-row--selected" : ""
+      } ${isContextTarget ? "tree-item--context-target" : ""}`}
       draggable={variant === "desktop" ? true : undefined}
       onDragStart={variant === "desktop" ? handleDragStart : undefined}
       onClick={() => {
@@ -580,9 +586,9 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       onPointerUp={(event) => onCancelLongPress(event.pointerId)}
       style={{ paddingLeft: 12 }}
     >
-      <span className="tree-chevron" aria-hidden="true" />
+      <span className="tree-indent" aria-hidden="true" />
 
-      <span className="tree-icon" aria-hidden="true">
+      <span className="tree-icon file" aria-hidden="true">
         <ThemedIcon semantic={getFileNodeSemantic(node, false)} size={14} />
       </span>
 
@@ -621,6 +627,7 @@ interface FileTreeNodeProps {
   onUpdateLongPress: (event: ReactPointerEvent<HTMLElement>) => void;
   onCancelLongPress: (pointerId?: number) => void;
   consumeSuppressedClick: () => boolean;
+  preserveSourceOrder: boolean;
 }
 
 const FileTreeNode: FC<FileTreeNodeProps> = ({
@@ -642,6 +649,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   onUpdateLongPress,
   onCancelLongPress,
   consumeSuppressedClick,
+  preserveSourceOrder,
 }) => {
   const t = useTranslation();
   const isFolder = node.kind === "dir";
@@ -701,13 +709,13 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
     });
   };
 
-  const paddingLeft = depth * 14 + 16;
+  const paddingLeft = depth * 14 + 8;
 
   return (
     <>
       <div
-        className={`tree-item tree-item--${node.kind} ${
-          selectedPath === node.path ? "selected" : ""
+        className={`tree-item workspace-sidebar-row tree-item--${node.kind} ${
+          selectedPath === node.path ? "selected workspace-sidebar-row--selected" : ""
         } ${contextTargetPath === node.path ? "tree-item--context-target" : ""}`}
         draggable={variant === "desktop" ? true : undefined}
         onDragStart={variant === "desktop" ? handleDragStart : undefined}
@@ -727,15 +735,30 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         }
         style={{ paddingLeft }}
       >
-        <span className="tree-chevron" aria-hidden="true">
-          {isFolder ? isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
-        </span>
+        {isFolder ? (
+          <span className="tree-chevron" aria-hidden="true">
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+        ) : (
+          <span className="tree-indent" aria-hidden="true" />
+        )}
 
-        <span className="tree-icon" aria-hidden="true">
+        <span
+          className={`tree-icon ${isFolder ? "folder" : "file"} ${
+            node.isGitIgnored ? "tree-icon--gitignored" : ""
+          }`}
+          aria-hidden="true"
+        >
           <ThemedIcon semantic={getFileNodeSemantic(node, isExpanded)} size={14} />
         </span>
 
-        <span className="tree-label">{node.name}</span>
+        <span className={`tree-label ${node.isGitIgnored ? "tree-label--gitignored" : ""}`}>
+          {node.name}
+        </span>
+
+        {variant === "desktop" && selectedPath === node.path ? (
+          <span className="tree-active-meta">{t("common.active")}</span>
+        ) : null}
 
         {variant === "desktop" ? (
           <div className="tree-item-actions">
@@ -773,7 +796,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
 
       {isFolder && isExpanded && node.children && (
         <div className="tree-children">
-          {sortNodes(node.children).map((child) => (
+          {sortNodes(node.children, { preserveSourceOrder }).map((child) => (
             <FileTreeNode
               key={child.path}
               workspaceId={workspaceId}
@@ -794,6 +817,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               onUpdateLongPress={onUpdateLongPress}
               onCancelLongPress={onCancelLongPress}
               consumeSuppressedClick={consumeSuppressedClick}
+              preserveSourceOrder={preserveSourceOrder}
             />
           ))}
           {node.children.length === 0 && !isLoadingDir && (
@@ -1014,13 +1038,13 @@ function normalizeDirPath(path: string): string {
     .replace(/\/+$/, "");
 }
 
-function countVisibleFiles(nodes: FileNode[]): number {
+function countVisibleItems(nodes: FileNode[]): number {
   return nodes.reduce((count, node) => {
     if (node.kind === "file") {
       return count + 1;
     }
 
-    return count + countVisibleFiles(node.children ?? []);
+    return count + 1 + countVisibleItems(node.children ?? []);
   }, 0);
 }
 
@@ -1039,7 +1063,11 @@ function buildNestedTree(treeMap: Map<string, FileNode[]>): FileNode[] {
   return attachChildren(treeMap.get(".") ?? []);
 }
 
-function sortNodes(nodes: FileNode[]) {
+function sortNodes(nodes: FileNode[], options?: { preserveSourceOrder?: boolean }) {
+  if (options?.preserveSourceOrder) {
+    return nodes;
+  }
+
   return [...nodes].sort((a, b) => {
     if (a.kind !== b.kind) {
       return a.kind === "dir" ? -1 : 1;

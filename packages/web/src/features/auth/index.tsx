@@ -107,13 +107,13 @@ export function LoginPage({
       });
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: "Login failed" }));
+        const data = await response.json().catch(() => ({ error: t("auth.login_failed") }));
         if (data?.blocked === true) {
           setError(formatBlockedMessage(data.blockedUntil));
           return;
         }
 
-        setError(data.error || "Login failed");
+        setError(data.error || t("auth.login_failed"));
         return;
       }
 

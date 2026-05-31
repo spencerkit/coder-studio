@@ -5,22 +5,42 @@ import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacesAtom } from "../../../../atoms/workspaces";
 import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../../../agent-panes/atoms/editor-panes";
+import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
+import {
   __resetPendingEditorLoadsForTests,
   beginPendingEditorLoad,
 } from "../../../code-editor/actions/pending-editor-loads";
-import { activeFilePathAtomFamily, type OpenFile, openFilesAtomFamily } from "../../atoms";
+import {
+  activeFilePathAtomFamily,
+  type OpenFile,
+  openEditorPathsAtomFamily,
+  openFilesAtomFamily,
+} from "../../atoms";
 import { OpenEditorsSection } from "./open-editors-section";
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string | number>) => {
-    if (key === "workspace.sidebar.open_editors") return "Open Editors";
+    if (key === "common.cancel") return "Cancel";
+    if (key === "workspace.sidebar.open_editors") return "Open Files";
     if (key === "action.close") return "Close";
     if (key === "action.close_all") return "Close all";
-    if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Editors"} (${params?.count ?? 0})`;
+    if (key === "code_editor.unsaved_changes") return "Unsaved changes";
+    if (key === "code_editor.close_unsaved_title") return "Discard unsaved changes?";
+    if (key === "code_editor.close_unsaved_description") {
+      return `${params?.name ?? "File"} has unsaved changes.`;
     }
-    if (key === "workspace.open_editors.expand_label") return "Expand Open Editors";
-    if (key === "workspace.open_editors.collapse_label") return "Collapse Open Editors";
+    if (key === "code_editor.discard_and_close") return "Discard and Close";
+    if (key === "workspace.open_editors.close_all_unsaved_description") {
+      return `${params?.count ?? 0} open files have unsaved changes.`;
+    }
+    if (key === "workspace.open_editors.title_with_count") {
+      return `${params?.title ?? "Open Files"} (${params?.count ?? 0})`;
+    }
+    if (key === "workspace.open_editors.expand_label") return "Expand Open Files";
+    if (key === "workspace.open_editors.collapse_label") return "Collapse Open Files";
     if (key === "workspace.open_editors.close_path") {
       return `Close ${params?.path ?? ""}`;
     }
@@ -39,7 +59,20 @@ function createFile(path: string): OpenFile {
   };
 }
 
-function renderSection(openFiles?: Record<string, OpenFile>, activePath?: string | null) {
+function createDirtyFile(path: string): OpenFile {
+  return {
+    ...createFile(path),
+    content: "changed",
+    savedContent: "saved",
+    isDirty: true,
+  };
+}
+
+function renderSection(
+  openFiles?: Record<string, OpenFile>,
+  activePath?: string | null,
+  seedStore?: (store: ReturnType<typeof createStore>) => void
+) {
   const store = createStore();
   store.set(workspacesAtom, {
     "ws-test": {
@@ -60,6 +93,7 @@ function renderSection(openFiles?: Record<string, OpenFile>, activePath?: string
     activePath ?? (files["src/beta.ts"] ? "src/beta.ts" : (Object.keys(files)[0] ?? null))
   );
   store.set(openFilesAtomFamily("ws-test"), files);
+  seedStore?.(store);
 
   render(
     <Provider store={store}>
@@ -79,14 +113,12 @@ describe("OpenEditorsSection", () => {
   it("shows file count, toggles collapse, closes a non-active row, and closes all", () => {
     const { store } = renderSection();
 
-    expect(screen.getByRole("heading", { level: 2, name: "Open Editors (3)" })).toHaveTextContent(
-      "Open Editors (3)"
-    );
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (3)" });
+    expect(heading).toHaveTextContent("Open Files");
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (3)" })
-      .closest("section") as HTMLElement;
-    const toggle = within(section).getByRole("button", { name: /collapse open editors/i });
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("3")).toHaveClass("workspace-open-editors__count");
+    const toggle = within(section).getByRole("button", { name: /collapse open files/i });
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
@@ -110,7 +142,7 @@ describe("OpenEditorsSection", () => {
     ]);
 
     fireEvent.click(toggle);
-    expect(within(section).getByRole("button", { name: "Expand Open Editors" })).toHaveAttribute(
+    expect(within(section).getByRole("button", { name: "Expand Open Files" })).toHaveAttribute(
       "aria-expanded",
       "false"
     );
@@ -120,7 +152,7 @@ describe("OpenEditorsSection", () => {
       })
     ).toBeNull();
 
-    fireEvent.click(within(section).getByRole("button", { name: /expand open editors/i }));
+    fireEvent.click(within(section).getByRole("button", { name: /expand open files/i }));
 
     const readmeRow = within(section)
       .getByRole("button", { name: "README.md" })
@@ -133,19 +165,25 @@ describe("OpenEditorsSection", () => {
     ]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/beta.ts");
 
-    fireEvent.click(within(section).getByRole("button", { name: "Close all" }));
+    const closeAllButton = within(section).getByRole("button", { name: "Close all" });
+    expect(closeAllButton).toHaveTextContent(/^$/);
+    expect(closeAllButton.querySelector("svg")).toBeTruthy();
+
+    fireEvent.click(closeAllButton);
 
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 
-  it("keeps the header visible but hides the body when there are no open editors", () => {
+  it("keeps the header visible but hides the body when there are no open files", () => {
     renderSection({});
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (0)" })
-      .closest("section") as HTMLElement;
-    const toggle = within(section).getByRole("button", { name: "Expand Open Editors" });
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (0)" });
+    expect(heading).toHaveTextContent("Open Files");
+
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("0")).toHaveClass("workspace-open-editors__count");
+    const toggle = within(section).getByRole("button", { name: "Expand Open Files" });
 
     expect(toggle).toBeDisabled();
     expect(toggle).not.toHaveAttribute("aria-expanded");
@@ -160,11 +198,13 @@ describe("OpenEditorsSection", () => {
 
     renderSection({}, "src/pending.ts");
 
-    const section = screen
-      .getByRole("heading", { level: 2, name: "Open Editors (1)" })
-      .closest("section") as HTMLElement;
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (1)" });
+    expect(heading).toHaveTextContent("Open Files");
 
-    expect(within(section).getByRole("button", { name: "Collapse Open Editors" })).toHaveAttribute(
+    const section = heading.closest("section") as HTMLElement;
+    expect(within(section).getByText("1")).toHaveClass("workspace-open-editors__count");
+
+    expect(within(section).getByRole("button", { name: "Collapse Open Files" })).toHaveAttribute(
       "aria-expanded",
       "true"
     );
@@ -172,5 +212,102 @@ describe("OpenEditorsSection", () => {
     expect(within(section).getByRole("button", { name: "src/pending.ts" })).toHaveClass(
       "workspace-open-editors__item--active"
     );
+  });
+
+  it("renders persisted editor paths when buffers have not loaded yet", () => {
+    const { store } = renderSection({}, "src/app.tsx", (draftStore) => {
+      draftStore.set(openEditorPathsAtomFamily("ws-test"), ["src/app.tsx", "README.md"]);
+    });
+
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (2)" });
+    const section = heading.closest("section") as HTMLElement;
+    const rowButtons = Array.from(
+      section.querySelectorAll<HTMLButtonElement>(".workspace-open-editors__item")
+    );
+
+    expect(rowButtons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "README.md",
+      "src/app.tsx",
+    ]);
+    expect(within(section).getByRole("button", { name: "src/app.tsx" })).toHaveClass(
+      "workspace-open-editors__item--active"
+    );
+
+    const readmeRow = within(section)
+      .getByRole("button", { name: "README.md" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+    fireEvent.click(within(readmeRow).getByRole("button", { name: "Close README.md" }));
+
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/app.tsx"]);
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+  });
+
+  it("routes open-editor clicks into the focused editor pane", () => {
+    const { store } = renderSection(undefined, undefined, (draftStore) => {
+      draftStore.set(paneLayoutAtomFamily("ws-test"), {
+        id: "root",
+        type: "leaf",
+        leafKind: "editor",
+      });
+      draftStore.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "README.md" }));
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
+  });
+
+  it("marks dirty open files and confirms before closing a dirty row", () => {
+    const { store } = renderSection(
+      {
+        "biome.jsonc": createDirtyFile("biome.jsonc"),
+      },
+      "biome.jsonc"
+    );
+
+    const row = screen
+      .getByRole("button", { name: "biome.jsonc" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+
+    expect(row.querySelector(".workspace-open-editors__dirty-indicator")).toBeTruthy();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Close biome.jsonc" }));
+
+    expect(store.get(openFilesAtomFamily("ws-test"))["biome.jsonc"]).toBeDefined();
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(store.get(openFilesAtomFamily("ws-test"))["biome.jsonc"]).toBeDefined();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Close biome.jsonc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+
+    expect(store.get(openFilesAtomFamily("ws-test"))["biome.jsonc"]).toBeUndefined();
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+  });
+
+  it("confirms before closing all when open files include dirty files", () => {
+    const { store } = renderSection(
+      {
+        "src/clean.ts": createFile("src/clean.ts"),
+        "src/dirty.ts": createDirtyFile("src/dirty.ts"),
+      },
+      "src/clean.ts"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual([
+      "src/clean.ts",
+      "src/dirty.ts",
+    ]);
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    expect(screen.getByText("1 open files have unsaved changes.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 });

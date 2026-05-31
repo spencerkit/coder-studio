@@ -67,7 +67,23 @@ export function resolveSpawnArgv(
     }
     const parsed = parseCmdShim(resolved, content);
     if (parsed) {
-      return [parsed.node, parsed.entry, ...restArgs];
+      // The standard npm cmd-shim hard-codes `"%~dp0\node.exe"`, but that
+      // path only really exists when node was installed alongside the shim
+      // directory (fnm / nvs / nvm-windows). Users who installed Node via
+      // the official MSI, Chocolatey, or Scoop don't have a `node.exe` in
+      // `%APPDATA%\npm`, and CreateProcess fails with ENOENT.
+      //
+      // The shim itself handles this at runtime via `IF EXIST … ELSE node`.
+      // We mirror that logic here: verify the parsed node path, then fall
+      // back to a `node` on PATH, then finally to a `cmd.exe` wrapper that
+      // lets cmd.exe execute the shim's own IF/ELSE.
+      if (existsSync(parsed.node)) {
+        return [parsed.node, parsed.entry, ...restArgs];
+      }
+      const nodeOnPath = resolveExecutablePath("node", pathEnv, pathExt, existsSync);
+      if (nodeOnPath) {
+        return [nodeOnPath, parsed.entry, ...restArgs];
+      }
     }
     return ["cmd.exe", "/d", "/s", "/c", resolved, ...restArgs];
   }

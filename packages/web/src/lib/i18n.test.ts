@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import en from "../locales/en.json";
 import zh from "../locales/zh.json";
 
 function flattenKeys(value: unknown, prefix = ""): string[] {
@@ -36,6 +37,15 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("i18n coverage", () => {
+  it("labels the open editor section as open files in user-facing copy", () => {
+    expect(zh.workspace.sidebar.open_editors).toBe("打开的文件");
+    expect(zh.workspace.open_editors.expand_label).toBe("展开打开的文件");
+    expect(zh.workspace.open_editors.collapse_label).toBe("收起打开的文件");
+    expect(en.workspace.sidebar.open_editors).toBe("Open Files");
+    expect(en.workspace.open_editors.expand_label).toBe("Expand Open Files");
+    expect(en.workspace.open_editors.collapse_label).toBe("Collapse Open Files");
+  });
+
   it("resolves every static translation key used in source files", () => {
     const localeKeys = new Set(flattenKeys(zh));
     const sourceRoot = path.resolve(__dirname, "..");

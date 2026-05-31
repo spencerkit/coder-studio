@@ -374,4 +374,26 @@ describe("CommandPalette", () => {
     expect(routerMocks.navigate).toHaveBeenCalledWith("/settings");
     expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });
+
+  it("opens Performance monitoring from the command palette", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(commandPaletteOpenAtom, true);
+    store.set(workspacesAtom, {
+      "ws-1": createWorkspace("ws-1", "/tmp/one"),
+    });
+    store.set(workspaceOrderAtom, ["ws-1"]);
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <CommandPalette />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByText("Monitoring"));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/settings?section=monitoring");
+    expect(store.get(commandPaletteOpenAtom)).toBe(false);
+  });
 });

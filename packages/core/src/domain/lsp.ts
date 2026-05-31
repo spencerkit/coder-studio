@@ -1,6 +1,45 @@
-export type LspServerKind = "typescript" | "python" | "go" | "rust";
+export type LspServerKind = "typescript" | "python" | "go" | "rust" | "vue";
 export type LspToolSource = "override" | "managed" | "bundled" | "system";
 export type LspRuntimeMode = "auto" | "off";
+
+export const LSP_SEMANTIC_TOKEN_TYPES = [
+  "namespace",
+  "type",
+  "class",
+  "enum",
+  "interface",
+  "struct",
+  "typeParameter",
+  "parameter",
+  "variable",
+  "property",
+  "enumMember",
+  "event",
+  "function",
+  "method",
+  "macro",
+  "keyword",
+  "modifier",
+  "comment",
+  "string",
+  "number",
+  "regexp",
+  "operator",
+  "decorator",
+] as const;
+
+export const LSP_SEMANTIC_TOKEN_MODIFIERS = [
+  "declaration",
+  "definition",
+  "readonly",
+  "static",
+  "deprecated",
+  "abstract",
+  "async",
+  "modification",
+  "documentation",
+  "defaultLibrary",
+] as const;
 
 export interface LspRange {
   startLine: number;
@@ -36,6 +75,11 @@ export interface LspDocumentSymbol {
   children?: LspDocumentSymbol[];
 }
 
+export interface LspSemanticTokens {
+  resultId?: string;
+  data: number[];
+}
+
 export interface LspSessionSummary {
   workspaceId: string;
   serverKind: LspServerKind;
@@ -47,6 +91,7 @@ export interface LspSessionSummary {
     references: boolean;
     hover: boolean;
     documentSymbols: boolean;
+    semanticTokens: boolean;
     diagnostics: boolean;
   };
 }

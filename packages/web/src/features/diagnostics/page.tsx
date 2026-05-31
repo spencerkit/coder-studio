@@ -31,8 +31,11 @@ import {
 import { assignSessionToPane } from "../agent-panes/pane-layout-tree";
 import { MobilePageHeader } from "../shared/components/mobile-page-header";
 import { PageHeader } from "../shared/components/page-header";
+import { hydrateWorkspaceEditorState } from "../workspace/actions/open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../workspace/actions/use-workspace-ui-state-persistence";
+import { useSystemDependencyInstaller } from "./actions/use-system-dependency-installer";
+import { SystemDependencyInstallPanel } from "./components/system-dependency-install-panel";
 import { parseDiagnosticsSearch } from "./navigation";
 
 function getProviderLabel(providerId?: string): string {
@@ -224,6 +227,9 @@ export function DiagnosticsPage() {
   const persistWorkspaceUiState = useWorkspaceUiStatePersistence(
     workspaceUiStateTargetId ?? "__workspace_empty__"
   );
+  const installer = useSystemDependencyInstaller(async () => {
+    await loadDiagnostics("diagnostics.recheck");
+  });
 
   function buildNextPaneLayout(
     workspaceId: string,
@@ -333,6 +339,7 @@ export function DiagnosticsPage() {
       ...prev,
       [result.data!.id]: result.data!,
     }));
+    hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
     setWorkspaceOrder((prev) => {
       if (prev.includes(result.data!.id)) {
         return prev;
@@ -638,6 +645,26 @@ export function DiagnosticsPage() {
                           </div>
                         ) : null}
                         <div className="diagnostics-issue__actions">
+                          {check.dependencyId &&
+                          check.status === "needs_attention" &&
+                          check.autoInstallSupported ? (
+                            <Button
+                              disabled={installer.hasActiveInstall}
+                              onClick={() => {
+                                const dependencyId = check.dependencyId;
+                                if (!dependencyId) {
+                                  return;
+                                }
+                                void installer.start(dependencyId);
+                              }}
+                              size="sm"
+                              variant="primary"
+                            >
+                              {check.dependencyId === "git"
+                                ? t("system_deps.install.install_git")
+                                : t("system_deps.install.install_node")}
+                            </Button>
+                          ) : null}
                           {check.docUrl ? (
                             <Button
                               as="a"
@@ -651,6 +678,15 @@ export function DiagnosticsPage() {
                             </Button>
                           ) : null}
                         </div>
+                        {installer.job && installer.job.dependencyId === check.dependencyId ? (
+                          <SystemDependencyInstallPanel
+                            job={installer.job}
+                            output={installer.output}
+                            submitting={installer.submitting}
+                            onSubmitInput={installer.submitInput}
+                            onCancel={installer.cancel}
+                          />
+                        ) : null}
                       </div>
                     );
                   })}

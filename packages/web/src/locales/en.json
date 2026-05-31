@@ -53,7 +53,8 @@
     "yes": "Yes",
     "no": "No",
     "ok": "OK",
-    "all": "All"
+    "all": "All",
+    "active": "Active"
   },
   "action": {
     "open": "Open",
@@ -82,7 +83,8 @@
     "back": "Back",
     "expand": "Expand",
     "collapse": "Collapse",
-    "close_all": "Close all"
+    "close_all": "Close all",
+    "retry": "Retry"
   },
   "label": {
     "workspace": "Workspace",
@@ -97,6 +99,7 @@
     "progress": "Progress"
   },
   "provider": {
+    "load_failed": "Failed to load providers",
     "install": {
       "cta": {
         "start": "Start Session",
@@ -155,13 +158,17 @@
     "loading_description": "Preparing your workspace list and restoring the last active session.",
     "load_failed_title": "Failed to load workspaces",
     "load_failed_description": "Failed to fetch workspace list",
+    "resize_left_panel": "Resize left panel",
+    "resize_bottom_panel": "Resize bottom panel",
     "sidebar": {
       "label": "Workspace activity bar",
       "explorer": "Explorer",
       "search": "Search",
       "source_control": "Source Control",
-      "open_editors": "Open Editors",
-      "workspace": "Workspace"
+      "open_editors": "Open Files",
+      "workspace": "Workspace",
+      "workspace_expand_label": "Expand Workspace",
+      "workspace_collapse_label": "Collapse Workspace"
     },
     "quick_jump": {
       "title": "Quick Jump",
@@ -172,8 +179,9 @@
     "open_editors": {
       "title_with_count": "{title} ({count})",
       "close_path": "Close {path}",
-      "expand_label": "Expand Open Editors",
-      "collapse_label": "Collapse Open Editors"
+      "close_all_unsaved_description": "{count} open files have unsaved changes. Closing them will discard those edits.",
+      "expand_label": "Expand Open Files",
+      "collapse_label": "Collapse Open Files"
     },
     "search": {
       "empty": "Type to search across file contents.",
@@ -183,13 +191,38 @@
       "truncated": "Results limited to keep search responsive.",
       "file_match_count": "{count}{suffix} matches",
       "failed": "Search failed. Try again.",
-      "retry": "Retry"
+      "retry": "Retry",
+      "replace": "Replace",
+      "replace_placeholder": "Replace",
+      "replace_all": "Replace All",
+      "replace_in_file": "Replace in File",
+      "replace_match": "Replace Match",
+      "toggle_replace": "Toggle replace",
+      "toggle_details": "Toggle search details",
+      "match_case": "Match Case",
+      "whole_word": "Whole Word",
+      "regex": "Use Regular Expression",
+      "preserve_case": "Preserve Case",
+      "files_to_include": "Files to Include",
+      "files_to_exclude": "Files to Exclude",
+      "only_open_editors": "Only Open Files",
+      "use_ignore_files": "Use Ignore Files",
+      "use_exclude_settings_and_ignore_files": "Use Exclude Settings and Ignore Files",
+      "preview": "Preview",
+      "invalid_regex": "Invalid regular expression.",
+      "skipped_files": "Skipped {binary} binary files and {large} large files."
     },
     "launch": {
       "kicker": "START WORKSPACE",
-      "title": "Open Workspace",
+      "title": "Start Workspace",
       "home_directory": "Home Directory",
       "go_up": "Go Up",
+      "new_folder": "New Folder",
+      "folder_name_label": "Folder Name",
+      "new_folder_placeholder": "Enter a folder name",
+      "create_folder": "Create Folder",
+      "creating_folder": "Creating...",
+      "create_folder_cancel": "Cancel",
       "no_directories": "No directories found",
       "items_count": "{count} items",
       "enter_folder": "Enter {name}",
@@ -198,6 +231,9 @@
       "start": "Start Workspace",
       "starting": "Starting...",
       "hint": "Select a directory to use as the workspace root.",
+      "folder_name_required": "Folder name is required",
+      "folder_name_invalid": "Folder name cannot include / or \\\\",
+      "create_folder_failed": "Failed to create folder",
       "browse_failed": "Failed to browse directories",
       "select_required": "Please select a directory",
       "open_failed": "Failed to open workspace"
@@ -275,6 +311,7 @@
     "no_session": "No active session",
     "provider_select": "Select Agent",
     "state": {
+      "draft": "Draft",
       "starting": "Starting...",
       "running": "Running",
       "idle": "Waiting for input",
@@ -289,6 +326,70 @@
       "waiting": "Waiting for response..."
     }
   },
+  "agent_panes": {
+    "open_in_editor": "Open in editor",
+    "move_here": "Move here",
+    "swap": "Swap",
+    "drag_pane": "Drag pane",
+    "split_horizontal": "Split horizontal",
+    "split_vertical": "Split vertical",
+    "close": "Close",
+    "draft_panels": "Draft panels",
+    "agent_panel": "Agent",
+    "file_editor": "File Editor",
+    "drop_file_to_open": "Drop files to open",
+    "draft_footer": "Launch an Agent or drop files on the right side to open them."
+  },
+  "shortcuts": {
+    "command_palette_toggle": {
+      "name": "Command Palette",
+      "description": "Open or close the command palette"
+    },
+    "workspace_new": {
+      "name": "New Workspace",
+      "description": "Open a new workspace tab"
+    },
+    "workspace_previous": {
+      "name": "Previous Workspace",
+      "description": "Switch to the previous workspace tab"
+    },
+    "workspace_next": {
+      "name": "Next Workspace",
+      "description": "Switch to the next workspace tab"
+    },
+    "focus_mode_toggle": {
+      "name": "Focus Mode",
+      "description": "Toggle focus mode and hide nonessential panels"
+    },
+    "agent_split_vertical": {
+      "name": "Vertical Split",
+      "description": "Split the Agent pane vertically"
+    },
+    "session_navigate_left": {
+      "name": "Move to Left Session",
+      "description": "Move focus to the session on the left"
+    },
+    "session_navigate_right": {
+      "name": "Move to Right Session",
+      "description": "Move focus to the session on the right"
+    },
+    "session_navigate_up": {
+      "name": "Move to Upper Session",
+      "description": "Move focus to the session above"
+    },
+    "session_navigate_down": {
+      "name": "Move to Lower Session",
+      "description": "Move focus to the session below"
+    },
+    "agent_split_horizontal": {
+      "name": "Horizontal Split",
+      "description": "Split the Agent pane horizontally"
+    },
+    "editor_save": {
+      "name": "Save",
+      "description": "Save the file currently being edited"
+    }
+  },
   "terminal": {
     "title": "Terminal",
     "kicker": "TERMINAL",
@@ -298,7 +399,7 @@
     "agent": "Agent Terminal",
     "reconnect_hint": "Connection lost, reconnecting...",
     "no_terminal": "No terminals",
-    "empty_hint": "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace.",
+    "empty_hint": "Launch a shell to inspect files and run commands.",
     "load_failed_title": "Could not load terminals",
     "load_failed_body": "Refresh the workspace connection and try again.",
     "create_failed_title": "Could not create terminal",
@@ -336,6 +437,19 @@
       "left": "Left arrow",
       "right": "Right arrow"
     },
+    "upload": {
+      "upload_failed": "Upload failed",
+      "upload_failed_body": "Could not upload file(s): {code}",
+      "uploading": "Uploading...",
+      "drop_failed": "Drop failed",
+      "drop_read_failed": "Could not read the dragged workspace path.",
+      "drop_workspace_mismatch": "You can only drop paths from the current workspace.",
+      "drop_insert_failed": "Could not insert the dragged path into the terminal.",
+      "paste": "Paste",
+      "clipboard_empty": "Clipboard is empty",
+      "paste_failed": "Paste failed",
+      "paste_permission_failed": "Could not read from clipboard. Please check permissions."
+    },
     "replay": {
       "queued_title": "Waiting in queue ({count} ahead)",
       "up_next": "Up next...",
@@ -367,8 +481,11 @@
     "visible_count": "{count} files",
     "empty_directory": "Empty directory",
     "new_file": "New File",
+    "new_file_short": "+ File",
     "new_folder": "New Folder",
+    "new_folder_short": "+ Folder",
     "collapse_all": "Collapse All",
+    "collapse_all_short": "Collapse",
     "rename": "Rename",
     "rename_name": "Name",
     "rename_helper": "Rename within the current directory only.",
@@ -407,8 +524,28 @@
     "mode_preview": "Preview",
     "mode_edit": "Edit",
     "mode_diff": "Diff",
+    "toolbar_actions": "Editor actions",
+    "image_load_failed_body": "The image could not be loaded. The file may have been moved or is larger than the browser allows.",
+    "image_diff_base": "Base",
+    "image_diff_current": "Current",
+    "image_diff_no_base": "No base image",
+    "image_diff_no_current": "No current image",
+    "lsp_disabled_title": "Language server disabled",
+    "lsp_disabled_message": "LSP is turned off in Settings to reduce memory usage.",
+    "lsp_installing_step": "Installing: {title}",
+    "lsp_install_failed_step": "Install failed at: {title}",
+    "lsp_install": "Install",
+    "lsp_unavailable": "{name} unavailable",
+    "lsp_install_in_progress": "Install in progress",
+    "lsp_install_failed": "Install failed",
     "diff_saved_only": "Diff preview is based on saved file contents.",
+    "unsaved_changes": "Unsaved changes",
+    "close_unsaved_title": "Discard unsaved changes?",
+    "close_unsaved_description": "{name} has unsaved changes. Closing it will discard those edits.",
+    "discard_and_close": "Discard and Close",
     "open_failed_title": "Failed to open file",
+    "save_failed_title": "Failed to save file",
+    "text_backed_image_load_failed": "Failed to load image text content",
     "empty_hint": "Select a file on the left to open it in the editor.",
     "modified_on_disk": "This file changed on disk after you opened it. Save carefully or reload the file.",
     "deleted_on_disk": "This file was deleted on disk after you opened it."
@@ -423,6 +560,8 @@
     "untracked": "Untracked",
     "no_changes": "No changes",
     "commit": "Commit",
+    "commit_expand_label": "Expand Commit",
+    "commit_collapse_label": "Collapse Commit",
     "commit_message": "Commit Message",
     "commit_placeholder": "Enter commit message...",
     "commit_summary_placeholder": "Enter commit message...",
@@ -499,7 +638,11 @@
       "empty_filtered": "No branches found",
       "empty_idle": "Type to search branches",
       "in_use": "In Use",
+      "hint_navigate": "Navigate",
+      "hint_select": "Select",
+      "hint_close": "Close",
       "worktree_in_use": "Checked out in another worktree",
+      "load_failed": "Failed to load branches",
       "checkout_failed_title": "Failed to switch branch",
       "checkout_failed_body": "Could not switch to {name}.",
       "create_failed_title": "Failed to create branch",
@@ -513,7 +656,9 @@
       "changes": "Uncommitted file changes",
       "ahead": "Local commits to push",
       "behind": "Remote commits to pull"
-    }
+    },
+    "diff_select_title": "Select a changed file to inspect",
+    "diff_empty_body": "Select a staged or modified file on the left to inspect its diff."
   },
   "worktree": {
     "title": "Worktree",
@@ -535,6 +680,7 @@
     "list_empty": "No worktrees",
     "list_open_label": "Open worktree list",
     "list_error": "Failed to load: {error}",
+    "list_load_failed": "Failed to load worktrees",
     "manage": "Manage",
     "new": "New",
     "current": "Current",
@@ -543,17 +689,24 @@
     "summary_current": "Current: {name}",
     "summary_no_current": "Current: unavailable",
     "create_title": "Create Worktree",
+    "create_branch_placeholder": "feature/worktree-manager",
+    "create_path_placeholder": "/path/to/coder-studio-feature-worktree-manager",
     "create_submit": "Create",
     "create_path_hint": "Path must be absolute. The suggested path is derived from the current workspace path.",
     "create_path_absolute_required": "Path must be an absolute path.",
     "create_failed_title": "Failed to create worktree",
+    "create_failed_body": "Could not create the worktree.",
     "create_success_title": "Worktree created",
     "create_success_body": "{name} is ready.",
     "remove_confirm": "Remove worktree?",
     "remove_force_confirm": "Force remove dirty worktree?",
     "remove_failed_title": "Failed to remove worktree",
+    "remove_failed_body": "Could not remove the worktree.",
     "remove_success_title": "Worktree removed",
     "remove_success_body": "Worktree removed.",
+    "open_failed_title": "Failed to open worktree",
+    "open_failed_body": "Could not open the selected worktree.",
+    "detail_load_failed": "Failed to load worktree data.",
     "force_remove": "Force Remove",
     "remove_row_label": "Remove {name}",
     "selection_removed": "The selected worktree is no longer available."
@@ -643,6 +796,14 @@
     "permission_request": "Request Permission",
     "permission_unavailable": "Unavailable",
     "permission_limited_hint": "Even with notification permission allowed, this mobile browser may still fail to show system notifications reliably.",
+    "monitoring": {
+      "group": "Performance monitoring",
+      "description": "Control whether runtime sampling is enabled and how deep it goes.",
+      "enable_monitoring": "Enable performance monitoring",
+      "enable_monitoring_hint": "Sampling is disabled by default to avoid background overhead.",
+      "disabled_title": "Monitoring disabled",
+      "disabled_settings_hint": "Turn monitoring on to start collecting host and runtime data."
+    },
     "supervisor": {
       "title": "Supervisor",
       "hint": "Configure supervisor evaluation timeout and global retry behavior. Retry rules apply to all supervisors.",
@@ -739,6 +900,12 @@
       "family_graphite": "Graphite",
       "family_nord": "Nord",
       "family_hc": "High Contrast",
+      "family_spring": "Spring",
+      "family_summer": "Summer",
+      "family_autumn": "Autumn",
+      "family_winter": "Winter",
+      "group_core": "Core Themes",
+      "group_seasonal": "Seasonal Themes",
       "mint_dark": "Mint Dark",
       "mint_light": "Mint Light",
       "graphite_dark": "Graphite Dark",
@@ -747,6 +914,14 @@
       "nord_light": "Nord Light",
       "hc_dark": "High Contrast Dark",
       "hc_light": "High Contrast Light",
+      "spring_light": "Spring Light",
+      "spring_dark": "Spring Dark",
+      "summer_light": "Summer Light",
+      "summer_dark": "Summer Dark",
+      "autumn_light": "Autumn Light",
+      "autumn_dark": "Autumn Dark",
+      "winter_light": "Winter Light",
+      "winter_dark": "Winter Dark",
       "variant_dark": "Dark",
       "variant_light": "Light"
     },
@@ -768,7 +943,12 @@
       "hint": "Review and adjust common keyboard actions",
       "reset_all": "Reset All",
       "capture_hint": "Press new shortcut combination",
-      "reset_hint": "Reset to default"
+      "capture_placeholder": "Press shortcut...",
+      "reset_hint": "Reset to default",
+      "category_global": "Global",
+      "category_workspace": "Workspace",
+      "category_editor": "Editor",
+      "category_terminal": "Terminal"
     },
     "config_files": {
       "title": "Config Files",
@@ -787,14 +967,138 @@
       "collapse": "Collapse",
       "format": "Format",
       "format_hint": "Format JSON code",
-      "file_not_found_hint": "Edit and save to create the config file."
+      "file_not_found_hint": "Edit and save to create the config file.",
+      "json_formatted": "JSON formatted",
+      "invalid_json": "Invalid JSON",
+      "invalid_json_format_body": "Cannot format invalid JSON"
     },
     "permission_denied_hint": "Browser or system notification permission may be blocked. Check site settings and device notification settings.",
     "permission_unavailable_hint": "This environment cannot request browser notification permission"
   },
+  "monitoring": {
+    "title": "Performance monitoring",
+    "command_label": "Monitoring",
+    "command_description": "Open the performance monitoring page",
+    "group": "Performance monitoring",
+    "description": "Control whether runtime sampling is enabled and how deep it goes.",
+    "enable_monitoring": "Enable performance monitoring",
+    "enable_monitoring_hint": "Sampling is disabled by default to avoid background overhead.",
+    "disabled_title": "Monitoring disabled",
+    "disabled_description": "No background sampling is running. Enable monitoring in settings before using this page.",
+    "disabled_settings_hint": "Turn monitoring on to start collecting host and runtime data.",
+    "open_settings": "Open Settings",
+    "open_monitoring": "Open Monitoring",
+    "loading": "Loading monitoring snapshot...",
+    "load_failed": "Monitoring failed to load",
+    "refresh_failed": "Could not refresh monitoring",
+    "last_updated": "Last updated",
+    "signal_summary_enabled": "Sampling is active for this workspace runtime.",
+    "signal_summary_disabled": "Sampling is off. Enable monitoring before inspecting deeper signals.",
+    "host_overview": "Host overview",
+    "mode_disabled": "Disabled",
+    "mode_light": "Light",
+    "mode_standard": "Standard",
+    "mode_deep": "Deep",
+    "mode_custom": "Custom",
+    "pressure_normal": "Normal",
+    "pressure_elevated": "Elevated",
+    "pressure_hot": "Hot",
+    "pressure_unknown": "Unknown",
+    "runtime_summary_title": "Coder Studio footprint",
+    "runtime_summary_disabled": "Runtime summary disabled",
+    "enable_runtime_summary": "Enable runtime summary in settings",
+    "runtime_summary_pending": "Waiting for the first process sample",
+    "runtime_summary_pending_description": "Waiting for the first process sample.",
+    "process_collection_degraded": "Process metrics unavailable",
+    "process_collection_unavailable": "Process collection is temporarily unavailable.",
+    "attribution_tree": "Attribution tree",
+    "attribution_disabled": "Attribution disabled",
+    "enable_attribution": "Enable workspace and session attribution in settings",
+    "attribution_empty": "No active attributed workloads",
+    "attribution_empty_description": "No workspace or session is currently contributing measurable load.",
+    "subprocess_disabled": "Subprocess drill-down disabled",
+    "enable_subprocess": "Enable subprocess drill-down in settings",
+    "subprocess_empty": "No active subprocesses",
+    "subprocess_empty_description": "No subprocesses are currently contributing measurable load.",
+    "detail_panel": "Detail panel",
+    "select_entity": "Select a workspace, session, or process to inspect details.",
+    "entity_kind_workspace": "Workspace total",
+    "entity_kind_session": "Session",
+    "entity_kind_subprocess": "Subprocess",
+    "entity_kind_background": "Background task",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "available_memory": "Available memory",
+    "host_pressure": "Host pressure",
+    "load_average": "Load average",
+    "uptime": "Uptime",
+    "server_cpu": "Server CPU",
+    "server_memory": "Server memory",
+    "managed_cpu": "Managed CPU",
+    "managed_memory": "Managed memory",
+    "process_count": "Process count",
+    "sort_by": "Sort by",
+    "time_window": "Time window",
+    "refresh_rate": "Refresh rate",
+    "preset": "Preset",
+    "host_metrics": "Host metrics",
+    "host_metrics_hint": "Collect machine-level CPU, memory, load average, and uptime.",
+    "runtime_summary_setting": "Runtime summary",
+    "runtime_summary_hint": "Collect Coder Studio service and managed-process totals.",
+    "runtime_summary_dependency": "Required for attribution and subprocess drill-down.",
+    "workspace_attribution": "Workspace and session attribution",
+    "workspace_attribution_hint": "Attribute runtime load back to workspaces and sessions.",
+    "subprocess_drilldown": "Subprocess drill-down",
+    "subprocess_drilldown_hint": "Show subprocess-level attribution and executable paths.",
+    "stage_label": "Monitoring data stage",
+    "stage_eyebrow": "Live telemetry",
+    "stage_title": "Inspect current system load",
+    "stage_summary": "Review host, runtime, attribution, and process signals before changing collection depth.",
+    "hero_summary": "Review host, runtime, attribution, and subprocess pressure before changing collection depth or sampling cadence.",
+    "toolbar_summary": "Tune collection depth, refresh cadence, and manual rechecks from one control strip.",
+    "toolbar_action_label": "Manual recheck",
+    "status_card": "Collection health",
+    "health_chip": "Sampling healthy",
+    "status_stable": "Stable",
+    "status_attention": "Needs attention",
+    "kpi_group": "Monitoring key metrics",
+    "kpi_host_load": "Host load",
+    "kpi_host_load_meta": "Current CPU pressure on this machine.",
+    "kpi_runtime_label": "Runtime footprint",
+    "kpi_runtime_meta": "Managed runtime memory currently attributed to Coder Studio.",
+    "kpi_active_entities": "Active entities",
+    "kpi_disabled_meta": "Enable monitoring to populate runtime and attribution data.",
+    "kpi_uptime": "Host uptime",
+    "kpi_managed_cpu_share": "Managed CPU share",
+    "kpi_managed_process_suffix": "managed processes",
+    "kpi_managed_share_idle": "No high-pressure managed workloads right now.",
+    "kpi_conclusion": "Monitoring conclusion",
+    "kpi_conclusion_meta": "Keep the standard preset unless deeper sampling is needed for active debugging.",
+    "host_overview_description": "Machine-level CPU, memory headroom, and historical pressure in the selected time window.",
+    "runtime_summary_description": "Coder Studio service footprint and managed runtime activity across the same sample window.",
+    "attribution_description": "Inspect workspaces and sessions with the most measurable load before drilling into details.",
+    "subprocess_description": "Subprocess-level groups for long-running tools, shells, and agent workloads.",
+    "dock_label": "Monitoring settings dock",
+    "dock_eyebrow": "Collection controls",
+    "dock_title": "Sampling configuration",
+    "dock_summary_enabled": "Monitoring is collecting data. Adjust depth, attribution, and drill-down here.",
+    "dock_summary_disabled": "Monitoring is off. Enable sampling here before inspecting live runtime signals.",
+    "toggle_settings": "Toggle monitoring settings",
+    "open_configuration": "Open monitoring configuration",
+    "mobile_entry_summary": "Monitoring is already collecting data. Open configuration only when you need to adjust sampling depth or attribution.",
+    "show_advanced_settings": "Show advanced monitoring settings",
+    "show_advanced_capabilities": "Show advanced sampling capabilities",
+    "hide_advanced_capabilities": "Hide advanced sampling capabilities",
+    "advanced_capabilities_hint": "Use advanced capability switches only when you need deeper attribution or subprocess drill-down.",
+    "mobile_section": "Monitoring section",
+    "mobile_overview": "Overview",
+    "mobile_attribution": "Attribution",
+    "mobile_process": "Process"
+  },
   "auth": {
     "description": "Enter your password to continue to the current workspace.",
     "hint": "Enter the access password configured for this deployment.",
+    "login_failed": "Login failed",
     "blocked_until": "Too many attempts. Try again after {time}, or ask an administrator to unblock access.",
     "blocked_generic": "Too many attempts. Try again later, or ask an administrator to unblock access.",
     "status_title": "Access verification",
@@ -813,9 +1117,17 @@
     "reconnecting": "Reconnecting...",
     "reconnect_failed": "Reconnection failed",
     "another_tab": "Another tab is active",
+    "another_tab_activated": "Another tab is active",
     "takeover": "Take Control",
     "server_shutdown": "Server has shut down",
-    "backpressure_warning": "Network congested, some output may be lost"
+    "backpressure_warning": "Network congested, some output may be lost",
+    "reconnecting_banner": "Connection lost, reconnecting...",
+    "slow_recovery_hint": "Recovery is taking longer than expected. If it does not recover soon, try refreshing the page.",
+    "slow_recovery_hint_mobile": "Recovery is taking longer than expected. Try refreshing the page if it does not recover soon."
+  },
+  "shell": {
+    "loading_title": "Loading workspace...",
+    "loading_description": "Syncing authentication and connection state before entering the current workspace."
   },
   "supervisor": {
     "title": "Supervisor",
@@ -955,6 +1267,8 @@
   "command": {
     "palette": "Command Palette",
     "no_results": "No results found",
+    "quick_actions": "Quick Actions",
+    "actions_count": "{count} actions",
     "shortcut": {
       "save": "Save",
       "save_all": "Save All",
@@ -1135,6 +1449,55 @@
       }
     }
   },
+  "system_deps": {
+    "install": {
+      "install_git": "Install Git",
+      "install_node": "Install Node.js",
+      "package_manager": "Package manager",
+      "current_step": "Current step",
+      "failure_reason": "Failure reason",
+      "failure_details": "Details",
+      "password_label": "Administrator password",
+      "submit_password": "Submit password",
+      "submit_input": "Submit",
+      "cancel": "Cancel install",
+      "failure": {
+        "unsupported_platform": "Unsupported platform",
+        "unsupported_package_manager": "Unsupported package manager",
+        "permission_denied": "Permission denied",
+        "user_cancelled": "Install cancelled",
+        "pty_disconnected": "Installer session disconnected",
+        "command_not_found": "Command not found",
+        "command_failed": "Install command failed",
+        "verification_failed": "Verification failed",
+        "unknown_failure": "Unknown failure"
+      },
+      "step": {
+        "install": {
+          "git": "Install Git",
+          "node": "Install Node.js"
+        },
+        "verify": {
+          "git": "Verify Git",
+          "node": "Verify Node.js"
+        }
+      },
+      "status": {
+        "queued": "Queued",
+        "running": "Installing",
+        "waiting_input": "Waiting for password",
+        "succeeded": "Installed",
+        "failed": "Install failed",
+        "cancelled": "Install cancelled"
+      },
+      "git": {
+        "manual": "Install Git manually if automatic install is not available for this machine."
+      },
+      "node": {
+        "manual": "Install Node.js manually if automatic install is not available for this machine."
+      }
+    }
+  },
   "not_found": {
     "kicker": "ROUTE NOT FOUND",
     "title": "Page not found",
@@ -1178,6 +1541,7 @@
   "fencing": {
     "observer_mode": "Read-only mode \u2014 another tab is the controller",
     "takeover": "Take over",
+    "taking_over": "Taking over...",
     "takeover_failed": "Takeover failed \u2014 controller is still active"
   }
 }

@@ -5,6 +5,7 @@
  */
 
 import {
+  createDefaultMonitoringSettings,
   createDefaultUpdateSettings,
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   DEFAULT_SUPERVISOR_RETRY_DELAY_SEC,
@@ -12,10 +13,14 @@ import {
   DEFAULT_SUPERVISOR_RETRY_MAX_COUNT,
   DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR,
   DEFAULT_SUPERVISOR_RETRY_ON_TIMEOUT,
+  deriveMonitoringMode,
   type LspRuntimeMode,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
+  type MonitoringMode,
+  type MonitoringSettings,
+  resolveMonitoringSettings,
   resolveSupervisorEvaluationTimeoutSec,
   resolveSupervisorRetryDelaySec,
   resolveSupervisorRetryEnabled,
@@ -47,6 +52,7 @@ import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { lspRuntimeModeAtom } from "../../code-editor/lsp/runtime-mode";
 import { buildDiagnosticsPath } from "../../diagnostics";
+import { useMonitoringData } from "../../monitoring";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { PageHeader } from "../../shared/components/page-header";
@@ -61,6 +67,7 @@ import {
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
 import { AboutSettings } from "./about-settings";
+import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
@@ -86,6 +93,28 @@ type SettingsNavigationState =
 type SettingsContentLayoutMode = "default" | "fill-height";
 type AppearanceAssetScope = "common" | "desktop" | "mobile";
 type AppearanceOverrideTarget = Exclude<AppearanceAssetScope, "common">;
+
+const CORE_THEME_IDS = [
+  "mint-dark",
+  "mint-light",
+  "graphite-dark",
+  "graphite-light",
+  "nord-dark",
+  "nord-light",
+  "hc-dark",
+  "hc-light",
+] as const;
+
+const SEASONAL_THEME_IDS = [
+  "spring-light",
+  "spring-dark",
+  "summer-light",
+  "summer-dark",
+  "autumn-light",
+  "autumn-dark",
+  "winter-light",
+  "winter-dark",
+] as const;
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
 const TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS = 500;
@@ -162,6 +191,8 @@ function getMobileSectionHintKey(section: SettingsSection) {
   switch (section) {
     case "general":
       return "settings.notifications_channel_hint";
+    case "monitoring":
+      return "monitoring.command_description";
     case "providers":
       return "settings.provider.command_preview_hint";
     case "appearance":
@@ -176,7 +207,7 @@ function getMobileSectionHintKey(section: SettingsSection) {
 const MOBILE_SETTINGS_GROUPS = [
   {
     titleKey: "settings.mobile_groups.workspace_runtime",
-    sections: ["general", "providers"],
+    sections: ["general", "monitoring", "providers"],
   },
   {
     titleKey: "settings.mobile_groups.interface_interaction",
@@ -186,6 +217,22 @@ const MOBILE_SETTINGS_GROUPS = [
   titleKey: string;
   sections: readonly SettingsSection[];
 }[];
+
+function resolveOrderedThemeDefinitions(
+  themeIds: readonly string[],
+  themeDefinitionsById: ReadonlyMap<string, (typeof THEMES)[number]>,
+  groupName: string
+) {
+  return themeIds.map((themeId) => {
+    const themeDefinition = themeDefinitionsById.get(themeId);
+
+    if (!themeDefinition) {
+      throw new Error(`Missing theme registry entry for "${themeId}" in ${groupName}.`);
+    }
+
+    return themeDefinition;
+  });
+}
 
 function resolveMobileSettingsGroups(
   availableSections: readonly {
@@ -213,6 +260,41 @@ function resolveMobileSettingsGroups(
   }));
 }
 
+interface MonitoringSettingsSectionProps {
+  readonly mode: MonitoringMode;
+  readonly monitoringSettingsReady: boolean;
+  readonly onChange: (
+    next: MonitoringSettings,
+    onLatestSuccess: () => Promise<void>
+  ) => Promise<void> | void;
+  readonly onLayoutModeChange?: (mode: SettingsContentLayoutMode) => void;
+  readonly settings: MonitoringSettings;
+}
+
+function MonitoringSettingsSection({
+  mode,
+  monitoringSettingsReady,
+  onChange,
+  onLayoutModeChange,
+  settings,
+}: MonitoringSettingsSectionProps) {
+  const monitoringData = useMonitoringData();
+
+  useEffect(() => {
+    onLayoutModeChange?.("fill-height");
+  }, [onLayoutModeChange]);
+
+  return (
+    <MonitoringSettingsSubpage
+      mode={mode}
+      monitoringSettingsReady={monitoringSettingsReady}
+      monitoringData={monitoringData}
+      onChange={(next) => onChange(next, monitoringData.refresh)}
+      settings={settings}
+    />
+  );
+}
+
 /**
  * Settings Page
  *
@@ -235,16 +317,15 @@ export function SettingsPage() {
   const serverInfo = useAtomValue(serverInfoAtom);
   const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const activeWorkspaceId = resolvedActiveWorkspaceId;
-  const initialRequestedSection = (() => {
+  const requestedSection = (() => {
     const section = new URLSearchParams(location.search).get("section");
     return SETTINGS_SECTIONS.some((item) => item.id === section)
       ? (section as SettingsSection)
       : null;
   })();
-  const initialRequestedSectionRef = useRef<SettingsSection | null>(initialRequestedSection);
   const [navigationState, setNavigationState] = useState<SettingsNavigationState>(() => {
-    if (initialRequestedSection) {
-      return { kind: "detail", section: initialRequestedSection };
+    if (requestedSection) {
+      return { kind: "detail", section: requestedSection };
     }
 
     return isMobile
@@ -284,6 +365,10 @@ export function SettingsPage() {
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
     Record<string, string>
   >({});
+  const [monitoringSettings, setMonitoringSettings] = useState<MonitoringSettings>(
+    createDefaultMonitoringSettings()
+  );
+  const [monitoringSettingsReady, setMonitoringSettingsReady] = useState(false);
   const defaultUpdateSettings = createDefaultUpdateSettings();
   const [updateAutoCheckEnabled, setUpdateAutoCheckEnabled] = useState(
     defaultUpdateSettings.autoCheckEnabled
@@ -303,6 +388,7 @@ export function SettingsPage() {
   const setHydratedLspRuntimeMode = useSetAtom(lspRuntimeModeAtom);
   const store = useStore();
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
+  const monitoringSettingsHydratedRef = useRef(false);
   const appearanceSelectionVersionRef = useRef({
     theme: 0,
     personalization: 0,
@@ -317,6 +403,7 @@ export function SettingsPage() {
     autoCheckEnabled: 0,
     checkIntervalSec: 0,
   });
+  const monitoringSelectionVersionRef = useRef(0);
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
@@ -337,27 +424,41 @@ export function SettingsPage() {
     });
   };
 
+  const selectSettingsSection = (section: SettingsSection) => {
+    const nextSearchParams = new URLSearchParams(location.search);
+    nextSearchParams.set("section", section);
+    const nextSearch = nextSearchParams.toString();
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : "",
+      },
+      { replace: true }
+    );
+
+    setNavigationState({ kind: "detail", section });
+  };
+
   useEffect(() => {
     settingsLoadFailedUnknownRef.current = settingsLoadFailedUnknown;
   }, [settingsLoadFailedUnknown]);
 
   useEffect(() => {
     setNavigationState((state) => {
+      if (requestedSection) {
+        return state.kind === "detail" && state.section === requestedSection
+          ? state
+          : { kind: "detail", section: requestedSection };
+      }
+
       if (isMobile) {
-        if (
-          initialRequestedSectionRef.current &&
-          state.kind === "detail" &&
-          state.section === initialRequestedSectionRef.current
-        ) {
-          initialRequestedSectionRef.current = null;
-          return state;
-        }
         return state.kind === "root" ? state : { kind: "root", lastSection: state.section };
       }
 
       return state.kind === "detail" ? state : { kind: "detail", section: state.lastSection };
     });
-  }, [isMobile]);
+  }, [isMobile, requestedSection]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -365,6 +466,9 @@ export function SettingsPage() {
     }
 
     let cancelled = false;
+    if (!monitoringSettingsHydratedRef.current) {
+      setMonitoringSettingsReady(false);
+    }
 
     const loadSettings = async () => {
       const appearanceSelectionVersionAtRequestStart = {
@@ -373,6 +477,7 @@ export function SettingsPage() {
       const updateSelectionVersionAtRequestStart = {
         ...updateSelectionVersionRef.current,
       };
+      const monitoringSelectionVersionAtRequestStart = monitoringSelectionVersionRef.current;
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
       if (result === null) {
         return;
@@ -393,6 +498,11 @@ export function SettingsPage() {
       }
       if (typeof settings["notifications.soundEnabled"] === "boolean") {
         setSoundEnabled(settings["notifications.soundEnabled"]);
+      }
+      if (monitoringSelectionVersionRef.current === monitoringSelectionVersionAtRequestStart) {
+        setMonitoringSettings(resolveMonitoringSettings(settings));
+        monitoringSettingsHydratedRef.current = true;
+        setMonitoringSettingsReady(true);
       }
       if (
         updateSelectionVersionRef.current.autoCheckEnabled ===
@@ -669,8 +779,39 @@ export function SettingsPage() {
     }
   };
 
+  const handleMonitoringSettingsChange = async (
+    nextSettings: MonitoringSettings,
+    onLatestSuccess: () => Promise<void>
+  ) => {
+    const previousSettings = monitoringSettings;
+    const monitoringWasHydrated = monitoringSettingsHydratedRef.current;
+    monitoringSelectionVersionRef.current += 1;
+    const requestVersion = monitoringSelectionVersionRef.current;
+    setMonitoringSettings(nextSettings);
+
+    const result = await dispatch("settings.update", {
+      settings: {
+        monitoring: nextSettings,
+      },
+    });
+
+    if (result === null || !result.ok) {
+      if (monitoringSelectionVersionRef.current === requestVersion) {
+        setMonitoringSettings(previousSettings);
+        if (!monitoringWasHydrated) {
+          setSettingsRefreshKey((value) => value + 1);
+        }
+      }
+      throw result?.error ?? new Error("monitoring update failed");
+    }
+
+    if (monitoringSelectionVersionRef.current === requestVersion) {
+      await onLatestSuccess();
+    }
+  };
+
   useEffect(() => {
-    if (detailSection !== "providers") {
+    if (detailSection !== "providers" && detailSection !== "monitoring") {
       setContentLayoutMode("default");
     }
   }, [detailSection]);
@@ -688,6 +829,13 @@ export function SettingsPage() {
 
   const handleBack = () => {
     if (isMobile && navigationState.kind === "detail") {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: "",
+        },
+        { replace: true }
+      );
       setNavigationState({ kind: "root", lastSection: navigationState.section });
       return;
     }
@@ -724,6 +872,16 @@ export function SettingsPage() {
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             activeWorkspaceId={activeWorkspaceId}
+          />
+        );
+      case "monitoring":
+        return (
+          <MonitoringSettingsSection
+            mode={deriveMonitoringMode(monitoringSettings)}
+            monitoringSettingsReady={monitoringSettingsReady}
+            onChange={handleMonitoringSettingsChange}
+            onLayoutModeChange={setContentLayoutMode}
+            settings={monitoringSettings}
           />
         );
       case "appearance":
@@ -782,7 +940,7 @@ export function SettingsPage() {
                   type="button"
                   className="settings-mobile-item"
                   aria-label={t(section.labelKey)}
-                  onClick={() => setNavigationState({ kind: "detail", section: section.id })}
+                  onClick={() => selectSettingsSection(section.id)}
                 >
                   <span className="settings-mobile-item__icon-shell" aria-hidden="true">
                     <span className="settings-mobile-item__icon">
@@ -847,7 +1005,7 @@ export function SettingsPage() {
                     icon={<ThemedIcon semantic={iconSemantic} size={16} />}
                     label={t(labelKey)}
                     active={detailSection === id}
-                    onClick={() => setNavigationState({ kind: "detail", section: id })}
+                    onClick={() => selectSettingsSection(id)}
                   />
                 ))}
               </nav>
@@ -857,7 +1015,11 @@ export function SettingsPage() {
           <main
             className={`settings-content ${isMobile ? "settings-content--mobile" : ""} ${isMobileDetailView ? "settings-content--mobile-detail" : ""} ${contentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""}`}
           >
-            <div className="settings-content-surface">
+            <div
+              className={`settings-content-surface ${
+                detailSection === "monitoring" ? "settings-content-surface--monitoring-dense" : ""
+              }`}
+            >
               {settingsLoadError && (
                 <Notice
                   role="alert"
@@ -1726,10 +1888,43 @@ function AppearanceSettings({
   const mobileGlassDescId = useId();
   const dispatch = useSessionGateDispatch();
   const currentThemeId = resolveStoredThemeId(theme);
-  const themeOptions = THEMES.map((registeredTheme) => ({
-    value: registeredTheme.id,
-    label: t(registeredTheme.labelKey),
-  }));
+  const themeDefinitionsById = new Map(
+    THEMES.map((registeredTheme) => [registeredTheme.id, registeredTheme])
+  );
+  const coreThemes = resolveOrderedThemeDefinitions(
+    CORE_THEME_IDS,
+    themeDefinitionsById,
+    "core theme picker group"
+  );
+  const seasonalThemes = resolveOrderedThemeDefinitions(
+    SEASONAL_THEME_IDS,
+    themeDefinitionsById,
+    "seasonal theme picker group"
+  );
+  const themeOptions = [
+    {
+      value: "__group_core",
+      label: t("settings.theme.group_core"),
+      disabled: true,
+    },
+    ...coreThemes.map((registeredTheme) => {
+      return {
+        value: registeredTheme.id,
+        label: t(registeredTheme.labelKey),
+      };
+    }),
+    {
+      value: "__group_seasonal",
+      label: t("settings.theme.group_seasonal"),
+      disabled: true,
+    },
+    ...seasonalThemes.map((registeredTheme) => {
+      return {
+        value: registeredTheme.id,
+        label: t(registeredTheme.labelKey),
+      };
+    }),
+  ];
   const [desktopTerminalFontSizeDraft, setDesktopTerminalFontSizeDraft] = useState(
     String(desktopTerminalFontSize)
   );

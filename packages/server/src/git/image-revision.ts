@@ -4,6 +4,7 @@ import { getImageTypeInfo } from "../fs/image.js";
 import { GitError } from "./cli.js";
 
 const execFileAsync = promisify(execFile);
+const GIT_COMMIT_REVISION_RE = /^[0-9a-fA-F]{7,64}$/;
 
 export interface GitImageRevisionAsset {
   exists: boolean;
@@ -11,10 +12,12 @@ export interface GitImageRevisionAsset {
   bytes?: Buffer;
 }
 
-export type GitImageRevisionSelector = "HEAD" | "INDEX";
+export type GitImageRevisionSelector = "HEAD" | "INDEX" | string;
 
 export function parseGitImageRevisionSelector(revision: string): GitImageRevisionSelector | null {
-  return revision === "HEAD" || revision === "INDEX" ? revision : null;
+  return revision === "HEAD" || revision === "INDEX" || GIT_COMMIT_REVISION_RE.test(revision)
+    ? revision
+    : null;
 }
 
 export async function readImageAtRevision(

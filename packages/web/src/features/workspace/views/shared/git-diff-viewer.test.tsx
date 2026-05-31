@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { gitDiffPreviewAtomFamily } from "../../atoms";
 import { GitDiffViewer } from "./git-diff-viewer";
@@ -23,6 +24,7 @@ describe("GitDiffViewer", () => {
     const sendCommand = vi.fn();
 
     const store = createStore();
+    store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
       path: "packages/core/src/domain/types.ts",
@@ -54,6 +56,7 @@ describe("GitDiffViewer", () => {
 
   it("clears the preview when the header close button is clicked", async () => {
     const store = createStore();
+    store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
       path: "packages/core/src/domain/types.ts",
@@ -90,6 +93,7 @@ describe("GitDiffViewer", () => {
 
   it("hides the internal close button when showCloseButton is false", async () => {
     const store = createStore();
+    store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
       path: "packages/core/src/domain/types.ts",

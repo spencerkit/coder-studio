@@ -1,11 +1,22 @@
 import type { OpenFile } from "../atoms";
+import { mergeOpenEditorPaths, normalizeOpenEditorPaths } from "./open-editor-state";
 
-export function orderOpenEditorPaths(openFiles: Record<string, OpenFile>): string[] {
-  return Object.keys(openFiles).sort();
+function isPathIterable(
+  source: Record<string, OpenFile> | Iterable<string>
+): source is Iterable<string> {
+  return typeof (source as Iterable<string>)[Symbol.iterator] === "function";
+}
+
+export function orderOpenEditorPaths(
+  source: Record<string, OpenFile> | Iterable<string>
+): string[] {
+  const paths = isPathIterable(source) ? Array.from(source) : Object.keys(source);
+  return normalizeOpenEditorPaths(paths).sort();
 }
 
 interface ResolveOpenEditorsCloseInput {
   openFiles: Record<string, OpenFile>;
+  openEditorPaths?: string[];
   activeFilePath: string | null;
   pendingActiveFilePath?: string | null;
   targetPath?: string;
@@ -24,16 +35,19 @@ export function resolveOpenEditorsClose(
 ): ResolveOpenEditorsCloseResult {
   const {
     openFiles,
+    openEditorPaths = [],
     activeFilePath,
     pendingActiveFilePath = null,
     targetPath,
     closeAll = false,
   } = input;
-  const orderedPaths = orderOpenEditorPaths(openFiles);
-  const resolvedOrderedPaths =
-    pendingActiveFilePath && !orderedPaths.includes(pendingActiveFilePath)
-      ? [...orderedPaths, pendingActiveFilePath].sort()
-      : orderedPaths;
+  const resolvedOrderedPaths = orderOpenEditorPaths(
+    mergeOpenEditorPaths(
+      openEditorPaths,
+      Object.keys(openFiles),
+      pendingActiveFilePath ? [pendingActiveFilePath] : undefined
+    )
+  );
 
   if (closeAll) {
     return {

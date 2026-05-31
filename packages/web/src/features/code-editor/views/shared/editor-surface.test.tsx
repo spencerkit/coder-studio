@@ -10,8 +10,12 @@ vi.mock("../../../../lib/i18n", () => ({
       "code_editor.mode_edit": "编辑",
       "code_editor.mode_diff": "Diff",
       "code_editor.diff_saved_only": "Diff preview is based on saved file contents.",
+      "code_editor.close_unsaved_title": "Discard unsaved changes?",
+      "code_editor.close_unsaved_description": "app.ts has unsaved changes.",
+      "code_editor.discard_and_close": "Discard and Close",
       "action.close": "Close",
       "action.save_file": "Save File",
+      "common.cancel": "Cancel",
     };
     return dictionary[key] ?? key;
   },
@@ -39,8 +43,56 @@ vi.mock("../../components/monaco-diff-host", () => ({
   ),
 }));
 
+vi.mock("../../components/commit-file-list-preview", () => ({
+  CommitFileListPreview: ({
+    preview,
+    onOpenFile,
+  }: {
+    preview: { files: Array<{ path: string }> };
+    onOpenFile: (file: { path: string }) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="commit-file-list-preview"
+      onClick={() => {
+        const firstFile = preview.files[0];
+        if (firstFile) {
+          onOpenFile(firstFile);
+        }
+      }}
+    >
+      {preview.files[0]?.path ?? "no-files"}
+    </button>
+  ),
+}));
+
 vi.mock("../../components/image-preview", () => ({
   ImagePreview: () => <div data-testid="image-preview" />,
+}));
+
+vi.mock("../../components/image-diff-preview", () => ({
+  ImageDiffPreview: ({
+    path,
+    mime,
+    status,
+    beforeUrl,
+    afterUrl,
+  }: {
+    path: string;
+    mime: string;
+    status: "modified" | "added" | "deleted";
+    beforeUrl?: string;
+    afterUrl?: string;
+  }) => (
+    <div
+      data-testid="image-diff-preview"
+      data-path={path}
+      data-mime={mime}
+      data-status={status}
+      data-before-url={beforeUrl ?? ""}
+      data-after-url={afterUrl ?? ""}
+    />
+  ),
 }));
 
 vi.mock("../../components/document-preview", () => ({
@@ -83,6 +135,7 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
       retry: vi.fn(),
     },
     mode: "edit",
+    openCommitFileDiff: vi.fn(),
     openInDiffMode: vi.fn(),
     saveError: null,
     setMode: vi.fn(),
@@ -106,7 +159,7 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
 }
 
 describe("EditorSurface", () => {
-  it("renders 预览, 编辑, and Diff in one persistent header for text files", () => {
+  it("renders icon-only 预览, 编辑, and Diff actions in one persistent header for text files", () => {
     const state = createState();
 
     render(<EditorSurface state={state} />);
@@ -114,6 +167,8 @@ describe("EditorSurface", () => {
     expect(screen.getByRole("button", { name: "预览" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diff" })).toBeInTheDocument();
+    expect(screen.queryByText("预览")).not.toBeInTheDocument();
+    expect(screen.queryByText("编辑")).not.toBeInTheDocument();
   });
 
   it("hides Diff when the active file has no git changes", () => {
@@ -167,13 +222,14 @@ describe("EditorSurface", () => {
     const state = createState({
       mode: "diff",
       activeDiffChange: {
+        kind: "worktree-file-diff",
         path: "src/app.ts",
         diff: "@@ -1 +1 @@\n-export const app = 1;\n+export const app = 2;\n",
         renderAs: "text",
         status: "modified",
         originalContent: "export const app = 1;\n",
         modifiedContent: "export const app = 2;\n",
-        source: "file",
+        staged: false,
       },
     });
 
@@ -189,18 +245,39 @@ describe("EditorSurface", () => {
     );
   });
 
+  it("renders Monaco diff for search replace previews", () => {
+    const state = createState({
+      mode: "diff",
+      activeDiffChange: {
+        kind: "search-replace-file-diff",
+        path: "src/app.ts",
+        title: "src/app.ts",
+        sessionId: "session-1",
+        baseHash: "hash-1",
+        originalContent: "before\n",
+        modifiedContent: "after\n",
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute("data-original", "before\n");
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute("data-modified", "after\n");
+  });
+
   it("shows the saved-only warning while diff mode ignores unsaved local edits", () => {
     const state = createState({
       mode: "diff",
       hasUnsavedChangesOutsideDiff: true,
       activeDiffChange: {
+        kind: "worktree-file-diff",
         path: "src/app.ts",
         diff: "@@ -1 +1 @@\n-export const app = 1;\n+export const app = 2;\n",
         renderAs: "text",
         status: "modified",
         originalContent: "export const app = 1;\n",
         modifiedContent: "export const app = 2;\n",
-        source: "file",
+        staged: false,
       },
     });
 
@@ -226,7 +303,7 @@ describe("EditorSurface", () => {
     expect(state.openInDiffMode).toHaveBeenCalledTimes(1);
   });
 
-  it("renders desktop header actions in the fixed order and left-aligned group", () => {
+  it("renders desktop header actions in the fixed order without a save button", () => {
     const state = createState({ canSave: true });
     const { container } = render(<EditorSurface state={state} />);
 
@@ -237,25 +314,188 @@ describe("EditorSurface", () => {
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
 
-    expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Save File", "Close"]);
+    expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Close"]);
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
   });
 
-  it("renders a working close action for commit-history previews", () => {
+  it("shows only the active filename in the header and marks dirty files with a status dot", () => {
     const state = createState({
-      activeFilePath: "src/app.ts",
+      currentFile: {
+        kind: "text",
+        path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+        content: "changed",
+        savedContent: "saved",
+        baseHash: "hash-1",
+        isDirty: true,
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    const title = screen.getByText("editor-surface.tsx");
+    const titleContainer = title.closest(".code-file-path");
+
+    expect(titleContainer).toHaveTextContent("editor-surface.tsx");
+    expect(titleContainer).not.toHaveTextContent("packages/web/src");
+    expect(titleContainer?.querySelector(".dirty-indicator")).toBeTruthy();
+  });
+
+  it("renders a commit file list preview inside the shared editor surface", () => {
+    const state = createState({
+      activeFilePath: null,
+      currentFile: undefined,
       activeDiffChange: {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.ts",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("commit-file-list-preview"));
+    expect(state.openCommitFileDiff).toHaveBeenCalledWith({
+      path: "src/app.ts",
+      status: "modified",
+      renderAs: "text",
+    });
+  });
+
+  it("renders a working close action for commit file diff previews", () => {
+    const state = createState({
+      activeFilePath: null,
+      currentFile: undefined,
+      activeDiffChange: {
+        kind: "commit-file-diff",
+        path: "src/app.ts",
+        title: "src/app.ts",
         diff: "diff --git a/src/app.ts b/src/app.ts",
-        source: "commit",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "export const app = 1;\n",
+        modifiedContent: "export const app = 2;\n",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        file: {
+          path: "src/app.ts",
+          status: "modified",
+          renderAs: "text",
+        },
+        parentList: {
+          kind: "commit-file-list",
+          path: "abc123",
+          title: "abc123 · commit subject",
+          commit: {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "commit subject",
+            authorName: "Spencer",
+            authoredAt: 1,
+          },
+          files: [
+            {
+              path: "src/app.ts",
+              status: "modified",
+              renderAs: "text",
+            },
+          ],
+        },
       },
     });
 
     render(<EditorSurface state={state} />);
 
     expect(screen.queryByRole("button", { name: "Diff" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-diff-host")).toHaveAttribute(
+      "data-original",
+      "export const app = 1;\n"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms before closing a dirty text file and only closes after discard", () => {
+    const state = createState({
+      currentFile: {
+        kind: "text",
+        path: "src/app.ts",
+        content: "changed",
+        savedContent: "saved",
+        baseHash: "hash-1",
+        isDirty: true,
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(state.handleClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
+    expect(screen.getByText("app.ts has unsaved changes.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(state.handleClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+
+    expect(state.handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders worktree image diffs from diff payload metadata instead of current file cache", () => {
+    const state = createState({
+      mode: "diff",
+      currentFile: undefined,
+      activeDiffChange: {
+        kind: "worktree-file-diff",
+        path: "assets/logo.png",
+        diff: "Binary files a/assets/logo.png and b/assets/logo.png differ",
+        renderAs: "image",
+        status: "deleted",
+        mime: "image/png",
+        originalPath: "assets/logo.png",
+        modifiedPath: "assets/logo.png",
+        originalRevision: "INDEX",
+        modifiedRevision: "WORKTREE",
+        staged: false,
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute(
+      "data-path",
+      "assets/logo.png"
+    );
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute("data-mime", "image/png");
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute("data-status", "deleted");
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute(
+      "data-before-url",
+      "/api/file?workspaceId=ws-1&path=assets%2Flogo.png&revision=INDEX"
+    );
+    expect(screen.getByTestId("image-diff-preview")).toHaveAttribute("data-after-url", "");
   });
 
   it("shows the commit preview title without leaking the background file dirty marker", () => {
@@ -269,17 +509,30 @@ describe("EditorSurface", () => {
         isDirty: true,
       },
       activeDiffChange: {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.ts b/src/app.ts",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.ts",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
     });
 
     render(<EditorSurface state={state} />);
 
     expect(screen.getByText("abc123 · commit subject")).toBeInTheDocument();
-    expect(screen.queryByText("src/app.ts")).not.toBeInTheDocument();
+    expect(document.querySelector(".code-file-path")).toHaveTextContent("abc123 · commit subject");
     expect(document.querySelector(".dirty-indicator")).toBeNull();
   });
 
@@ -287,10 +540,23 @@ describe("EditorSurface", () => {
     const state = createState({
       activeExternalStatus: "modified",
       activeDiffChange: {
+        kind: "commit-file-list",
         path: "abc123",
         title: "abc123 · commit subject",
-        diff: "diff --git a/src/app.ts b/src/app.ts",
-        source: "commit",
+        commit: {
+          sha: "abc123",
+          shortSha: "abc123",
+          subject: "commit subject",
+          authorName: "Spencer",
+          authoredAt: 1,
+        },
+        files: [
+          {
+            path: "src/app.ts",
+            status: "modified",
+            renderAs: "text",
+          },
+        ],
       },
       hasUnsavedChangesOutsideDiff: true,
       saveError: "Failed to save file",

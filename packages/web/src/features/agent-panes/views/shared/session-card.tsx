@@ -15,6 +15,7 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionByIdAtomFamily, sessionsAtom } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { useTranslation } from "../../../../lib/i18n";
 import { useTerminalThemeBackground } from "../../../../theme";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
@@ -72,6 +73,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   onSplitHorizontal,
   onSplitVertical,
 }) => {
+  const t = useTranslation();
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
@@ -113,7 +115,7 @@ export const SessionCard: FC<SessionCardProps> = ({
 
   const sessionTitle = session.title?.trim() || formatSessionLabel(session.id);
   const providerLabel = formatProviderLabel(session.providerId);
-  const sessionStateLabel = formatSessionStateLabel(session.state);
+  const sessionStateLabel = formatSessionStateLabel(session.state, t);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
   const isRunning = session.state === "running";
@@ -187,7 +189,7 @@ export const SessionCard: FC<SessionCardProps> = ({
       {dragOverlayPlacement ? (
         <div className={`pane-drop-overlay pane-drop-overlay--${dragOverlayPlacement}`}>
           {dragOverlayPlacement === "center" ? (
-            <div className="pane-drop-overlay__center">Swap</div>
+            <div className="pane-drop-overlay__center">{t("agent_panes.swap")}</div>
           ) : null}
         </div>
       ) : null}
@@ -227,10 +229,11 @@ export const SessionCard: FC<SessionCardProps> = ({
               {showHeaderActions ? (
                 <div className="session-header-actions">
                   {supportsPaneDrag ? (
-                    <Tooltip content="Drag pane">
+                    <Tooltip content={t("agent_panes.drag_pane")}>
                       <IconButton
-                        aria-label="Drag pane"
+                        aria-label={t("agent_panes.drag_pane")}
                         className="session-action-btn session-action-btn-drag"
+                        data-session-action="drag"
                         icon={<GripVertical size={13} />}
                         onPointerDown={(event) => {
                           event.preventDefault();
@@ -255,28 +258,31 @@ export const SessionCard: FC<SessionCardProps> = ({
                       />
                     </Tooltip>
                   ) : null}
-                  <Tooltip content="Split horizontal">
+                  <Tooltip content={t("agent_panes.split_horizontal")}>
                     <IconButton
-                      aria-label="Split horizontal"
+                      aria-label={t("agent_panes.split_horizontal")}
                       className="session-action-btn"
+                      data-session-action="split-horizontal"
                       icon={<FlipHorizontal size={13} />}
                       onClick={() => onSplitHorizontal?.()}
                       size="sm"
                     />
                   </Tooltip>
-                  <Tooltip content="Split vertical">
+                  <Tooltip content={t("agent_panes.split_vertical")}>
                     <IconButton
-                      aria-label="Split vertical"
+                      aria-label={t("agent_panes.split_vertical")}
                       className="session-action-btn"
+                      data-session-action="split-vertical"
                       icon={<FlipVertical size={13} />}
                       onClick={() => onSplitVertical?.()}
                       size="sm"
                     />
                   </Tooltip>
-                  <Tooltip content="Close">
+                  <Tooltip content={t("action.close")}>
                     <IconButton
-                      aria-label="Close"
+                      aria-label={t("action.close")}
                       className="session-action-btn session-action-btn-close"
+                      data-session-action="close"
                       icon={<X size={14} />}
                       onClick={() => void onClose?.()}
                       size="sm"
@@ -377,8 +383,15 @@ function formatSessionLabel(sessionId: string) {
   return sessionId.replace(/[_-]/g, " ").toUpperCase();
 }
 
-function formatSessionStateLabel(state: SessionState) {
-  return state.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+function formatSessionStateLabel(
+  state: SessionState,
+  t: (key: string, params?: Record<string, string | number>) => string
+) {
+  const key = `session.state.${state}`;
+  const translated = t(key);
+  return translated === key
+    ? state.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+    : translated;
 }
 
 function formatProviderLabel(providerId: string) {

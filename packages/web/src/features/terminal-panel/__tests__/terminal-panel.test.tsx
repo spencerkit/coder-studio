@@ -545,7 +545,7 @@ describe("TerminalPanel", () => {
     ).toBeTruthy();
     expect(
       within(emptyPanel as HTMLElement).getByText(
-        "Launch a shell to inspect files, run commands, and verify changes without leaving the workspace."
+        "Launch a shell to inspect files and run commands."
       )
     ).toHaveClass("bottom-terminal-empty-hint");
 

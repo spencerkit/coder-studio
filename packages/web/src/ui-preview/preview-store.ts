@@ -1,8 +1,14 @@
 import type {
   FileNode,
   GitBranch,
+  GitCommitDetail,
   GitCommitSummary,
+  GitFileDiffPayload,
   GitStatus,
+  MonitoringResponse,
+  SearchSessionApplyResult,
+  SearchSessionFilePreview,
+  SearchSessionStartResult,
   Session,
   Supervisor,
   UpdateStateView,
@@ -37,6 +43,10 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import {
+  activeEditorPaneIdAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "../features/agent-panes/atoms/editor-panes";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { type Toast, toastsAtom } from "../features/notifications";
 import { supervisorDialogAtom, supervisorsAtom } from "../features/supervisor/atoms";
@@ -49,7 +59,10 @@ import {
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
+  type OpenFile,
+  openFilesAtomFamily,
   terminalPanelVisibleAtom,
+  workspaceLayoutStateAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { resolveStoredThemeId } from "../theme";
@@ -62,6 +75,8 @@ export interface UiPreviewCommands {
   settingsGet?: Record<string, unknown>;
   settingsUpdate?: Record<string, unknown>;
   settingsPreviewCommandByProviderId?: Record<string, string>;
+  monitoringGet?: MonitoringResponse;
+  monitoringRecheck?: MonitoringResponse;
   workspaceBrowse?: {
     currentPath: string;
     parentPath: string | null;
@@ -74,10 +89,15 @@ export interface UiPreviewCommands {
   gitStatusByWorkspaceId?: Record<string, GitStatus>;
   gitBranchesByWorkspaceId?: Record<string, { current: string; branches: GitBranch[] }>;
   gitLogByWorkspaceId?: Record<string, { entries: GitCommitSummary[] }>;
-  gitDiffByWorkspaceId?: Record<string, { diff: string }>;
-  gitShowByWorkspaceId?: Record<string, { diff: string }>;
+  gitDiffByWorkspaceId?: Record<string, GitFileDiffPayload>;
+  gitCommitDetailByWorkspaceId?: Record<string, GitCommitDetail>;
+  gitCommitFileDiffByWorkspaceId?: Record<string, GitFileDiffPayload>;
   fileTreeByWorkspaceId?: Record<string, Record<string, FileNode[]>>;
   fileSearchByWorkspaceId?: Record<string, FileNode[]>;
+  fileSearchSessionByWorkspaceId?: Record<string, SearchSessionStartResult>;
+  fileSearchPreviewByWorkspaceId?: Record<string, Record<string, SearchSessionFilePreview>>;
+  fileSearchApplyByWorkspaceId?: Record<string, SearchSessionApplyResult>;
+  fileReadByWorkspaceId?: Record<string, Record<string, { content: string; baseHash?: string }>>;
   worktreeListByWorkspaceId?: Record<string, WorktreeInfo[]>;
   worktreeStatusByPath?: Record<string, GitStatus>;
   worktreeDiffByPath?: Record<string, string>;
@@ -113,13 +133,16 @@ export interface UiPreviewSeed {
   workspacesLoadError?: string | null;
   sessions?: Session[];
   paneLayoutByWorkspaceId?: Record<string, PaneNode>;
+  activeEditorPaneIdByWorkspaceId?: Record<string, string | null>;
+  focusedEditorPaneIdByWorkspaceId?: Record<string, string | null>;
   fileTreeByWorkspaceId?: Record<string, Map<string, FileNode[]>>;
+  openFilesByWorkspaceId?: Record<string, Record<string, OpenFile>>;
   activeFilePathByWorkspaceId?: Record<string, string | null>;
   gitStateByWorkspaceId?: Record<string, GitStatus>;
   gitBranchListByWorkspaceId?: Record<string, { current: string; branches: GitBranch[] }>;
   gitDiffPreviewByWorkspaceId?: Record<
     string,
-    { path: string; diff: string; source?: "file" | "commit" }
+    import("../features/workspace/atoms").GitDiffPreview
   >;
   worktreeListByWorkspaceId?: Record<string, WorktreeInfo[]>;
   terminalMetaById?: Record<
@@ -182,7 +205,7 @@ function err(message: string) {
   };
 }
 
-function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
+function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCommand {
   return async <T>(op: string, args: unknown) => {
     const commands = seed.commands ?? {};
 
@@ -207,6 +230,17 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
 
     if (op === "settings.writeConfigFile") {
       return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "monitoring.get") {
+      if (!commands.monitoringGet) {
+        return err("Missing preview handler for monitoring.get");
+      }
+      return ok(commands.monitoringGet as T);
+    }
+
+    if (op === "monitoring.recheck") {
+      return ok((commands.monitoringRecheck ?? commands.monitoringGet ?? null) as T);
     }
 
     if (op === "workspace.list") {
@@ -262,12 +296,40 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
 
     if (op === "git.diff") {
       const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
-      return ok((commands.gitDiffByWorkspaceId?.[workspaceId] ?? { diff: "" }) as unknown as T);
+      return ok(
+        (commands.gitDiffByWorkspaceId?.[workspaceId] ?? {
+          diff: "",
+          renderAs: "text",
+          status: "modified",
+        }) as unknown as T
+      );
     }
 
-    if (op === "git.show") {
+    if (op === "git.commitDetail") {
       const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
-      return ok((commands.gitShowByWorkspaceId?.[workspaceId] ?? { diff: "" }) as unknown as T);
+      return ok(
+        (commands.gitCommitDetailByWorkspaceId?.[workspaceId] ?? {
+          commit: {
+            sha: "",
+            shortSha: "",
+            subject: "",
+            authorName: "",
+            authoredAt: 0,
+          },
+          files: [],
+        }) as unknown as T
+      );
+    }
+
+    if (op === "git.commitFileDiff") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      return ok(
+        (commands.gitCommitFileDiffByWorkspaceId?.[workspaceId] ?? {
+          diff: "",
+          renderAs: "text",
+          status: "modified",
+        }) as unknown as T
+      );
     }
 
     if (op === "git.checkout") {
@@ -286,9 +348,67 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
       return ok({ path: key, children } as unknown as T);
     }
 
+    if (op === "file.read") {
+      const { workspaceId = "", path = "" } =
+        (args as { workspaceId?: string; path?: string }) ?? {};
+      const file = commands.fileReadByWorkspaceId?.[workspaceId]?.[path];
+      return ok({
+        kind: "text",
+        content: file?.content ?? `// Preview file: ${path}\n`,
+        baseHash: file?.baseHash ?? "",
+        encoding: "utf-8",
+      } as unknown as T);
+    }
+
     if (op === "file.search") {
       const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
       return ok({ files: commands.fileSearchByWorkspaceId?.[workspaceId] ?? [] } as unknown as T);
+    }
+
+    if (op === "file.searchSession.start") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      return ok(
+        (commands.fileSearchSessionByWorkspaceId?.[workspaceId] ?? {
+          files: [],
+          sessionId: "preview-search-session",
+          totalMatchCount: 0,
+          totalFileCount: 0,
+          hasMoreFiles: false,
+          truncatedMatchFileCount: 0,
+          skippedBinaryFileCount: 0,
+          skippedLargeFileCount: 0,
+        }) as unknown as T
+      );
+    }
+
+    if (op === "file.searchSession.previewFile") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      return ok(
+        (commands.fileSearchPreviewByWorkspaceId?.[workspaceId]?.[path] ?? {
+          kind: "search-replace-file-diff",
+          path,
+          title: path,
+          sessionId: "preview-search-session",
+          baseHash: "preview-base-hash",
+          originalContent: `// Preview before replacement: ${path}\n`,
+          modifiedContent: `// Preview after replacement: ${path}\n`,
+        }) as unknown as T
+      );
+    }
+
+    if (op === "file.searchSession.apply") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      return ok(
+        (commands.fileSearchApplyByWorkspaceId?.[workspaceId] ?? {
+          sessionId: "preview-search-session",
+          status: "ok",
+          appliedFileCount: 1,
+          conflictFileCount: 0,
+          skippedFileCount: 0,
+          results: [],
+        }) as unknown as T
+      );
     }
 
     if (op === "worktree.list") {
@@ -406,7 +526,7 @@ function createPreviewDispatcher(seed: UiPreviewSeed): DispatchCommand {
 
 export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   const store = createStore();
-  const dispatch = createPreviewDispatcher(seed);
+  const dispatch = createPreviewDispatcher(seed, store);
   const workspaces = seed.workspaces ?? [];
   const resolvedThemeId = resolveStoredThemeId(seed.theme);
   const personalization = resolveAppearancePersonalizationSetting(seed.commands?.settingsGet ?? {});
@@ -431,6 +551,16 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
     activeWorkspaceIdAtom,
     seed.activeWorkspaceId === undefined ? (workspaces[0]?.id ?? null) : seed.activeWorkspaceId
   );
+  for (const workspace of workspaces) {
+    store.set(workspaceLayoutStateAtomFamily(workspace.id), {
+      focusMode: workspace.uiState.focusMode,
+      leftPanelWidth: workspace.uiState.leftPanelWidth,
+      bottomPanelHeight: workspace.uiState.bottomPanelHeight,
+      sidebarCollapsed: false,
+      desktopSidebarView: "explorer",
+      terminalPanelVisible: seed.terminalPanelVisible ?? true,
+    });
+  }
   store.set(
     sessionsAtom,
     Object.fromEntries((seed.sessions ?? []).map((session) => [session.id, session]))
@@ -487,8 +617,20 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
     store.set(paneLayoutAtomFamily(workspaceId), layout);
   }
 
+  for (const [workspaceId, paneId] of Object.entries(seed.activeEditorPaneIdByWorkspaceId ?? {})) {
+    store.set(activeEditorPaneIdAtomFamily(workspaceId), paneId);
+  }
+
+  for (const [workspaceId, paneId] of Object.entries(seed.focusedEditorPaneIdByWorkspaceId ?? {})) {
+    store.set(focusedEditorPaneIdAtomFamily(workspaceId), paneId);
+  }
+
   for (const [workspaceId, treeMap] of Object.entries(seed.fileTreeByWorkspaceId ?? {})) {
     store.set(fileTreeAtomFamily(workspaceId), treeMap);
+  }
+
+  for (const [workspaceId, openFiles] of Object.entries(seed.openFilesByWorkspaceId ?? {})) {
+    store.set(openFilesAtomFamily(workspaceId), openFiles);
   }
 
   for (const [workspaceId, path] of Object.entries(seed.activeFilePathByWorkspaceId ?? {})) {

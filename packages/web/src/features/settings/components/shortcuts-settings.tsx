@@ -18,11 +18,11 @@ import {
 
 type ShortcutCategory = "global" | "workspace" | "editor" | "terminal";
 
-const CATEGORY_LABELS: Record<ShortcutCategory, string> = {
-  global: "全局",
-  workspace: "工作区",
-  editor: "编辑器",
-  terminal: "终端",
+const CATEGORY_LABEL_KEYS: Record<ShortcutCategory, string> = {
+  global: "settings.shortcuts.category_global",
+  workspace: "settings.shortcuts.category_workspace",
+  editor: "settings.shortcuts.category_editor",
+  terminal: "settings.shortcuts.category_terminal",
 };
 
 export function ShortcutsSettings() {
@@ -131,8 +131,8 @@ export function ShortcutsSettings() {
         className="shortcuts-category-tabs"
         onChange={(nextValue) => setActiveCategory(nextValue as ShortcutCategory)}
         optionClassName="shortcuts-category-tab"
-        options={(Object.keys(CATEGORY_LABELS) as ShortcutCategory[]).map((category) => ({
-          label: CATEGORY_LABELS[category],
+        options={(Object.keys(CATEGORY_LABEL_KEYS) as ShortcutCategory[]).map((category) => ({
+          label: t(CATEGORY_LABEL_KEYS[category]),
           value: category,
         }))}
         size="sm"
@@ -147,6 +147,8 @@ export function ShortcutsSettings() {
           const isEditing = editingId === shortcut.id;
           const shortcutNameId = `shortcut-name-${shortcut.id}`;
           const shortcutDescriptionId = `shortcut-description-${shortcut.id}`;
+          const shortcutName = t(shortcut.nameKey);
+          const shortcutDescription = t(shortcut.descriptionKey);
 
           return (
             <div
@@ -155,10 +157,10 @@ export function ShortcutsSettings() {
             >
               <div className="shortcuts-info">
                 <span id={shortcutNameId} className="shortcuts-name">
-                  {shortcut.name}
+                  {shortcutName}
                 </span>
                 <span id={shortcutDescriptionId} className="shortcuts-desc">
-                  {shortcut.description}
+                  {shortcutDescription}
                 </span>
               </div>
 
@@ -170,7 +172,7 @@ export function ShortcutsSettings() {
                     className="shortcuts-capture"
                     aria-labelledby={shortcutNameId}
                     aria-describedby={shortcutDescriptionId}
-                    placeholder="按下快捷键..."
+                    placeholder={t("settings.shortcuts.capture_placeholder")}
                     autoFocus
                     onKeyDown={(e) => handleKeyCapture(e, shortcut.id)}
                     onBlur={() => setEditingId(null)}

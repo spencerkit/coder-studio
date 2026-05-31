@@ -6,6 +6,7 @@ import { lastViewedTargetAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
+import { activeEditorPaneIdAtomFamily } from "../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../agent-panes/atoms/pane-layout";
 import { updateStateAtom } from "../updates/atoms";
 import {
@@ -281,9 +282,10 @@ describe("WorkspacePage", () => {
       screen.getByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
     ).toBeInTheDocument();
     expect(sourceControlButton).toHaveAttribute("aria-pressed", "true");
-    expect(
-      await screen.findByPlaceholderText("Search branches or create new branch...")
-    ).toBeInTheDocument();
+    const branchSearchInput = await screen.findByPlaceholderText(
+      /Search branches or create new branch\.\.\.|搜索分支或创建新分支\.\.\./
+    );
+    expect(branchSearchInput).toBeInTheDocument();
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
       workspaceId: "ws-test",
@@ -339,6 +341,9 @@ describe("WorkspacePage", () => {
     await screen.findByRole("button", { name: /Explorer|资源管理器/i });
 
     expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.explorer"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.sourceControl"]')).toBeTruthy();
     expect(document.querySelector(".workspace-sidebar-panel__tabs")).toBeNull();
     expect(document.querySelector(".workspace-sidebar-panel__tab")).toBeNull();
   });
@@ -407,7 +412,7 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    await screen.findByText(/Open Editors|打开的编辑器/i);
+    await screen.findByText(/Open Files|打开的文件/i);
 
     const explorerButton = screen.getByRole("button", { name: /Explorer|资源管理器/i });
     expect(explorerButton).toHaveAttribute("aria-pressed", "true");
@@ -463,11 +468,10 @@ describe("WorkspacePage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Search|搜索/i }));
-    await waitFor(() => {
-      expect(
-        document.querySelector(".workspace-sidebar-view .panel-header__title")
-      ).toHaveTextContent(/Search|搜索/i);
-    });
+    expect(await screen.findByRole("searchbox", { name: /Search|搜索/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Type to search across file contents|输入关键词以搜索文件内容/i)
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
     expect(screen.getByTestId("git-panel")).toBeInTheDocument();
@@ -587,12 +591,16 @@ describe("WorkspacePage", () => {
         };
       }
 
-      if (op === "file.searchContent") {
+      if (op === "file.searchSession.start") {
         return {
+          sessionId: "search-session-preview",
           files: [],
           totalMatchCount: 0,
+          totalFileCount: 0,
           hasMoreFiles: false,
           truncatedMatchFileCount: 0,
+          skippedBinaryFileCount: 0,
+          skippedLargeFileCount: 0,
         };
       }
 
@@ -744,64 +752,88 @@ describe("WorkspacePage", () => {
           };
         }
 
-        if (op === "file.searchContent") {
+        if (op === "file.searchSession.start") {
           if (args?.workspaceId === "ws-a" && args.query === "alpha") {
             return {
+              sessionId: "search-session-alpha",
               files: [
                 {
                   path: "src/alpha.tsx",
                   name: "alpha.tsx",
                   matchCount: 1,
                   hasMoreMatches: false,
+                  baseHash: "hash-alpha",
                   matches: [
                     {
+                      id: "alpha-match-1",
                       line: 3,
                       column: 7,
                       endColumn: 12,
                       preview: "const alpha = true;",
                       previewColumnStart: 7,
                       previewColumnEnd: 12,
+                      replacementPreview: "const alpha = true;",
+                      replacementPreviewColumnStart: 7,
+                      replacementPreviewColumnEnd: 12,
+                      isReplacementPreviewTruncated: false,
                     },
                   ],
                 },
               ],
               totalMatchCount: 1,
+              totalFileCount: 1,
               hasMoreFiles: false,
               truncatedMatchFileCount: 0,
+              skippedBinaryFileCount: 0,
+              skippedLargeFileCount: 0,
             };
           }
 
           if (args?.workspaceId === "ws-b" && args.query === "beta") {
             return {
+              sessionId: "search-session-beta",
               files: [
                 {
                   path: "src/beta.tsx",
                   name: "beta.tsx",
                   matchCount: 1,
                   hasMoreMatches: false,
+                  baseHash: "hash-beta",
                   matches: [
                     {
+                      id: "beta-match-1",
                       line: 4,
                       column: 7,
                       endColumn: 11,
                       preview: "const beta = true;",
                       previewColumnStart: 7,
                       previewColumnEnd: 11,
+                      replacementPreview: "const beta = true;",
+                      replacementPreviewColumnStart: 7,
+                      replacementPreviewColumnEnd: 11,
+                      isReplacementPreviewTruncated: false,
                     },
                   ],
                 },
               ],
               totalMatchCount: 1,
+              totalFileCount: 1,
               hasMoreFiles: false,
               truncatedMatchFileCount: 0,
+              skippedBinaryFileCount: 0,
+              skippedLargeFileCount: 0,
             };
           }
 
           return {
+            sessionId: "search-session-empty",
             files: [],
             totalMatchCount: 0,
+            totalFileCount: 0,
             hasMoreFiles: false,
             truncatedMatchFileCount: 0,
+            skippedBinaryFileCount: 0,
+            skippedLargeFileCount: 0,
           };
         }
 
@@ -1403,6 +1435,7 @@ describe("WorkspacePage", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {
+        kind: "worktree-file-diff",
         path: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
         staged: false,
@@ -1412,6 +1445,7 @@ describe("WorkspacePage", () => {
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "worktree-file-diff",
       path: "src/app.tsx",
       diff: "diff --git a/src/app.tsx b/src/app.tsx",
       staged: false,
@@ -1465,10 +1499,14 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "worktree-file-diff",
       path: "src/app.tsx",
       diff: "diff --git a/src/app.tsx b/src/app.tsx",
       staged: false,
-      source: "file",
+      renderAs: "text",
+      status: "modified",
+      originalContent: "const app = 0;",
+      modifiedContent: "const app = 1;",
     });
 
     render(
@@ -1484,6 +1522,62 @@ describe("WorkspacePage", () => {
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
     expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+  });
+
+  it("keeps the desktop main area on agent panes when an active file is targeted at an editor pane", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(activeEditorPaneIdAtomFamily("ws-test"), "root");
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("agent-panes");
+    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
   });
 
   it("does not switch to a dedicated diff page when git preview payload state changes", async () => {
@@ -1535,10 +1629,14 @@ describe("WorkspacePage", () => {
 
     act(() => {
       store.set(gitDiffPreviewAtomFamily("ws-test"), {
+        kind: "worktree-file-diff",
         path: "src/app.tsx",
         diff: "diff --git a/src/app.tsx b/src/app.tsx",
         staged: false,
-        source: "file",
+        renderAs: "text",
+        status: "modified",
+        originalContent: "const app = 0;",
+        modifiedContent: "const app = 1;",
       });
     });
 
@@ -1606,14 +1704,14 @@ describe("WorkspacePage", () => {
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
-    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(1\)/i);
-
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
     const section = heading.closest("section") as HTMLElement;
+    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
+    expect(within(section).getByText("1")).toHaveClass("workspace-open-editors__count");
     fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
 
     await screen.findByTestId("agent-panes");
-    expect(heading).toHaveTextContent(/(Open Editors|打开的编辑器)\s*\(0\)/i);
+    expect(within(section).getByText("0")).toHaveClass("workspace-open-editors__count");
     expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
@@ -1654,10 +1752,23 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     render(
@@ -1721,10 +1832,23 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     render(
@@ -1739,7 +1863,7 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Editors|打开的编辑器)/i });
+    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
     const section = heading.closest("section") as HTMLElement;
     fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
 
@@ -1748,14 +1872,27 @@ describe("WorkspacePage", () => {
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
   });
 
-  it("clearing the final open editor from Open Editors also clears an active commit preview", async () => {
+  it("clearing the final open editor from Open Files preserves an active commit preview", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -1802,10 +1939,23 @@ describe("WorkspacePage", () => {
       },
     });
     store.set(gitDiffPreviewAtomFamily("ws-test"), {
+      kind: "commit-file-list",
       path: "abc123",
       title: "abc123 · commit subject",
-      diff: "diff --git a/src/app.tsx b/src/app.tsx",
-      source: "commit",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
     });
 
     render(
@@ -1828,11 +1978,29 @@ describe("WorkspacePage", () => {
       within(activeRow).getByRole("button", { name: /^(Close|关闭) src\/app\.tsx$/ })
     );
 
-    await screen.findByTestId("agent-panes");
-    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
+    await screen.findByTestId("code-editor-host");
+    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
-    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
+      kind: "commit-file-list",
+      path: "abc123",
+      title: "abc123 · commit subject",
+      commit: {
+        sha: "abc123",
+        shortSha: "abc123",
+        subject: "commit subject",
+        authorName: "Spencer",
+        authoredAt: 1,
+      },
+      files: [
+        {
+          path: "src/app.tsx",
+          status: "modified",
+          renderAs: "text",
+        },
+      ],
+    });
   });
 
   it("keeps the resized desktop file panel width after dragging the left separator", async () => {
@@ -1882,7 +2050,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
 
-    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
     const leftPanel = container.querySelector(".left-panel");
 
     expect(leftPanel).not.toBeNull();
@@ -1949,7 +2119,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
 
-    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
 
     expect(document.body).not.toHaveClass("is-resizing-panels");
 
@@ -2009,7 +2181,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
 
-    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
     const leftPanel = container.querySelector(".left-panel");
 
     expect(leftPanel).not.toBeNull();
@@ -2073,7 +2247,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("terminal-panel");
 
-    const bottomSeparator = screen.getByRole("separator", { name: "Resize bottom panel" });
+    const bottomSeparator = screen.getByRole("separator", {
+      name: /Resize bottom panel|调整底部面板大小/,
+    });
     const bottomPanel = container.querySelector(".workspace-bottom-panel");
 
     expect(bottomPanel).not.toBeNull();

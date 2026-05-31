@@ -7,7 +7,6 @@
 
 import type { FC } from "react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
@@ -26,12 +25,10 @@ interface FeatureItem {
  * PRD §7.4:
  *   - Clear first-run workspace activation flow
  *   - "Open Workspace" button as the primary action
- *   - "Settings" as secondary setup help
  *   - Compact support context below the core steps
  */
 export const WelcomePage: FC = () => {
   const t = useTranslation();
-  const navigate = useNavigate();
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
   const isMobile = useViewport() === "mobile";
   const features: FeatureItem[] = [
@@ -49,10 +46,6 @@ export const WelcomePage: FC = () => {
 
   const handleOpenWorkspace = () => {
     setWorkspaceLaunchOpen(true);
-  };
-
-  const handleOpenSettings = () => {
-    navigate("/settings");
   };
 
   return (
@@ -106,15 +99,6 @@ export const WelcomePage: FC = () => {
                   <div className="welcome-step-card__title">{t("welcome.step_2_title")}</div>
                   <p className="welcome-step-detail meta-text">{t("welcome.step_2_detail")}</p>
                 </section>
-              </div>
-
-              <div className="welcome-flow__support">
-                <p className="welcome-settings-hint meta-text">{t("welcome.settings_hint")}</p>
-
-                <button className="welcome-link" onClick={handleOpenSettings}>
-                  <ThemedIcon semantic="nav.settings" size={14} />
-                  <span>{t("action.settings")}</span>
-                </button>
               </div>
             </section>
           </div>

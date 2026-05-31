@@ -8,10 +8,15 @@ import {
   createDirectory,
   createFile,
   deleteEntry,
-  readFile,
+  readFile as readWorkspaceFile,
   renameEntry,
-  writeFile,
+  writeFile as writeWorkspaceFile,
 } from "../fs/file-io.js";
+import {
+  applySearchSession,
+  createSearchSession,
+  previewSearchSessionFile,
+} from "../fs/search-replace.js";
 import { readTree, searchFiles } from "../fs/tree.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -86,7 +91,108 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return readFile(args.workspaceId, workspace.path, args.path);
+    return readWorkspaceFile(args.workspaceId, workspace.path, args.path);
+  }
+);
+
+// file.searchSession.start
+registerCommand(
+  "file.searchSession.start",
+  z.object({
+    workspaceId: z.string(),
+    query: z.string(),
+    replace: z.string(),
+    isRegex: z.boolean(),
+    matchCase: z.boolean(),
+    matchWholeWord: z.boolean(),
+    preserveCase: z.boolean(),
+    includeGlobs: z.array(z.string()),
+    excludeGlobs: z.array(z.string()),
+    useIgnoreFiles: z.boolean(),
+    useExcludeSettings: z.boolean(),
+    onlyOpenEditors: z.boolean(),
+    openEditorPaths: z.array(z.string()),
+    maxFiles: z.number().int().positive().max(100),
+    maxMatchesPerFile: z.number().int().positive().max(100),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    const result = await createSearchSession(workspace.path, {
+      query: args.query,
+      replace: args.replace,
+      isRegex: args.isRegex,
+      matchCase: args.matchCase,
+      matchWholeWord: args.matchWholeWord,
+      preserveCase: args.preserveCase,
+      includeGlobs: args.includeGlobs,
+      excludeGlobs: args.excludeGlobs,
+      useIgnoreFiles: args.useIgnoreFiles,
+      useExcludeSettings: args.useExcludeSettings,
+      onlyOpenEditors: args.onlyOpenEditors,
+      openEditorPaths: args.openEditorPaths,
+      maxFiles: args.maxFiles,
+      maxMatchesPerFile: args.maxMatchesPerFile,
+    });
+
+    return result.result;
+  }
+);
+
+// file.searchSession.previewFile
+registerCommand(
+  "file.searchSession.previewFile",
+  z.object({
+    workspaceId: z.string(),
+    sessionId: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    const result = await previewSearchSessionFile(workspace.path, args.sessionId, args.path);
+    if (!result) {
+      throw { code: "stale_session", message: "Search session is stale or missing" };
+    }
+
+    return result;
+  }
+);
+
+// file.searchSession.apply
+registerCommand(
+  "file.searchSession.apply",
+  z.object({
+    workspaceId: z.string(),
+    sessionId: z.string(),
+    scope: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("all") }),
+      z.object({ kind: z.literal("file"), path: z.string() }),
+      z.object({ kind: z.literal("match"), path: z.string(), matchId: z.string() }),
+    ]),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    const result = await applySearchSession(workspace.path, args.sessionId, args.scope);
+    if (result.status === "ok" || result.status === "partial") {
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "file_content",
+      });
+    }
+
+    return result;
   }
 );
 
@@ -198,7 +304,7 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    const result = await writeFile(workspace.path, args.path, args.content, args.baseHash);
+    const result = await writeWorkspaceFile(workspace.path, args.path, args.content, args.baseHash);
     ctx.eventBus.emit({
       type: "fs.dirty",
       workspaceId: args.workspaceId,

@@ -245,7 +245,7 @@ export function WorkspaceMobileView() {
     }
 
     const isCommitDetailRoute =
-      diffPreview?.source === "commit" &&
+      (diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff") &&
       mobileFilesRoute.path === diffPreview.path &&
       mobileFilesRoute.title === diffPreview.title;
 
@@ -266,7 +266,7 @@ export function WorkspaceMobileView() {
       return;
     }
 
-    if (diffPreview?.source === "commit") {
+    if (diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff") {
       if (
         mobileFilesRoute.path !== diffPreview.path ||
         mobileFilesRoute.title !== diffPreview.title
@@ -305,6 +305,13 @@ export function WorkspaceMobileView() {
       <CodeEditorHeaderActions state={mobileEditorState} variant="mobile" />
     ) : null;
 
+  const rootFilesSheetTitle =
+    mobileFilesView === "explorer"
+      ? t("workspace.sidebar.explorer")
+      : mobileFilesView === "search"
+        ? t("workspace.sidebar.search")
+        : t("workspace.sidebar.source_control");
+
   const sheetBody =
     mobileSheet === "files"
       ? {
@@ -313,11 +320,7 @@ export function WorkspaceMobileView() {
               ? (mobileFilesRoute.title ??
                 mobileFilesRoute.path?.split("/").pop() ??
                 t("mobile.files.editor_fallback"))
-              : mobileFilesView === "explorer"
-                ? t("workspace.sidebar.explorer")
-                : mobileFilesView === "search"
-                  ? t("workspace.sidebar.search")
-                  : t("workspace.sidebar.source_control"),
+              : rootFilesSheetTitle,
           body: activeWorkspaceId ? (
             <MobileFilesSheet
               workspaceId={activeWorkspaceId}
@@ -331,23 +334,16 @@ export function WorkspaceMobileView() {
               onCollapseAll={() => setMobileFileCollapseVersion((value) => value + 1)}
               onRouteChange={updateMobileFilesRoute}
               onTabChange={setMobileFilesView}
-              onCloseSheet={closeMobileSheet}
               editorState={mobileEditorState}
-            />
-          ) : null,
-          footer: activeWorkspaceId ? (
-            <WorkspaceStatusBar
-              workspaceId={activeWorkspaceId}
-              gitState={gitState}
-              onOpenBranchSwitcher={handleOpenBranchSwitcher}
-              flush
             />
           ) : null,
           kicker: filesSheetKicker,
           onBack:
             mobileFilesRoute.kind === "root"
               ? undefined
-              : () => updateMobileFilesRoute({ kind: "root" }),
+              : diffPreview?.kind === "commit-file-list" || diffPreview?.kind === "commit-file-diff"
+                ? () => void mobileEditorState.handleClose()
+                : () => updateMobileFilesRoute({ kind: "root" }),
           backLabel: t("action.back"),
           headerAction: filesSheetHeaderAction,
           fullscreen: true,

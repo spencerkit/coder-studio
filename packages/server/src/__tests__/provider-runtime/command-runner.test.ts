@@ -116,6 +116,23 @@ describe("runCommandAsString", () => {
     );
   });
 
+  it("routes explicit Windows cmd-shim paths through a shell", async () => {
+    Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    });
+
+    await runCommandAsString("C:\\tools\\vue-language-server.cmd", ["--version"]);
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "C:\\tools\\vue-language-server.cmd",
+      ["--version"],
+      expect.objectContaining({ cwd: undefined, env: undefined, shell: true, windowsHide: true })
+    );
+  });
+
   it("keeps native Windows executables off the shell path", async () => {
     Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
     spawnMock.mockImplementation(() => {

@@ -14,9 +14,9 @@ import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications";
 import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
 
-function formatTime(timestamp: number | null, locale: "zh" | "en"): string {
+function formatTime(timestamp: number | null, locale: "zh" | "en", emptyLabel: string): string {
   if (!timestamp) {
-    return locale === "zh" ? "未检查" : "Not checked";
+    return emptyLabel;
   }
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
     year: "numeric",
@@ -220,7 +220,11 @@ export function AboutSettings({
         <div className="settings-info-row">
           <span className="settings-info-label">{t("settings.about.last_checked")}</span>
           <span className="settings-info-value">
-            {formatTime(updateState?.lastCheckedAt ?? null, locale)}
+            {formatTime(
+              updateState?.lastCheckedAt ?? null,
+              locale,
+              t("settings.about.availability_unknown")
+            )}
           </span>
         </div>
         <div className="settings-info-row">

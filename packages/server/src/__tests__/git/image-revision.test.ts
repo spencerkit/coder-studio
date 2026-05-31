@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readImageAtRevision } from "../../git/image-revision.js";
+import { parseGitImageRevisionSelector, readImageAtRevision } from "../../git/image-revision.js";
 
 const execFileAsync = promisify(execFile);
 const PNG_BYTES = Buffer.from(
@@ -57,5 +57,35 @@ describe("readImageAtRevision", () => {
     expect(asset.exists).toBe(true);
     expect(asset.mime).toBe("image/png");
     expect(asset.bytes?.equals(nextBytes)).toBe(true);
+  });
+
+  it("reads committed image bytes from an explicit commit sha", async () => {
+    await writeFile(join(testDir, "pixel.png"), PNG_BYTES);
+    await execFileAsync("git", ["add", "."], { cwd: testDir });
+    await execFileAsync("git", ["commit", "-m", "Add pixel"], { cwd: testDir });
+    const sha = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: testDir })).stdout.trim();
+
+    const asset = await readImageAtRevision(testDir, sha, "pixel.png");
+
+    expect(asset.exists).toBe(true);
+    expect(asset.mime).toBe("image/png");
+    expect(asset.bytes?.equals(PNG_BYTES)).toBe(true);
+  });
+});
+
+describe("parseGitImageRevisionSelector", () => {
+  it("accepts HEAD, INDEX, and strict commit shas", () => {
+    expect(parseGitImageRevisionSelector("HEAD")).toBe("HEAD");
+    expect(parseGitImageRevisionSelector("INDEX")).toBe("INDEX");
+    expect(parseGitImageRevisionSelector("abcdef1")).toBe("abcdef1");
+    expect(parseGitImageRevisionSelector("0123456789abcdef0123456789abcdef01234567")).toBe(
+      "0123456789abcdef0123456789abcdef01234567"
+    );
+  });
+
+  it("rejects non-sha revision selectors", () => {
+    expect(parseGitImageRevisionSelector("HEAD~1")).toBeNull();
+    expect(parseGitImageRevisionSelector("../HEAD")).toBeNull();
+    expect(parseGitImageRevisionSelector("abcxyz1")).toBeNull();
   });
 });

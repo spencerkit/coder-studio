@@ -8,8 +8,10 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createGitignoreFilter,
+  createGitignoreMatcher,
   createTreeVisibilityFilter,
   createWatcherIgnoreFilter,
+  isPathGitignored,
 } from "../../fs/gitignore.js";
 
 describe("createGitignoreFilter", () => {
@@ -99,6 +101,32 @@ describe("createTreeVisibilityFilter", () => {
     expect(filter(".env")).toBe(true);
     expect(filter("node_modules")).toBe(true);
     expect(filter("src")).toBe(true);
+  });
+});
+
+describe("gitignore matcher helpers", () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `gitignore-matcher-test-${Date.now()}`);
+    await mkdir(join(testDir, "src"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it("matches paths against the root .gitignore while keeping .git visible", async () => {
+    await writeFile(join(testDir, ".gitignore"), "*.log\ndist/\n!important.log");
+    await writeFile(join(testDir, "src", "index.ts"), "export {};\n");
+
+    const matcher = createGitignoreMatcher(testDir);
+
+    expect(isPathGitignored(matcher, "app.log")).toBe(true);
+    expect(isPathGitignored(matcher, "dist")).toBe(true);
+    expect(isPathGitignored(matcher, "important.log")).toBe(false);
+    expect(isPathGitignored(matcher, ".git")).toBe(false);
+    expect(isPathGitignored(matcher, "src/index.ts")).toBe(false);
   });
 });
 

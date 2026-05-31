@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { getThemeById } from "../../../theme";
@@ -28,6 +28,9 @@ const {
   mockSetJavaScriptCompilerOptions,
   mockSetJavaScriptDiagnosticsOptions,
   mockSetJavaScriptEagerModelSync,
+  mockRegisterLanguage,
+  mockSetLanguageConfiguration,
+  mockSetMonarchTokensProvider,
   mockSetTypeScriptCompilerOptions,
   mockSetTypeScriptDiagnosticsOptions,
   mockSetTypeScriptEagerModelSync,
@@ -137,6 +140,9 @@ const {
       return { dispose: vi.fn() };
     }
   );
+  const mockRegisterLanguage = vi.fn();
+  const mockSetLanguageConfiguration = vi.fn();
+  const mockSetMonarchTokensProvider = vi.fn();
   const mockSetTypeScriptCompilerOptions = vi.fn();
   const mockSetJavaScriptCompilerOptions = vi.fn();
   const mockSetTypeScriptDiagnosticsOptions = vi.fn();
@@ -172,6 +178,9 @@ const {
     mockRevealRangeInCenter,
     mockRegistryGetOrCreate,
     mockRegisterCodeEditorOpenHandler,
+    mockRegisterLanguage,
+    mockSetLanguageConfiguration,
+    mockSetMonarchTokensProvider,
     mockSetJavaScriptCompilerOptions,
     mockSetJavaScriptDiagnosticsOptions,
     mockSetJavaScriptEagerModelSync,
@@ -212,6 +221,15 @@ vi.mock("monaco-editor", () => ({
     CtrlCmd: 2048,
   },
   languages: {
+    register: mockRegisterLanguage,
+    setLanguageConfiguration: mockSetLanguageConfiguration,
+    setMonarchTokensProvider: mockSetMonarchTokensProvider,
+    IndentAction: {
+      None: 0,
+      Indent: 1,
+      IndentOutdent: 2,
+      Outdent: 3,
+    },
     typescript: {
       JsxEmit: {
         ReactJSX: 4,
@@ -266,6 +284,7 @@ vi.mock("monaco-editor/esm/vs/editor/browser/services/codeEditorService.js", () 
 
 describe("MonacoHost", () => {
   beforeEach(() => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     mockCreateEditor.mockClear();
     mockCreateModel.mockClear();
     mockDefineTheme.mockClear();
@@ -279,6 +298,9 @@ describe("MonacoHost", () => {
     mockRevealRangeInCenter.mockClear();
     mockRegistryGetOrCreate.mockClear();
     mockRegisterCodeEditorOpenHandler.mockClear();
+    mockRegisterLanguage.mockClear();
+    mockSetLanguageConfiguration.mockClear();
+    mockSetMonarchTokensProvider.mockClear();
     mockEditorInstance.dispose.mockClear();
     mockEditorInstance.getValue.mockClear();
     mockEditorInstance.layout.mockClear();
@@ -290,6 +312,10 @@ describe("MonacoHost", () => {
     modelState.current = null;
     modelChangeListenerState.current = null;
     openHandlerState.current = null;
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
   });
 
   it("configures Monaco JS/TS defaults for JSX syntax and eager model sync", () => {
@@ -353,6 +379,7 @@ describe("MonacoHost", () => {
         expect.any(HTMLDivElement),
         expect.objectContaining({
           readOnly: false,
+          "semanticHighlighting.enabled": true,
           theme: "coder-studio-workspace-mint-light",
         })
       );
@@ -618,6 +645,39 @@ describe("MonacoHost", () => {
           workspaceRootPath: "/repo",
           path: "src/app.tsx",
           monacoLanguage: "typescriptreact",
+          model: workspaceModelA,
+        },
+        expect.any(Function)
+      );
+    });
+  });
+
+  it("attaches vue workspace-backed models with the vue language id", async () => {
+    render(
+      <Provider store={createStore()}>
+        <MonacoHost
+          workspaceId="ws-test"
+          workspaceRootPath="/repo"
+          filePath="src/App.vue"
+          content={'<script setup lang="ts">const count = 1;</script>'}
+        />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(mockRegistryGetOrCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceRootPath: "/repo",
+          path: "src/App.vue",
+          language: "vue",
+        })
+      );
+      expect(mockAttachLspBridgeModel).toHaveBeenCalledWith(
+        {
+          workspaceId: "ws-test",
+          workspaceRootPath: "/repo",
+          path: "src/App.vue",
+          monacoLanguage: "vue",
           model: workspaceModelA,
         },
         expect.any(Function)

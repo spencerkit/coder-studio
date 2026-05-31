@@ -1,7 +1,5 @@
 import type { FC } from "react";
 import { useState } from "react";
-import { useTranslation } from "../../../../lib/i18n";
-import { PanelHeader } from "../../../shared/components/panel-header";
 import type { WorkspaceCreateRequest } from "../../actions/use-workspace-screen-model";
 import { FileTreePanel } from "./file-tree-panel";
 import { OpenEditorsSection } from "./open-editors-section";
@@ -13,6 +11,7 @@ interface ExplorerPanelProps {
   onCreateRequestConsumed: () => void;
   onOpenFileCreate: () => void;
   onOpenFolderCreate: () => void;
+  refreshToken?: number;
 }
 
 export const ExplorerPanel: FC<ExplorerPanelProps> = ({
@@ -21,31 +20,56 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
   onCreateRequestConsumed,
   onOpenFileCreate,
   onOpenFolderCreate,
+  refreshToken = 0,
 }) => {
-  const t = useTranslation();
   const [collapseVersion, setCollapseVersion] = useState(0);
+  const [workspaceCount, setWorkspaceCount] = useState(0);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const fileTreePanelId = `workspace-file-tree-${workspaceId}`;
+
+  const handleOpenFileCreate = () => {
+    setWorkspaceCollapsed(false);
+    onOpenFileCreate();
+  };
+
+  const handleOpenFolderCreate = () => {
+    setWorkspaceCollapsed(false);
+    onOpenFolderCreate();
+  };
 
   return (
     <div className="workspace-sidebar-view">
-      <PanelHeader title={t("workspace.sidebar.explorer")} />
-
       <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
         <OpenEditorsSection workspaceId={workspaceId} />
 
         <section className="workspace-sidebar-section workspace-sidebar-section--fill">
           <WorkspaceSectionHeader
-            onOpenFileCreate={onOpenFileCreate}
-            onOpenFolderCreate={onOpenFolderCreate}
+            count={workspaceLoading ? undefined : workspaceCount}
+            isExpanded={!workspaceCollapsed}
+            panelId={fileTreePanelId}
+            onToggleExpanded={() => setWorkspaceCollapsed((value) => !value)}
+            onOpenFileCreate={handleOpenFileCreate}
+            onOpenFolderCreate={handleOpenFolderCreate}
             onCollapseAll={() => setCollapseVersion((value) => value + 1)}
           />
-          <FileTreePanel
-            workspaceId={workspaceId}
-            createRequest={createRequest}
-            onCreateRequestConsumed={onCreateRequestConsumed}
-            collapseVersion={collapseVersion}
-            variant="desktop"
-            showSearch={false}
-          />
+          {!workspaceCollapsed ? (
+            <FileTreePanel
+              workspaceId={workspaceId}
+              createRequest={createRequest}
+              onCreateRequestConsumed={onCreateRequestConsumed}
+              onVisibleCountChange={(count, loading) => {
+                setWorkspaceCount(count);
+                setWorkspaceLoading(loading);
+              }}
+              collapseVersion={collapseVersion}
+              refreshToken={refreshToken}
+              variant="desktop"
+              showSearch={false}
+              preserveSourceOrder
+              panelId={fileTreePanelId}
+            />
+          ) : null}
         </section>
       </div>
     </div>

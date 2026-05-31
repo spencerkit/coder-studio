@@ -68,3 +68,8 @@ tsconfig.tsbuildinfo
 
 # Stitch design files
 .stitch/
+
+# Rust build artefacts (from lsp-test/ fixture or any ad-hoc cargo)
+target/
+Cargo.lock
+

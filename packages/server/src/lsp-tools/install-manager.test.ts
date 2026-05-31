@@ -3,6 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Workspace } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  VUE_LANGUAGE_SERVER_VERSION,
+  VUE_MANAGED_VERSION,
+  VUE_TYPESCRIPT_VERSION,
+} from "./definitions.js";
 import { LspToolInstallManager } from "./install-manager.js";
 import { FileManifestStore } from "./manifest-store.js";
 
@@ -22,8 +27,12 @@ describe("LspToolInstallManager", () => {
   });
 
   it("returns missing_prerequisite when python3 is unavailable", async () => {
+    // Pin platform so the prerequisite list is deterministic (on win32 the
+    // manager also tries `python` as a fallback, which would otherwise leak
+    // into `missingCommands`).
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(mkdtempSync(join(tmpdir(), "lsp-tools-"))),
+      platform: "linux",
       commandExists: vi.fn(async () => false),
       runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
     });
@@ -37,6 +46,30 @@ describe("LspToolInstallManager", () => {
     expect(job.failure).toMatchObject({
       code: "missing_prerequisite",
       missingCommands: ["python3"],
+    });
+  });
+
+  it("fails with missing_prerequisite when the Windows python candidate is a Microsoft Store stub", async () => {
+    // Regression test: `where.exe python` returns the zero-byte App
+    // Execution Alias at `%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe`
+    // even when Python is not installed. The manager must reject the
+    // candidate via the version probe instead of silently falling through
+    // to the venv install step (which then fails opaquely).
+    const manager = new LspToolInstallManager({
+      manifestStore: new FileManifestStore(mkdtempSync(join(tmpdir(), "lsp-tools-"))),
+      platform: "win32",
+      // `where` finds both stubs.
+      commandExists: vi.fn(async () => true),
+      // ...but invoking the stub produces no output (Store stub behavior).
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
+    });
+
+    const job = await manager.start({ workspace, serverKind: "python" });
+
+    expect(job.status).toBe("failed");
+    expect(job.failure).toMatchObject({
+      code: "missing_prerequisite",
+      missingCommands: ["python3", "python"],
     });
   });
 
@@ -63,6 +96,13 @@ describe("LspToolInstallManager", () => {
         return false;
       }),
       runCommand: vi.fn(async (file: string, args: string[]) => {
+        // The resolver also probes `python --version` on Windows to defend
+        // against Microsoft Store stubs. Return a believable version banner
+        // so the candidate is accepted.
+        if (file === "python" && args[0] === "--version") {
+          return { stdout: "Python 3.12.0\n", stderr: "" };
+        }
+
         if (file === "python" && args[0] === "-m" && args[1] === "venv") {
           return { stdout: "created venv", stderr: "" };
         }
@@ -72,7 +112,7 @@ describe("LspToolInstallManager", () => {
           return { stdout: "installed pylsp", stderr: "" };
         }
 
-        throw new Error(`unexpected command: ${file}`);
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
       }),
     });
 
@@ -157,6 +197,71 @@ describe("LspToolInstallManager", () => {
     });
   });
 
+  it("installs the vue language server into the managed tool directory and writes a manifest", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
+    let installed = false;
+    const executablePath = join(
+      root,
+      "vue",
+      VUE_MANAGED_VERSION,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "vue-language-server.cmd" : "vue-language-server"
+    );
+    const runCommand = vi.fn(async (file: string) => {
+      if (file === "npm") {
+        installed = true;
+        return { stdout: "installed vue-language-server", stderr: "" };
+      }
+
+      throw new Error(`unexpected command: ${file}`);
+    });
+
+    const manager = new LspToolInstallManager({
+      manifestStore: new FileManifestStore(root),
+      commandExists: vi.fn(async (command: string) => {
+        if (command === "npm") {
+          return true;
+        }
+
+        if (command === executablePath) {
+          return installed;
+        }
+
+        return false;
+      }),
+      runCommand,
+    });
+
+    const started = await manager.start({
+      workspace,
+      serverKind: "vue",
+    });
+
+    await vi.waitFor(() => {
+      expect(manager.get(started.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(new FileManifestStore(root).read("vue")).toMatchObject({
+      serverKind: "vue",
+      version: VUE_MANAGED_VERSION,
+      executablePath,
+      source: "managed",
+    });
+    expect(runCommand).toHaveBeenCalledWith(
+      "npm",
+      [
+        "install",
+        "--no-save",
+        `@vue/language-server@${VUE_LANGUAGE_SERVER_VERSION}`,
+        `typescript@${VUE_TYPESCRIPT_VERSION}`,
+      ],
+      expect.objectContaining({
+        cwd: join(root, "vue", VUE_MANAGED_VERSION),
+      })
+    );
+  });
+
   it("classifies install-step ENOENT failures as command_not_found", async () => {
     const installError = Object.assign(new Error("spawn python3 ENOENT"), {
       code: "ENOENT",
@@ -165,6 +270,10 @@ describe("LspToolInstallManager", () => {
     });
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(mkdtempSync(join(tmpdir(), "lsp-tools-"))),
+      // Pin platform so the Windows-only Microsoft Store stub probe (which
+      // calls `python --version`) doesn't intercept the ENOENT we want the
+      // install step itself to surface.
+      platform: "linux",
       commandExists: vi.fn(async () => true),
       runCommand: vi.fn(async () => {
         throw installError;
@@ -214,6 +323,12 @@ describe("LspToolInstallManager", () => {
         return false;
       }),
       runCommand: vi.fn(async (file: string, args: string[]) => {
+        // On Windows the resolver probes `python3 --version` to defend
+        // against the Microsoft Store stub. Return a believable banner.
+        if (file === "python3" && args[0] === "--version") {
+          return { stdout: "Python 3.12.0\n", stderr: "" };
+        }
+
         if (file === "python3" && args[0] === "-m" && args[1] === "venv") {
           return { stdout: "created venv", stderr: "" };
         }
@@ -223,7 +338,7 @@ describe("LspToolInstallManager", () => {
           return { stdout: "installed pylsp", stderr: "" };
         }
 
-        throw new Error(`unexpected command: ${file}`);
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
       }),
     });
 
@@ -260,7 +375,15 @@ describe("LspToolInstallManager", () => {
   it("downloads rust-analyzer into the managed tool directory and writes a manifest", async () => {
     const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
     let installed = false;
-    const executablePath = join(root, "rust", "2026-05-18", "bin", "rust-analyzer");
+    // The real manager picks `.exe` on Windows; mirror that here so the
+    // commandExists mock matches the path the verify step actually checks.
+    const executablePath = join(
+      root,
+      "rust",
+      "2026-05-18",
+      "bin",
+      process.platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer"
+    );
 
     const manager = new LspToolInstallManager({
       manifestStore: new FileManifestStore(root),

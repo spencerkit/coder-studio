@@ -5,6 +5,13 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DocumentStore } from "./document-store.js";
 
+// POSIX-style fixtures (`/repo`, `file:///repo/...`) only resolve correctly
+// when the host treats `/` as an absolute root. On Windows `path.resolve("/repo")`
+// returns `<drive>:\repo`, which breaks both URI construction and reverse
+// lookup. Gate the POSIX-only assertions to keep the suite green on every host
+// while preserving the actual coverage on the platforms where it matters.
+const itPosix = process.platform === "win32" ? it.skip : it;
+
 describe("DocumentStore", () => {
   it("tracks open/change/close versions and replayable snapshots", () => {
     const store = new DocumentStore("/repo");
@@ -31,7 +38,7 @@ describe("DocumentStore", () => {
     expect(store.listReplayable()).toHaveLength(0);
   });
 
-  it("maps file URIs back to workspace-relative paths without a leading slash", () => {
+  itPosix("maps file URIs back to workspace-relative paths without a leading slash", () => {
     const store = new DocumentStore("/repo");
 
     expect(store.fromUri("file:///repo/e2e/fixtures/lsp-workspace/shared.ts")).toBe(
@@ -39,7 +46,7 @@ describe("DocumentStore", () => {
     );
   });
 
-  it("encodes spaces in file URIs and decodes them back to relative paths", () => {
+  itPosix("encodes spaces in file URIs and decodes them back to relative paths", () => {
     const store = new DocumentStore("/repo with spaces");
     const opened = store.open({
       path: "dir/a b.ts",
@@ -61,18 +68,24 @@ describe("DocumentStore", () => {
     );
   });
 
-  it("maps POSIX file URIs back to workspace-relative paths when the workspace path is a symlink alias", () => {
-    const realRoot = mkdtempSync(join(tmpdir(), "document-store-real-"));
-    const aliasParent = mkdtempSync(join(tmpdir(), "document-store-alias-"));
-    const aliasRoot = join(aliasParent, "workspace");
+  // `symlinkSync(... "dir")` requires elevated privileges or Developer Mode on
+  // Windows. The behaviour we care about (resolving symlink-aliased workspace
+  // roots) is POSIX-only in practice, so gate the test to non-Windows hosts.
+  itPosix(
+    "maps POSIX file URIs back to workspace-relative paths when the workspace path is a symlink alias",
+    () => {
+      const realRoot = mkdtempSync(join(tmpdir(), "document-store-real-"));
+      const aliasParent = mkdtempSync(join(tmpdir(), "document-store-alias-"));
+      const aliasRoot = join(aliasParent, "workspace");
 
-    mkdirSync(join(realRoot, "src"));
-    symlinkSync(realRoot, aliasRoot, "dir");
+      mkdirSync(join(realRoot, "src"));
+      symlinkSync(realRoot, aliasRoot, "dir");
 
-    const store = new DocumentStore(aliasRoot);
+      const store = new DocumentStore(aliasRoot);
 
-    expect(store.fromUri(pathToFileURL(join(realRoot, "src/main.ts")).toString())).toBe(
-      "src/main.ts"
-    );
-  });
+      expect(store.fromUri(pathToFileURL(join(realRoot, "src/main.ts")).toString())).toBe(
+        "src/main.ts"
+      );
+    }
+  );
 });

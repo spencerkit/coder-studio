@@ -12,6 +12,7 @@ import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { LspManager } from "../lsp/manager.js";
 import type { LspToolInstallManager } from "../lsp-tools/install-manager.js";
 import type { LspToolManager } from "../lsp-tools/manager.js";
+import type { MonitoringService } from "../monitoring/service.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
@@ -20,6 +21,7 @@ import type { ProviderConfigRepo } from "../storage/repositories/provider-config
 import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
+import type { SystemDependencyInstallManager } from "../system-deps/install-manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { UpdateService } from "../update/update-service.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -44,6 +46,7 @@ export interface CommandContext {
   autoFetch: AutoFetchRuntime;
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
+  systemDependencyInstallMgr?: SystemDependencyInstallManager;
   activationMgr: ActivationManager;
   config?: Pick<ServerConfig, "auth" | "host">;
   lspMgr: LspManager;
@@ -53,6 +56,7 @@ export interface CommandContext {
   customProviderRepo?: CustomProviderRepo;
   sessionMetadataRepo?: SessionMetadataRepo;
   setProviderRegistry?: (providers: ProviderDefinition[]) => void;
+  monitoringService?: MonitoringService;
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { LspServerKind, Workspace } from "@coder-studio/core";
 import type { LspToolManager } from "./manager.js";
 
-const SERVER_KINDS: LspServerKind[] = ["typescript", "python", "go", "rust"];
+const SERVER_KINDS: LspServerKind[] = ["typescript", "python", "go", "rust", "vue"];
 
 export async function buildLspRuntimeStatus(input: {
   workspace: Workspace;

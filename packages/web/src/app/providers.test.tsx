@@ -13,7 +13,11 @@ import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout"
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
 import { updateStateAtom } from "../features/updates/atoms";
-import { fileTreeStaleAtomFamily } from "../features/workspace/atoms";
+import {
+  activeFilePathAtomFamily,
+  fileTreeStaleAtomFamily,
+  openEditorPathsAtomFamily,
+} from "../features/workspace/atoms";
 import { resetAppProvidersSingletonsForTests, routeEventToAtom } from "./providers";
 
 describe("routeEventToAtom", () => {
@@ -161,8 +165,81 @@ describe("routeEventToAtom", () => {
     expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
       id: "root",
       type: "leaf",
+      leafKind: "session",
       sessionId: "sess-1",
     });
+  });
+
+  it("preserves typed pane leaf kinds from workspace meta updates", () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      "workspace.ws-1.meta",
+      {
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          paneLayout: {
+            id: "root",
+            type: "split",
+            direction: "horizontal",
+            children: [
+              { id: "left", type: "leaf", leafKind: "draft" },
+              { id: "right", type: "leaf", leafKind: "editor" },
+            ],
+          },
+        },
+      },
+      store
+    );
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "draft" },
+        { id: "right", type: "leaf", leafKind: "editor" },
+      ],
+    });
+  });
+
+  it("projects workspace open editor metadata into editor atoms", () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      "workspace.ws-1.meta",
+      {
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          openEditorPaths: ["src/app.tsx", "README.md", "src/app.tsx", ""],
+          activeEditorPath: "src/app.tsx",
+        },
+      },
+      store
+    );
+
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toEqual(["src/app.tsx", "README.md"]);
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
+  });
+
+  it("keeps local open editor metadata when a workspace meta patch omits editor fields", () => {
+    const store = createStore();
+    store.set(openEditorPathsAtomFamily("ws-1"), ["src/current.ts"]);
+    store.set(activeFilePathAtomFamily("ws-1"), "src/current.ts");
+
+    routeEventToAtom("workspace.ws-1.meta", { path: "/tmp/ws-1", targetRuntime: "native" }, store);
+    routeEventToAtom("workspace.ws-1.meta", { name: "Renamed workspace" }, store);
+
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toEqual(["src/current.ts"]);
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/current.ts");
   });
 
   it("marks the file tree stale when an fs.dirty event arrives", () => {

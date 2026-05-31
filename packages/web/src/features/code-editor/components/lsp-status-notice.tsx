@@ -4,6 +4,7 @@ import type {
   LspToolInstallStepSnapshot,
 } from "@coder-studio/core";
 import { Button, Notice } from "../../../components/ui";
+import { useTranslation } from "../../../lib/i18n";
 
 type LspNoticeState = Exclude<
   LspEnsureSessionResult,
@@ -19,20 +20,43 @@ interface LspStatusNoticeProps {
   installing?: boolean;
 }
 
-function describeStep(step: LspToolInstallStepSnapshot | undefined): string | null {
+function describeStep(
+  step: LspToolInstallStepSnapshot | undefined,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string | null {
   if (!step) {
     return null;
   }
 
   if (step.status === "running") {
-    return `Installing: ${step.title}`;
+    return t("code_editor.lsp_installing_step", { title: step.title });
   }
 
   if (step.status === "failed") {
-    return `Install failed at: ${step.title}`;
+    return t("code_editor.lsp_install_failed_step", { title: step.title });
   }
 
   return null;
+}
+
+function getLspMessage(
+  state: LspNoticeState,
+  progressMessage: string | null,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string {
+  if (progressMessage) {
+    return progressMessage;
+  }
+
+  if (state.kind === "installing" && state.errorCode === "lsp_install_in_progress") {
+    return t("code_editor.lsp_install_in_progress");
+  }
+
+  if (state.kind === "failed" && state.errorCode === "lsp_install_failed") {
+    return state.message || t("code_editor.lsp_install_failed");
+  }
+
+  return state.message;
 }
 
 export function LspStatusNotice({
@@ -41,12 +65,14 @@ export function LspStatusNotice({
   onRetry,
   installing = false,
 }: LspStatusNoticeProps) {
+  const t = useTranslation();
+
   if (state.kind === "disabled") {
     return (
       <Notice
         tone="info"
-        title="Language server disabled"
-        message="LSP is turned off in Settings to reduce memory usage."
+        title={t("code_editor.lsp_disabled_title")}
+        message={t("code_editor.lsp_disabled_message")}
       />
     );
   }
@@ -54,7 +80,7 @@ export function LspStatusNotice({
   const activeStep = state.installJob?.steps.find(
     (step) => step.id === state.installJob?.currentStepId
   );
-  const progressMessage = describeStep(activeStep);
+  const progressMessage = describeStep(activeStep, t);
   const canInstall =
     state.kind === "tool_missing" &&
     state.autoInstallSupported &&
@@ -64,19 +90,19 @@ export function LspStatusNotice({
 
   const action = canInstall ? (
     <Button onClick={onInstall} loading={installing} size="sm">
-      Install
+      {t("code_editor.lsp_install")}
     </Button>
   ) : canRetry ? (
     <Button onClick={onRetry} size="sm" variant="ghost">
-      Retry
+      {t("action.retry")}
     </Button>
   ) : null;
 
   return (
     <Notice
       tone={state.kind === "failed" ? "warning" : "info"}
-      title={`${state.displayName} unavailable`}
-      message={progressMessage ?? state.message}
+      title={t("code_editor.lsp_unavailable", { name: state.displayName })}
+      message={getLspMessage(state, progressMessage, t)}
       action={action}
     />
   );

@@ -3,17 +3,28 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { useTranslation } from "../../../lib/i18n";
-import { useOpenLocation } from "../../code-editor/actions/use-open-location";
 import {
   activeFilePathAtomFamily,
-  deriveEditorModeForPath,
-  editorModeAtomFamily,
+  expandedDirsAtomFamily,
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
   type OpenFile,
+  openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../atoms";
+import {
+  applyDirectoryRefresh,
+  applyRootTreeRefresh,
+  collectRefreshTargets,
+} from "./file-tree-refresh";
+import {
+  mergeOpenEditorPaths,
+  removeOpenEditorPaths,
+  rewriteOpenEditorPaths,
+} from "./open-editor-state";
+import { useOpenWorkspaceFile } from "./use-open-workspace-file";
+import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 export interface CreateRequest {
   id: number;
@@ -58,6 +69,14 @@ interface UseFileActionsArgs {
   onSelectFile?: (path: string) => void;
 }
 
+function isReadTreeResult(value: unknown): value is ReadTreeResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return Array.isArray((value as ReadTreeResult).children);
+}
+
 function rewriteDescendantPath(path: string, fromPath: string, toPath: string): string {
   if (path === fromPath) {
     return toPath;
@@ -94,6 +113,24 @@ function rewriteOpenFiles(
   return Object.fromEntries(nextEntries);
 }
 
+function setsEqual<T>(left: Set<T> | null, right: Set<T>): boolean {
+  if (!left) {
+    return right.size === 0;
+  }
+
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function useFileActions({
   workspaceId,
   refreshToken = 0,
@@ -105,13 +142,18 @@ export function useFileActions({
   const fileTree = useAtomValue(fileTreeAtomFamily(workspaceId));
   const fileTreeStale = useAtomValue(fileTreeStaleAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
+  const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
+  const expandedDirs = useAtomValue(expandedDirsAtomFamily(workspaceId));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setFileTreeStale = useSetAtom(fileTreeStaleAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
-  const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
+  const setOpenEditorPaths = useSetAtom(openEditorPathsAtomFamily(workspaceId));
   const setOpenFiles = useSetAtom(openFilesAtomFamily(workspaceId));
-  const { openLocation } = useOpenLocation(workspaceId);
+  const setExpandedDirs = useSetAtom(expandedDirsAtomFamily(workspaceId));
+  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
   const loadedDirs = useAtomValue(loadedDirsAtomFamily(workspaceId));
   const setLoadedDirs = useSetAtom(loadedDirsAtomFamily(workspaceId));
 
@@ -131,11 +173,69 @@ export function useFileActions({
       workspaceId,
     });
 
-    if (result.ok && result.data) {
-      const treeMap = new Map<string, FileNode[]>();
-      treeMap.set(".", result.data.children);
-      setFileTree(treeMap);
-      setLoadedDirs(new Set());
+    if (result.ok && isReadTreeResult(result.data)) {
+      const reconciled = applyRootTreeRefresh({
+        previousTree: fileTree,
+        previousLoadedDirs: loadedDirs,
+        previousExpandedDirs: expandedDirs,
+        rootChildren: result.data.children,
+      });
+
+      let currentTree = reconciled.tree;
+      let currentLoadedDirs = reconciled.loadedDirs;
+      let currentExpandedDirs: Set<string> | null = expandedDirs;
+
+      setFileTree(currentTree);
+      setLoadedDirs(currentLoadedDirs);
+
+      if (expandedDirs) {
+        if (!setsEqual(expandedDirs, reconciled.prunedExpandedDirs)) {
+          const normalizedExpandedDirs = collectRefreshTargets(reconciled.prunedExpandedDirs);
+          currentExpandedDirs = new Set(normalizedExpandedDirs);
+          setExpandedDirs(currentExpandedDirs);
+          void persistUiState({ fileTreeExpandedDirs: normalizedExpandedDirs });
+        } else {
+          currentExpandedDirs = reconciled.prunedExpandedDirs;
+        }
+      }
+
+      const refreshTargets = collectRefreshTargets(currentExpandedDirs ?? currentLoadedDirs);
+
+      for (const dirPath of refreshTargets) {
+        const childResult = await dispatch<ReadTreeResult>("file.readTree", {
+          workspaceId,
+          subPath: dirPath,
+        });
+
+        if (!childResult.ok || !isReadTreeResult(childResult.data)) {
+          continue;
+        }
+
+        const refreshed = applyDirectoryRefresh({
+          previousTree: currentTree,
+          previousLoadedDirs: currentLoadedDirs,
+          previousExpandedDirs: currentExpandedDirs,
+          dirPath,
+          children: childResult.data.children,
+        });
+
+        currentTree = refreshed.tree;
+        currentLoadedDirs = new Set(refreshed.loadedDirs).add(dirPath);
+        setFileTree(currentTree);
+        setLoadedDirs(currentLoadedDirs);
+
+        if (currentExpandedDirs) {
+          if (!setsEqual(currentExpandedDirs, refreshed.prunedExpandedDirs)) {
+            const normalizedExpandedDirs = collectRefreshTargets(refreshed.prunedExpandedDirs);
+            currentExpandedDirs = new Set(normalizedExpandedDirs);
+            setExpandedDirs(currentExpandedDirs);
+            void persistUiState({ fileTreeExpandedDirs: normalizedExpandedDirs });
+          } else {
+            currentExpandedDirs = refreshed.prunedExpandedDirs;
+          }
+        }
+      }
+
       setIsLoading(false);
       return true;
     }
@@ -146,7 +246,18 @@ export function useFileActions({
 
     setIsLoading(false);
     return false;
-  }, [workspaceId, isLoading, dispatch, setFileTree, setLoadedDirs]);
+  }, [
+    workspaceId,
+    isLoading,
+    dispatch,
+    expandedDirs,
+    fileTree,
+    loadedDirs,
+    persistUiState,
+    setExpandedDirs,
+    setFileTree,
+    setLoadedDirs,
+  ]);
 
   const loadChildren = useCallback(
     async (dirPath: string) => {
@@ -159,19 +270,31 @@ export function useFileActions({
         subPath: dirPath,
       });
 
-      if (result.ok && result.data) {
-        setFileTree((prev) => {
-          if (!prev) return prev;
-          const next = new Map(prev);
-          next.set(dirPath, result.data!.children);
-          return next;
+      if (result.ok && isReadTreeResult(result.data)) {
+        const refreshed = applyDirectoryRefresh({
+          previousTree: fileTree,
+          previousLoadedDirs: loadedDirs,
+          previousExpandedDirs: expandedDirs,
+          dirPath,
+          children: result.data.children,
         });
-        setLoadedDirs((prev) => new Set(prev).add(dirPath));
+
+        setFileTree(refreshed.tree);
+        setLoadedDirs(new Set(refreshed.loadedDirs).add(dirPath));
       }
 
       setIsLoadingDir(null);
     },
-    [workspaceId, isLoadingDir, loadedDirs, fileTree, dispatch, setFileTree, setLoadedDirs]
+    [
+      workspaceId,
+      isLoadingDir,
+      loadedDirs,
+      fileTree,
+      expandedDirs,
+      dispatch,
+      setFileTree,
+      setLoadedDirs,
+    ]
   );
 
   const loadSearchResults = useCallback(
@@ -303,13 +426,13 @@ export function useFileActions({
     closeCreateDialog();
 
     if (createDialog.mode === "file") {
-      void openLocation({
+      void openWorkspaceFile({
         workspaceId,
         path,
         source: "manual",
       });
     }
-  }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, openLocation, t]);
+  }, [createDialog, dispatch, workspaceId, loadFileTree, closeCreateDialog, openWorkspaceFile, t]);
 
   const submitRenameDialog = useCallback(async () => {
     if (!renameDialog) {
@@ -368,13 +491,38 @@ export function useFileActions({
       return;
     }
 
-    setActiveFilePath((current) =>
-      current ? rewriteDescendantPath(current, renameDialog.fromPath, toPath) : current
+    const nextActiveFilePath = activeFilePath
+      ? rewriteDescendantPath(activeFilePath, renameDialog.fromPath, toPath)
+      : activeFilePath;
+    const nextOpenEditorPaths = rewriteOpenEditorPaths(
+      mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles)),
+      renameDialog.fromPath,
+      toPath
     );
+
+    setActiveFilePath(nextActiveFilePath);
+    setOpenEditorPaths(nextOpenEditorPaths);
     setOpenFiles((current) => rewriteOpenFiles(current, renameDialog.fromPath, toPath));
+    void persistUiState({
+      openEditorPaths: nextOpenEditorPaths,
+      activeEditorPath: nextActiveFilePath,
+    });
     await loadFileTree();
     setRenameDialog(null);
-  }, [dispatch, loadFileTree, renameDialog, setActiveFilePath, setOpenFiles, t, workspaceId]);
+  }, [
+    activeFilePath,
+    dispatch,
+    loadFileTree,
+    openEditorPaths,
+    openFiles,
+    persistUiState,
+    renameDialog,
+    setActiveFilePath,
+    setOpenEditorPaths,
+    setOpenFiles,
+    t,
+    workspaceId,
+  ]);
 
   const cancelDelete = useCallback(() => {
     setPendingDelete(null);
@@ -402,9 +550,17 @@ export function useFileActions({
       return;
     }
 
-    if (activeFilePath === pendingDelete.path) {
-      setActiveFilePath(null);
+    const nextActiveFilePath = activeFilePath === pendingDelete.path ? null : activeFilePath;
+    const nextOpenEditorPaths = removeOpenEditorPaths(
+      mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles)),
+      [pendingDelete.path]
+    );
+
+    if (activeFilePath !== nextActiveFilePath) {
+      setActiveFilePath(nextActiveFilePath);
     }
+
+    setOpenEditorPaths(nextOpenEditorPaths);
 
     setOpenFiles((prev) => {
       if (!(pendingDelete.path in prev)) {
@@ -415,6 +571,10 @@ export function useFileActions({
       delete next[pendingDelete.path];
       return next;
     });
+    void persistUiState({
+      openEditorPaths: nextOpenEditorPaths,
+      activeEditorPath: nextActiveFilePath,
+    });
     await loadFileTree();
     setPendingDelete(null);
   }, [
@@ -422,7 +582,11 @@ export function useFileActions({
     dispatch,
     workspaceId,
     activeFilePath,
+    openEditorPaths,
+    openFiles,
+    persistUiState,
     setActiveFilePath,
+    setOpenEditorPaths,
     setOpenFiles,
     loadFileTree,
     t,
@@ -462,15 +626,14 @@ export function useFileActions({
 
   const handleSelectFile = useCallback(
     (path: string) => {
-      setEditorMode(deriveEditorModeForPath(path));
-      void openLocation({
+      void openWorkspaceFile({
         workspaceId,
         path,
         source: "file-tree",
       });
       onSelectFile?.(path);
     },
-    [onSelectFile, openLocation, setEditorMode, workspaceId]
+    [onSelectFile, openWorkspaceFile, workspaceId]
   );
 
   return {
@@ -484,6 +647,7 @@ export function useFileActions({
     cancelDelete,
     confirmDelete,
     handleSelectFile,
+    loadFileTree,
     loadChildren,
     loadSearchResults,
     openCreateDialog,

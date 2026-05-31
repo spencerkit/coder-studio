@@ -210,6 +210,174 @@ describe("File Commands", () => {
     });
   });
 
+  it("starts search sessions and returns replacement-aware results", async () => {
+    await writeFile(join(testDir, "alpha.ts"), "const match = 'match';\n");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-session-start-1",
+        op: "file.searchSession.start",
+        args: {
+          workspaceId,
+          query: "match",
+          replace: "rename",
+          isRegex: false,
+          matchCase: true,
+          matchWholeWord: false,
+          preserveCase: false,
+          includeGlobs: [],
+          excludeGlobs: [],
+          useIgnoreFiles: true,
+          useExcludeSettings: true,
+          onlyOpenEditors: false,
+          openEditorPaths: [],
+          maxFiles: 20,
+          maxMatchesPerFile: 20,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      sessionId: expect.any(String),
+      totalMatchCount: 2,
+      totalFileCount: 1,
+    });
+    expect(
+      (result.data as { files: Array<{ path: string; matchCount: number }> }).files[0]
+    ).toMatchObject({
+      path: "alpha.ts",
+      matchCount: 2,
+    });
+    expect(
+      (
+        result.data as {
+          files: Array<{ matches: Array<{ replacementPreview: string }> }>;
+        }
+      ).files[0]?.matches
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          replacementPreview: "const rename = 'match';",
+        }),
+      ])
+    );
+  });
+
+  it("previews one search-session file and applies replacements with fs.dirty emission", async () => {
+    await writeFile(join(testDir, "alpha.ts"), "match match\n");
+
+    const startResult = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-session-start-2",
+        op: "file.searchSession.start",
+        args: {
+          workspaceId,
+          query: "match",
+          replace: "rename",
+          isRegex: false,
+          matchCase: true,
+          matchWholeWord: false,
+          preserveCase: false,
+          includeGlobs: [],
+          excludeGlobs: [],
+          useIgnoreFiles: true,
+          useExcludeSettings: true,
+          onlyOpenEditors: false,
+          openEditorPaths: [],
+          maxFiles: 20,
+          maxMatchesPerFile: 20,
+        },
+      },
+      ctx
+    );
+
+    expect(startResult.ok).toBe(true);
+    const startData = startResult.data as {
+      sessionId: string;
+      files: Array<{ path: string; matches: Array<{ id: string }> }>;
+    };
+
+    const previewResult = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-session-preview-1",
+        op: "file.searchSession.previewFile",
+        args: {
+          workspaceId,
+          sessionId: startData.sessionId,
+          path: "alpha.ts",
+        },
+      },
+      ctx
+    );
+
+    expect(previewResult.ok).toBe(true);
+    expect(previewResult.data).toMatchObject({
+      kind: "search-replace-file-diff",
+      path: "alpha.ts",
+      originalContent: "match match\n",
+      modifiedContent: "rename rename\n",
+    });
+
+    const applyResult = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-session-apply-1",
+        op: "file.searchSession.apply",
+        args: {
+          workspaceId,
+          sessionId: startData.sessionId,
+          scope: {
+            kind: "match",
+            path: "alpha.ts",
+            matchId: startData.files[0]?.matches[0]?.id,
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(applyResult.ok).toBe(true);
+    expect(applyResult.data).toMatchObject({
+      status: "ok",
+      appliedFileCount: 1,
+      results: [{ path: "alpha.ts", status: "applied", replacedMatchCount: 1 }],
+    });
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: "fs.dirty",
+      workspaceId,
+      reason: "file_content",
+    });
+  });
+
+  it("returns stale_session for missing search sessions", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-search-session-apply-2",
+        op: "file.searchSession.apply",
+        args: {
+          workspaceId,
+          sessionId: "missing-session",
+          scope: {
+            kind: "all",
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      sessionId: "missing-session",
+      status: "stale_session",
+    });
+  });
+
   it("shows dotfiles and node_modules in file.readTree while still hiding .git", async () => {
     await writeFile(join(testDir, ".gitignore"), "*.log\nnode_modules/\n");
     await writeFile(join(testDir, ".env"), "secret\n");
@@ -230,10 +398,15 @@ describe("File Commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    const children = (result.data as { children: Array<{ name: string }> }).children;
-    expect(children.some((item) => item.name === ".env")).toBe(true);
-    expect(children.some((item) => item.name === "ignored.log")).toBe(true);
-    expect(children.some((item) => item.name === "node_modules")).toBe(true);
+    const children = (result.data as { children: Array<{ name: string; isGitIgnored?: boolean }> })
+      .children;
+    expect(children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: ".env", isGitIgnored: false }),
+        expect.objectContaining({ name: "ignored.log", isGitIgnored: true }),
+        expect.objectContaining({ name: "node_modules", isGitIgnored: true }),
+      ])
+    );
     expect(children.some((item) => item.name === ".git")).toBe(false);
   });
 

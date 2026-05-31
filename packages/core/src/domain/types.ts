@@ -22,13 +22,48 @@ export interface Workspace {
   uiState: UiState;
 }
 
-export interface WorkspacePaneNode {
+export type WorkspacePaneLeafKind = "draft" | "session" | "editor";
+
+export interface LegacyWorkspacePaneLeaf {
   id: string;
-  type: "leaf" | "split";
+  type: "leaf";
   sessionId?: string;
+  leafKind?: undefined;
+}
+
+export interface WorkspaceDraftPaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind: "draft";
+}
+
+export interface WorkspaceSessionPaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind: "session";
+  sessionId: string;
+}
+
+export interface WorkspaceEditorPaneLeaf {
+  id: string;
+  type: "leaf";
+  leafKind: "editor";
+}
+
+export type WorkspacePaneLeaf =
+  | LegacyWorkspacePaneLeaf
+  | WorkspaceDraftPaneLeaf
+  | WorkspaceSessionPaneLeaf
+  | WorkspaceEditorPaneLeaf;
+
+export interface WorkspacePaneSplit {
+  id: string;
+  type: "split";
   direction?: "horizontal" | "vertical";
   children?: WorkspacePaneNode[];
 }
+
+export type WorkspacePaneNode = WorkspacePaneLeaf | WorkspacePaneSplit;
 
 export interface UiState {
   leftPanelWidth: number;
@@ -37,6 +72,8 @@ export interface UiState {
   activeSessionId?: string;
   paneLayout?: WorkspacePaneNode;
   fileTreeExpandedDirs?: string[];
+  openEditorPaths?: string[];
+  activeEditorPath?: string | null;
 }
 
 export interface WorkspaceLastViewedTarget {
@@ -188,6 +225,7 @@ export interface Terminal {
   id: string;
   workspaceId: string;
   kind: "agent" | "shell";
+  pid?: number;
   title: string;
   cwd: string;
   argv: string[];
@@ -251,6 +289,10 @@ export interface GitStatus {
 
 export type GitChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
 
+export type GitDiffRenderMode = "text" | "image";
+
+export type GitRevisionSource = "HEAD" | "INDEX" | "WORKTREE" | string;
+
 export interface GitFileChange {
   path: string;
   oldPath?: string; // for renames
@@ -263,6 +305,33 @@ export interface GitCommitSummary {
   subject: string;
   authorName: string;
   authoredAt: number;
+}
+
+export interface GitCommitFileEntry {
+  path: string;
+  oldPath?: string;
+  status: Exclude<GitChangeStatus, "untracked">;
+  renderAs: GitDiffRenderMode;
+}
+
+export interface GitCommitDetail {
+  commit: GitCommitSummary & {
+    parentSha?: string;
+  };
+  files: GitCommitFileEntry[];
+}
+
+export interface GitFileDiffPayload {
+  diff: string;
+  renderAs: GitDiffRenderMode;
+  status: "modified" | "added" | "deleted";
+  mime?: string;
+  originalPath?: string;
+  modifiedPath?: string;
+  originalContent?: string;
+  modifiedContent?: string;
+  originalRevision?: GitRevisionSource;
+  modifiedRevision?: GitRevisionSource;
 }
 
 export interface GitBranch {
@@ -288,6 +357,7 @@ export interface FileNode {
   children?: FileNode[];
   size?: number;
   mtime?: number;
+  isGitIgnored?: boolean;
 }
 
 export interface SearchContentMatch {
@@ -312,6 +382,70 @@ export interface SearchContentResult {
   totalMatchCount: number;
   hasMoreFiles: boolean;
   truncatedMatchFileCount: number;
+}
+
+export interface SearchSessionMatchPreview {
+  id: string;
+  line: number;
+  column: number;
+  endColumn: number;
+  preview: string;
+  previewColumnStart: number;
+  previewColumnEnd: number;
+  replacementPreview: string;
+  replacementPreviewColumnStart: number;
+  replacementPreviewColumnEnd: number;
+  isReplacementPreviewTruncated: boolean;
+}
+
+export interface SearchSessionFileResult {
+  path: string;
+  name: string;
+  matchCount: number;
+  hasMoreMatches: boolean;
+  baseHash: string;
+  matches: SearchSessionMatchPreview[];
+}
+
+export interface SearchSessionStartResult {
+  sessionId: string;
+  files: SearchSessionFileResult[];
+  totalMatchCount: number;
+  totalFileCount: number;
+  hasMoreFiles: boolean;
+  truncatedMatchFileCount: number;
+  skippedBinaryFileCount: number;
+  skippedLargeFileCount: number;
+}
+
+export interface SearchSessionFilePreview {
+  kind: "search-replace-file-diff";
+  path: string;
+  title?: string;
+  sessionId: string;
+  baseHash: string;
+  originalContent: string;
+  modifiedContent: string;
+}
+
+export type SearchSessionApplyScope =
+  | { kind: "all" }
+  | { kind: "file"; path: string }
+  | { kind: "match"; path: string; matchId: string };
+
+export interface SearchSessionApplyFileResult {
+  path: string;
+  status: "applied" | "conflict" | "skipped" | "not_found";
+  replacedMatchCount: number;
+}
+
+export interface SearchSessionApplyResult {
+  sessionId: string;
+  status: "ok" | "partial" | "stale_session";
+  appliedFileCount: number;
+  conflictFileCount: number;
+  skippedFileCount: number;
+  results: SearchSessionApplyFileResult[];
 }
 
 export interface Settings {

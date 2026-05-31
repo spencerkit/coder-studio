@@ -1,5 +1,5 @@
 import type { Workspace, WorkspaceLastViewedTarget } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { authEnabledAtom, connectionStatusAtom, dispatchCommandAtom } from "../atoms";
@@ -13,8 +13,14 @@ import {
   workspacesLoadErrorAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import {
+  hydrateWorkspaceEditorState,
+  normalizeWorkspaceEditorUiState,
+} from "../features/workspace/actions/open-editor-state";
+import { useTranslation } from "../lib/i18n";
 
 export function useBootstrap() {
+  const t = useTranslation();
   const bootstrapRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,6 +37,7 @@ export function useBootstrap() {
   const setWorkspaceOrder = useSetAtom(workspaceOrderAtom);
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
+  const store = useStore();
 
   useEffect(() => {
     if (authEnabled === null) {
@@ -97,14 +104,22 @@ export function useBootstrap() {
 
           if (!listResult.ok) {
             setWorkspacesLoadState("error");
-            setWorkspacesLoadError(listResult.error?.message ?? "Failed to fetch workspace list");
+            setWorkspacesLoadError(
+              listResult.error?.message ?? t("workspace.load_failed_description")
+            );
             return;
           }
 
-          const nextWorkspaces = Array.isArray(listResult.data) ? listResult.data : [];
+          const nextWorkspaces = (Array.isArray(listResult.data) ? listResult.data : []).map(
+            (workspace) => ({
+              ...workspace,
+              uiState: normalizeWorkspaceEditorUiState(workspace.uiState),
+            })
+          );
           const wsMap: Record<string, Workspace> = {};
           for (const workspace of nextWorkspaces) {
             wsMap[workspace.id] = workspace;
+            hydrateWorkspaceEditorState(store, workspace.id, workspace.uiState);
           }
 
           setWorkspaces(wsMap);
@@ -126,7 +141,7 @@ export function useBootstrap() {
           }
           setWorkspacesLoadState("error");
           setWorkspacesLoadError(
-            error instanceof Error ? error.message : "Failed to fetch workspace list"
+            error instanceof Error ? error.message : t("workspace.load_failed_description")
           );
         });
       return;
@@ -159,6 +174,8 @@ export function useBootstrap() {
     setLastViewedTarget,
     setWorkspacesLoadError,
     setWorkspacesLoadState,
+    store,
+    t,
     workspaces.length,
     workspacesLoadState,
   ]);

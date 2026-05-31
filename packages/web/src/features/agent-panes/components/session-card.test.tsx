@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { lastViewedTargetAtom, pendingFocusSessionAtom } from "../../../atoms/app-ui";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { lastViewedTargetAtom, localeAtom, pendingFocusSessionAtom } from "../../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../../atoms/connection";
 import { sessionsAtom } from "../../../atoms/sessions";
 import {
@@ -40,6 +40,7 @@ function createSessionStore(
   sendCommand = vi.fn().mockResolvedValue(undefined)
 ) {
   const store = createStore();
+  store.set(localeAtom, "en");
 
   store.set(wsClientAtom, {
     sendCommand,
@@ -82,8 +83,13 @@ function createSessionStore(
 
 describe("SessionCard", () => {
   beforeEach(() => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     vi.clearAllMocks();
     paneDragEnabledMock.value = true;
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
   });
 
   it("renders ended sessions with a read-only terminal host", () => {
@@ -523,7 +529,7 @@ describe("SessionCard", () => {
     expect(headerRow).not.toBeNull();
     expect(headerRow).toContainElement(screen.getByText("SESSION-56"));
     expect(headerRow).toContainElement(screen.getByText("Codex"));
-    expect(headerRow).toContainElement(screen.getByText("Idle"));
+    expect(headerRow).toContainElement(screen.getByText("Waiting for input"));
     expect(inlineMeta).not.toBeNull();
     expect(headerRow).toContainElement(inlineMeta as HTMLElement);
   });

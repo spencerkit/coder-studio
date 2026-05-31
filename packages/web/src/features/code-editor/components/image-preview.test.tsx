@@ -1,10 +1,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createStore, Provider } from "jotai";
+import type { PropsWithChildren, ReactElement } from "react";
 import { describe, expect, it } from "vitest";
+import { localeAtom } from "../../../atoms/app-ui";
 import { ImagePreview } from "./image-preview";
+
+function renderWithLocale(ui: ReactElement) {
+  const store = createStore();
+  store.set(localeAtom, "en");
+
+  function LocaleProvider({ children }: PropsWithChildren) {
+    return <Provider store={store}>{children}</Provider>;
+  }
+
+  return render(ui, { wrapper: LocaleProvider });
+}
 
 describe("ImagePreview", () => {
   it("preserves the migrated empty-state fallback when image loading fails", () => {
-    render(
+    renderWithLocale(
       <ImagePreview
         alt="Preview asset"
         mime="image/png"
@@ -22,7 +36,7 @@ describe("ImagePreview", () => {
   });
 
   it("resets the preview state when only the version changes", () => {
-    const { rerender } = render(
+    const { rerender } = renderWithLocale(
       <ImagePreview
         alt="Preview asset"
         mime="image/png"
@@ -53,7 +67,7 @@ describe("ImagePreview", () => {
   });
 
   it("appends the cache-busting version with ampersand when the url already has query params", () => {
-    render(
+    renderWithLocale(
       <ImagePreview
         alt="Preview asset"
         mime="image/png"

@@ -12,7 +12,8 @@ import {
 import { usePaneActions } from "../../agent-panes/actions/use-pane-actions";
 import { useSessionActions } from "../../agent-panes/actions/use-session-actions";
 import { useWorkspaceSessions } from "../../agent-panes/actions/use-workspace-sessions";
-import { collectSessionIds } from "../../agent-panes/pane-layout-tree";
+import { activeEditorPaneIdAtomFamily } from "../../agent-panes/atoms/editor-panes";
+import { collectSessionIds, paneLayoutHasEditorPaneId } from "../../agent-panes/pane-layout-tree";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
@@ -79,6 +80,7 @@ export function useWorkspaceScreenModel() {
   const workspaces = useAtomValue(orderedWorkspacesAtom);
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const activeEditorPaneId = useAtomValue(activeEditorPaneIdAtomFamily(workspaceId));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const focusMode = useAtomValue(focusModeAtom);
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
@@ -337,8 +339,18 @@ export function useWorkspaceScreenModel() {
     [setScreenState]
   );
 
-  const mainAreaMode: WorkspaceMainAreaMode =
-    activeFilePath || diffPreview?.source === "commit" ? "editor" : "agent";
+  const hasActiveEditorPaneTarget =
+    Boolean(activeFilePath) &&
+    Boolean(activeEditorPaneId) &&
+    paneLayoutHasEditorPaneId(paneLayout, activeEditorPaneId);
+
+  const mainAreaMode: WorkspaceMainAreaMode = hasActiveEditorPaneTarget
+    ? "agent"
+    : activeFilePath ||
+        diffPreview?.kind === "commit-file-list" ||
+        diffPreview?.kind === "commit-file-diff"
+      ? "editor"
+      : "agent";
 
   return {
     activeSession,

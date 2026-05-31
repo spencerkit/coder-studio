@@ -47,7 +47,10 @@ import {
 import { appearancePersonalizationAtom, authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
-import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
+import {
+  normalizePaneLayout,
+  paneLayoutAtomFamily,
+} from "../features/agent-panes/atoms/pane-layout";
 import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorsAtom } from "../features/supervisor/atoms";
@@ -70,6 +73,10 @@ import {
 } from "../features/terminal-panel/recovery-singleton";
 import { updateStateAtom } from "../features/updates/atoms";
 import {
+  hydrateWorkspaceEditorState,
+  normalizeWorkspaceEditorUiState,
+} from "../features/workspace/actions/open-editor-state";
+import {
   editorRefreshTokenAtomFamily,
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
@@ -80,7 +87,6 @@ import {
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
-import { useTranslation } from "../lib/i18n";
 import { getThemeById, resolveStoredThemeId } from "../theme";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
@@ -267,7 +273,6 @@ interface AppProvidersProps {
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
-  const t = useTranslation();
   const [, setWsClient] = useAtom(wsClientAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const authEnabled = useAtomValue(authEnabledAtom);
@@ -484,6 +489,17 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     void claim();
   }, [claim, connectionStatus, store]);
+
+  // Forward activation status transitions to the recovery coordinator so that
+  // any recovery deferred during the post-reconnect "no lease yet" window can
+  // resume once the client has re-claimed the activation lease. Without this
+  // the coordinator would either surface a spurious "terminal recovery check
+  // failed" notice or — after the activation-aware defer landed — stay stuck
+  // in loading because nothing else would re-trigger reconcile when the
+  // session is idle.
+  useEffect(() => {
+    getGlobalRecoveryCoordinator()?.handleActivationStatus(activationStatus);
+  }, [activationStatus]);
 
   // Initialize theme from localStorage
   useEffect(() => {
@@ -1262,18 +1278,27 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
         return;
       }
 
+      const normalizedPatch: Partial<Workspace> = patch.uiState
+        ? {
+            ...patch,
+            uiState: normalizeWorkspaceEditorUiState(patch.uiState),
+          }
+        : patch;
+
       store.set(workspacesAtom, (prev: Record<string, Workspace>) => ({
         ...prev,
         [workspaceId]: {
           ...prev[workspaceId],
-          ...patch,
+          ...normalizedPatch,
           id: workspaceId,
         } as Workspace,
       }));
-      const paneLayout = patch.uiState?.paneLayout;
-      if (paneLayout) {
-        store.set(paneLayoutAtomFamily(workspaceId), normalizePaneLayout(paneLayout));
+      const paneLayout = normalizedPatch.uiState?.paneLayout;
+      const normalizedPaneLayout = paneLayout ? normalizePaneLayout(paneLayout) : null;
+      if (normalizedPaneLayout) {
+        store.set(paneLayoutAtomFamily(workspaceId), normalizedPaneLayout);
       }
+      hydrateWorkspaceEditorState(store, workspaceId, normalizedPatch.uiState);
       store.set(workspaceOrderAtom, (prev: string[]) => {
         if (prev.includes(workspaceId)) {
           return prev;
@@ -1416,14 +1441,4 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
 
   // Unknown topic - log for debugging
   console.log(`Unhandled event topic: ${topic}`, payload);
-}
-
-function normalizePaneLayout(layout: Workspace["uiState"]["paneLayout"]): PaneNode {
-  return {
-    id: layout?.id ?? "root",
-    type: layout?.type ?? "leaf",
-    sessionId: layout?.sessionId,
-    direction: layout?.direction,
-    children: layout?.children?.map((child) => normalizePaneLayout(child)),
-  };
 }

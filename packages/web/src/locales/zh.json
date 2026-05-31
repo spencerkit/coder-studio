@@ -53,7 +53,8 @@
     "yes": "是",
     "no": "否",
     "ok": "确定",
-    "all": "全部"
+    "all": "全部",
+    "active": "当前"
   },
   "action": {
     "open": "打开",
@@ -82,7 +83,8 @@
     "back": "返回",
     "expand": "展开",
     "collapse": "收起",
-    "close_all": "全部关闭"
+    "close_all": "全部关闭",
+    "retry": "重试"
   },
   "label": {
     "workspace": "工作区",
@@ -97,6 +99,7 @@
     "progress": "进度"
   },
   "provider": {
+    "load_failed": "Provider 加载失败",
     "install": {
       "cta": {
         "start": "启动会话",
@@ -155,13 +158,17 @@
     "loading_description": "正在准备工作区列表并恢复上次活跃的会话。",
     "load_failed_title": "工作区加载失败",
     "load_failed_description": "获取工作区列表失败",
+    "resize_left_panel": "调整左侧面板大小",
+    "resize_bottom_panel": "调整底部面板大小",
     "sidebar": {
       "label": "工作区活动栏",
       "explorer": "资源管理器",
       "search": "搜索",
       "source_control": "源代码管理",
-      "open_editors": "打开的编辑器",
-      "workspace": "工作区"
+      "open_editors": "打开的文件",
+      "workspace": "工作区",
+      "workspace_expand_label": "展开工作区",
+      "workspace_collapse_label": "收起工作区"
     },
     "quick_jump": {
       "title": "快速跳转",
@@ -172,8 +179,9 @@
     "open_editors": {
       "title_with_count": "{title} ({count})",
       "close_path": "关闭 {path}",
-      "expand_label": "展开打开的编辑器",
-      "collapse_label": "收起打开的编辑器"
+      "close_all_unsaved_description": "{count} 个打开的文件有未保存的更改。关闭后这些更改将被放弃。",
+      "expand_label": "展开打开的文件",
+      "collapse_label": "收起打开的文件"
     },
     "search": {
       "empty": "输入关键词以搜索文件内容。",
@@ -183,13 +191,38 @@
       "truncated": "结果已截断，以保持搜索响应速度。",
       "file_match_count": "{count}{suffix} 条匹配",
       "failed": "搜索失败，请重试。",
-      "retry": "重试"
+      "retry": "重试",
+      "replace": "替换",
+      "replace_placeholder": "替换",
+      "replace_all": "全部替换",
+      "replace_in_file": "替换文件中全部",
+      "replace_match": "替换此项",
+      "toggle_replace": "切换替换",
+      "toggle_details": "切换搜索详情",
+      "match_case": "区分大小写",
+      "whole_word": "全字匹配",
+      "regex": "使用正则表达式",
+      "preserve_case": "保留大小写",
+      "files_to_include": "包含的文件",
+      "files_to_exclude": "排除的文件",
+      "only_open_editors": "仅在打开的文件中",
+      "use_ignore_files": "使用忽略文件",
+      "use_exclude_settings_and_ignore_files": "使用排除设置和忽略文件",
+      "preview": "预览",
+      "invalid_regex": "无效正则表达式。",
+      "skipped_files": "已跳过 {binary} 个二进制文件和 {large} 个大文件。"
     },
     "launch": {
       "kicker": "启动工作区",
-      "title": "打开工作区",
+      "title": "启动工作区",
       "home_directory": "主目录",
       "go_up": "返回上一级",
+      "new_folder": "新建文件夹",
+      "folder_name_label": "文件夹名称",
+      "new_folder_placeholder": "输入文件夹名称",
+      "create_folder": "创建文件夹",
+      "creating_folder": "创建中...",
+      "create_folder_cancel": "取消",
       "no_directories": "未找到目录",
       "items_count": "{count} 项",
       "enter_folder": "进入 {name}",
@@ -198,6 +231,9 @@
       "start": "启动工作区",
       "starting": "启动中...",
       "hint": "选择一个目录作为工作区根目录。",
+      "folder_name_required": "请输入文件夹名称",
+      "folder_name_invalid": "文件夹名称不能包含 / 或 \\\\",
+      "create_folder_failed": "创建文件夹失败",
       "browse_failed": "浏览目录失败",
       "select_required": "请选择一个目录",
       "open_failed": "打开工作区失败"
@@ -275,6 +311,7 @@
     "no_session": "无活跃会话",
     "provider_select": "选择 Agent",
     "state": {
+      "draft": "草稿",
       "starting": "启动中...",
       "running": "运行中",
       "idle": "等待指令",
@@ -289,6 +326,70 @@
       "waiting": "等待响应..."
     }
   },
+  "agent_panes": {
+    "open_in_editor": "在编辑器中打开",
+    "move_here": "移动到这里",
+    "swap": "交换",
+    "drag_pane": "拖动面板",
+    "split_horizontal": "水平分屏",
+    "split_vertical": "垂直分屏",
+    "close": "关闭",
+    "draft_panels": "草稿面板",
+    "agent_panel": "Agent",
+    "file_editor": "文件编辑器",
+    "drop_file_to_open": "拖入文件打开",
+    "draft_footer": "点击启动 Agent，或将文件拖到右侧区域直接打开。"
+  },
+  "shortcuts": {
+    "command_palette_toggle": {
+      "name": "命令面板",
+      "description": "打开或关闭命令面板"
+    },
+    "workspace_new": {
+      "name": "新建工作区",
+      "description": "打开新的工作区标签"
+    },
+    "workspace_previous": {
+      "name": "上一个工作区",
+      "description": "切换到上一个工作区标签"
+    },
+    "workspace_next": {
+      "name": "下一个工作区",
+      "description": "切换到下一个工作区标签"
+    },
+    "focus_mode_toggle": {
+      "name": "专注模式",
+      "description": "切换专注模式并隐藏非必要面板"
+    },
+    "agent_split_vertical": {
+      "name": "垂直分屏",
+      "description": "垂直分割 Agent 面板"
+    },
+    "session_navigate_left": {
+      "name": "切换到左侧会话",
+      "description": "将焦点切换到左侧会话"
+    },
+    "session_navigate_right": {
+      "name": "切换到右侧会话",
+      "description": "将焦点切换到右侧会话"
+    },
+    "session_navigate_up": {
+      "name": "切换到上方会话",
+      "description": "将焦点切换到上方会话"
+    },
+    "session_navigate_down": {
+      "name": "切换到下方会话",
+      "description": "将焦点切换到下方会话"
+    },
+    "agent_split_horizontal": {
+      "name": "水平分屏",
+      "description": "水平分割 Agent 面板"
+    },
+    "editor_save": {
+      "name": "保存",
+      "description": "保存当前编辑的文件"
+    }
+  },
   "terminal": {
     "title": "终端",
     "kicker": "TERMINAL",
@@ -298,7 +399,7 @@
     "agent": "Agent 终端",
     "reconnect_hint": "连接已断开，正在重连...",
     "no_terminal": "暂无终端",
-    "empty_hint": "启动一个 Shell 来查看文件、运行命令，并在不离开工作区的情况下验证更改。",
+    "empty_hint": "启动一个 Shell 来查看文件、运行命令。",
     "load_failed_title": "加载终端失败",
     "load_failed_body": "请刷新工作区连接后重试。",
     "create_failed_title": "创建终端失败",
@@ -336,6 +437,19 @@
       "left": "左方向键",
       "right": "右方向键"
     },
+    "upload": {
+      "upload_failed": "上传失败",
+      "upload_failed_body": "无法上传文件：{code}",
+      "uploading": "上传中...",
+      "drop_failed": "拖放失败",
+      "drop_read_failed": "无法读取拖入的工作区路径。",
+      "drop_workspace_mismatch": "只能拖入当前工作区中的路径。",
+      "drop_insert_failed": "无法将拖入路径插入终端。",
+      "paste": "粘贴",
+      "clipboard_empty": "剪贴板为空",
+      "paste_failed": "粘贴失败",
+      "paste_permission_failed": "无法读取剪贴板，请检查权限。"
+    },
     "replay": {
       "queued_title": "等待队列中（前方还有 {count} 个）",
       "up_next": "即将开始…",
@@ -367,8 +481,11 @@
     "visible_count": "{count} 个文件",
     "empty_directory": "空文件夹",
     "new_file": "新建文件",
+    "new_file_short": "+文件",
     "new_folder": "新建文件夹",
+    "new_folder_short": "+目录",
     "collapse_all": "折叠全部",
+    "collapse_all_short": "收起",
     "rename": "重命名",
     "rename_name": "名称",
     "rename_helper": "当前版本仅支持在同级目录内重命名。",
@@ -407,8 +524,28 @@
     "mode_preview": "预览",
     "mode_edit": "编辑",
     "mode_diff": "Diff",
+    "toolbar_actions": "编辑器操作",
+    "image_load_failed_body": "图片无法加载。文件可能已被移动，或大小超出浏览器限制。",
+    "image_diff_base": "基准",
+    "image_diff_current": "当前",
+    "image_diff_no_base": "没有基准图片",
+    "image_diff_no_current": "没有当前图片",
+    "lsp_disabled_title": "语言服务已关闭",
+    "lsp_disabled_message": "已在设置中关闭 LSP，以降低内存占用。",
+    "lsp_installing_step": "正在安装：{title}",
+    "lsp_install_failed_step": "安装失败于：{title}",
+    "lsp_install": "安装",
+    "lsp_unavailable": "{name} 不可用",
+    "lsp_install_in_progress": "安装进行中",
+    "lsp_install_failed": "安装失败",
     "diff_saved_only": "Diff 仅基于已保存到磁盘的文件内容。",
+    "unsaved_changes": "未保存的更改",
+    "close_unsaved_title": "放弃未保存的更改？",
+    "close_unsaved_description": "{name} 有未保存的更改。关闭后这些编辑将被放弃。",
+    "discard_and_close": "放弃并关闭",
     "open_failed_title": "打开文件失败",
+    "save_failed_title": "保存文件失败",
+    "text_backed_image_load_failed": "加载图片文本内容失败",
     "empty_hint": "从左侧选择一个文件以在编辑器中打开。",
     "modified_on_disk": "该文件在打开后已被磁盘上的其他操作修改。请谨慎保存或重新加载文件。",
     "deleted_on_disk": "该文件在打开后已被磁盘上的其他操作删除。"
@@ -423,6 +560,8 @@
     "untracked": "未跟踪",
     "no_changes": "无更改",
     "commit": "提交",
+    "commit_expand_label": "展开提交",
+    "commit_collapse_label": "收起提交",
     "commit_message": "提交信息",
     "commit_placeholder": "输入提交信息...",
     "commit_summary_placeholder": "输入提交信息...",
@@ -499,7 +638,11 @@
       "empty_filtered": "未找到分支",
       "empty_idle": "输入以搜索分支",
       "in_use": "占用中",
+      "hint_navigate": "导航",
+      "hint_select": "选择",
+      "hint_close": "关闭",
       "worktree_in_use": "已在其他工作区中签出",
+      "load_failed": "加载分支失败",
       "checkout_failed_title": "切换分支失败",
       "checkout_failed_body": "无法切换到 {name}。",
       "create_failed_title": "创建分支失败",
@@ -513,7 +656,9 @@
       "changes": "未提交的文件变更",
       "ahead": "待推送的本地提交",
       "behind": "远端有新提交待拉取"
-    }
+    },
+    "diff_select_title": "选择一个已更改文件查看",
+    "diff_empty_body": "从左侧选择暂存或已修改文件查看 diff。"
   },
   "worktree": {
     "title": "工作树",
@@ -535,6 +680,7 @@
     "list_empty": "暂无工作树",
     "list_open_label": "查看工作树",
     "list_error": "加载失败：{error}",
+    "list_load_failed": "加载工作树失败",
     "manage": "管理",
     "new": "新建",
     "current": "当前",
@@ -543,17 +689,24 @@
     "summary_current": "当前：{name}",
     "summary_no_current": "当前：不可用",
     "create_title": "新建工作树",
+    "create_branch_placeholder": "feature/worktree-manager",
+    "create_path_placeholder": "/path/to/coder-studio-feature-worktree-manager",
     "create_submit": "创建",
     "create_path_hint": "路径必须是绝对路径。默认建议路径会基于当前工作区路径生成。",
     "create_path_absolute_required": "路径必须是绝对路径。",
     "create_failed_title": "创建工作树失败",
+    "create_failed_body": "无法创建工作树。",
     "create_success_title": "工作树已创建",
     "create_success_body": "{name} 已可用。",
     "remove_confirm": "确认删除这个工作树？",
     "remove_force_confirm": "强制删除有更改的工作树？",
     "remove_failed_title": "删除工作树失败",
+    "remove_failed_body": "无法删除工作树。",
     "remove_success_title": "工作树已删除",
     "remove_success_body": "工作树已删除。",
+    "open_failed_title": "打开工作树失败",
+    "open_failed_body": "无法打开所选工作树。",
+    "detail_load_failed": "加载工作树数据失败。",
     "force_remove": "强制删除",
     "remove_row_label": "删除 {name}",
     "selection_removed": "所选工作树已不可用。"
@@ -643,6 +796,14 @@
     "permission_request": "请求授权",
     "permission_unavailable": "不可用",
     "permission_limited_hint": "当前移动端浏览器内即使允许通知权限，也可能无法稳定展示系统通知。",
+    "monitoring": {
+      "group": "性能监控",
+      "description": "控制是否启用运行时采样，以及采样深度。",
+      "enable_monitoring": "启用性能监控",
+      "enable_monitoring_hint": "默认关闭采样，避免后台开销。",
+      "disabled_title": "监控已关闭",
+      "disabled_settings_hint": "开启监控后才会采集主机和运行时数据。"
+    },
     "supervisor": {
       "title": "Supervisor",
       "hint": "配置 Supervisor 评估超时和全局重试策略。重试规则对所有 Supervisor 生效。",
@@ -739,6 +900,12 @@
       "family_graphite": "Graphite",
       "family_nord": "Nord",
       "family_hc": "高对比",
+      "family_spring": "春",
+      "family_summer": "夏",
+      "family_autumn": "秋",
+      "family_winter": "冬",
+      "group_core": "基础主题",
+      "group_seasonal": "四季主题",
       "mint_dark": "Mint 深色",
       "mint_light": "Mint 浅色",
       "graphite_dark": "Graphite 深色",
@@ -747,6 +914,14 @@
       "nord_light": "Nord 浅色",
       "hc_dark": "高对比深色",
       "hc_light": "高对比浅色",
+      "spring_light": "春·浅色",
+      "spring_dark": "春·深色",
+      "summer_light": "夏·浅色",
+      "summer_dark": "夏·深色",
+      "autumn_light": "秋·浅色",
+      "autumn_dark": "秋·深色",
+      "winter_light": "冬·浅色",
+      "winter_dark": "冬·深色",
       "variant_dark": "深色",
       "variant_light": "浅色"
     },
@@ -768,7 +943,12 @@
       "hint": "查看并调整常用键盘操作",
       "reset_all": "重置全部",
       "capture_hint": "按下新的快捷键组合",
-      "reset_hint": "重置为默认"
+      "capture_placeholder": "按下快捷键...",
+      "reset_hint": "重置为默认",
+      "category_global": "全局",
+      "category_workspace": "工作区",
+      "category_editor": "编辑器",
+      "category_terminal": "终端"
     },
     "config_files": {
       "title": "配置文件",
@@ -787,16 +967,140 @@
       "collapse": "折叠",
       "format": "格式化",
       "format_hint": "格式化 JSON 代码",
-      "file_not_found_hint": "编辑并保存以创建配置文件。"
+      "file_not_found_hint": "编辑并保存以创建配置文件。",
+      "json_formatted": "JSON 已格式化",
+      "invalid_json": "无效 JSON",
+      "invalid_json_format_body": "无法格式化无效 JSON"
     },
     "permission_denied_hint": "浏览器或系统通知权限可能已阻止，请检查站点设置和设备通知设置",
     "permission_unavailable_hint": "当前环境无法请求浏览器通知权限"
+  },
+  "monitoring": {
+    "title": "性能监控",
+    "command_label": "监控",
+    "command_description": "打开性能监控页面",
+    "group": "性能监控",
+    "description": "控制是否启用运行时采样，以及采样深度。",
+    "enable_monitoring": "启用性能监控",
+    "enable_monitoring_hint": "默认关闭采样，避免后台开销。",
+    "disabled_title": "监控已关闭",
+    "disabled_description": "当前没有后台采样任务。请先在设置中启用监控，再使用此页面。",
+    "disabled_settings_hint": "开启监控后才会采集主机和运行时数据。",
+    "open_settings": "打开设置",
+    "open_monitoring": "打开监控",
+    "loading": "正在加载监控快照...",
+    "load_failed": "监控加载失败",
+    "refresh_failed": "刷新监控失败",
+    "last_updated": "最后更新",
+    "signal_summary_enabled": "当前工作区运行时的采样已启用。",
+    "signal_summary_disabled": "采样当前关闭。启用监控后才能查看更深层的信号。",
+    "host_overview": "主机概览",
+    "mode_disabled": "已关闭",
+    "mode_light": "轻量",
+    "mode_standard": "标准",
+    "mode_deep": "深度",
+    "mode_custom": "自定义",
+    "pressure_normal": "正常",
+    "pressure_elevated": "偏高",
+    "pressure_hot": "过热",
+    "pressure_unknown": "未知",
+    "runtime_summary_title": "Coder Studio 占用",
+    "runtime_summary_disabled": "运行时概览已关闭",
+    "enable_runtime_summary": "在设置中启用运行时概览",
+    "runtime_summary_pending": "正在等待首个进程样本",
+    "runtime_summary_pending_description": "正在等待首个进程样本。",
+    "process_collection_degraded": "进程指标不可用",
+    "process_collection_unavailable": "进程采集暂时不可用。",
+    "attribution_tree": "归因树",
+    "attribution_disabled": "归因已关闭",
+    "enable_attribution": "在设置中启用工作区与会话归因",
+    "attribution_empty": "当前没有活跃归因负载",
+    "attribution_empty_description": "当前没有工作区或会话产生可观测负载。",
+    "subprocess_disabled": "子进程钻取已关闭",
+    "enable_subprocess": "在设置中启用子进程钻取",
+    "subprocess_empty": "当前没有活跃子进程",
+    "subprocess_empty_description": "当前没有子进程产生可观测负载。",
+    "detail_panel": "详情面板",
+    "select_entity": "选择一个工作区、会话或进程以查看详情。",
+    "entity_kind_workspace": "工作区汇总",
+    "entity_kind_session": "会话",
+    "entity_kind_subprocess": "子进程",
+    "entity_kind_background": "后台任务",
+    "cpu": "CPU",
+    "memory": "内存",
+    "available_memory": "可用内存",
+    "host_pressure": "主机压力",
+    "load_average": "负载均值",
+    "uptime": "运行时长",
+    "server_cpu": "服务 CPU",
+    "server_memory": "服务内存",
+    "managed_cpu": "托管 CPU",
+    "managed_memory": "托管内存",
+    "process_count": "进程数",
+    "sort_by": "排序方式",
+    "time_window": "时间窗口",
+    "refresh_rate": "刷新频率",
+    "preset": "预设",
+    "host_metrics": "主机指标",
+    "host_metrics_hint": "采集机器级 CPU、内存、负载均值和运行时长。",
+    "runtime_summary_setting": "运行时概览",
+    "runtime_summary_hint": "采集 Coder Studio 服务及托管进程的总量数据。",
+    "runtime_summary_dependency": "归因和子进程钻取依赖此项。",
+    "workspace_attribution": "工作区与会话归因",
+    "workspace_attribution_hint": "将运行时负载归因回工作区和会话。",
+    "subprocess_drilldown": "子进程钻取",
+    "subprocess_drilldown_hint": "显示子进程级别的归因和可执行路径。",
+    "stage_label": "监控数据主舞台",
+    "stage_eyebrow": "实时遥测",
+    "stage_title": "先查看当前系统负载",
+    "stage_summary": "先看主机、运行时、归因和进程信号，再决定是否调整采样深度。",
+    "hero_summary": "先看主机、运行时、归因和子进程压力，再决定是否调整采样深度或采样节奏。",
+    "toolbar_summary": "在同一条控制带里调整采样深度、刷新频率和手动复查。",
+    "toolbar_action_label": "手动复查",
+    "status_card": "采集健康度",
+    "health_chip": "采样健康",
+    "status_stable": "稳定",
+    "status_attention": "需要关注",
+    "kpi_group": "监控关键指标",
+    "kpi_host_load": "主机负载",
+    "kpi_host_load_meta": "当前机器 CPU 压力概览。",
+    "kpi_runtime_label": "运行时占用",
+    "kpi_runtime_meta": "当前归属于 Coder Studio 的运行时内存占用。",
+    "kpi_active_entities": "活跃实体",
+    "kpi_disabled_meta": "启用监控后才会填充运行时与归因数据。",
+    "kpi_uptime": "主机运行时长",
+    "kpi_managed_cpu_share": "托管 CPU 占比",
+    "kpi_managed_process_suffix": "个托管进程",
+    "kpi_managed_share_idle": "当前没有高压工作负载。",
+    "kpi_conclusion": "监控结论",
+    "kpi_conclusion_meta": "建议保持标准档位，仅在定位问题时切换更深层采样。",
+    "host_overview_description": "查看所选时间窗口内的机器级 CPU、内存余量和历史压力走势。",
+    "runtime_summary_description": "查看同一采样窗口下 Coder Studio 服务占用与托管运行时活动。",
+    "attribution_description": "优先查看负载最高的工作区和会话，再深入明细。",
+    "subprocess_description": "查看长任务、Shell 与代理工作负载对应的子进程分组。",
+    "dock_label": "监控设置侧栏",
+    "dock_eyebrow": "采集控制",
+    "dock_title": "采样配置",
+    "dock_summary_enabled": "监控正在采集数据，可在这里调整深度、归因和钻取级别。",
+    "dock_summary_disabled": "监控当前关闭，请先在这里启用采样，再查看实时运行时信号。",
+    "toggle_settings": "切换监控设置",
+    "open_configuration": "打开监控配置",
+    "mobile_entry_summary": "监控已在采集数据。只有需要调整采样深度或归因时，才需要打开配置。",
+    "show_advanced_settings": "显示高级监控设置",
+    "show_advanced_capabilities": "显示高级采样能力",
+    "hide_advanced_capabilities": "隐藏高级采样能力",
+    "advanced_capabilities_hint": "只有需要更深层归因或子进程钻取时，才展开高级能力开关。",
+    "mobile_section": "监控分区",
+    "mobile_overview": "概览",
+    "mobile_attribution": "归因",
+    "mobile_process": "进程"
   },
   "auth": {
     "description": "输入密码后继续进入当前工作区。",
     "hint": "请输入当前部署配置的访问密码。",
     "blocked_until": "尝试次数过多，请于 {time} 后再试，或联系管理员解禁。",
     "blocked_generic": "尝试次数过多，请稍后再试，或联系管理员解禁。",
+    "login_failed": "登录失败",
     "status_title": "访问验证",
     "status_loading": "正在检查当前部署的访问状态。",
     "status_unavailable": "暂时无法连接鉴权服务，请稍后重试。",
@@ -813,9 +1117,17 @@
     "reconnecting": "正在重新连接...",
     "reconnect_failed": "重连失败",
     "another_tab": "另一个标签页已激活",
+    "another_tab_activated": "另一个标签页已激活",
     "takeover": "接管控制权",
     "server_shutdown": "服务器已关闭",
-    "backpressure_warning": "网络拥堵，部分输出可能丢失"
+    "backpressure_warning": "网络拥堵，部分输出可能丢失",
+    "reconnecting_banner": "连接已断开，正在重新连接...",
+    "slow_recovery_hint": "连接恢复较慢，可能是网络问题。如果长时间没有恢复，可以刷新页面。",
+    "slow_recovery_hint_mobile": "连接恢复较慢，长时间未恢复可刷新页面。"
+  },
+  "shell": {
+    "loading_title": "正在连接工作区...",
+    "loading_description": "正在同步认证与连接状态，随后会自动进入当前工作区。"
   },
   "supervisor": {
     "title": "Supervisor",
@@ -955,6 +1267,8 @@
   "command": {
     "palette": "命令面板",
     "no_results": "未找到结果",
+    "quick_actions": "快速操作",
+    "actions_count": "{count} 个操作",
     "shortcut": {
       "save": "保存",
       "save_all": "保存全部",
@@ -1135,6 +1449,55 @@
       }
     }
   },
+  "system_deps": {
+    "install": {
+      "install_git": "安装 Git",
+      "install_node": "安装 Node.js",
+      "package_manager": "包管理器",
+      "current_step": "当前步骤",
+      "failure_reason": "失败原因",
+      "failure_details": "详情",
+      "password_label": "管理员密码",
+      "submit_password": "提交密码",
+      "submit_input": "提交",
+      "cancel": "取消安装",
+      "failure": {
+        "unsupported_platform": "当前平台不支持",
+        "unsupported_package_manager": "当前包管理器不支持",
+        "permission_denied": "权限不足",
+        "user_cancelled": "安装已取消",
+        "pty_disconnected": "安装会话已断开",
+        "command_not_found": "命令不存在",
+        "command_failed": "安装命令执行失败",
+        "verification_failed": "验证失败",
+        "unknown_failure": "未知错误"
+      },
+      "step": {
+        "install": {
+          "git": "安装 Git",
+          "node": "安装 Node.js"
+        },
+        "verify": {
+          "git": "验证 Git",
+          "node": "验证 Node.js"
+        }
+      },
+      "status": {
+        "queued": "等待中",
+        "running": "安装中",
+        "waiting_input": "等待输入密码",
+        "succeeded": "安装完成",
+        "failed": "安装失败",
+        "cancelled": "安装已取消"
+      },
+      "git": {
+        "manual": "如果当前机器不支持自动安装，请手动安装 Git。"
+      },
+      "node": {
+        "manual": "如果当前机器不支持自动安装，请手动安装 Node.js。"
+      }
+    }
+  },
   "not_found": {
     "kicker": "路由不存在",
     "title": "页面不存在",
@@ -1178,6 +1541,7 @@
   "fencing": {
     "observer_mode": "只读模式 — 另一个标签页正在控制",
     "takeover": "接管控制",
+    "taking_over": "接管中...",
     "takeover_failed": "接管失败 — 控制器仍然活跃"
   }
 }
