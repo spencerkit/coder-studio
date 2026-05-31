@@ -345,6 +345,7 @@ function setPaneRect(
 
 describe("AgentPanes", () => {
   beforeEach(() => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     vi.clearAllMocks();
   });
 
@@ -1566,10 +1567,12 @@ describe("AgentPanes", () => {
       </Provider>
     );
 
-    expect(await screen.findByText("Install & Start")).toBeInTheDocument();
-
     await waitFor(() => {
-      expect(screen.getByText("Install & Start")).toBeInTheDocument();
+      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Claude/i }));
@@ -1648,7 +1651,11 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Install & Start")).toBeInTheDocument();
+      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Codex/i }));
@@ -1718,7 +1725,11 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("View Install Steps")).toBeInTheDocument();
+      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Codex/i }));

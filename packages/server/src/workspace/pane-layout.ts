@@ -30,7 +30,7 @@ function closePaneBySessionId(node: WorkspacePaneNode, sessionId: string): Works
 
 function replaceSessionWithDraft(node: WorkspacePaneNode, sessionId: string): WorkspacePaneNode {
   if (node.type === "leaf") {
-    if (node.sessionId === sessionId) {
+    if ("sessionId" in node && node.sessionId === sessionId) {
       return createDraftLeaf(node.id, isLegacyLeaf(node));
     }
     return node;
@@ -62,7 +62,7 @@ function removePaneBySessionId(node: WorkspacePaneNode, sessionId: string): Work
 
 function removeSessionPane(node: WorkspacePaneNode, sessionId: string): WorkspacePaneNode | null {
   if (node.type === "leaf") {
-    if (node.sessionId === sessionId) {
+    if ("sessionId" in node && node.sessionId === sessionId) {
       return null;
     }
     return node;

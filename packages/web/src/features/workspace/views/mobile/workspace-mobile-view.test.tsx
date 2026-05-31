@@ -36,6 +36,8 @@ vi.hoisted(() => {
   });
 });
 
+let currentStore: ReturnType<typeof createStore> | null = null;
+
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string, params?: Record<string, string>) => {
     const translations: Record<string, string> = {
@@ -128,28 +130,85 @@ vi.mock("../../actions/use-workspace-ui-state-persistence", () => ({
 }));
 
 vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
-  CodeEditorHeaderActions: () => null,
+  CodeEditorHeaderActions: ({
+    state,
+    variant = "full",
+  }: {
+    state: {
+      activeDiffChange?: GitDiffPreview | null;
+      activeFilePath?: string | null;
+      handleClose: () => Promise<void> | void;
+    };
+    variant?: "full" | "mobile";
+  }) =>
+    variant === "mobile" && (state.activeFilePath || state.activeDiffChange) ? (
+      <div className="mobile-sheet__header-actions">
+        <button
+          type="button"
+          className="mobile-sheet__action"
+          onClick={() => void state.handleClose()}
+          aria-label="Close"
+        >
+          Close
+        </button>
+      </div>
+    ) : null,
   CodeEditorHost: () => null,
 }));
 
 vi.mock("../../../code-editor/actions/use-code-editor-actions", () => ({
-  useCodeEditorActions: () => ({
-    activeFilePath: null,
-    activeDiffChange: null,
-    canDiff: false,
-    canEdit: false,
-    canPreview: false,
-    canSave: false,
-    handleClose: vi.fn(),
-    handleSave: vi.fn(),
-    isImageFile: false,
-    isSaving: false,
-    isSvgTextBacked: false,
-    mode: "edit",
-    openInDiffMode: vi.fn(),
-    setMode: vi.fn(),
-    toggleSvgTextMode: vi.fn(),
-  }),
+  useCodeEditorActions: () => {
+    const store = currentStore;
+    const activeFilePath = store?.get(activeFilePathAtomFamily("ws-test")) ?? null;
+    const diffPreview = store?.get(gitDiffPreviewAtomFamily("ws-test")) ?? null;
+    const activeDiffChange =
+      diffPreview &&
+      (((diffPreview.kind === "worktree-file-diff" ||
+        diffPreview.kind === "search-replace-file-diff") &&
+        diffPreview.path === activeFilePath) ||
+        diffPreview.kind === "commit-file-list" ||
+        diffPreview.kind === "commit-file-diff")
+        ? diffPreview
+        : null;
+
+    return {
+      activeFilePath,
+      activeDiffChange,
+      canDiff: false,
+      canEdit: false,
+      canPreview: false,
+      canSave: false,
+      handleClose: async () => {
+        if (!store) {
+          return;
+        }
+
+        const currentDiffPreview = store.get(gitDiffPreviewAtomFamily("ws-test"));
+        if (currentDiffPreview?.kind === "commit-file-diff") {
+          store.set(gitDiffPreviewAtomFamily("ws-test"), currentDiffPreview.parentList);
+          return;
+        }
+
+        if (currentDiffPreview?.kind === "commit-file-list") {
+          store.set(gitDiffPreviewAtomFamily("ws-test"), null);
+          return;
+        }
+
+        const currentActiveFilePath = store.get(activeFilePathAtomFamily("ws-test"));
+        if (currentActiveFilePath) {
+          store.set(activeFilePathAtomFamily("ws-test"), null);
+        }
+      },
+      handleSave: vi.fn(),
+      isImageFile: false,
+      isSaving: false,
+      isSvgTextBacked: false,
+      mode: "edit",
+      openInDiffMode: vi.fn(),
+      setMode: vi.fn(),
+      toggleSvgTextMode: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("./mobile-agent-sheet", () => ({
@@ -251,6 +310,7 @@ function renderMobileView(options: {
   diffPreview?: GitDiffPreview | null;
 }) {
   const store = createStore();
+  currentStore = store;
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, { sendCommand: createSendCommandMock() } as never);
   seedReadyWorkspaceState(store, {
@@ -287,6 +347,7 @@ function renderMobileView(options: {
 
 describe("WorkspaceMobileView", () => {
   afterEach(() => {
+    currentStore = null;
     vi.restoreAllMocks();
   });
 

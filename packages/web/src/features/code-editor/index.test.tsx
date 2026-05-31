@@ -296,10 +296,15 @@ describe("CodeEditorHost", () => {
       baseHash: string;
       encoding: "utf-8";
     }>();
-    const sendCommand = vi
-      .fn()
-      .mockImplementationOnce(() => firstRead.promise)
-      .mockImplementationOnce(() => secondRead.promise);
+    let fileReadCount = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "file.read") {
+        fileReadCount += 1;
+        return fileReadCount === 1 ? firstRead.promise : secondRead.promise;
+      }
+
+      return null;
+    });
     const { store } = setupStore({ activePath: "src/foo.ts", sendCommand });
 
     render(
@@ -328,15 +333,16 @@ describe("CodeEditorHost", () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenNthCalledWith(
-        2,
+      const fileReadCalls = sendCommand.mock.calls.filter(([op]) => op === "file.read");
+      expect(fileReadCalls).toHaveLength(2);
+      expect(fileReadCalls[1]).toEqual([
         "file.read",
         {
           workspaceId: "ws-1",
           path: "src/foo.ts",
         },
-        undefined
-      );
+        undefined,
+      ]);
     });
 
     await act(async () => {

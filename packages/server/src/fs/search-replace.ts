@@ -609,9 +609,9 @@ function globToRegExp(pattern: string) {
   let source = "^";
 
   for (let index = 0; index < pattern.length; index += 1) {
-    const char = pattern[index];
-    const next = pattern[index + 1];
-    const nextNext = pattern[index + 2];
+    const char = pattern.charAt(index);
+    const next = pattern.charAt(index + 1);
+    const nextNext = pattern.charAt(index + 2);
 
     if (char === "*" && next === "*" && nextNext === "/") {
       source += "(?:.*/)?";

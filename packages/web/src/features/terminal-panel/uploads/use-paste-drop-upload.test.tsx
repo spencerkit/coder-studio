@@ -97,6 +97,7 @@ describe("usePasteDropUpload", () => {
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     sendInput = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal(
       "fetch",
@@ -113,6 +114,7 @@ describe("usePasteDropUpload", () => {
 
   afterEach(() => {
     container.remove();
+    window.localStorage.clear();
     vi.unstubAllGlobals();
   });
 

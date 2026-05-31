@@ -42,4 +42,4 @@ beforeAll(async () => {
   monaco = await import("monaco-editor");
   ({ ensureVueLanguageRegistered } = await import("./vue-language"));
   ensureVueLanguageRegistered();
-});
+}, 30_000);

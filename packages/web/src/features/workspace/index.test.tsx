@@ -282,9 +282,10 @@ describe("WorkspacePage", () => {
       screen.getByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
     ).toBeInTheDocument();
     expect(sourceControlButton).toHaveAttribute("aria-pressed", "true");
-    expect(
-      await screen.findByPlaceholderText("Search branches or create new branch...")
-    ).toBeInTheDocument();
+    const branchSearchInput = await screen.findByPlaceholderText(
+      /Search branches or create new branch\.\.\.|搜索分支或创建新分支\.\.\./
+    );
+    expect(branchSearchInput).toBeInTheDocument();
     expect(store.get(branchQuickPickAtom)).toEqual({
       visible: true,
       workspaceId: "ws-test",
@@ -2049,7 +2050,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
 
-    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
     const leftPanel = container.querySelector(".left-panel");
 
     expect(leftPanel).not.toBeNull();
@@ -2116,7 +2119,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
 
-    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
 
     expect(document.body).not.toHaveClass("is-resizing-panels");
 
@@ -2176,7 +2181,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("file-tree-panel");
 
-    const leftSeparator = screen.getByRole("separator", { name: "Resize left panel" });
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
     const leftPanel = container.querySelector(".left-panel");
 
     expect(leftPanel).not.toBeNull();
@@ -2240,7 +2247,9 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("terminal-panel");
 
-    const bottomSeparator = screen.getByRole("separator", { name: "Resize bottom panel" });
+    const bottomSeparator = screen.getByRole("separator", {
+      name: /Resize bottom panel|调整底部面板大小/,
+    });
     const bottomPanel = container.querySelector(".workspace-bottom-panel");
 
     expect(bottomPanel).not.toBeNull();

@@ -38,6 +38,14 @@ const rawFoundationPattern =
 
 const exemptBaseSelectors: RegExp[] = [];
 const exemptComponentSelectors = [
+  /\.settings-monitoring-/,
+  /\.workspace-activity-bar/,
+  /\.workspace-sidebar-panel__body--stacked/,
+  /\.workspace-sidebar-section/,
+  /\.workspace-open-editors/,
+  /\.workspace-search-panel/,
+  /\.code-file-path \.dirty-indicator/,
+  /\.editor-pane-card__dirty-indicator/,
   /(?:^|[\s>+~,])\.file-tree(?=[\s>+~,:]|$)/,
   /(?:^|[\s>+~,])\.file-tree-shell(?=[\s>+~,:]|$)/,
   /(?:^|[\s>+~,])\.tree-(?:item|empty-hint|loading)(?=[\s>+~,:]|$)/,

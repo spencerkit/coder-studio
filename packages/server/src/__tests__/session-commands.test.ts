@@ -428,6 +428,67 @@ describe("Session Commands", () => {
       });
     });
 
+    it("preserves non-session leaf kinds when removing a typed session pane", async () => {
+      const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-typed-"));
+      tempDirs.push(workspacePath);
+      const workspace = await workspaceMgr.open({ path: workspacePath });
+      workspaceMgr.updateUiState(workspace.id, {
+        ...workspace.uiState,
+        paneLayout: {
+          id: "root",
+          type: "split",
+          direction: "horizontal",
+          children: [
+            { id: "left", type: "leaf", leafKind: "draft" },
+            { id: "center", type: "leaf", leafKind: "session", sessionId: "sess-typed" },
+            { id: "right", type: "leaf", leafKind: "editor" },
+          ],
+        },
+      });
+
+      const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
+      vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
+        sessionId === "sess-typed"
+          ? ({
+              id: "sess-typed",
+              workspaceId: workspace.id,
+              terminalId: "term-typed",
+              providerId: "codex",
+              capability: "full",
+              state: "ended",
+              startedAt: 1,
+              lastActiveAt: 1,
+              endedAt: 2,
+            } as const)
+          : undefined
+      );
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "test-id-close-typed",
+          op: "session.close",
+          args: {
+            sessionId: "sess-typed",
+            paneDisposition: "remove",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(deleteSpy).toHaveBeenCalledWith("sess-typed");
+      expect(workspaceMgr.get(workspace.id)?.uiState.paneLayout).toEqual({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        children: [
+          { id: "left", type: "leaf", leafKind: "draft" },
+          { id: "right", type: "leaf", leafKind: "editor" },
+        ],
+      });
+    });
+
     it("keeps the pane as a draft leaf for desktop disposition", async () => {
       const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-desktop-"));
       tempDirs.push(workspacePath);

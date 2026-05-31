@@ -447,7 +447,20 @@ describe("DesktopShell auth gating", () => {
   it("redirects / to /workspace after auth resolves and workspace.list is non-empty", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "workspace.list") {
-        return [{ id: "ws-1", path: "/tmp/ws-1", targetRuntime: "native" }];
+        return [
+          {
+            id: "ws-1",
+            path: "/tmp/ws-1",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
       }
       return [];
     });
@@ -455,6 +468,7 @@ describe("DesktopShell auth gating", () => {
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
     store.set(authenticatedAtom, true);
+    store.set(localeAtom, "en");
     store.set(workspacesAtom, {});
     store.set(workspaceOrderAtom, []);
     store.set(workspacesLoadStateAtom, "idle");

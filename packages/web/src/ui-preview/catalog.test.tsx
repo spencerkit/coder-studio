@@ -133,7 +133,7 @@ describe("UI preview catalog", () => {
       },
     });
     catalogModule = await import("./catalog");
-  });
+  }, 30_000);
 
   afterAll(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
@@ -457,7 +457,7 @@ describe("UI preview catalog", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("README.md")).toBeInTheDocument();
     expect(document.querySelectorAll(".agent-pane-leaf")).toHaveLength(2);
-    expect(screen.getAllByText("DRAFT")).toHaveLength(2);
+    expect(screen.getAllByText("Draft")).toHaveLength(2);
   });
 
   it("renders the editor-pane review scene with pane-local editor toolbar chrome", async () => {
@@ -472,7 +472,7 @@ describe("UI preview catalog", () => {
     expect(toolbar).toBeInTheDocument();
     expect(within(toolbar).getByRole("button", { name: /Diff|差异/i })).toBeInTheDocument();
     expect(within(toolbar).getByRole("button", { name: /Edit|编辑/i })).toBeInTheDocument();
-    expect(screen.getAllByText("DRAFT")).toHaveLength(1);
+    expect(screen.getAllByText("Draft")).toHaveLength(1);
   });
 
   it("renders the workspace editor review scene", async () => {

@@ -17,7 +17,7 @@
  * but semantic features will not return until the bridge is in place.
  */
 
-import path, { dirname } from "node:path";
+import path from "node:path";
 import type { LspCompanionSpec, LspServerSpec } from "./server-factory.js";
 
 export type VueBridgeMode = "auto" | "off";
@@ -64,9 +64,10 @@ export function inferVueLanguageServerLocation(vueExecutablePath: string): strin
     return null;
   }
 
-  const binDir = dirname(vueExecutablePath); // <root>/node_modules/.bin
-  const nodeModulesDir = dirname(binDir); // <root>/node_modules
-  return joinPathOnPlatform(nodeModulesDir, "@vue", "language-server");
+  const pathApi = getPathApi(vueExecutablePath);
+  const binDir = pathApi.dirname(vueExecutablePath); // <root>/node_modules/.bin
+  const nodeModulesDir = pathApi.dirname(binDir); // <root>/node_modules
+  return pathApi.join(nodeModulesDir, "@vue", "language-server");
 }
 
 export function buildVueSpecParts(inputs: VueSpecInputs): VueSpecParts {
@@ -118,18 +119,20 @@ export function parseVueBridgeMode(value: string | undefined): VueBridgeMode {
   return value.toLowerCase() === "off" ? "off" : "auto";
 }
 
-function joinPathOnPlatform(...segments: string[]): string {
-  // Pick the path style based on the input that produced these segments by
-  // letting node:path decide via `path.join`. Tests can still pass either
-  // separator style.
-  return path.join(...segments);
-}
-
 function deriveTsdk(vueLanguageServerLocation: string): string {
   // typescript is installed at the sibling of @vue/language-server:
   //   <root>/node_modules/@vue/language-server   <- location
   //   <root>/node_modules/typescript/lib         <- tsdk
-  const vueAtDir = dirname(vueLanguageServerLocation); // <root>/node_modules/@vue
-  const nodeModulesDir = dirname(vueAtDir); // <root>/node_modules
-  return joinPathOnPlatform(nodeModulesDir, "typescript", "lib");
+  const pathApi = getPathApi(vueLanguageServerLocation);
+  const vueAtDir = pathApi.dirname(vueLanguageServerLocation); // <root>/node_modules/@vue
+  const nodeModulesDir = pathApi.dirname(vueAtDir); // <root>/node_modules
+  return pathApi.join(nodeModulesDir, "typescript", "lib");
+}
+
+function getPathApi(value: string) {
+  return isWindowsStylePath(value) ? path.win32 : path.posix;
+}
+
+function isWindowsStylePath(value: string) {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.includes("\\");
 }

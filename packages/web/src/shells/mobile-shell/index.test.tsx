@@ -3391,6 +3391,7 @@ describe("MobileShell Phase 2 workspace", () => {
   it("renders a reconnecting banner inside the mobile workspace scaffold", async () => {
     renderMobileShell({
       connectionStatus: "reconnecting",
+      locale: "zh",
       reconnectAttempts: 2,
     });
 

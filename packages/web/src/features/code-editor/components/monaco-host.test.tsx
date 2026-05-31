@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
 import { getThemeById } from "../../../theme";
@@ -284,6 +284,7 @@ vi.mock("monaco-editor/esm/vs/editor/browser/services/codeEditorService.js", () 
 
 describe("MonacoHost", () => {
   beforeEach(() => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     mockCreateEditor.mockClear();
     mockCreateModel.mockClear();
     mockDefineTheme.mockClear();
@@ -311,6 +312,10 @@ describe("MonacoHost", () => {
     modelState.current = null;
     modelChangeListenerState.current = null;
     openHandlerState.current = null;
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
   });
 
   it("configures Monaco JS/TS defaults for JSX syntax and eager model sync", () => {
