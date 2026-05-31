@@ -491,7 +491,7 @@ export const SearchPanel: FC<SearchPanelProps> = ({
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </span>
                       <span className="workspace-search-panel__group-copy">
-                        <strong className="workspace-search-panel__group-name">{file.name}</strong>
+                        <span className="workspace-search-panel__group-name">{file.name}</span>
                         {renderFilePathMeta(file.path, file.name)}
                       </span>
                       <span className="workspace-search-panel__group-count" aria-hidden="true">

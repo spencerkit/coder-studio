@@ -3273,7 +3273,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const section = getLastGroupedRuleBlock(
       /\.git-panel-section,\s*\.git-panel-section-header,\s*\.git-panel-section-body\s*\{([^}]*)\}/g
     );
-    const toggle = getLastRuleBlock(".git-panel-section-toggle");
+    const toggle = getRuleBlocksFrom(stylesheet, ".git-panel-section-toggle").join("\n");
+    const sectionCount = getLastRuleBlock(".git-panel-section-count");
     const desktopPanel = getLastRuleBlock(".git-panel--desktop");
 
     expect(section).toContain("min-width: 0");
@@ -3282,6 +3283,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(toggle).toContain("flex: 1 1 auto");
     expect(toggle).toContain("width: 100%");
     expect(toggle).toContain("justify-content: flex-start");
+    expect(toggle).toContain("font-size: var(--type-body-6-size)");
+    expect(toggle).toContain("line-height: var(--type-body-6-line-height)");
+    expect(toggle).toContain("font-weight: var(--type-body-6-weight)");
+    expect(sectionCount).toContain("font-size: var(--type-body-6-size)");
+    expect(sectionCount).toContain("line-height: var(--type-body-6-line-height)");
+    expect(sectionCount).toContain("font-weight: var(--type-body-6-weight)");
     expect(desktopPanel).toContain("height: auto");
   });
 
@@ -3295,6 +3302,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const rowSelected = getLastRuleBlock(".file-tree-shell .tree-item.selected");
     const rowActionsBase = getLastRuleBlock(".file-tree-shell .tree-item-actions");
     const rowActionsDesktop = getLastRuleBlock(".file-tree-shell--desktop .tree-item-actions");
+    const fileTreeLabel = getLastRuleBlock(".file-tree-shell .tree-label");
+    const gitRowName = getLastRuleBlock(".git-panel .git-row-name");
 
     expect(search).toContain("gap: var(--gap-default)");
     expect(search).toContain("margin: var(--space-default) var(--inset-control-inline)");
@@ -3321,6 +3330,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(rowSelected).toContain("color: var(--text-primary)");
     expect(rowActionsBase).toContain("gap: var(--gap-compact)");
     expect(rowActionsDesktop).toContain("opacity: 0");
+    expect(fileTreeLabel).toContain("font-weight: var(--type-body-3-weight)");
+    expect(gitRowName).toContain("font-weight: var(--type-body-3-weight)");
   });
 
   it("keeps workspace search and quick open on compact editor-search chrome", () => {
@@ -3329,6 +3340,8 @@ describe("components.css theme-sensitive surfaces", () => {
     const quickJumpSearch = getLastRuleBlock(".workspace-quick-jump__search");
     const workspaceSection = getLastRuleBlock(".workspace-sidebar-section");
     const workspaceSectionHeader = getLastRuleBlock(".workspace-sidebar-section__header");
+    const workspaceSectionTitle = getLastRuleBlock(".workspace-sidebar-section__title");
+    const workspaceSectionCount = getLastRuleBlock(".workspace-sidebar-section__count");
     const openEditorsHeader = getLastRuleBlock(".workspace-open-editors__header");
     const openEditorsHeaderMain = getLastRuleBlock(".workspace-open-editors__header-main");
     const openEditorsTitle = getLastRuleBlock(".workspace-open-editors__title");
@@ -3408,6 +3421,12 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(workspaceSection).not.toContain("border:");
     expect(workspaceSection).not.toContain("border-radius:");
     expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
+    expect(workspaceSectionTitle).toContain("font-size: var(--type-body-6-size)");
+    expect(workspaceSectionTitle).toContain("line-height: var(--type-body-6-line-height)");
+    expect(workspaceSectionTitle).toContain("font-weight: var(--type-body-6-weight)");
+    expect(workspaceSectionCount).toContain("font-size: var(--type-body-6-size)");
+    expect(workspaceSectionCount).toContain("line-height: var(--type-body-6-line-height)");
+    expect(workspaceSectionCount).toContain("font-weight: var(--type-body-6-weight)");
     expect(openEditorsRow).toContain("grid-template-columns: minmax(0, 1fr) auto");
     expect(openEditorsItemHover).toContain("background: var(--surface-hover)");
     expect(openEditorsItemActiveHover).toContain("background: var(--state-selected-bg)");
@@ -3429,6 +3448,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchFilter).toContain("border-left: 1px solid");
     expect(searchFilter).toContain("min-width: 21px");
     expect(searchFilter).toContain("font-size: 10px");
+    expect(searchFilter).toContain("font-weight: var(--font-normal)");
     expect(searchFilterActive).toContain(
       "background: color-mix(in srgb, var(--status-info-fg) 1%, transparent)"
     );
@@ -3443,6 +3463,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(searchDetailHeading).toContain("min-height: 20px");
     expect(searchDetailHeading).toContain("padding-inline-end: 0");
     expect(searchDetailLabel).toContain("font-size: 10px");
+    expect(searchDetailLabel).toContain("font-weight: var(--font-normal)");
     expect(searchResults).toContain("padding: 0");
     expect(openEditorsItem).toContain("display: flex");
     expect(openEditorsItem).toContain("overflow: hidden");
@@ -3481,7 +3502,7 @@ describe("components.css theme-sensitive surfaces", () => {
       "box-shadow: inset 0 0 0 var(--state-focus-ring-width)"
     );
     expect(searchLine).toContain("text-align: left");
-    expect(searchLine).toContain("font-weight: var(--font-bold)");
+    expect(searchLine).toContain("font-weight: var(--type-body-3-weight)");
 
     expect(quickJumpSearch).toContain("border-radius: var(--radius-md)");
     expect(quickOpen).toContain("border: 1px solid var(--surface-overlay-border)");
@@ -3748,10 +3769,10 @@ describe("components.css theme-sensitive surfaces", () => {
     const key = getLastRuleBlock(".mobile-terminal-input-bar__key");
     const ctrlKey = getLastRuleBlock(".mobile-terminal-input-bar__ctrl");
     const shiftKey = getLastRuleBlock(".mobile-terminal-input-bar__shift");
-    const escapeKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Escape"]');
-    const tabKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Tab"]');
-    const enterKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Enter"]');
-    const upArrowKey = getLastRuleBlock('.mobile-terminal-input-bar__key[aria-label="Up arrow"]');
+    const escapeKey = getLastRuleBlock('.mobile-terminal-input-bar__key[data-key-id="escape"]');
+    const tabKey = getLastRuleBlock('.mobile-terminal-input-bar__key[data-key-id="tab"]');
+    const enterKey = getLastRuleBlock('.mobile-terminal-input-bar__key[data-key-id="enter"]');
+    const upArrowKey = getLastRuleBlock('.mobile-terminal-input-bar__key[data-key-id="arrow_up"]');
     const ctrlLocked = getLastRuleBlock(
       '.mobile-terminal-input-bar__ctrl[data-ctrl-mode="locked"]'
     );

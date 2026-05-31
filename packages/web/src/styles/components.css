@@ -16194,9 +16194,9 @@ body.is-dragging-pane .session-action-btn-drag {
 .workspace-open-editors__title,
 .git-panel-section-toggle {
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.35;
-  font-weight: var(--font-bold);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -16208,6 +16208,9 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: var(--gap-compact);
   margin: 0;
   min-width: 0;
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .git-panel-section-toggle {
@@ -16350,7 +16353,7 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .file-tree-shell .tree-label,
 .git-panel .git-row-name {
-  font-weight: var(--font-bold);
+  font-weight: var(--type-body-3-weight);
 }
 
 .file-tree-shell .tree-icon--gitignored,
@@ -16914,7 +16917,8 @@ body.is-dragging-pane .session-action-btn-drag {
   padding: 0;
   border-radius: var(--radius-pill);
   font-size: 12px;
-  font-weight: var(--font-bold);
+  line-height: 1.4;
+  font-weight: var(--type-body-6-weight);
 }
 
 .git-status-badge.untracked {
