@@ -1,3 +1,4 @@
+import type { TerminalKind } from "@coder-studio/core";
 import type { ManagedProcessRoot } from "./types.js";
 
 interface ManagedProcessRegistryOptions {
@@ -8,7 +9,7 @@ interface TerminalRootInput {
   terminalId: string;
   workspaceId: string;
   pid?: number;
-  kind: "agent" | "shell";
+  kind: TerminalKind;
   title: string;
 }
 

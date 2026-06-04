@@ -32,6 +32,12 @@ export const Topics = {
     `workspace.${workspaceId}.terminal.${terminalId}.exit`,
   terminalsAll: (workspaceId: string) => `workspace.${workspaceId}.terminal.*`,
 
+  // Task-level
+  workspaceTaskDiscovered: (workspaceId: string) => `workspace.${workspaceId}.task.discovered`,
+  workspaceTaskRun: (workspaceId: string, runId: string) =>
+    `workspace.${workspaceId}.task.${runId}`,
+  workspaceTasksAll: (workspaceId: string) => `workspace.${workspaceId}.task.*`,
+
   // Notification
   notificationToast: "notification.toast",
   monitoringSnapshotUpdated: "monitoring.snapshot.updated",

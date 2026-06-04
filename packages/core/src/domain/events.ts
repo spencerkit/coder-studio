@@ -1,7 +1,7 @@
 // DomainEvent type union for EventBus (spec §4.0)
 
 import type { LspDiagnosticsEvent } from "./lsp";
-import type { SessionState, Workspace } from "./types";
+import type { SessionState, TaskDefinition, TaskRun, TerminalKind, Workspace } from "./types";
 
 export type DomainEvent =
   | {
@@ -31,7 +31,7 @@ export type DomainEvent =
       type: "terminal.created";
       workspaceId: string;
       terminalId: string;
-      kind: "agent" | "shell";
+      kind: TerminalKind;
       title: string;
       cwd: string;
     }
@@ -44,4 +44,9 @@ export type DomainEvent =
       reason: "stream_drop" | "topic_evicted";
     }
   | { type: "terminal.exited"; workspaceId: string; terminalId: string; exitCode: number }
+  | { type: "task.discovered"; workspaceId: string; tasks: TaskDefinition[] }
+  | { type: "task.run.started"; workspaceId: string; run: TaskRun }
+  | { type: "task.run.updated"; workspaceId: string; run: TaskRun }
+  | { type: "task.run.finished"; workspaceId: string; run: TaskRun }
+  | { type: "task.run.stopped"; workspaceId: string; run: TaskRun }
   | ({ type: "lsp.diagnostics.updated" } & LspDiagnosticsEvent);

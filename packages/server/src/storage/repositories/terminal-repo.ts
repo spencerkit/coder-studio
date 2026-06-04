@@ -1,5 +1,7 @@
-import type { Terminal } from "@coder-studio/core";
+import type { Terminal, TerminalKind } from "@coder-studio/core";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
+
+const TERMINAL_KINDS = new Set<TerminalKind>(["agent", "shell", "task"]);
 
 /**
  * Input type for creating a new terminal
@@ -7,7 +9,7 @@ import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 export interface NewTerminal {
   id: string;
   workspaceId: string;
-  kind: "agent" | "shell";
+  kind: TerminalKind;
   pid?: number;
   cwd: string;
   argv: string[];
@@ -39,7 +41,7 @@ function isTerminal(value: unknown): value is Terminal {
   return (
     typeof value.id === "string" &&
     typeof value.workspaceId === "string" &&
-    (value.kind === "agent" || value.kind === "shell") &&
+    TERMINAL_KINDS.has(value.kind as TerminalKind) &&
     (value.pid === undefined || typeof value.pid === "number") &&
     typeof value.cwd === "string" &&
     Array.isArray(value.argv) &&
