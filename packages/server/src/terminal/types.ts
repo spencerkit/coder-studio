@@ -1,13 +1,13 @@
 // Terminal types (spec §4.5)
 
-import type { Terminal } from "@coder-studio/core";
+import type { Terminal, TerminalKind } from "@coder-studio/core";
 
 /**
  * Specification for creating a new terminal
  */
 export interface TerminalSpec {
   workspaceId: string;
-  kind: "agent" | "shell";
+  kind: TerminalKind;
   argv: string[];
   cwd: string;
   env?: Record<string, string>;
@@ -83,7 +83,7 @@ export class TerminalSpawnError extends Error {
     public readonly details?: {
       command?: string;
       cwd?: string;
-      terminalKind?: "agent" | "shell";
+      terminalKind?: TerminalKind;
     }
   ) {
     super(`Terminal spawn failed: ${cause.message}`);

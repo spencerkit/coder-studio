@@ -216,7 +216,7 @@ export class TerminalManager {
     const ringBuffer = new RingBuffer(RING_BUFFER_SIZE);
     let snapshotBuffer: HeadlessSnapshotBuffer | undefined;
 
-    if (spec.kind === "shell" || spec.kind === "agent") {
+    if (spec.kind === "shell" || spec.kind === "agent" || spec.kind === "task") {
       try {
         snapshotBuffer = new HeadlessSnapshotBuffer({
           cols: spec.cols ?? 120,

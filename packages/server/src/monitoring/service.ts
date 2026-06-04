@@ -6,6 +6,7 @@ import {
   resolveMonitoringSettings,
   type Session,
   type Terminal,
+  type TerminalKind,
   Topics,
   type Workspace,
 } from "@coder-studio/core";
@@ -19,7 +20,7 @@ interface ActiveTerminalLike {
   toDTO(): Terminal;
   spec?: {
     workspaceId: string;
-    kind: "agent" | "shell";
+    kind: TerminalKind;
     title?: string;
   };
 }

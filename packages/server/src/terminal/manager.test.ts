@@ -316,6 +316,22 @@ describe("TerminalManager", () => {
       expect(manager.get(agent.id)?.snapshotBuffer).toBeDefined();
     });
 
+    it("creates task terminals with snapshot support", () => {
+      const terminal = manager.create({
+        workspaceId: "ws-123",
+        kind: "task",
+        argv: ["pnpm", "ci:verify"],
+        cwd: "/test",
+        title: "Task: Verify",
+        cols: 100,
+        rows: 24,
+      });
+
+      expect(terminal.kind).toBe("task");
+      expect(terminal.title).toBe("Task: Verify");
+      expect(manager.get(terminal.id)?.snapshotBuffer).toBeDefined();
+    });
+
     it("degrades gracefully when the snapshot buffer fails to initialize", async () => {
       const snapshotCtorSpy = vi
         .spyOn(snapshotBufferModule, "HeadlessSnapshotBuffer")
