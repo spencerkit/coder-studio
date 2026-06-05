@@ -1,10 +1,11 @@
-import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
-import { atom, useAtom, useAtomValue } from "jotai";
+import type { GitCommitSummary, GitFileChange, TaskRun, WorktreeInfo } from "@coder-studio/core";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { atomFamily } from "jotai-family";
 import { ChevronDown, ChevronRight, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { FC, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
+import { dispatchCommandAtom } from "../../../../atoms/connection";
 import {
   ConfirmDialog,
   EmptyState,
@@ -14,6 +15,10 @@ import {
   Tooltip,
 } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
+import { useTerminalThemeBackground } from "../../../../theme";
+import { bottomPanelActiveTabAtomFamily } from "../../../bottom-panel";
+import { pushToastAtom } from "../../../notifications/atoms";
+import { latestVerifyRunAtomFamily, taskStateAtomFamily } from "../../../tasks/atoms";
 import {
   type GitChangeType,
   type GitPanelChangeItem,
@@ -109,6 +114,13 @@ export const GitPanel: FC<GitPanelProps> = ({
   );
   const locale = useAtomValue(localeAtom) === "zh" ? "zh" : "en";
   const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const pushToast = useSetAtom(pushToastAtom);
+  const setBottomPanelTab = useSetAtom(bottomPanelActiveTabAtomFamily(workspaceId));
+  const taskState = useAtomValue(taskStateAtomFamily(workspaceId));
+  const latestVerifyRun = useAtomValue(latestVerifyRunAtomFamily(workspaceId));
+  const setTaskState = useSetAtom(taskStateAtomFamily(workspaceId));
+  const themeBackground = useTerminalThemeBackground();
   const {
     commitMessage,
     diffPreview,
@@ -204,6 +216,9 @@ export const GitPanel: FC<GitPanelProps> = ({
     pendingWorktreeDelete !== null;
   const showWorktreeCount = !isMobile || list.items.length > 0;
   const showHistoryCount = !isMobile || history.length > 0;
+  const verifyTask = taskState.tasks.find(
+    (task) => task.kind === "verify" || task.id === latestVerifyRun?.taskId
+  );
 
   useEffect(() => {
     if (!toolbarAction || variant !== "desktop") {
@@ -245,6 +260,37 @@ export const GitPanel: FC<GitPanelProps> = ({
     await openWorktree(worktree.path);
   };
 
+  const rerunVerify = async () => {
+    if (!verifyTask) {
+      pushToast({
+        kind: "info",
+        title: t("tasks.title"),
+        body: t("tasks.no_verify_task"),
+      });
+      return null;
+    }
+
+    const result = await dispatch<TaskRun>("task.rerun", {
+      workspaceId,
+      taskId: verifyTask.id,
+      themeBackground,
+    });
+    if (!result.ok || !result.data) {
+      pushToast({
+        kind: "error",
+        title: t("tasks.run_failed_title"),
+        body: result.error?.message ?? t("tasks.run_failed_body"),
+      });
+      return null;
+    }
+
+    setTaskState((previous) => ({
+      ...previous,
+      runs: [result.data!, ...previous.runs.filter((run) => run.taskId !== verifyTask.id)],
+    }));
+    return result.data;
+  };
+
   const closePendingWorktreeDelete = () => {
     setPanelState((current) => ({
       ...current,
@@ -256,6 +302,24 @@ export const GitPanel: FC<GitPanelProps> = ({
     <>
       <div className={`git-panel git-panel--${variant}`}>
         <div className="git-panel-scroll">
+          {latestVerifyRun ? (
+            <div
+              className={`git-verification-banner git-verification-banner--${latestVerifyRun.status}`}
+            >
+              <span>
+                {t("tasks.verification_status", {
+                  status: t(`tasks.status_${latestVerifyRun.status}`),
+                })}
+              </span>
+              <button type="button" onClick={() => setBottomPanelTab("tasks")}>
+                {t("tasks.view_tasks")}
+              </button>
+              <button type="button" onClick={() => void rerunVerify()}>
+                {t("tasks.rerun_verify")}
+              </button>
+            </div>
+          ) : null}
+
           <section className="git-panel-section git-commit-block">
             <div className="git-panel-section-header">
               <button

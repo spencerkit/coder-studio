@@ -10190,6 +10190,60 @@ body.is-dragging-pane .session-action-btn-drag {
   cursor: grabbing;
 }
 
+.session-card-verify {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gap-tight) var(--sp-3);
+  margin: var(--gap-tight) var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--component-mix-current-color-22pct-transparent);
+  border-radius: var(--radius-md);
+  background: var(--component-mix-current-color-8pct-transparent);
+  color: var(--status-info-fg);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+}
+
+.session-card-verify-command {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-card-verify-actions {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-compact);
+}
+
+.session-card-verify--passed {
+  color: var(--status-success-fg);
+}
+
+.session-card-verify--failed {
+  color: var(--status-danger-fg);
+}
+
+.session-card-verify--queued,
+.session-card-verify--running {
+  color: var(--status-info-fg);
+}
+
+.session-card-verify--stopped {
+  color: var(--status-warning-fg);
+}
+
 .workspace-bottom-panel {
   display: flex;
   flex-direction: column;
@@ -16178,6 +16232,64 @@ body.is-dragging-pane .session-action-btn-drag {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.git-verification-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-tight);
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--component-mix-current-color-22pct-transparent);
+  border-radius: var(--radius-md);
+  background: var(--component-mix-current-color-8pct-transparent);
+  color: var(--status-info-fg);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
+}
+
+.git-verification-banner > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.git-verification-banner button {
+  display: inline-flex;
+  min-height: var(--control-height-sm);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--component-mix-current-color-22pct-transparent);
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  color: inherit;
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+}
+
+.git-verification-banner button:hover {
+  background: var(--component-mix-current-color-8pct-transparent);
+}
+
+.git-verification-banner--passed {
+  color: var(--status-success-fg);
+}
+
+.git-verification-banner--failed {
+  color: var(--status-danger-fg);
+}
+
+.git-verification-banner--queued,
+.git-verification-banner--running {
+  color: var(--status-info-fg);
+}
+
+.git-verification-banner--stopped {
+  color: var(--status-warning-fg);
 }
 
 .git-panel-section + .git-panel-section {

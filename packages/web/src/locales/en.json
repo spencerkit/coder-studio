@@ -674,7 +674,13 @@
     "status_running": "Running",
     "status_passed": "Passed",
     "status_failed": "Failed",
-    "status_stopped": "Stopped"
+    "status_stopped": "Stopped",
+    "last_verify": "Last verify: {status}",
+    "verification_status": "Verification: {status}",
+    "view_output": "View output",
+    "view_tasks": "View Tasks",
+    "rerun_verify": "Rerun Verify",
+    "no_verify_task": "No Verify task is available for this workspace."
   },
   "file": {
     "title": "Files",

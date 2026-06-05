@@ -674,7 +674,13 @@
     "status_running": "运行中",
     "status_passed": "通过",
     "status_failed": "失败",
-    "status_stopped": "已停止"
+    "status_stopped": "已停止",
+    "last_verify": "最近验证：{status}",
+    "verification_status": "验证：{status}",
+    "view_output": "查看输出",
+    "view_tasks": "查看任务",
+    "rerun_verify": "重新验证",
+    "no_verify_task": "当前工作区没有可用的 Verify 任务。"
   },
   "file": {
     "title": "文件",

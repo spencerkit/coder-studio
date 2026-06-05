@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { GitStatus } from "@coder-studio/core";
+import type { GitStatus, TaskDefinition, TaskRun } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import { wsClientAtom } from "../../../../atoms/connection";
 import { workspacesAtom } from "../../../../atoms/workspaces";
 import { CommandResultError } from "../../../../ws/client";
 import { toastsAtom } from "../../../notifications/atoms";
+import { taskStateAtomFamily } from "../../../tasks/atoms";
 import {
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
@@ -95,6 +96,32 @@ describe("GitPanel", () => {
   const unstagedOnlyStatus: GitStatus = {
     ...status,
     staged: [],
+  };
+
+  const verifyTask: TaskDefinition = {
+    id: "verify",
+    workspaceId: "ws-test",
+    kind: "verify",
+    label: "Verify",
+    command: "pnpm",
+    args: ["ci:verify"],
+    cwdPath: ".",
+    source: "package-json",
+    priority: 900,
+  };
+
+  const failedVerifyRun: TaskRun = {
+    id: "run-verify-1",
+    workspaceId: "ws-test",
+    taskId: "verify",
+    terminalId: "term-verify",
+    status: "failed",
+    command: "pnpm",
+    args: ["ci:verify"],
+    cwdPath: ".",
+    startedAt: 100,
+    finishedAt: 200,
+    exitCode: 1,
   };
 
   function seedWorkspaceStore(store: ReturnType<typeof createStore>, workspaceId = "ws-test") {
@@ -1220,6 +1247,42 @@ describe("GitPanel", () => {
     expect(within(changesSection as HTMLElement).getByText("deprecated.ts")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History0" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Latest Commit")).not.toBeInTheDocument();
+  });
+
+  it("surfaces the latest verify result in the git panel", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(taskStateAtomFamily("ws-test"), {
+      tasks: [verifyTask],
+      runs: [failedVerifyRun],
+      loading: false,
+    });
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Verification: Failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View Tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rerun Verify" })).toBeInTheDocument();
   });
 
   it("renders unmerged conflict files in a merge changes section", async () => {
