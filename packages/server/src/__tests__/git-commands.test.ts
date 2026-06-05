@@ -579,6 +579,63 @@ describe("Git Commands", () => {
     expect(stdout).not.toContain("scratch.txt");
   });
 
+  it("applies a git.hunk operation and emits worktree refresh hints", async () => {
+    await writeFile(
+      join(testDir, "sample.ts"),
+      [
+        "export const value = 2;",
+        "export const spacer1 = 1;",
+        "export const spacer2 = 2;",
+        "export const spacer3 = 3;",
+        "export const spacer4 = 4;",
+        "export const spacer5 = 5;",
+        "export const spacer6 = 6;",
+        "export const tail = true;",
+        "",
+      ].join("\n")
+    );
+    const diffResult = await dispatch(
+      {
+        kind: "command",
+        id: "git-diff-for-hunk",
+        op: "git.diff",
+        args: {
+          workspaceId,
+          path: "sample.ts",
+        },
+      },
+      ctx
+    );
+    expect(diffResult.ok).toBe(true);
+    const hunkId = (diffResult.data as { hunks?: Array<{ id: string }> }).hunks?.[0]?.id;
+    expect(hunkId).toMatch(/^hunk_/);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-hunk-stage",
+        op: "git.hunk",
+        args: {
+          workspaceId,
+          path: "sample.ts",
+          staged: false,
+          hunkId,
+          operation: "stage",
+        },
+      },
+      ctx
+    );
+
+    expect(result).toMatchObject({ ok: true, data: {} });
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: "git.state.changed",
+      workspaceId,
+      treeChanged: undefined,
+      branchChanged: undefined,
+      worktreeChanged: true,
+    });
+  });
+
   it("fetches remote refs and emits branchChanged via git.fetch", async () => {
     const remoteDir = join(tmpdir(), `git-fetch-remote-${Date.now()}`);
     const contributorDir = join(tmpdir(), `git-fetch-contributor-${Date.now()}`);

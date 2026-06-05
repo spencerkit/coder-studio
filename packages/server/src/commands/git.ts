@@ -21,6 +21,7 @@ import {
 } from "../git/cli.js";
 import { getFileDiff } from "../git/diff.js";
 import { getGitCommitDetail, getGitCommitFileDiff } from "../git/history.js";
+import { applyGitHunkOperation } from "../git/hunk-operations.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { registerCommand } from "../ws/dispatch.js";
 import { emitGitStateChanged } from "./git-events.js";
@@ -97,6 +98,30 @@ registerCommand(
     }
 
     return getFileDiff(workspace.path, args.path, args.staged ?? false);
+  }
+);
+
+// git.hunk
+registerCommand(
+  "git.hunk",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+    staged: z.boolean(),
+    hunkId: z.string(),
+    operation: z.enum(["stage", "unstage", "discard"]),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    await applyGitHunkOperation(workspace.path, args);
+    emitGitStateChanged(ctx, args.workspaceId, {
+      worktreeChanged: true,
+    });
+    return {};
   }
 );
 
