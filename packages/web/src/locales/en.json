@@ -654,7 +654,27 @@
     }
   },
   "tasks": {
-    "placeholder": "Task details will appear here."
+    "kicker": "Managed commands",
+    "title": "Tasks",
+    "empty_title": "No tasks found",
+    "empty_body": "Add .coder-studio/tasks.json or package scripts to run verification here.",
+    "load_failed_title": "Failed to load tasks",
+    "load_failed_body": "Task discovery failed.",
+    "run_failed_title": "Failed to run task",
+    "run_failed_body": "The task could not be started.",
+    "stop_failed_title": "Failed to stop task",
+    "stop_failed_body": "The task could not be stopped.",
+    "quick_run_label": "Quick task {label}",
+    "quick_run_short": "Quick {label}",
+    "run_label": "Run {label}",
+    "rerun_label": "Rerun {label}",
+    "stop_label": "Stop {label}",
+    "status_not_run": "Not run",
+    "status_queued": "Queued",
+    "status_running": "Running",
+    "status_passed": "Passed",
+    "status_failed": "Failed",
+    "status_stopped": "Stopped"
   },
   "file": {
     "title": "Files",

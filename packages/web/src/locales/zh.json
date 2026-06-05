@@ -654,7 +654,27 @@
     }
   },
   "tasks": {
-    "placeholder": "任务详情将在这里显示。"
+    "kicker": "托管命令",
+    "title": "任务",
+    "empty_title": "未发现任务",
+    "empty_body": "添加 .coder-studio/tasks.json 或 package scripts 后可在这里运行验证。",
+    "load_failed_title": "任务加载失败",
+    "load_failed_body": "任务发现失败。",
+    "run_failed_title": "任务运行失败",
+    "run_failed_body": "无法启动该任务。",
+    "stop_failed_title": "任务停止失败",
+    "stop_failed_body": "无法停止该任务。",
+    "quick_run_label": "快速任务 {label}",
+    "quick_run_short": "快速 {label}",
+    "run_label": "运行 {label}",
+    "rerun_label": "重新运行 {label}",
+    "stop_label": "停止 {label}",
+    "status_not_run": "未运行",
+    "status_queued": "排队中",
+    "status_running": "运行中",
+    "status_passed": "通过",
+    "status_failed": "失败",
+    "status_stopped": "已停止"
   },
   "file": {
     "title": "文件",
