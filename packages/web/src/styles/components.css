@@ -10319,7 +10319,7 @@ body.is-dragging-pane .session-action-btn-drag {
 }
 
 .workspace-bottom-panel-tabs {
-  gap: 2px;
+  gap: var(--gap-compact);
   min-height: 30px;
   padding: 0 12px;
   border-bottom: 1px solid var(--border-default);
