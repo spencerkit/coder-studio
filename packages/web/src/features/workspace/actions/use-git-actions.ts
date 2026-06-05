@@ -75,10 +75,10 @@ export interface GitSyncAuthPromptState {
   details: GitAuthFailureDetails;
 }
 
-function isCommitPreview(
+function isWorktreeFileDiffPreview(
   preview: GitDiffPreview | null
-): preview is Extract<GitDiffPreview, { kind: "commit-file-list" | "commit-file-diff" }> {
-  return preview?.kind === "commit-file-list" || preview?.kind === "commit-file-diff";
+): preview is Extract<GitDiffPreview, { kind: "worktree-file-diff" }> {
+  return preview?.kind === "worktree-file-diff";
 }
 
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
@@ -499,6 +499,7 @@ export function useGitPanelActions({
         ...(result.data.mime ? { mime: result.data.mime } : {}),
         ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
         ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
+        ...(result.data.hunks ? { hunks: result.data.hunks } : {}),
         ...(result.data.originalContent !== undefined
           ? { originalContent: result.data.originalContent }
           : {}),
@@ -646,11 +647,7 @@ export function useGitPanelActions({
         return;
       }
 
-      if (isCommitPreview(diffPreview)) {
-        return;
-      }
-
-      if (!diffPreview) {
+      if (!isWorktreeFileDiffPreview(diffPreview)) {
         return;
       }
 
@@ -707,11 +704,7 @@ export function useGitPanelActions({
       return;
     }
 
-    if (isCommitPreview(diffPreview)) {
-      return;
-    }
-
-    if (!diffPreview) {
+    if (!isWorktreeFileDiffPreview(diffPreview)) {
       return;
     }
 
@@ -951,9 +944,129 @@ export function useGitPanelActions({
 }
 
 export function useGitDiffViewerActions(workspaceId: string) {
+  const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const preview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const setPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
+  const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
+  const pushToast = useSetAtom(pushToastAtom);
+
+  const refreshGitState = useCallback(async () => {
+    const result = await dispatch<GitStatus>("git.status", {
+      workspaceId,
+    });
+    if (result.ok && result.data) {
+      setGitState(result.data);
+    }
+    return result.ok;
+  }, [dispatch, setGitState, workspaceId]);
+
+  const refreshPreview = useCallback(
+    async (path: string, staged: boolean) => {
+      const refreshed = await dispatch<GitFileDiffPayload>("git.diff", {
+        workspaceId,
+        path,
+        staged,
+      });
+
+      if (refreshed.ok && refreshed.data) {
+        setPreview((current) =>
+          current?.kind === "worktree-file-diff" &&
+          current.path === path &&
+          Boolean(current.staged) === staged
+            ? {
+                ...current,
+                ...refreshed.data,
+              }
+            : current
+        );
+      }
+
+      if (!refreshed.ok) {
+        setPreview((current) =>
+          current?.kind === "worktree-file-diff" &&
+          current.path === path &&
+          Boolean(current.staged) === staged
+            ? null
+            : current
+        );
+      }
+
+      return refreshed.ok;
+    },
+    [dispatch, setPreview, workspaceId]
+  );
+
+  const runHunkOperation = useCallback(
+    async (input: {
+      path: string;
+      staged: boolean;
+      hunkId: string;
+      operation: "stage" | "unstage" | "discard";
+    }) => {
+      const result = await dispatch("git.hunk", {
+        workspaceId,
+        path: input.path,
+        staged: input.staged,
+        hunkId: input.hunkId,
+        operation: input.operation,
+      });
+
+      if (!result.ok) {
+        pushToast({
+          kind: "error",
+          title: t("git.hunk_failed_title"),
+          body: result.error?.message ?? t("git.hunk_failed_body"),
+        });
+        return false;
+      }
+
+      await refreshPreview(input.path, input.staged);
+      await refreshGitState();
+      return true;
+    },
+    [dispatch, pushToast, refreshGitState, refreshPreview, t, workspaceId]
+  );
+
+  const runFileOperation = useCallback(
+    async (input: {
+      path: string;
+      staged: boolean;
+      operation: "stage" | "unstage" | "discard";
+    }) => {
+      const op =
+        input.operation === "stage"
+          ? "git.stage"
+          : input.operation === "unstage"
+            ? "git.unstage"
+            : "git.discard";
+      const errorTitle =
+        input.operation === "stage"
+          ? t("git.stage_failed_title")
+          : input.operation === "unstage"
+            ? t("git.unstage_failed_title")
+            : t("git.discard_failed_title");
+      const result = await dispatch(op, {
+        workspaceId,
+        paths: [input.path],
+      });
+
+      if (!result.ok) {
+        pushToast({
+          kind: "error",
+          title: errorTitle,
+          body: result.error?.message,
+        });
+        return false;
+      }
+
+      await refreshPreview(input.path, input.staged);
+      await refreshGitState();
+      return true;
+    },
+    [dispatch, pushToast, refreshGitState, refreshPreview, t, workspaceId]
+  );
 
   return {
     closePreview: () => {
@@ -961,6 +1074,9 @@ export function useGitDiffViewerActions(workspaceId: string) {
       setPreview(null);
     },
     preview,
+    refreshPreview,
+    runFileOperation,
+    runHunkOperation,
   };
 }
 

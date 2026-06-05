@@ -8963,6 +8963,56 @@ textarea.input {
   color: var(--text-primary);
 }
 
+.git-diff-actions,
+.git-diff-hunk-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-compact);
+}
+
+.git-diff-actions {
+  margin-right: var(--gap-compact);
+}
+
+.git-diff-hunk {
+  border-top: 1px solid var(--component-mix-border-default-70pct-transparent);
+}
+
+.git-diff-hunk:first-child {
+  border-top: 0;
+}
+
+.git-diff-hunk-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-default);
+  min-height: 30px;
+  padding: var(--gap-compact) var(--editor-toolbar-inset);
+  background:
+    linear-gradient(180deg, var(--component-rgba-255-255-255-0-035), transparent),
+    var(--component-mix-surface-panel-90pct-surface-input-10pct);
+  border-bottom: 1px solid var(--component-mix-border-default-70pct-transparent);
+}
+
+.git-diff-hunk-header {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-diff-hunk-action {
+  min-height: 24px;
+  padding-inline: var(--gap-tight);
+}
+
 .git-diff-empty {
   display: flex;
   flex-direction: column;
