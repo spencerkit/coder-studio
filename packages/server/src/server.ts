@@ -69,6 +69,7 @@ import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
 import { SystemDependencyInstallManager } from "./system-deps/install-manager.js";
+import { TaskManager } from "./tasks/manager.js";
 import { TerminalManager } from "./terminal/manager.js";
 import { NodePtyHost } from "./terminal/pty-host.js";
 import { UpdateService } from "./update/update-service.js";
@@ -138,6 +139,10 @@ export async function createServer(
     ptyHost: createPtyHost(),
     eventBus,
     db: terminalRepo,
+  });
+  const taskMgr = new TaskManager({
+    eventBus,
+    terminalMgr,
   });
 
   const settingsRepo = new SettingsRepo({
@@ -290,6 +295,7 @@ export async function createServer(
       await lspMgr?.disposeWorkspace(workspaceId);
       await supervisorMgr?.deleteForWorkspace(workspaceId);
       await sessionMgr.stopForWorkspace(workspaceId);
+      taskMgr.clearWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
 
@@ -454,6 +460,7 @@ export async function createServer(
     workspaceMgr,
     sessionMgr,
     terminalMgr,
+    taskMgr,
     eventBus,
     broadcaster: wsHub,
     settingsRepo,

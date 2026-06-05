@@ -31,6 +31,7 @@ import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js
 import type { SkillTargetRepo } from "../storage/repositories/skill-target-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { SystemDependencyInstallManager } from "../system-deps/install-manager.js";
+import type { TaskManager } from "../tasks/manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { UpdateService } from "../update/update-service.js";
 import type { WorkAnalysisService } from "../work-analysis/service.js";
@@ -46,6 +47,7 @@ export interface CommandContext {
   workspaceMgr: WorkspaceManager;
   sessionMgr: SessionManager;
   terminalMgr: TerminalManager;
+  taskMgr: TaskManager;
   eventBus: EventBus;
   broadcaster: Broadcaster;
   settingsRepo: SettingsRepo;

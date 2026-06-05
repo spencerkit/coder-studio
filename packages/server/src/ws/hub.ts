@@ -396,6 +396,11 @@ export class WsHub implements Broadcaster {
       "terminal.continuity_lost",
       "terminal.output",
       "terminal.exited",
+      "task.discovered",
+      "task.run.started",
+      "task.run.updated",
+      "task.run.finished",
+      "task.run.stopped",
       "lsp.diagnostics.updated",
     ];
 
@@ -496,6 +501,19 @@ export class WsHub implements Broadcaster {
         data = {
           code: event.exitCode,
         };
+        break;
+
+      case "task.discovered":
+        topic = Topics.workspaceTaskDiscovered(event.workspaceId);
+        data = { tasks: event.tasks };
+        break;
+
+      case "task.run.started":
+      case "task.run.updated":
+      case "task.run.finished":
+      case "task.run.stopped":
+        topic = Topics.workspaceTaskRun(event.workspaceId, event.run.id);
+        data = { event: event.type, run: event.run };
         break;
 
       case "lsp.diagnostics.updated":

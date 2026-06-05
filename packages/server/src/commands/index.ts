@@ -13,6 +13,7 @@ import "./session.js";
 import "./session-metadata.js";
 import "./session-review.js";
 import "./terminal.js";
+import "./task.js";
 import "./file.js";
 import "./git.js";
 import "./agent-instructions.js";
