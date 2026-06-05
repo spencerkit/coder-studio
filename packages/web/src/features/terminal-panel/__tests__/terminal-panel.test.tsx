@@ -70,7 +70,7 @@ describe("TerminalPanel", () => {
   it("keeps rendering when the first terminal is created after mount", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -153,7 +153,7 @@ describe("TerminalPanel", () => {
   it("renders the new terminal immediately from terminal.create result before the created event arrives", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -215,7 +215,8 @@ describe("TerminalPanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
     });
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    const lastXtermHostCall = mockXtermHost.mock.calls[mockXtermHost.mock.calls.length - 1];
+    expect(lastXtermHostCall?.[0]).toEqual(
       expect.objectContaining({
         terminalId: "term_2",
         terminalKind: "shell",
@@ -228,7 +229,7 @@ describe("TerminalPanel", () => {
 
   it("renders shared tab semantics for desktop terminal tabs and supports keyboard switching", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -317,7 +318,7 @@ describe("TerminalPanel", () => {
   it("closes an inactive terminal tab without switching to it first", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -405,7 +406,7 @@ describe("TerminalPanel", () => {
 
   it("shows an error toast when terminal creation fails", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -463,7 +464,7 @@ describe("TerminalPanel", () => {
   it("ignores agent terminals and keeps the shell panel empty", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -510,7 +511,7 @@ describe("TerminalPanel", () => {
 
   it("shows shell and task terminals but excludes agent terminals", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -592,7 +593,7 @@ describe("TerminalPanel", () => {
 
   it("renders the empty-state create action with shared button compatibility classes", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -762,7 +763,7 @@ describe("TerminalPanel", () => {
   it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -825,7 +826,7 @@ describe("TerminalPanel", () => {
 
   it("leaves the mobile fullscreen title slot blank when no terminal exists", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -877,7 +878,7 @@ describe("TerminalPanel", () => {
 
   it("renders the mobile fullscreen terminal toolbar as a single compact chrome row", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -969,7 +970,7 @@ describe("TerminalPanel", () => {
 
   it("renders a static mobile fullscreen title when only one terminal exists", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1043,7 +1044,7 @@ describe("TerminalPanel", () => {
 
   it("keeps mobile fullscreen terminal actions together in the toolbar when header actions are available", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1156,7 +1157,7 @@ describe("TerminalPanel", () => {
 
   it("keeps only one terminal switcher in mobile fullscreen mode", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1234,7 +1235,7 @@ describe("TerminalPanel", () => {
   it("uses MobileSelectSheet for the mobile terminal selector", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1362,7 +1363,7 @@ describe("TerminalPanel", () => {
   it("uses Popover for the desktop terminal selector open/select/close flow", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1475,7 +1476,7 @@ describe("TerminalPanel", () => {
   it("closes an inactive terminal from the desktop selector close action", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
