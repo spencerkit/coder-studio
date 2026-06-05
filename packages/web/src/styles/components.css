@@ -9102,7 +9102,8 @@ textarea.input {
   border-radius: 6px;
 }
 
-.workspace-bottom-panel > .bottom-terminal {
+.workspace-bottom-panel > .bottom-terminal,
+.workspace-bottom-panel-body > .bottom-terminal {
   border: 1px solid var(--component-mix-border-subtle-64pct-status-info-fg-36pct);
   border-radius: 0;
   box-shadow: var(--shadow-lg);
@@ -10200,7 +10201,51 @@ body.is-dragging-pane .session-action-btn-drag {
   border-top: none;
 }
 
-.workspace-bottom-panel > .bottom-terminal {
+.workspace-bottom-panel-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--workspace-bottom-terminal-surface);
+  backdrop-filter: var(--material-backdrop-filter);
+}
+
+.workspace-bottom-panel-tabs-shell {
+  flex-shrink: 0;
+}
+
+.workspace-bottom-panel-tabs {
+  gap: 2px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--workspace-terminal-toolbar-surface);
+  backdrop-filter: var(--material-backdrop-filter);
+}
+
+.workspace-bottom-panel-tab {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.workspace-bottom-panel-tab.active {
+  border-bottom-color: var(--status-info-fg);
+  color: var(--text-primary);
+}
+
+.workspace-bottom-panel-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.workspace-bottom-panel > .bottom-terminal,
+.workspace-bottom-panel-body > .bottom-terminal {
   flex: 1;
   min-height: 0;
   border: none;
@@ -10518,6 +10563,23 @@ body.is-dragging-pane .session-action-btn-drag {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.terminal-managed-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .terminal-tab-close {
@@ -17296,7 +17358,8 @@ body.is-dragging-pane .session-action-btn-drag {
   backdrop-filter: var(--material-backdrop-filter);
 }
 
-.workspace-bottom-panel > .bottom-terminal {
+.workspace-bottom-panel > .bottom-terminal,
+.workspace-bottom-panel-body > .bottom-terminal {
   border: none;
   border-radius: 0;
   background: var(--workspace-terminal-shell-surface);

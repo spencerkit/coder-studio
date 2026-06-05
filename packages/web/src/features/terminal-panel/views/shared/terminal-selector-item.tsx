@@ -35,6 +35,9 @@ export function TerminalSelectorItem({
     <div className={`terminal-selector-item ${isActive ? "terminal-selector-item-active" : ""}`}>
       <button type="button" className="terminal-selector-item-trigger" onClick={onSelect}>
         <span className="terminal-selector-item-title">{title}</span>
+        {meta?.kind === "task" ? (
+          <span className="terminal-managed-badge">{t("terminal.managed_task")}</span>
+        ) : null}
       </button>
       <IconButton
         aria-label={t("action.close")}

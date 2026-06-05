@@ -145,6 +145,11 @@
     "reconnecting": "Reconnecting",
     "rejected": "Rejected"
   },
+  "bottom_panel": {
+    "tabs_label": "Bottom panel",
+    "terminal": "Terminal",
+    "tasks": "Tasks"
+  },
   "workspace": {
     "title": "Workspace",
     "tabs": "Workspace tabs",
@@ -568,6 +573,7 @@
     "title": "Terminal",
     "kicker": "TERMINAL",
     "new_terminal": "New Terminal",
+    "managed_task": "Managed",
     "close_terminal": "Close Terminal",
     "shell": "Shell Terminal",
     "agent": "Agent Terminal",
@@ -646,6 +652,9 @@
       "closed_body": "Reopen a new session to continue?",
       "closed_body_with_provider": "Reopen a {provider} session to continue?"
     }
+  },
+  "tasks": {
+    "placeholder": "Task details will appear here."
   },
   "file": {
     "title": "Files",

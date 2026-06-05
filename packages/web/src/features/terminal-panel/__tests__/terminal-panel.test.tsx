@@ -30,7 +30,13 @@ import {
 import { TerminalPanel } from "../views/shared/terminal-panel";
 
 const mockXtermHost = vi.fn(
-  ({ terminalId, terminalKind }: { terminalId: string; terminalKind?: "agent" | "shell" }) => (
+  ({
+    terminalId,
+    terminalKind,
+  }: {
+    terminalId: string;
+    terminalKind?: "agent" | "shell" | "task";
+  }) => (
     <div data-testid="xterm-host" data-terminal-kind={terminalKind}>
       {terminalId}
     </div>
@@ -38,7 +44,7 @@ const mockXtermHost = vi.fn(
 );
 
 vi.mock("../views/shared/xterm-host", () => ({
-  XtermHost: (props: { terminalId: string; terminalKind?: "agent" | "shell" }) =>
+  XtermHost: (props: { terminalId: string; terminalKind?: "agent" | "shell" | "task" }) =>
     mockXtermHost(props),
 }));
 
@@ -500,6 +506,88 @@ describe("TerminalPanel", () => {
     expect(screen.getByText("No terminals")).toBeInTheDocument();
     expect(screen.queryByTestId("xterm-host")).not.toBeInTheDocument();
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows shell and task terminals but excludes agent terminals", async () => {
+    const store = createStore();
+    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term-shell",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "bash",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: "term-task",
+            workspaceId: "ws-test",
+            kind: "task",
+            title: "Task: Verify",
+            cwd: "/tmp/ws-test",
+            argv: ["pnpm", "ci:verify"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+          {
+            id: "term-agent",
+            workspaceId: "ws-test",
+            kind: "agent",
+            title: "Codex",
+            cwd: "/tmp/ws-test",
+            argv: ["codex"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 3,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    expect((await screen.findAllByText(/bash/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText("Task: Verify")).toBeInTheDocument();
+    expect(screen.queryByText("Codex")).not.toBeInTheDocument();
   });
 
   it("renders the empty-state create action with shared button compatibility classes", async () => {

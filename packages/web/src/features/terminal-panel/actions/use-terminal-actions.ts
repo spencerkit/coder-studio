@@ -89,15 +89,17 @@ export function useTerminalActions() {
           return;
         }
 
-        const shellTerminals = result.data.filter((terminal) => terminal.kind === "shell");
-        const shellIds = shellTerminals.map((terminal) => terminal.id);
+        const panelTerminals = result.data.filter(
+          (terminal) => terminal.kind === "shell" || terminal.kind === "task"
+        );
+        const panelIds = panelTerminals.map((terminal) => terminal.id);
 
-        for (const terminal of shellTerminals) {
+        for (const terminal of panelTerminals) {
           store.set(terminalMetaAtomFamily(terminal.id), toTerminalMeta(terminal));
         }
 
-        setTerminalIds((current) => mergeTerminalIds(current, shellIds));
-        setActiveTerminalId((current) => current ?? shellIds[0] ?? null);
+        setTerminalIds((current) => mergeTerminalIds(current, panelIds));
+        setActiveTerminalId((current) => current ?? panelIds[0] ?? null);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -130,12 +132,27 @@ export function useTerminalActions() {
 
       const terminalId = parts[3];
       const event = parts[4];
+      if (!terminalId || !event) {
+        return;
+      }
 
       if (event === "created") {
-        const createData = payload as { id: string; kind: "shell" | "agent" };
-        if (createData.kind !== "shell") {
+        const createData = payload as {
+          id: string;
+          kind: "shell" | "agent" | "task";
+          title?: string;
+          workspaceId?: string;
+        };
+        if (createData.kind !== "shell" && createData.kind !== "task") {
           return;
         }
+        store.set(terminalMetaAtomFamily(createData.id), {
+          id: createData.id,
+          workspaceId: createData.workspaceId ?? activeWorkspaceId,
+          kind: createData.kind,
+          alive: true,
+          title: createData.title,
+        });
 
         setTerminalIds((previous) => {
           if (previous.includes(createData.id)) {
@@ -152,7 +169,7 @@ export function useTerminalActions() {
       }
 
       const meta = store.get(terminalMetaAtomFamily(terminalId));
-      if (!meta || meta.kind !== "shell") {
+      if (!meta || (meta.kind !== "shell" && meta.kind !== "task")) {
         return;
       }
 

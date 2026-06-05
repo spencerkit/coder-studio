@@ -145,6 +145,11 @@
     "reconnecting": "重连中",
     "rejected": "被拒绝"
   },
+  "bottom_panel": {
+    "tabs_label": "底部面板",
+    "terminal": "终端",
+    "tasks": "任务"
+  },
   "workspace": {
     "title": "工作区",
     "tabs": "工作区标签",
@@ -568,6 +573,7 @@
     "title": "终端",
     "kicker": "TERMINAL",
     "new_terminal": "新建终端",
+    "managed_task": "托管",
     "close_terminal": "关闭终端",
     "shell": "Shell 终端",
     "agent": "Agent 终端",
@@ -646,6 +652,9 @@
       "closed_body": "是否重新打开一个新会话继续。",
       "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。"
     }
+  },
+  "tasks": {
+    "placeholder": "任务详情将在这里显示。"
   },
   "file": {
     "title": "文件",

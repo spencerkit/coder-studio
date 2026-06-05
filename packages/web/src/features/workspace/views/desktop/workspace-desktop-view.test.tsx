@@ -53,8 +53,8 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
-vi.mock("../../../terminal-panel", () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
+vi.mock("../shared/workspace-bottom-panel", () => ({
+  WorkspaceBottomPanel: () => <div data-testid="workspace-bottom-panel">Terminal Tasks</div>,
 }));
 
 vi.mock("../../../topbar", () => ({
@@ -107,6 +107,7 @@ function renderDesktopView(
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, {
+    subscribe: vi.fn(() => vi.fn()),
     sendCommand: vi.fn().mockImplementation(async (op: string) => {
       if (op === "session.list") {
         return [];
@@ -153,6 +154,10 @@ function renderDesktopView(
   );
 }
 
+function renderWorkspaceDesktopView() {
+  renderDesktopView("explorer");
+}
+
 describe("WorkspaceDesktopView", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -188,5 +193,11 @@ describe("WorkspaceDesktopView", () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(agentInstructionsSection).not.toContainElement(screen.getByTestId("agent-token-trend"));
+  });
+
+  it("renders the shared workspace bottom panel on desktop", () => {
+    renderWorkspaceDesktopView();
+
+    expect(screen.getByTestId("workspace-bottom-panel")).toHaveTextContent("Terminal Tasks");
   });
 });

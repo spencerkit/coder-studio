@@ -6,6 +6,10 @@ export function formatTerminalTitle(
   fallback: string
 ) {
   const rawTitle = meta?.title?.trim();
+  if (meta?.kind === "task" && rawTitle) {
+    return rawTitle;
+  }
+
   const shellLabel = inferShellLabel(rawTitle);
 
   if (!rawTitle || isGenericShellTitle(rawTitle, fallback)) {
