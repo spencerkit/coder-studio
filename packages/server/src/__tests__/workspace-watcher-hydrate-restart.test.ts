@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
@@ -118,6 +119,60 @@ describe("workspace watcher hydrate restart", () => {
         ignoreInitial: true,
         persistent: true,
       })
+    );
+  });
+
+  it("restores managed target files after restart", async () => {
+    mkdirSync(join(workspaceDir, ".coder-studio"), { recursive: true });
+    writeFileSync(
+      join(workspaceDir, ".coder-studio", "agent.md"),
+      "# Agent Instructions\n\n- Custom rule.\n"
+    );
+
+    server = await createServer({
+      stateDir,
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const firstCtx = server.__test__!.commandContext;
+
+    const openResult = await dispatch(
+      {
+        kind: "command",
+        id: "workspace-open-publish",
+        op: "workspace.open",
+        args: { path: workspaceDir },
+      },
+      firstCtx
+    );
+
+    expect(openResult.ok).toBe(true);
+    expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toContain(
+      "# Agent Instructions"
+    );
+    expect(await readFile(join(workspaceDir, ".claude", "CLAUDE.md"), "utf8")).toContain(
+      "# Agent Instructions"
+    );
+
+    await server.stop();
+    server = undefined;
+    watchSpy.mockClear();
+
+    rmSync(join(workspaceDir, "AGENTS.md"), { force: true });
+    rmSync(join(workspaceDir, ".claude", "CLAUDE.md"), { force: true });
+
+    server = await createServer({
+      stateDir,
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toContain(
+      "# Agent Instructions"
+    );
+    expect(await readFile(join(workspaceDir, ".claude", "CLAUDE.md"), "utf8")).toContain(
+      "# Agent Instructions"
     );
   });
 });

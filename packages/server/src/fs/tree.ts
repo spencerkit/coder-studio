@@ -4,7 +4,7 @@
  */
 
 import type { FileNode } from "@coder-studio/core";
-import { readdir, stat } from "fs/promises";
+import { readdir, realpath, stat } from "fs/promises";
 import { join, relative } from "path";
 import {
   createGitignoreFilter,
@@ -12,6 +12,7 @@ import {
   createTreeVisibilityFilter,
   isPathGitignored,
 } from "./gitignore.js";
+import { isPathInsideRoot } from "./path-safety.js";
 
 export interface ReadTreeResult {
   path: string;
@@ -31,6 +32,7 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
   const targetPath = subdir ? join(rootPath, subdir) : rootPath;
   const filter = createTreeVisibilityFilter();
   const gitignoreMatcher = createGitignoreMatcher(rootPath);
+  await assertPathInsideWorkspace(rootPath, targetPath);
 
   const entries = await readdir(targetPath, { withFileTypes: true });
   const nodes: FileNode[] = [];
@@ -43,24 +45,26 @@ export async function readTree(rootPath: string, subdir?: string): Promise<ReadT
     const fullPath = join(targetPath, entry.name);
     const relPath = relative(rootPath, fullPath);
     const isGitIgnored = isPathGitignored(gitignoreMatcher, relPath);
+    const entryInfo = await classifyEntry(rootPath, fullPath, entry.isSymbolicLink());
 
-    if (entry.isDirectory()) {
+    if (entryInfo?.kind === "dir") {
       nodes.push({
         name: entry.name,
         path: relPath,
         kind: "dir",
         isGitIgnored,
+        isSymlink: entryInfo.isSymlink,
         children: undefined, // Not loaded yet - client will request on expand
       });
-    } else if (entry.isFile()) {
-      const stats = await stat(fullPath);
+    } else if (entryInfo?.kind === "file") {
       nodes.push({
         name: entry.name,
         path: relPath,
         kind: "file",
         isGitIgnored,
-        size: stats.size,
-        mtime: stats.mtimeMs,
+        isSymlink: entryInfo.isSymlink,
+        size: Number(entryInfo.stats.size),
+        mtime: Number(entryInfo.stats.mtimeMs),
       });
     }
   }
@@ -96,6 +100,7 @@ export async function searchFiles(
   const matches: Array<{ path: string; name: string; fullPath: string; rank: number }> = [];
 
   async function walk(dirPath: string): Promise<void> {
+    await assertPathInsideWorkspace(rootPath, dirPath);
     const filter = createGitignoreFilter(rootPath, dirPath);
     const entries = await readdir(dirPath, { withFileTypes: true });
 
@@ -105,13 +110,20 @@ export async function searchFiles(
     for (const entry of filteredEntries) {
       const fullPath = join(dirPath, entry.name);
       const relPath = relative(rootPath, fullPath);
+      const entryInfo = await classifyEntry(rootPath, fullPath, entry.isSymbolicLink());
 
-      if (entry.isDirectory()) {
-        await walk(fullPath);
+      if (entryInfo?.kind === "dir") {
+        if (entryInfo.isInsideWorkspace) {
+          await walk(fullPath);
+        }
         continue;
       }
 
-      if (entry.isFile()) {
+      if (entryInfo?.kind === "file") {
+        if (!entryInfo.isInsideWorkspace) {
+          continue;
+        }
+
         const rank = scoreFileMatch(relPath, entry.name, normalizedQuery);
         if (rank === null) {
           continue;
@@ -160,6 +172,57 @@ export async function searchFiles(
   }
 
   return { files };
+}
+
+async function classifyEntry(
+  rootPath: string,
+  fullPath: string,
+  isSymlink: boolean
+): Promise<{
+  kind: "file" | "dir";
+  isSymlink: boolean;
+  isInsideWorkspace: boolean;
+  stats: Awaited<ReturnType<typeof stat>>;
+} | null> {
+  const stats = await stat(fullPath).catch(() => null);
+  if (!stats) {
+    return null;
+  }
+
+  const isInsideWorkspace = isSymlink
+    ? await isResolvedPathInsideWorkspace(rootPath, fullPath)
+    : true;
+
+  if (stats.isDirectory()) {
+    return { kind: "dir", isSymlink, isInsideWorkspace, stats };
+  }
+
+  if (stats.isFile()) {
+    return { kind: "file", isSymlink, isInsideWorkspace, stats };
+  }
+
+  return null;
+}
+
+async function assertPathInsideWorkspace(rootPath: string, targetPath: string): Promise<void> {
+  if (!(await isResolvedPathInsideWorkspace(rootPath, targetPath))) {
+    throw { code: "path_escape", message: `Path escapes workspace root: ${targetPath}` };
+  }
+}
+
+async function isResolvedPathInsideWorkspace(
+  rootPath: string,
+  targetPath: string
+): Promise<boolean> {
+  try {
+    const [realRootPath, realTargetPath] = await Promise.all([
+      realpath(rootPath),
+      realpath(targetPath),
+    ]);
+    return isPathInsideRoot(realRootPath, realTargetPath);
+  } catch {
+    return false;
+  }
 }
 
 function scoreFileMatch(path: string, name: string, query: string): number | null {

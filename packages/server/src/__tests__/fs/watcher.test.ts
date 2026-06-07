@@ -93,6 +93,19 @@ describe("WorkspaceWatcher", () => {
     expect(ignored?.(join(testDir, "src/index.ts"))).toBe(false);
   });
 
+  it("ignores managed target files used for agent instruction publishing", () => {
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster);
+
+    const options = watchSpy.mock.calls[0]?.[1];
+    const ignored = options?.ignored;
+
+    expect(typeof ignored).toBe("function");
+    expect(ignored?.(join(testDir, "AGENTS.md"))).toBe(true);
+    expect(ignored?.(join(testDir, "GEMINI.md"))).toBe(true);
+    expect(ignored?.(join(testDir, ".claude", "CLAUDE.md"))).toBe(true);
+    expect(ignored?.(join(testDir, ".coder-studio", "agent.md"))).toBe(false);
+  });
+
   it("ignores transient git lock files and write-heavy git internals", () => {
     new WorkspaceWatcher("test-workspace-id", testDir, broadcaster);
 
@@ -239,6 +252,20 @@ describe("WorkspaceWatcher", () => {
       Topics.workspaceFsDirty("test-workspace-id"),
       { reason: "fs_change" }
     );
+  });
+
+  it("invokes the dirty callback after a single file event settles", async () => {
+    vi.useFakeTimers();
+    const onDirty = vi.fn();
+
+    new WorkspaceWatcher("test-workspace-id", testDir, broadcaster, undefined, onDirty);
+
+    watcherEvents.all?.("change", join(testDir, ".coder-studio", "agent.md"));
+    await vi.advanceTimersByTimeAsync(199);
+    expect(onDirty).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(onDirty).toHaveBeenCalledWith("test-workspace-id", "fs_change");
   });
 
   it("broadcasts fs.dirty after consecutive file events settle", async () => {
