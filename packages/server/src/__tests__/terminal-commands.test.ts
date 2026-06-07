@@ -51,6 +51,7 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       close: vi.fn().mockResolvedValue(undefined),
       write: vi.fn(),
       resize: vi.fn(),
+      syncThemeBackgroundForWorkspace: vi.fn(),
     } as never,
     eventBus: {} as never,
     broadcaster: {
@@ -838,6 +839,63 @@ describe("terminal commands", () => {
     expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
   });
 
+  it("leaves submit payload untouched", async () => {
+    const sessionMetadataRepo = {
+      get: vi.fn(),
+      upsert: vi.fn(),
+    };
+    const sendInput = vi.fn();
+    const ctx = createContext({
+      workspaceMgr: {
+        get: vi.fn().mockReturnValue({
+          id: "ws-1",
+          path: "/workspace",
+          uiState: {
+            leftPanelWidth: 320,
+            bottomPanelHeight: 240,
+            focusMode: false,
+          },
+        }),
+      } as never,
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue("sess-1"),
+        get: vi.fn().mockReturnValue({
+          id: "sess-1",
+          terminalId: "term-1",
+          state: "idle",
+          workspaceId: "ws-1",
+          providerId: "codex",
+          capability: "full",
+          startedAt: 1,
+          lastActiveAt: 1,
+        }),
+        sendInput,
+        resize: vi.fn(),
+      } as never,
+      sessionMetadataRepo: sessionMetadataRepo as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-input-submit-1",
+        op: "terminal.input",
+        args: {
+          terminalId: "term-1",
+          bytes: Buffer.from("ship it\r").toString("base64"),
+          activity: "submit",
+          submittedText: "ship it",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(sendInput).toHaveBeenCalledWith("sess-1", Buffer.from("ship it\r"), "submit", "ship it");
+    expect(sessionMetadataRepo.get).not.toHaveBeenCalled();
+    expect(sessionMetadataRepo.upsert).not.toHaveBeenCalled();
+  });
+
   it("delegates ctrl-modified terminal.input to sessionMgr.sendInput as control activity", async () => {
     const ctx = createContext({
       sessionMgr: {
@@ -1052,5 +1110,25 @@ describe("terminal commands", () => {
     expect(result.ok).toBe(true);
     expect(ctx.terminalMgr.resize).toHaveBeenCalledWith("term-shell", 80, 24);
     expect(ctx.sessionMgr.resize).not.toHaveBeenCalled();
+  });
+
+  it("delegates terminal.syncThemeBackground to terminalMgr.syncThemeBackgroundForWorkspace", async () => {
+    const ctx = createContext();
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-sync-theme-1",
+        op: "terminal.syncThemeBackground",
+        args: {
+          workspaceId: "ws-1",
+          themeBackground: "#0b1218",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.terminalMgr.syncThemeBackgroundForWorkspace).toHaveBeenCalledWith("ws-1", "#0b1218");
   });
 });

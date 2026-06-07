@@ -10,6 +10,7 @@ import type {
   Workspace,
 } from "@coder-studio/core";
 import { LspToolManager, type ResolvedLspToolCommand } from "../lsp-tools/manager.js";
+import { ManagedProcessRegistry } from "../monitoring/managed-process-registry.js";
 import { resolveLspServerKind, wrapLspCommandForWorkspace } from "./server-factory.js";
 import { LspSession } from "./session.js";
 import {
@@ -75,6 +76,7 @@ export class LspManager {
       idleTtlMs: number;
       restartLimit: number;
       lspToolMgr: LspToolManager;
+      managedProcessRegistry?: ManagedProcessRegistry;
       createSession?: (deps: LspSessionDeps) => LspSessionLike;
       /**
        * Optional override for the Vue tsserver bridge. When omitted, the
@@ -205,6 +207,14 @@ export class LspManager {
           type: "lsp.diagnostics.updated",
           ...payload,
         }),
+      onPrimaryProcessPidChange: (pid) => {
+        this.handlePrimaryProcessPidChange(
+          input.workspaceId,
+          spec.serverKind,
+          resolution.displayName,
+          pid
+        );
+      },
     });
 
     this.sessions.set(key, { session, idleTimer: null });
@@ -522,10 +532,50 @@ export class LspManager {
     }
 
     this.sessions.delete(key);
-    await entry.session.stop();
+    try {
+      await entry.session.stop();
+    } finally {
+      this.deps.managedProcessRegistry?.unregisterByOwner(this.ownerIdForKey(key));
+    }
   }
 
   private keyFor(workspaceId: string, serverKind: string): string {
     return `${workspaceId}::${serverKind}`;
+  }
+
+  private ownerIdForKey(key: string): string {
+    const [workspaceId, serverKind] = key.split("::");
+    return this.ownerIdFor(workspaceId ?? "", serverKind ?? "");
+  }
+
+  private ownerIdFor(workspaceId: string, serverKind: string): string {
+    return `lsp:${workspaceId}:${serverKind}`;
+  }
+
+  private handlePrimaryProcessPidChange(
+    workspaceId: string,
+    serverKind: string,
+    displayName: string,
+    pid: number | null
+  ): void {
+    const registry = this.deps.managedProcessRegistry;
+    if (!registry) {
+      return;
+    }
+
+    const ownerId = this.ownerIdFor(workspaceId, serverKind);
+    if (!pid || pid <= 0) {
+      registry.unregisterByOwner(ownerId);
+      return;
+    }
+
+    registry.registerBackgroundRoot({
+      ownerId,
+      rootPid: pid,
+      kind: "lsp",
+      label: displayName,
+      workspaceId,
+      startedAt: Date.now(),
+    });
   }
 }

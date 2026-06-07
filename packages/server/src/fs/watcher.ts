@@ -46,6 +46,7 @@ export class WorkspaceWatcher {
   private firstDirtyTime: number | null = null;
   private pendingReason: "fs_change" | "git_metadata" | null = null;
   private pendingWorktreeChanged = false;
+  private pendingAgentInstructionsChanged = false;
   private readonly logger: WatcherLogger;
   private readonly DEBOUNCE_MS = 200;
   private readonly MAX_WAIT_MS = 1_000;
@@ -54,7 +55,8 @@ export class WorkspaceWatcher {
     private workspaceId: string,
     rootPath: string,
     private broadcaster?: Broadcaster,
-    logger?: WatcherLogger
+    logger?: WatcherLogger,
+    private onDirty?: (workspaceId: string, reason: string) => void
   ) {
     this.logger = logger ?? NOOP_WATCHER_LOGGER;
     const shouldIgnore = createWatcherIgnoreFilter(rootPath);
@@ -107,6 +109,10 @@ export class WorkspaceWatcher {
       this.pendingWorktreeChanged = true;
     }
 
+    if (changedPath && this.isAgentInstructionsPath(changedPath)) {
+      this.pendingAgentInstructionsChanged = true;
+    }
+
     if (changedPath && !this.isGitMetadataPath(changedPath)) {
       this.pendingReason = "fs_change";
     } else if (changedPath && this.pendingReason !== "fs_change") {
@@ -126,18 +132,24 @@ export class WorkspaceWatcher {
   }
 
   private flushDirty(): void {
+    const reason = this.pendingReason ?? "fs_change";
+
     this.broadcaster?.broadcast(Topics.workspaceFsDirty(this.workspaceId), {
-      reason: this.pendingReason ?? "fs_change",
+      reason,
     });
     if (this.pendingWorktreeChanged) {
       this.broadcaster?.broadcast(Topics.workspaceGitState(this.workspaceId), {
         worktreeChanged: true,
       });
     }
+    if (this.pendingAgentInstructionsChanged) {
+      this.onDirty?.(this.workspaceId, reason);
+    }
     this.dirtyTimer = null;
     this.firstDirtyTime = null;
     this.pendingReason = null;
     this.pendingWorktreeChanged = false;
+    this.pendingAgentInstructionsChanged = false;
   }
 
   private isGitMetadataPath(changedPath: string): boolean {
@@ -147,6 +159,10 @@ export class WorkspaceWatcher {
   private isWorktreeMetadataPath(changedPath: string): boolean {
     const normalized = changedPath.replace(/\\/g, "/");
     return normalized.includes("/.git/worktrees");
+  }
+
+  private isAgentInstructionsPath(changedPath: string): boolean {
+    return /(^|\/)\.coder-studio\/agent\.md$/.test(changedPath.replace(/\\/g, "/"));
   }
 
   /**

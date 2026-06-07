@@ -128,6 +128,34 @@ describe("SessionMetadataRepo", () => {
     ]);
   });
 
+  it("rehydrates attached agent instructions in a fresh repo instance", () => {
+    repo.upsert({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      verificationRuns: [],
+      attachedAgentInstructions: {
+        effectiveHash: "hash-123",
+        mode: "manual",
+        attachedAt: 1234,
+      },
+    });
+
+    const reloadedRepo = new SessionMetadataRepo({ workspaceRepo });
+
+    expect(reloadedRepo.get("sess-1")).toEqual({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      verificationRuns: [],
+      attachedAgentInstructions: {
+        effectiveHash: "hash-123",
+        mode: "manual",
+        attachedAt: 1234,
+      },
+    });
+  });
+
   it("finds metadata across registered workspaces by session id", async () => {
     const otherWorkspacePath = join(tempDir, "workspace-2");
     await mkdir(otherWorkspacePath, { recursive: true });

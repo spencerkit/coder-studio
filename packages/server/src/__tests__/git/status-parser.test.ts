@@ -16,6 +16,7 @@ describe("parseStatus", () => {
     expect(status.modified).toHaveLength(0);
     expect(status.untracked).toHaveLength(0);
     expect(status.deleted).toHaveLength(0);
+    expect(status.conflicted).toHaveLength(0);
   });
 
   it("should parse branch name", () => {
@@ -142,6 +143,21 @@ describe("parseStatus", () => {
         status: "added",
       },
     ]);
+  });
+
+  it("parses unmerged conflict entries as merge changes", () => {
+    const porcelain = `# branch.head main
+u UU N... 100644 100644 100644 100644 base123 ours123 theirs123 conflicted.ts`;
+    const status = parseStatus(porcelain);
+
+    expect(status.conflicted).toEqual([
+      {
+        path: "conflicted.ts",
+        status: "conflicted",
+      },
+    ]);
+    expect(status.modified).toHaveLength(0);
+    expect(status.staged).toHaveLength(0);
   });
 
   it("should handle complex status", () => {
