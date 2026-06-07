@@ -180,6 +180,7 @@
       "search": "Search",
       "skills": "Skills",
       "source_control": "Source Control",
+      "extensions": "Extensions",
       "skills": "Skills",
       "open_editors": "Open Files",
       "workspace": "Workspace",
@@ -286,8 +287,20 @@
       },
       "source": {
         "skillhub": "skills-hub",
-        "local": "Local"
+        "local": "Local",
+        "builtin": "Built-in"
       }
+    },
+    "extensions": {
+      "title": "Extensions",
+      "empty_title": "No extension state",
+      "empty_body": "Status, progress, logs, and quick actions appear here.",
+      "status_title": "Status",
+      "progress_title": "Progress",
+      "logs_title": "Logs",
+      "quick_actions_title": "Quick Actions",
+      "progress_value": "{value}/{max}",
+      "action_failed": "Quick action failed"
     },
     "search": {
       "empty": "Type to search across file contents.",

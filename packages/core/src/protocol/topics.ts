@@ -7,6 +7,7 @@ export const Topics = {
 
   // Workspace-level
   workspaceMeta: (id: string) => `workspace.${id}.meta`,
+  workspaceExtensionState: (id: string) => `workspace.${id}.extension.state`,
   workspaceFsDirty: (id: string) => `workspace.${id}.fs.dirty`,
   workspaceGitState: (id: string) => `workspace.${id}.git.state`,
   workspaceLspDiagnostics: (workspaceId: string) => `workspace.${workspaceId}.lsp.diagnostics`,

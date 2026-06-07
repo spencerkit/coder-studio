@@ -80,4 +80,49 @@ describe("SkillLibraryRepo", () => {
       }),
     ]);
   });
+
+  it("does not let scanned local skills override persisted built-in entries", async () => {
+    const skillsRoot = join(tempDir, "agents-skills");
+    const localSkillDir = join(skillsRoot, "coder-studio-automation");
+    await mkdir(localSkillDir, { recursive: true });
+    await writeFile(
+      join(localSkillDir, "SKILL.md"),
+      [
+        "---",
+        "name: coder-studio-automation",
+        "description: Local shadow copy",
+        "---",
+        "",
+        "# Local Shadow Copy",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+
+    repo.set({
+      slug: "coder-studio-automation",
+      displayName: "Coder Studio Automation",
+      description: "Built-in automation skill",
+      version: "1.0.0",
+      source: "builtin",
+      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-automation"),
+      installState: "installed",
+      installedAt: 1,
+      updatedAt: 2,
+      builtin: { defaultEnabled: true, autoMount: true },
+    });
+
+    const scannedRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "library.json"),
+      localSkillRoots: [skillsRoot],
+    });
+
+    expect(scannedRepo.get("coder-studio-automation")).toMatchObject({
+      slug: "coder-studio-automation",
+      description: "Built-in automation skill",
+      source: "builtin",
+      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-automation"),
+      builtin: { defaultEnabled: true, autoMount: true },
+    });
+  });
 });

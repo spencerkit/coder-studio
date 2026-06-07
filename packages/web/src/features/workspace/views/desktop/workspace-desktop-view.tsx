@@ -19,6 +19,7 @@ import { SearchPanel } from "../shared/search-panel";
 import { SkillsPanel } from "../shared/skills-panel";
 import { WorkspaceActivityBar } from "../shared/workspace-activity-bar";
 import { WorkspaceBottomPanel } from "../shared/workspace-bottom-panel";
+import { WorkspaceExtensionStatePanel } from "../shared/workspace-extension-state-panel";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -108,6 +109,12 @@ const WorkspaceDesktopScene: FC = () => {
       if (event.key === "5") {
         event.preventDefault();
         setDesktopSidebarView("skills");
+        return;
+      }
+
+      if (event.key === "6") {
+        event.preventDefault();
+        setDesktopSidebarView("extensions");
       }
     };
 
@@ -176,6 +183,10 @@ const WorkspaceDesktopScene: FC = () => {
 
                   {activeSidebarView === "skills" ? (
                     <SkillsPanel workspaceId={workspace.id} refreshToken={panelRefreshToken} />
+                  ) : null}
+
+                  {activeSidebarView === "extensions" ? (
+                    <WorkspaceExtensionStatePanel workspaceId={workspace.id} />
                   ) : null}
                 </div>
               </div>

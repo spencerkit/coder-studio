@@ -16,6 +16,7 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.sidebar.explorer": "Explorer",
       "workspace.sidebar.search": "Search",
       "workspace.sidebar.source_control": "Source Control",
+      "workspace.sidebar.extensions": "Extensions",
       "workspace.sidebar.label": "Workspace Sidebar",
       "workspace.sidebar.workspace": "Workspace",
       "workspace.sidebar.open_editors": "Open Files",
@@ -25,6 +26,15 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.search.placeholder": "Search",
       "workspace.agent_instructions.project_title": "Project Agent.md",
       "workspace.agent_instructions.token_trend.title": "Token Trend",
+      "workspace.extensions.title": "Extensions",
+      "workspace.extensions.empty_title": "No extension state",
+      "workspace.extensions.empty_body": "Status, progress, logs, and quick actions appear here.",
+      "workspace.extensions.status_title": "Status",
+      "workspace.extensions.progress_title": "Progress",
+      "workspace.extensions.logs_title": "Logs",
+      "workspace.extensions.quick_actions_title": "Quick Actions",
+      "workspace.extensions.progress_value": "{{value}}/{{max}}",
+      "workspace.extensions.action_failed": "Quick action failed",
       "common.loading": "Loading",
       "topbar.current_project": "Current Project",
     };
@@ -95,14 +105,26 @@ vi.mock("../shared/agent-instructions-section", () => ({
   ),
 }));
 
-vi.mock("../shared/agent-instructions-token-trend", () => ({
-  AgentInstructionsTokenTrend: ({ workspacePath }: { workspacePath: string }) => (
-    <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
+vi.mock("../shared/agent-token-trend-section", () => ({
+  AgentTokenTrendSection: ({ workspacePath }: { workspacePath: string }) => (
+    <section className="workspace-sidebar-section workspace-agent-token-trend-section">
+      <h2 className="workspace-sidebar-section__title">Token Trend</h2>
+      <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
+    </section>
+  ),
+}));
+
+vi.mock("../shared/workspace-extension-state-panel", () => ({
+  WorkspaceExtensionStatePanel: () => (
+    <div>
+      <h2>Extensions</h2>
+      <p>No extension state</p>
+    </div>
   ),
 }));
 
 function renderDesktopView(
-  activeView: "explorer" | "search" | "source-control" | "agent-instructions"
+  activeView: "explorer" | "search" | "source-control" | "agent-instructions" | "extensions"
 ) {
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
@@ -199,5 +221,14 @@ describe("WorkspaceDesktopView", () => {
     renderWorkspaceDesktopView();
 
     expect(screen.getByTestId("workspace-bottom-panel")).toHaveTextContent("Terminal Tasks");
+  });
+
+  it("opens the extension-state sidebar panel from the activity bar", () => {
+    renderDesktopView("explorer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Extensions" }));
+
+    expect(screen.getByRole("heading", { level: 2, name: "Extensions" })).toBeInTheDocument();
+    expect(screen.getByText("No extension state")).toBeInTheDocument();
   });
 });

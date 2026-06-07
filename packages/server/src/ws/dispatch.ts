@@ -7,8 +7,10 @@
 import type { Command, ProviderDefinition, Result } from "@coder-studio/core";
 import { z } from "zod";
 import type { AgentInstructionsPublisher } from "../agent-instructions/publisher.js";
+import type { AutomationAuditLog } from "../automation/audit-log.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { ServerConfig } from "../config.js";
+import type { WorkspaceExtensionStateService } from "../extension-state/workspace-extension-state-service.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { LspManager } from "../lsp/manager.js";
 import type { LspToolInstallManager } from "../lsp-tools/install-manager.js";
@@ -18,6 +20,7 @@ import type { ProviderInstallManager } from "../provider-runtime/install-manager
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
 import type { SessionAnalysisService } from "../session-analysis/service.js";
+import type { BuiltinSkillSyncManager } from "../skills/builtin/sync-manager.js";
 import type { SkillHealthManager } from "../skills/health-manager.js";
 import type { SkillInstallManager } from "../skills/install-manager.js";
 import type { SkillMountManager } from "../skills/mount-manager.js";
@@ -79,6 +82,10 @@ export interface CommandContext {
   skillLibraryRepo?: SkillLibraryRepo;
   skillTargetRepo?: SkillTargetRepo;
   skillMountRepo?: SkillMountRepo;
+  builtinSkillSyncMgr?: BuiltinSkillSyncManager;
+  automationAuditLog?: AutomationAuditLog;
+  workspaceExtensionStateService?: WorkspaceExtensionStateService;
+  stateRoot?: string;
 }
 
 /**
@@ -104,7 +111,27 @@ const schemas = new Map<string, CommandSchema>();
 const ACTIVATION_ALLOWLIST = new Set([
   "activation.claim",
   "activation.release",
+  "automation.capabilities",
+  "automation.identify",
   "connection.probe",
+  "git.diff",
+  "git.status",
+  "session.list",
+  "terminal.read",
+  "workspace.list",
+  "workspace.extensionState.list",
+  "workspace.extensionState.statusPills.set",
+  "workspace.extensionState.statusPills.list",
+  "workspace.extensionState.statusPills.clear",
+  "workspace.extensionState.progress.set",
+  "workspace.extensionState.progress.list",
+  "workspace.extensionState.progress.clear",
+  "workspace.extensionState.logs.append",
+  "workspace.extensionState.logs.list",
+  "workspace.extensionState.logs.clear",
+  "workspace.extensionState.quickActions.set",
+  "workspace.extensionState.quickActions.list",
+  "workspace.extensionState.quickActions.clear",
 ]);
 
 /**

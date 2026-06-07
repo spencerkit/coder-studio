@@ -32,6 +32,11 @@ export const WorkspaceActivityBar: FC<WorkspaceActivityBarProps> = ({
       icon: "nav.agent",
     },
     { view: "skills", label: t("workspace.sidebar.skills"), icon: "nav.skills" },
+    {
+      view: "extensions",
+      label: t("workspace.sidebar.extensions"),
+      icon: "nav.extensions",
+    },
   ];
 
   return (

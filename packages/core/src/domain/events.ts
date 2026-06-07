@@ -1,5 +1,6 @@
 // DomainEvent type union for EventBus (spec §4.0)
 
+import type { WorkspaceExtensionStateView } from "./extension-state";
 import type { LspDiagnosticsEvent } from "./lsp";
 import type { SessionState, TaskDefinition, TaskRun, TerminalKind, Workspace } from "./types";
 
@@ -19,6 +20,11 @@ export type DomainEvent =
       event: "started" | "turn_completed" | "stopped" | "removed";
     }
   | { type: "workspace.meta.changed"; workspaceId: string; patch: Partial<Workspace> }
+  | {
+      type: "workspace.extension_state.changed";
+      workspaceId: string;
+      state: WorkspaceExtensionStateView;
+    }
   | {
       type: "git.state.changed";
       workspaceId: string;

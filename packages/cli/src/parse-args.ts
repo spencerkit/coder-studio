@@ -7,8 +7,18 @@ type CliCommand =
   | "logs"
   | "help"
   | "version"
-  | "auth";
+  | "auth"
+  | "identify"
+  | "capabilities"
+  | "workspace"
+  | "session"
+  | "terminal"
+  | "git";
 type AuthCommand = "ban-list" | "unblock";
+type WorkspaceCommand = "list";
+type SessionCommand = "list";
+type TerminalCommand = "read";
+type GitCommand = "status" | "diff";
 
 export const RUNTIME_CONFIG_ERROR =
   "Host, port, state-dir, password, and auth settings must be configured via the config command";
@@ -20,6 +30,10 @@ export interface CliArgs {
   tail?: number;
   errorsOnly?: boolean;
   authCommand?: AuthCommand;
+  workspaceCommand?: WorkspaceCommand;
+  sessionCommand?: SessionCommand;
+  terminalCommand?: TerminalCommand;
+  gitCommand?: GitCommand;
   configHelp?: boolean;
   port?: number;
   host?: string;
@@ -27,6 +41,13 @@ export interface CliArgs {
   password?: string;
   noAuth?: boolean;
   ip?: string;
+  json?: boolean;
+  workspaceId?: string;
+  terminalId?: string;
+  bytes?: number;
+  path?: string;
+  staged?: boolean;
+  apiUrl?: string;
 }
 
 function getActiveCommand(args: CliArgs): CliCommand {
@@ -47,6 +68,19 @@ function clearAuthArgs(args: CliArgs): void {
   delete args.ip;
 }
 
+function clearAutomationArgs(args: CliArgs): void {
+  delete args.workspaceCommand;
+  delete args.sessionCommand;
+  delete args.terminalCommand;
+  delete args.gitCommand;
+  delete args.workspaceId;
+  delete args.terminalId;
+  delete args.bytes;
+  delete args.path;
+  delete args.staged;
+  delete args.apiUrl;
+}
+
 function clearLogsArgs(args: CliArgs): void {
   delete args.tail;
   delete args.errorsOnly;
@@ -63,6 +97,18 @@ function setCommand(args: CliArgs, command: CliCommand): void {
 
   if (command !== "logs") {
     clearLogsArgs(args);
+  }
+
+  if (!["workspace", "session", "terminal", "git"].includes(command)) {
+    clearAutomationArgs(args);
+  }
+
+  if (
+    command !== "identify" &&
+    command !== "capabilities" &&
+    !["workspace", "session", "terminal", "git"].includes(command)
+  ) {
+    delete args.json;
   }
 
   if (command !== "serve") {
@@ -122,10 +168,24 @@ export function parseArgs(argv: string[]): CliArgs {
       case "open":
       case "config":
       case "stop":
-      case "status":
       case "logs":
       case "version":
       case "auth":
+      case "identify":
+      case "capabilities":
+      case "workspace":
+      case "session":
+      case "terminal":
+      case "git":
+        setCommand(args, arg);
+        break;
+
+      case "status":
+        if (getActiveCommand(args) === "git") {
+          args.gitCommand = arg;
+          break;
+        }
+
         setCommand(args, arg);
         break;
 
@@ -196,6 +256,94 @@ export function parseArgs(argv: string[]): CliArgs {
         args.errorsOnly = true;
         break;
 
+      case "--json": {
+        const command = getActiveCommand(args);
+
+        if (
+          command !== "identify" &&
+          command !== "capabilities" &&
+          !["workspace", "session", "terminal", "git"].includes(command)
+        ) {
+          throwUnknownOption(arg);
+        }
+
+        args.json = true;
+        break;
+      }
+
+      case "--workspace":
+      case "--workspace-id": {
+        const command = getActiveCommand(args);
+        if (command !== "session" && command !== "git") {
+          throwUnknownOption(arg);
+        }
+
+        args.workspaceId = readOptionValue(argv, i + 1, "workspace");
+        i += 1;
+        break;
+      }
+
+      case "--terminal":
+      case "--terminal-id": {
+        if (getActiveCommand(args) !== "terminal") {
+          throwUnknownOption(arg);
+        }
+
+        args.terminalId = readOptionValue(argv, i + 1, "terminal");
+        i += 1;
+        break;
+      }
+
+      case "--bytes": {
+        if (getActiveCommand(args) !== "terminal") {
+          throwUnknownOption(arg);
+        }
+
+        const bytesValue = readOptionValue(argv, i + 1, "bytes");
+        if (!/^[1-9]\d*$/u.test(bytesValue)) {
+          throw new Error("Invalid bytes number");
+        }
+
+        const bytes = Number(bytesValue);
+        if (!Number.isSafeInteger(bytes)) {
+          throw new Error("Invalid bytes number");
+        }
+
+        args.bytes = bytes;
+        i += 1;
+        break;
+      }
+
+      case "--path": {
+        if (getActiveCommand(args) !== "git" || args.gitCommand !== "diff") {
+          throwUnknownOption(arg);
+        }
+
+        args.path = readOptionValue(argv, i + 1, "path");
+        i += 1;
+        break;
+      }
+
+      case "--staged": {
+        if (getActiveCommand(args) !== "git" || args.gitCommand !== "diff") {
+          throwUnknownOption(arg);
+        }
+
+        args.staged = true;
+        break;
+      }
+
+      case "--api-url": {
+        const command = getActiveCommand(args);
+        if (!["workspace", "session", "terminal", "git"].includes(command)) {
+          throwUnknownOption(arg);
+        }
+
+        args.apiUrl = readOptionValue(argv, i + 1, "api-url");
+        i += 1;
+        break;
+      }
+
       case "--port":
       case "-p": {
         ensureConfigContext(args, arg);
@@ -247,6 +395,37 @@ export function parseArgs(argv: string[]): CliArgs {
         args.authCommand = arg;
         break;
 
+      case "list": {
+        const command = getActiveCommand(args);
+        if (command === "workspace") {
+          args.workspaceCommand = arg;
+          break;
+        }
+        if (command === "session") {
+          args.sessionCommand = arg;
+          break;
+        }
+
+        throwUnknownArgument(arg);
+      }
+
+      case "read":
+        if (getActiveCommand(args) !== "terminal") {
+          throwUnknownArgument(arg);
+        }
+
+        args.terminalCommand = arg;
+        break;
+
+      case "status":
+      case "diff":
+        if (getActiveCommand(args) !== "git") {
+          throwUnknownArgument(arg);
+        }
+
+        args.gitCommand = arg;
+        break;
+
       case "--ip":
         if (getActiveCommand(args) !== "auth" || args.authCommand !== "unblock") {
           throwUnknownOption(arg);
@@ -276,6 +455,46 @@ export function parseArgs(argv: string[]): CliArgs {
 
     if (args.authCommand === "unblock" && args.ip === undefined) {
       throw new Error("Missing ip value");
+    }
+  }
+
+  if (args.command === "workspace") {
+    if (args.workspaceCommand === undefined) {
+      throw new Error("Missing workspace subcommand");
+    }
+  }
+
+  if (args.command === "session") {
+    if (args.sessionCommand === undefined) {
+      throw new Error("Missing session subcommand");
+    }
+
+    if (args.sessionCommand === "list" && args.workspaceId === undefined) {
+      throw new Error("Missing workspace value");
+    }
+  }
+
+  if (args.command === "terminal") {
+    if (args.terminalCommand === undefined) {
+      throw new Error("Missing terminal subcommand");
+    }
+
+    if (args.terminalCommand === "read" && args.terminalId === undefined) {
+      throw new Error("Missing terminal value");
+    }
+  }
+
+  if (args.command === "git") {
+    if (args.gitCommand === undefined) {
+      throw new Error("Missing git subcommand");
+    }
+
+    if (args.workspaceId === undefined) {
+      throw new Error("Missing workspace value");
+    }
+
+    if (args.gitCommand === "diff" && args.path === undefined) {
+      throw new Error("Missing path value");
     }
   }
 

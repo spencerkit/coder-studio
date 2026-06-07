@@ -228,6 +228,104 @@ describe("skills commands", () => {
     ]);
   });
 
+  it("returns builtin library metadata", async () => {
+    const ctx = createBaseContext({
+      skillLibraryRepo: {
+        list: vi.fn(() => [
+          {
+            slug: "coder-studio-automation",
+            displayName: "Coder Studio Automation",
+            description: "Teach agents",
+            version: "1.0.0",
+            source: "builtin",
+            libraryPath: "/skills/builtin/coder-studio-automation",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+            builtin: { defaultEnabled: true, autoMount: true },
+          },
+        ]),
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+      skillsHubClient: {} as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-library-builtin-1",
+        op: "skills.library.list",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        slug: "coder-studio-automation",
+        source: "builtin",
+        builtin: { defaultEnabled: true, autoMount: true },
+      }),
+    ]);
+  });
+
+  it("syncs builtin skills through command dispatch", async () => {
+    const sync = vi.fn(async () => ({
+      libraryEntries: [],
+      mounted: [],
+      skipped: [],
+    }));
+    const ctx = createBaseContext({
+      builtinSkillSyncMgr: { sync } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-builtin-sync-1",
+        op: "skills.builtin.sync",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists builtin mount disablement through command dispatch", async () => {
+    const setMountEnabled = vi.fn();
+    const sync = vi.fn(async () => ({
+      libraryEntries: [],
+      mounted: [],
+      skipped: [],
+    }));
+    const ctx = createBaseContext({
+      builtinSkillSyncMgr: { setMountEnabled, sync } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-builtin-set-enabled-1",
+        op: "skills.builtin.setMountEnabled",
+        args: {
+          providerId: "codex",
+          skillSlug: "coder-studio-review",
+          enabled: false,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(setMountEnabled).toHaveBeenCalledWith("codex", "coder-studio-review", false);
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
   it("starts and fetches install jobs", async () => {
     const start = vi.fn(async () => ({
       jobId: "job-1",

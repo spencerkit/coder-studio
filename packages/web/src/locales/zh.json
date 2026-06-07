@@ -180,6 +180,7 @@
       "search": "搜索",
       "skills": "Skills",
       "source_control": "源代码管理",
+      "extensions": "扩展状态",
       "skills": "技能",
       "open_editors": "打开的文件",
       "workspace": "工作区",
@@ -286,8 +287,20 @@
       },
       "source": {
         "skillhub": "skills-hub",
-        "local": "本地"
+        "local": "本地",
+        "builtin": "内置"
       }
+    },
+    "extensions": {
+      "title": "扩展状态",
+      "empty_title": "暂无扩展状态",
+      "empty_body": "状态、进度、日志和快捷操作会显示在这里。",
+      "status_title": "状态",
+      "progress_title": "进度",
+      "logs_title": "日志",
+      "quick_actions_title": "快捷操作",
+      "progress_value": "{value}/{max}",
+      "action_failed": "快捷操作失败"
     },
     "search": {
       "empty": "输入关键词以搜索文件内容。",

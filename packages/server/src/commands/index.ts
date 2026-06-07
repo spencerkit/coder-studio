@@ -6,6 +6,8 @@
 
 import "./workspace.js";
 import "./workspace-activity.js";
+import "./workspace-extension-state.js";
+import "./automation.js";
 import "./activation.js";
 import "./connection.js";
 import "./recovery.js";

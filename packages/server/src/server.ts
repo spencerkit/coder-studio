@@ -19,6 +19,7 @@ import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { AgentInstructionsPublisher } from "./agent-instructions/publisher.js";
 import { buildFastifyApp } from "./app.js";
+import { AutomationAuditLog } from "./automation/audit-log.js";
 import { EventBus } from "./bus/event-bus.js";
 import {
   ensureStateDir,
@@ -26,6 +27,7 @@ import {
   resolveConfiguredStateDir,
   type ServerConfigInput,
 } from "./config.js";
+import { WorkspaceExtensionStateService } from "./extension-state/workspace-extension-state-service.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
 import { LspManager } from "./lsp/manager.js";
 import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
@@ -44,6 +46,7 @@ import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
 import { SessionAnalysisRunner } from "./session-analysis/runner.js";
 import { SessionAnalysisService } from "./session-analysis/service.js";
+import { BuiltinSkillSyncManager } from "./skills/builtin/sync-manager.js";
 import { SkillHealthManager } from "./skills/health-manager.js";
 import { SkillInstallManager } from "./skills/install-manager.js";
 import { resolveDefaultLocalSkillRoots } from "./skills/local-skill-scanner.js";
@@ -65,6 +68,7 @@ import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { TerminalRepo } from "./storage/repositories/terminal-repo.js";
 import { UpdateStateRepo } from "./storage/repositories/update-state-repo.js";
 import { WorkAnalysisRepo } from "./storage/repositories/work-analysis-repo.js";
+import { WorkspaceExtensionStateRepo } from "./storage/repositories/workspace-extension-state-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
@@ -220,6 +224,12 @@ export async function createServer(
   const workspaceRepo = new WorkspaceRepo({
     filePath: join(stateRoot, "state", "workspaces.json"),
   });
+  const workspaceExtensionStateService = new WorkspaceExtensionStateService({
+    repo: new WorkspaceExtensionStateRepo({
+      workspaceRepo,
+    }),
+    eventBus,
+  });
   const sessionMetadataRepo = new SessionMetadataRepo({
     workspaceRepo,
   });
@@ -234,6 +244,19 @@ export async function createServer(
     ...providerRegistry,
     ...customProviderRepo.list().map((config) => buildCustomProviderDefinition(config)),
   ];
+  const automationAuditLog = new AutomationAuditLog({
+    filePath: join(stateRoot, "state", "automation-audit.jsonl"),
+  });
+  const builtinSkillSyncMgr = new BuiltinSkillSyncManager({
+    builtinRoot: join(stateRoot, "state", "skills", "builtin"),
+    getProviderRegistry: () => activeProviderRegistry,
+    skillLibraryRepo,
+    skillMountRepo,
+    skillMountMgr,
+    settingsRepo,
+  });
+  await builtinSkillSyncMgr.sync();
+
   const sessionMgr = new SessionManager({
     terminalMgr,
     eventBus,
@@ -241,6 +264,9 @@ export async function createServer(
     broadcaster: wsHub,
     providerRegistry: activeProviderRegistry,
     providerConfigRepo,
+    runtimeContext: {
+      apiUrl: `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`,
+    },
   });
 
   let supervisorMgr: SupervisorManager | undefined;
@@ -497,6 +523,10 @@ export async function createServer(
     skillLibraryRepo,
     skillTargetRepo,
     skillMountRepo,
+    builtinSkillSyncMgr,
+    automationAuditLog,
+    workspaceExtensionStateService,
+    stateRoot,
     agentInstructionPublisher,
   };
 

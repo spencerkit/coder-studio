@@ -17,7 +17,8 @@ export type DesktopSidebarView =
   | "search"
   | "source-control"
   | "agent-instructions"
-  | "skills";
+  | "skills"
+  | "extensions";
 
 export interface WorkspaceLayoutState {
   focusMode: boolean;
@@ -36,6 +37,7 @@ const DESKTOP_SIDEBAR_VIEW_VALUES = new Set<DesktopSidebarView>([
   "source-control",
   "agent-instructions",
   "skills",
+  "extensions",
 ]);
 const DEFAULT_WORKSPACE_LAYOUT_STATE: WorkspaceLayoutState = {
   focusMode: false,

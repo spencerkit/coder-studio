@@ -15846,6 +15846,124 @@ body.is-dragging-pane .session-action-btn-drag {
   overflow-y: auto;
 }
 
+.workspace-extension-state-panel__body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-3);
+  overflow-y: auto;
+  padding: var(--sp-4) calc(var(--sp-3) + var(--gap-compact)) calc(var(--sp-3) + var(--gap-compact));
+}
+
+.workspace-extension-state-panel__title {
+  text-transform: none;
+}
+
+.workspace-extension-state-panel__summary {
+  flex-shrink: 0;
+}
+
+.workspace-extension-state-panel__notice {
+  margin-top: var(--gap-tight);
+}
+
+.workspace-extension-state-panel__empty {
+  min-height: auto;
+}
+
+.workspace-extension-state-panel__section {
+  gap: var(--gap-compact);
+}
+
+.workspace-extension-state-panel__section-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--gap-compact);
+}
+
+.workspace-extension-state-panel__row,
+.workspace-extension-state-panel__progress-row,
+.workspace-extension-state-panel__quick-action {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gap-default);
+  padding: var(--sp-2);
+  border-color: var(--component-mix-border-default-92pct-transparent);
+}
+
+.workspace-extension-state-panel__progress-row {
+  flex-direction: column;
+}
+
+.workspace-extension-state-panel__row-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--gap-compact);
+}
+
+.workspace-extension-state-panel__row-head {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-default);
+}
+
+.workspace-extension-state-panel__row-title,
+.workspace-extension-state-panel__log-message {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body-4-size);
+  line-height: var(--type-body-4-line-height);
+  font-weight: var(--type-body-4-weight);
+}
+
+.workspace-extension-state-panel__row-detail,
+.workspace-extension-state-panel__meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+}
+
+.workspace-extension-state-panel__meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.workspace-extension-state-panel__tag {
+  flex-shrink: 0;
+}
+
+.workspace-extension-state-panel__log-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--gap-default);
+  padding: var(--sp-2);
+  border-color: var(--component-mix-border-default-92pct-transparent);
+}
+
+.workspace-extension-state-panel__quick-action .btn {
+  flex-shrink: 0;
+}
+
 .skills-panel__list-item,
 .skill-targets-drawer__card {
   display: flex;
