@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- [#72](https://github.com/spencerkit/coder-studio/pull/72) [`93e05d6`](https://github.com/spencerkit/coder-studio/commit/93e05d690135f6ef939fa33a465380b00fd99de9) Thanks [@pallyoung](https://github.com/pallyoung)! - Add expanded provider runtime support, agent instruction generation, skills management, and work analysis dashboard updates.
+
 ## 0.4.9
 
 ### Patch Changes
