@@ -4,6 +4,11 @@ import type { DomainEvent, Terminal } from "@coder-studio/core";
 import type { EventBus } from "../bus/event-bus";
 import { ActiveTerminal } from "./active-terminal";
 import { RING_BUFFER_SIZE } from "./constants";
+import {
+  containsOsc11BackgroundQuery,
+  formatOsc11BackgroundResponse,
+  shouldInjectOsc11BackgroundResponse,
+} from "./osc-theme-response";
 import { RingBuffer } from "./ring-buffer";
 import { type RenderOptions, renderSnapshotToText } from "./snapshot-render";
 import { HeadlessSnapshotBuffer } from "./terminal-snapshot-buffer";
@@ -167,8 +172,9 @@ export class TerminalManager {
     // TUIs that auto-pick color schemes (Claude Code, Codex, bat, delta, …)
     // can match the page background. We derive it from spec.themeBackground.
     // On Windows the ConPTY layer intercepts OSC 11 background-color queries
-    // and never forwards xterm.js's response back to the child, so this env
-    // variable is the only signal that survives the round trip.
+    // and never forwards xterm.js's response back to the child. COLORFGBG is
+    // the signal for TUIs that read it (Claude Code, Codex, …); Gemini CLI
+    // relies on OSC 11 instead and is handled in wireEvents() below.
     const derivedColorFgBg = spec.themeBackground
       ? computeColorFgBg(spec.themeBackground)
       : undefined;
@@ -255,6 +261,8 @@ export class TerminalManager {
 
     // Handle PTY output
     pty.onData((data: string) => {
+      this.maybeInjectOsc11BackgroundResponse(active, data);
+
       const buffer = Buffer.from(data, "utf-8");
       const { seq } = ringBuffer.append(buffer);
       traceTerminal(id, "pty.output", {
@@ -320,6 +328,32 @@ export class TerminalManager {
     });
   }
 
+  /**
+   * Answer OSC 11 background-color queries on Windows before ConPTY can reply
+   * with a stale value. Gemini CLI and similar TUIs read the response on stdin.
+   */
+  private maybeInjectOsc11BackgroundResponse(active: ActiveTerminal, data: string): void {
+    if (!shouldInjectOsc11BackgroundResponse() || !active.alive) {
+      return;
+    }
+
+    const themeBackground = active.spec.themeBackground;
+    if (!themeBackground || !containsOsc11BackgroundQuery(data)) {
+      return;
+    }
+
+    const response = formatOsc11BackgroundResponse(themeBackground);
+    if (!response) {
+      return;
+    }
+
+    traceTerminal(active.id, "pty.osc11.inject", {
+      workspaceId: active.spec.workspaceId,
+      themeBackground,
+    });
+    active.pty.write(response);
+  }
+
   private finalizeTerminal(active: ActiveTerminal): void {
     if (active.cleanupTimer) {
       clearTimeout(active.cleanupTimer);
@@ -327,6 +361,20 @@ export class TerminalManager {
     }
     active.snapshotBuffer?.dispose();
     this.terminals.delete(active.id);
+  }
+
+  /**
+   * Update the theme background used for OSC 11 injection and future spawns
+   * for all alive terminals in a workspace.
+   */
+  syncThemeBackgroundForWorkspace(workspaceId: string, themeBackground: string | undefined): void {
+    for (const terminal of this.terminals.values()) {
+      if (terminal.spec.workspaceId !== workspaceId || !terminal.alive) {
+        continue;
+      }
+
+      terminal.spec.themeBackground = themeBackground;
+    }
   }
 
   /**

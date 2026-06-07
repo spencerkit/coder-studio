@@ -1358,6 +1358,15 @@ export class SupervisorManager {
     return provider.capability === "full";
   }
 
+  private providerSupportsCapability(
+    provider: ProviderDefinition,
+    key: "interactive_session" | "supervisor_eval"
+  ): boolean {
+    return provider.capabilities.some(
+      (capability) => capability.key === key && capability.supported
+    );
+  }
+
   private requireWorkspace(workspaceId: string): { id: string; path: string } {
     const workspace = this.deps.workspaceMgr.get(workspaceId);
     if (!workspace) {
@@ -1670,17 +1679,14 @@ export class SupervisorManager {
 
   private assertEvaluatorProvider(providerId: string): void {
     const provider = this.deps.providerRegistry.find((item) => item.id === providerId);
-    if (!provider?.buildSupervisorEvalCommand) {
+    if (
+      !provider ||
+      !this.providerSupportsCapability(provider, "supervisor_eval") ||
+      !provider.headless?.supportedScenarios.includes("supervisor_eval")
+    ) {
       throw {
         code: "supervisor_invalid_evaluator_provider",
         message: `Provider ${providerId} cannot evaluate supervisors`,
-      };
-    }
-    const hasConfig = this.deps.providerConfigRepo.get(providerId) ?? provider.defaultConfig;
-    if (!hasConfig) {
-      throw {
-        code: "missing_evaluator_config",
-        message: `Missing config for evaluator provider ${providerId}`,
       };
     }
   }

@@ -1,4 +1,5 @@
-import { useSetAtom } from "jotai";
+import { atom, useAtom, useSetAtom, useStore } from "jotai";
+import { atomFamily } from "jotai-family";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../../lib/i18n";
 import {
@@ -7,11 +8,12 @@ import {
 } from "../../../lib/workspace-path-drag";
 import { pushToastAtom } from "../../notifications/atoms";
 import { quoteShellSingle } from "./quote-shell.js";
-import { UploadError, uploadFiles } from "./upload-files.js";
+import { UploadError, type UploadedFileMeta, uploadFiles } from "./upload-files.js";
 
 interface Options {
   containerRef: RefObject<HTMLElement | null>;
   workspaceId: string;
+  terminalId: string;
   sendTextToTerminal: (text: string) => Promise<void>;
   enabled: boolean;
 }
@@ -27,10 +29,39 @@ async function clipboardItemToFile(item: ClipboardItem): Promise<File | null> {
   return new File([blob], `clipboard.${extension}`, { type: fileType });
 }
 
+export interface PendingUploadImage {
+  id: string;
+  file: File;
+  previewUrl: string;
+  name: string;
+  type: string;
+}
+
+interface PendingUploadBucket {
+  images: PendingUploadImage[];
+  nextImageId: number;
+}
+
 export interface PasteDropUploadActions {
   handleClipboardPaste: () => Promise<void>;
   handleFiles: (files: File[]) => Promise<void>;
+  collectPendingFiles: (files: File[]) => void;
+  uploadPendingImages: () => Promise<UploadedFileMeta[]>;
+  clearPendingImages: () => void;
+  removePendingImage: (imageId: string) => void;
+  pendingImages: PendingUploadImage[];
   busy: boolean;
+}
+
+const pendingUploadBucketAtomFamily = atomFamily((_: string) =>
+  atom<PendingUploadBucket>({
+    images: [],
+    nextImageId: 0,
+  })
+);
+
+function getPendingUploadBucketKey(workspaceId: string, terminalId: string): string {
+  return `${workspaceId}:${terminalId}`;
 }
 
 interface RunSequenceOptions {
@@ -39,15 +70,50 @@ interface RunSequenceOptions {
 }
 
 export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
-  const { containerRef, workspaceId, sendTextToTerminal, enabled } = opts;
+  const { containerRef, workspaceId, terminalId, sendTextToTerminal, enabled } = opts;
+  const store = useStore();
+  const pendingUploadBucketAtom = pendingUploadBucketAtomFamily(
+    getPendingUploadBucketKey(workspaceId, terminalId)
+  );
+  const [pendingUploadBucket, setPendingUploadBucket] = useAtom(pendingUploadBucketAtom);
   const [busy, setBusy] = useState(false);
   const inFlightCountRef = useRef(0);
   const nextSequenceRef = useRef(0);
   const nextSequenceToFlushRef = useRef(0);
   const completedTextsRef = useRef(new Map<number, string | null>());
   const flushChainRef = useRef(Promise.resolve());
+  const pendingImages = pendingUploadBucket.images;
+  const pendingImagesRef = useRef<PendingUploadImage[]>(pendingImages);
   const pushToast = useSetAtom(pushToastAtom);
   const t = useTranslation();
+  pendingImagesRef.current = pendingImages;
+
+  const revokePendingImages = useCallback((images: PendingUploadImage[]) => {
+    for (const image of images) {
+      URL.revokeObjectURL(image.previewUrl);
+    }
+  }, []);
+
+  const updatePendingBucket = useCallback(
+    (updater: (bucket: PendingUploadBucket) => PendingUploadBucket) => {
+      const previousBucket = store.get(pendingUploadBucketAtom);
+      const nextBucket = updater(previousBucket);
+
+      if (nextBucket === previousBucket) {
+        return;
+      }
+
+      const previousImages = previousBucket.images;
+      const nextImages = nextBucket.images;
+      const nextIds = new Set(nextImages.map((image) => image.id));
+      const removedImages = previousImages.filter((image) => !nextIds.has(image.id));
+
+      pendingImagesRef.current = nextImages;
+      setPendingUploadBucket(nextBucket);
+      revokePendingImages(removedImages);
+    },
+    [pendingUploadBucketAtom, revokePendingImages, setPendingUploadBucket, store]
+  );
 
   const settleSequence = useCallback(
     async (sequence: number, text: string | null) => {
@@ -107,6 +173,62 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
     [pushToast, settleSequence, t]
   );
 
+  const collectPendingFiles = useCallback(
+    (files: File[]) => {
+      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+      if (imageFiles.length === 0) {
+        return;
+      }
+
+      updatePendingBucket((bucket) => {
+        let nextImageId = bucket.nextImageId;
+        const nextPendingImages = imageFiles.map((file) => {
+          const id = `pending-upload-image-${nextImageId}`;
+          nextImageId += 1;
+          return {
+            id,
+            file,
+            previewUrl: URL.createObjectURL(file),
+            name: file.name,
+            type: file.type,
+          };
+        });
+
+        return {
+          images: [...bucket.images, ...nextPendingImages],
+          nextImageId,
+        };
+      });
+    },
+    [updatePendingBucket]
+  );
+
+  const clearPendingImages = useCallback(() => {
+    updatePendingBucket((bucket) =>
+      bucket.images.length === 0
+        ? bucket
+        : {
+            ...bucket,
+            images: [],
+          }
+    );
+  }, [updatePendingBucket]);
+
+  const removePendingImage = useCallback(
+    (imageId: string) => {
+      updatePendingBucket((bucket) => {
+        const images = bucket.images.filter((image) => image.id !== imageId);
+        return images.length === bucket.images.length
+          ? bucket
+          : {
+              ...bucket,
+              images,
+            };
+      });
+    },
+    [updatePendingBucket]
+  );
+
   const handleFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) {
@@ -124,6 +246,36 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
     },
     [runSequence, workspaceId]
   );
+
+  const uploadPendingImages = useCallback(async () => {
+    const images = pendingImagesRef.current;
+    if (images.length === 0) {
+      return [];
+    }
+
+    inFlightCountRef.current += 1;
+    setBusy(true);
+
+    try {
+      const uploaded = await uploadFiles({
+        workspaceId,
+        files: images.map((image) => image.file),
+      });
+      return uploaded;
+    } catch (error) {
+      const code = error instanceof UploadError ? error.code : "unknown";
+      pushToast({
+        kind: "error",
+        title: t("terminal.upload.upload_failed"),
+        body: t("terminal.upload.upload_failed_body", { code }),
+        duration: 5_000,
+      });
+      throw error;
+    } finally {
+      inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+      setBusy(inFlightCountRef.current > 0);
+    }
+  }, [pushToast, t, workspaceId]);
 
   const handleText = useCallback(
     async (text: string) => {
@@ -208,7 +360,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         }
 
         if (files.length > 0) {
-          await handleFiles(files);
+          collectPendingFiles(files);
           return;
         }
       }
@@ -244,7 +396,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       });
       throw error;
     }
-  }, [enabled, handleFiles, handleText, pushToast, t]);
+  }, [collectPendingFiles, enabled, handleText, pushToast, t]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -258,17 +410,34 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         return;
       }
 
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+      const otherFiles = Array.from(files).filter((file) => !file.type.startsWith("image/"));
+
       event.preventDefault();
       event.stopPropagation();
-      void handleFiles(Array.from(files));
+
+      if (imageFiles.length > 0) {
+        collectPendingFiles(imageFiles);
+      }
+      if (otherFiles.length > 0) {
+        void handleFiles(otherFiles);
+      }
     };
 
     const onDrop = (event: DragEvent) => {
       const files = event.dataTransfer?.files;
       if (files && files.length > 0) {
+        const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+        const otherFiles = Array.from(files).filter((file) => !file.type.startsWith("image/"));
+
         event.preventDefault();
         event.stopPropagation();
-        void handleFiles(Array.from(files));
+        if (imageFiles.length > 0) {
+          collectPendingFiles(imageFiles);
+        }
+        if (otherFiles.length > 0) {
+          void handleFiles(otherFiles);
+        }
         return;
       }
 
@@ -302,11 +471,16 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       element.removeEventListener("drop", onDrop, { capture: true });
       element.removeEventListener("dragover", onDragOver, { capture: true });
     };
-  }, [containerRef, enabled, handleFiles, handleWorkspacePathDrop]);
+  }, [collectPendingFiles, containerRef, enabled, handleFiles, handleWorkspacePathDrop]);
 
   return {
     busy,
     handleClipboardPaste,
     handleFiles,
+    collectPendingFiles,
+    uploadPendingImages,
+    clearPendingImages,
+    removePendingImage,
+    pendingImages,
   };
 }

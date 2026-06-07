@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { Tooltip } from "../../../components/ui";
 
 export interface PanelHeaderProps {
   title: string;
+  titleTooltip?: ReactNode;
   meta?: ReactNode;
   status?: ReactNode;
   actions?: ReactNode;
@@ -11,6 +13,7 @@ export interface PanelHeaderProps {
 
 export function PanelHeader({
   title,
+  titleTooltip,
   meta,
   status,
   actions,
@@ -24,6 +27,7 @@ export function PanelHeader({
       {meta}
     </div>
   ) : null;
+  const titleNode = <div className="panel-header__title">{title}</div>;
 
   return (
     <div
@@ -33,7 +37,7 @@ export function PanelHeader({
         <div className="panel-header__copy">
           <div className="panel-header__title-row">
             {status ? <div className="panel-header__status">{status}</div> : null}
-            <div className="panel-header__title">{title}</div>
+            {titleTooltip ? <Tooltip content={titleTooltip}>{titleNode}</Tooltip> : titleNode}
             {metaPlacement === "inline" ? metaNode : null}
           </div>
           {metaPlacement === "stacked" ? metaNode : null}

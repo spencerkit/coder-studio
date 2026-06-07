@@ -12,7 +12,7 @@ import type {
   SessionState,
   TerminalInputActivity,
 } from "@coder-studio/core";
-import { deriveSessionTitle } from "@coder-studio/core";
+import { deriveSessionTitle, normalizeSessionTitleInput } from "@coder-studio/core";
 import type { EventBus, Unsubscribe } from "../bus/event-bus.js";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
@@ -106,6 +106,40 @@ interface PendingResumeAggregation {
 function readTerminalEscapeSequence(text: string, start: number): string | null {
   const match = text.slice(start).match(TERMINAL_ESCAPE_SEQUENCE_PATTERN);
   return match?.[0] ?? null;
+}
+
+function isTerminalSubmitInput(data: string): boolean {
+  if (data.includes("\r") || data.includes("\n")) {
+    return true;
+  }
+
+  // Kitty keyboard Enter: ESC [ 13 ; modifiers u/~
+  if (/\x1b\[13(?:;[\d;]*)?(?:u|~)/.test(data)) {
+    return true;
+  }
+
+  // Application keypad Enter transmits ESC O M (same as CR).
+  if (data.includes("\x1bOM")) {
+    return true;
+  }
+
+  return false;
+}
+
+function resolveTerminalInputActivity(
+  bytes: Buffer,
+  activity: TerminalInputActivity
+): TerminalInputActivity {
+  if (
+    activity === "submit" ||
+    activity === "internal_submit" ||
+    activity === "system" ||
+    activity === "control"
+  ) {
+    return activity;
+  }
+
+  return isTerminalSubmitInput(bytes.toString("utf8")) ? "submit" : activity;
 }
 
 function classifyRecentInputEcho(
@@ -338,6 +372,7 @@ export class SessionManager {
         capability: session.capability,
         state: nextState,
         title: session.title,
+        firstSubmittedUserInput: session.firstSubmittedUserInput,
         startedAt: session.startedAt,
         lastActiveAt: session.lastActiveAt,
         endedAt: session.endedAt,
@@ -451,7 +486,10 @@ export class SessionManager {
     session: ActiveSession,
     activity: TerminalInputActivity,
     text: string | undefined,
-    options: { armTurnCompletion: boolean }
+    options: {
+      armTurnCompletion: boolean;
+      skipResumeWhenTurnCompletedSynchronously?: boolean;
+    }
   ): void {
     const completedSynchronously =
       !options.armTurnCompletion && session.state === "idle" && !session.awaitingTurnCompletion;
@@ -490,7 +528,7 @@ export class SessionManager {
 
     const shouldResume = session.state === "idle" || session.state === "starting";
 
-    if (shouldResume && !completedSynchronously) {
+    if (shouldResume && !options.skipResumeWhenTurnCompletedSynchronously) {
       this.transitionSessionToRunning(session);
     } else if (titleChanged) {
       // State stayed the same, but the DTO changed (title added) and the UI
@@ -515,12 +553,15 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    const resolvedActivity = resolveTerminalInputActivity(bytes, activity);
+
     const text =
-      activity === "submit" || activity === "internal_submit"
-        ? (submittedText ?? bytes.toString("utf-8"))
+      resolvedActivity === "submit" || resolvedActivity === "internal_submit"
+        ? (submittedText ?? bytes.toString("utf8"))
         : undefined;
-    const rollbackArm = this.armTurnCompletionBeforeWrite(session, activity);
-    const rollbackRecentInput = this.recordRecentInputBeforeWrite(session, bytes, activity);
+    const rollbackArm = this.armTurnCompletionBeforeWrite(session, resolvedActivity);
+    const armedTurnCompletion = session.awaitingTurnCompletion;
+    const rollbackRecentInput = this.recordRecentInputBeforeWrite(session, bytes, resolvedActivity);
 
     try {
       this.deps.terminalMgr.write(session.terminalId, bytes);
@@ -530,7 +571,13 @@ export class SessionManager {
       throw error;
     }
 
-    this.applyTerminalInputActivity(session, activity, text, { armTurnCompletion: false });
+    const turnCompletedSynchronously =
+      armedTurnCompletion && !session.awaitingTurnCompletion && session.state === "idle";
+
+    this.applyTerminalInputActivity(session, resolvedActivity, text, {
+      armTurnCompletion: false,
+      skipResumeWhenTurnCompletedSynchronously: turnCompletedSynchronously,
+    });
     this.flushPendingPtyIdle(session);
   }
 
@@ -592,12 +639,16 @@ export class SessionManager {
     if (session.title) return false;
     if (!text) return false;
 
-    const title = deriveSessionTitle(text);
+    const firstSubmittedUserInput = normalizeSessionTitleInput(text);
+    if (!firstSubmittedUserInput) return false;
+
+    const title = deriveSessionTitle(firstSubmittedUserInput);
 
     if (!title) return false;
 
     session.title = title;
-    this.deps.db.update(session.id, { title });
+    session.firstSubmittedUserInput = firstSubmittedUserInput;
+    this.deps.db.update(session.id, { title, firstSubmittedUserInput });
     return true;
   }
 
@@ -616,6 +667,26 @@ export class SessionManager {
     });
 
     this.emitStateChanged(session, prev, "running");
+  }
+
+  private maybeResumeRunningFromOutput(
+    session: ActiveSession,
+    assessment: TerminalOutputAssessment,
+    now: number = Date.now()
+  ): void {
+    if (!assessment.shouldResumeRunning) {
+      return;
+    }
+
+    if (session.state !== "idle" && session.state !== "starting") {
+      return;
+    }
+
+    if (!session.awaitingTurnCompletion && !this.hasRecentSubmitInput(session, now)) {
+      return;
+    }
+
+    this.transitionSessionToRunning(session);
   }
 
   /**
@@ -807,6 +878,14 @@ export class SessionManager {
     );
   }
 
+  private hasRecentSubmitInput(session: ActiveSession, now: number): boolean {
+    return session.recentInputEchoes.some(
+      (entry) =>
+        (entry.activity === "submit" || entry.activity === "internal_submit") &&
+        now - entry.at <= RECENT_INPUT_ECHO_WINDOW_MS
+    );
+  }
+
   private hasRecentOpaqueNonSubmitInput(session: ActiveSession, now: number): boolean {
     return session.recentInputEchoes.some(
       (entry) =>
@@ -949,6 +1028,7 @@ export class SessionManager {
     if (outputAssessment.countsAsTurnOutput) {
       session.sawOutputSinceTurnStart = true;
     }
+    this.maybeResumeRunningFromOutput(session, outputAssessment);
   }
 
   private schedulePendingResumeAggregation(session: ActiveSession, chunk: Buffer): void {
@@ -1093,6 +1173,8 @@ export class SessionManager {
         activeSession.sawOutputSinceTurnStart = true;
       }
 
+      this.maybeResumeRunningFromOutput(activeSession, outputAssessment);
+
       detector.feed(event.chunk);
     });
 
@@ -1145,6 +1227,7 @@ class ActiveSession {
   exitCode?: number;
   draft?: string;
   title?: string;
+  firstSubmittedUserInput?: string;
   latestSubmittedUserInput?: string;
   awaitingTurnCompletion = false;
   sawOutputSinceTurnStart = false;
@@ -1160,6 +1243,7 @@ class ActiveSession {
     state: SessionState;
     draft?: string;
     title?: string;
+    firstSubmittedUserInput?: string;
     startedAt?: number;
     lastActiveAt?: number;
     endedAt?: number;
@@ -1174,6 +1258,7 @@ class ActiveSession {
     this.state = data.state;
     this.draft = data.draft;
     this.title = data.title;
+    this.firstSubmittedUserInput = data.firstSubmittedUserInput;
     this.startedAt = data.startedAt ?? Date.now();
     this.lastActiveAt = data.lastActiveAt ?? this.startedAt;
     this.endedAt = data.endedAt;
@@ -1195,6 +1280,7 @@ class ActiveSession {
       completionPercent: this.completionPercent,
       errorReason: this.errorReason,
       title: this.title,
+      firstSubmittedUserInput: this.firstSubmittedUserInput,
     };
   }
 

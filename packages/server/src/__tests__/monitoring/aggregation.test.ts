@@ -129,6 +129,64 @@ describe("buildMonitoringSnapshot", () => {
     expect(response.snapshot.workspaces[0]?.label).toBe("ws_1779980247607_u2lfvdjf");
   });
 
+  it("keeps workspace-scoped background roots under the workspace attribution tree", () => {
+    const response = buildMonitoringSnapshot({
+      settings: {
+        ...createDefaultMonitoringSettings(),
+        enabled: true,
+      },
+      sampledAt: 100,
+      host: null,
+      roots: [
+        {
+          ownerId: "lsp:ws-1:typescript",
+          rootPid: 200,
+          kind: "lsp",
+          label: "TypeScript language server",
+          workspaceId: "ws-1",
+          startedAt: 2,
+        },
+      ],
+      workspaceLabels: {
+        "ws-1": "coder-studio",
+      },
+      processRows: [
+        {
+          pid: 200,
+          ppid: 1,
+          cpuPercent: 7,
+          rssBytes: 150,
+          elapsedSec: 45,
+          command: "typescript-language-server",
+        },
+      ],
+      previousSnapshot: null,
+    });
+
+    expect(response.snapshot.workspaces).toEqual([
+      expect.objectContaining({
+        id: "workspace:ws-1",
+        kind: "workspace",
+        label: "coder-studio",
+        cpuPercent: 7,
+        memoryBytes: 150,
+        processCount: 1,
+      }),
+    ]);
+    expect(response.snapshot.backgroundGroups).toEqual([
+      expect.objectContaining({
+        id: "background:lsp:ws-1:typescript",
+        kind: "background_group",
+        parentId: "workspace:ws-1",
+        workspaceId: "ws-1",
+        label: "TypeScript language server",
+        cpuPercent: 7,
+        memoryBytes: 150,
+        processCount: 1,
+      }),
+    ]);
+  });
+
   it("keeps host data when process collection fails", () => {
     const response = buildMonitoringSnapshot({
       settings: {

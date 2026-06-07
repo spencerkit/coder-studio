@@ -64,7 +64,7 @@ describe("inspectWorkspaceIntelligence", () => {
       rootPath,
     });
 
-    expect(summary).toEqual({
+    expect(summary).toMatchObject({
       workspaceId: "ws-1",
       rootPath,
       git: {
@@ -94,6 +94,8 @@ describe("inspectWorkspaceIntelligence", () => {
         path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       },
     });
+    expect(summary.workspaceKind).toBe("monorepo");
+    expect(summary.topLevelDirectories).toEqual([".coder-studio", "docs"]);
   });
 
   it("handles non-git folders without package.json", async () => {
@@ -107,7 +109,7 @@ describe("inspectWorkspaceIntelligence", () => {
       rootPath,
     });
 
-    expect(summary).toEqual({
+    expect(summary).toMatchObject({
       workspaceId: "ws-plain",
       rootPath,
       git: {
@@ -128,6 +130,8 @@ describe("inspectWorkspaceIntelligence", () => {
         path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
       },
     });
+    expect(summary.workspaceKind).toBe("unknown");
+    expect(summary.topLevelDirectories).toEqual(["docs"]);
   });
 
   it("reads branch metadata from a worktree-style .git file", async () => {
@@ -148,5 +152,134 @@ describe("inspectWorkspaceIntelligence", () => {
       isRepo: true,
       branch: "review/phase-3",
     });
+  });
+
+  it("infers a monorepo architecture summary with key directories and stronger verification commands", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "workspace-intelligence-rich-"));
+    tempDirs.push(rootPath);
+
+    await writeFile(join(rootPath, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n");
+    await writeFile(
+      join(rootPath, "package.json"),
+      JSON.stringify(
+        {
+          scripts: {
+            dev: "tsx scripts/dev.ts",
+            build: "tsx scripts/build.ts",
+            lint: "biome lint .",
+            "ci:test": "pnpm -r test",
+            "ci:typecheck": "pnpm -r exec tsc -p tsconfig.json --noEmit",
+            "ci:verify": "pnpm ci:test && pnpm ci:typecheck",
+            "acceptance:phase1": "pnpm --dir e2e exec playwright test --grep @phase1",
+          },
+        },
+        null,
+        2
+      )
+    );
+    await writeFile(join(rootPath, "README.md"), "# Repo\n");
+    await mkdir(join(rootPath, "docs", "help"), { recursive: true });
+    await writeFile(join(rootPath, "docs", "help", "quick-start.md"), "# Quick Start\n");
+    await mkdir(join(rootPath, "packages", "web"), { recursive: true });
+    await writeFile(
+      join(rootPath, "packages", "web", "package.json"),
+      JSON.stringify({ name: "@repo/web", scripts: { test: "vitest run" } })
+    );
+    await mkdir(join(rootPath, "packages", "server"), { recursive: true });
+    await writeFile(
+      join(rootPath, "packages", "server", "package.json"),
+      JSON.stringify({ name: "@repo/server" })
+    );
+
+    const summary = await inspectWorkspaceIntelligence({
+      workspaceId: "ws-1",
+      rootPath,
+    });
+
+    expect(summary).toMatchObject({
+      workspaceKind: "monorepo",
+      keyDirectories: [
+        {
+          path: "packages/web",
+          kind: "frontend",
+          reason: expect.any(String),
+        },
+        {
+          path: "packages/server",
+          kind: "backend",
+          reason: expect.any(String),
+        },
+        {
+          path: "docs",
+          kind: "docs",
+          reason: expect.any(String),
+        },
+      ],
+      packages: expect.arrayContaining([
+        {
+          path: "packages/web",
+          name: "@repo/web",
+          role: "frontend_ui",
+          scripts: ["test"],
+        },
+        {
+          path: "packages/server",
+          name: "@repo/server",
+          role: "backend_runtime",
+          scripts: [],
+        },
+      ]),
+      verificationCommands: expect.arrayContaining([
+        {
+          command: "pnpm ci:test",
+          reason: expect.any(String),
+          priority: "verification",
+        },
+        {
+          command: "pnpm ci:typecheck",
+          reason: expect.any(String),
+          priority: "quality",
+        },
+        {
+          command: "pnpm ci:verify",
+          reason: expect.any(String),
+          priority: "verification",
+        },
+      ]),
+      fileConstraints: expect.arrayContaining([
+        expect.stringContaining("package boundaries"),
+        expect.stringContaining("unrelated refactors"),
+      ]),
+    });
+  });
+
+  it("caps key directories and skips noisy root folders", async () => {
+    const rootPath = await mkdtemp(join(tmpdir(), "workspace-intelligence-noise-"));
+    tempDirs.push(rootPath);
+
+    await writeFile(join(rootPath, "package.json"), JSON.stringify({ scripts: {} }));
+    await mkdir(join(rootPath, "packages", "core"), { recursive: true });
+    await writeFile(
+      join(rootPath, "packages", "core", "package.json"),
+      JSON.stringify({ name: "@repo/core" })
+    );
+    await mkdir(join(rootPath, "packages", "providers"), { recursive: true });
+    await writeFile(
+      join(rootPath, "packages", "providers", "package.json"),
+      JSON.stringify({ name: "@repo/providers" })
+    );
+    await mkdir(join(rootPath, "node_modules"), { recursive: true });
+    await mkdir(join(rootPath, ".git"), { recursive: true });
+    await mkdir(join(rootPath, "scripts"), { recursive: true });
+    await mkdir(join(rootPath, "e2e"), { recursive: true });
+
+    const summary = await inspectWorkspaceIntelligence({
+      workspaceId: "ws-noise",
+      rootPath,
+    });
+
+    expect(summary.keyDirectories?.length).toBeLessThanOrEqual(6);
+    expect(summary.keyDirectories?.map((entry) => entry.path)).not.toContain("node_modules");
+    expect(summary.topLevelDirectories).not.toContain(".git");
   });
 });

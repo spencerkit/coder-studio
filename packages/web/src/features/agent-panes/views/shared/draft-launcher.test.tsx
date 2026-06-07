@@ -1,4 +1,5 @@
-import { act, createEvent, fireEvent, render, screen } from "@testing-library/react";
+import type { ProviderListItem } from "@coder-studio/core";
+import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -10,8 +11,6 @@ const mockUseProviderLauncher = vi.fn();
 const paneDragEnabledMock = vi.hoisted(() => ({
   value: true,
 }));
-const originalResizeObserver = global.ResizeObserver;
-
 vi.mock("../../actions/use-provider-launcher", () => ({
   useProviderLauncher: (...args: unknown[]) => mockUseProviderLauncher(...args),
 }));
@@ -20,7 +19,25 @@ vi.mock("../../actions/use-pane-drag-enabled", () => ({
   usePaneDragEnabled: () => paneDragEnabledMock.value,
 }));
 
-function createRuntimeState(providerId: "claude" | "codex") {
+function createProvider(
+  provider: Partial<ProviderListItem> & Pick<ProviderListItem, "id">
+): ProviderListItem {
+  return {
+    id: provider.id,
+    displayName: provider.displayName ?? provider.id,
+    badge: provider.badge ?? provider.id,
+    kind: provider.kind ?? "built_in",
+    stability: provider.stability,
+    capability: provider.capability ?? "full",
+    capabilities: provider.capabilities ?? [
+      { key: "interactive_session", supported: true, label: "Interactive session" },
+      { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+    ],
+    requiredCommands: provider.requiredCommands ?? [provider.id],
+  };
+}
+
+function createRuntimeState(providerId: string) {
   return {
     runtime: {
       providerId,
@@ -39,6 +56,36 @@ function createRuntimeState(providerId: "claude" | "codex") {
   };
 }
 
+function createProviderLauncherValue() {
+  return {
+    providers: [
+      createProvider({ id: "claude", displayName: "Claude Code", badge: "Claude" }),
+      createProvider({ id: "codex", displayName: "Codex", badge: "Codex" }),
+      createProvider({ id: "gemini", displayName: "Gemini CLI", badge: "Gemini" }),
+      createProvider({ id: "cursor", displayName: "Cursor Agent", badge: "Cursor" }),
+      createProvider({
+        id: "opencode",
+        displayName: "OpenCode",
+        badge: "OpenCode",
+        stability: "experimental",
+        capability: "limited",
+        capabilities: [
+          { key: "interactive_session", supported: true, label: "Interactive session" },
+          { key: "supervisor_eval", supported: false, label: "Supervisor evaluation" },
+        ],
+      }),
+    ],
+    states: {
+      claude: createRuntimeState("claude"),
+      codex: createRuntimeState("codex"),
+      gemini: createRuntimeState("gemini"),
+      cursor: createRuntimeState("cursor"),
+      opencode: createRuntimeState("opencode"),
+    },
+    launch: vi.fn(),
+  };
+}
+
 function createDraftLauncherStore() {
   const store = createStore();
 
@@ -51,55 +98,13 @@ function createDraftLauncherStore() {
   return store;
 }
 
-function installResizeObserverMock() {
-  let callback: ResizeObserverCallback | null = null;
-
-  class ResizeObserverMock {
-    constructor(observerCallback: ResizeObserverCallback) {
-      callback = observerCallback;
-    }
-
-    observe() {}
-    disconnect() {}
-  }
-
-  global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
-
-  return {
-    resize(target: Element, width: number) {
-      if (!callback) {
-        throw new Error("ResizeObserver was not created");
-      }
-
-      callback(
-        [
-          {
-            target,
-            contentRect: { width },
-          } as ResizeObserverEntry,
-        ],
-        {} as ResizeObserver
-      );
-    },
-  };
-}
-
 describe("DraftLauncher", () => {
-  afterEach(() => {
-    global.ResizeObserver = originalResizeObserver;
-    vi.useRealTimers();
-  });
+  afterEach(() => {});
 
   beforeEach(() => {
     vi.clearAllMocks();
     paneDragEnabledMock.value = true;
-    mockUseProviderLauncher.mockReturnValue({
-      states: {
-        claude: createRuntimeState("claude"),
-        codex: createRuntimeState("codex"),
-      },
-      launch: vi.fn(),
-    });
+    mockUseProviderLauncher.mockReturnValue(createProviderLauncherValue());
   });
 
   it("uses shared IconButton compatibility classes for header actions", () => {
@@ -170,7 +175,7 @@ describe("DraftLauncher", () => {
     expect(onPaneDragStart).toHaveBeenCalledWith(expect.objectContaining({ paneId: "pane-1" }));
   });
 
-  it("renders provider cards with semantic business icons", () => {
+  it("renders provider cards without capability metadata in the launcher", () => {
     const store = createStore();
 
     store.set(localeAtom, "en");
@@ -185,8 +190,46 @@ describe("DraftLauncher", () => {
       </Provider>
     );
 
-    expect(container.querySelector('[data-icon-semantic="agent.provider.claude"]')).toBeTruthy();
-    expect(container.querySelector('[data-icon-semantic="agent.provider.codex"]')).toBeTruthy();
+    const claudeCard = container.querySelector(".agent-provider-card-claude");
+    const codexCard = container.querySelector(".agent-provider-card-codex");
+    const geminiCard = container.querySelector(".agent-provider-card-gemini");
+    const cursorCard = container.querySelector(".agent-provider-card-cursor");
+    const opencodeCard = container.querySelector(".agent-provider-card-opencode");
+
+    expect(claudeCard).not.toBeNull();
+    expect(codexCard).not.toBeNull();
+    expect(geminiCard).not.toBeNull();
+    expect(cursorCard).not.toBeNull();
+    expect(opencodeCard).not.toBeNull();
+    expect(container.querySelector('[data-icon-semantic^="agent.provider."]')).toBeNull();
+    expect(within(claudeCard as HTMLElement).getByText("CL")).toBeInTheDocument();
+    expect(within(codexCard as HTMLElement).getByText("CO")).toBeInTheDocument();
+    expect(within(geminiCard as HTMLElement).getByText("GE")).toBeInTheDocument();
+    expect(within(cursorCard as HTMLElement).getByText("CU")).toBeInTheDocument();
+    expect(within(opencodeCard as HTMLElement).getByText("OP")).toBeInTheDocument();
+    expect(screen.queryByText("Limited Support")).not.toBeInTheDocument();
+    expect(screen.queryByText("Experimental")).not.toBeInTheDocument();
+    expect(screen.queryByText("Supervisor evaluation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Interactive session")).not.toBeInTheDocument();
+  });
+
+  it("renders provider rows as single-line labels with a dedicated CTA column", () => {
+    const store = createDraftLauncherStore();
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    const claudeCard = container.querySelector(".agent-provider-card-claude");
+    const claudeMeta = claudeCard?.querySelector(".agent-provider-card-meta");
+
+    expect(claudeCard).not.toBeNull();
+    expect(claudeMeta).not.toBeNull();
+    expect(container.querySelector(".agent-provider-card-subtitle")).toBeNull();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(within(claudeCard as HTMLElement).getByText("Claude")).toBeInTheDocument();
+    expect(within(claudeMeta as HTMLElement).getByText("Start Session")).toBeInTheDocument();
   });
 
   it("renders the agent selection title", () => {
@@ -207,91 +250,46 @@ describe("DraftLauncher", () => {
     expect(screen.getByText("Select Agent")).toBeInTheDocument();
   });
 
-  it("switches draft launcher carousel panels", () => {
+  it("renders split helper copy inside the agent and file headers", () => {
     const store = createDraftLauncherStore();
-
     const { container } = render(
       <Provider store={store}>
         <DraftLauncher workspaceId="ws-123" />
       </Provider>
     );
 
-    const agentButton = screen.getByRole("button", { name: "Agent" });
-    const fileButton = screen.getByRole("button", { name: "File Editor" });
-    const carouselTrack = container.querySelector(".agent-draft-component-row");
+    const workarea = container.querySelector(".agent-draft-workarea");
+    const workareaMain = container.querySelector(".agent-draft-workarea-main");
+    const workareaSide = container.querySelector(".agent-draft-workarea-side");
 
-    expect(agentButton).toHaveAttribute("aria-pressed", "true");
-    expect(fileButton).toHaveAttribute("aria-pressed", "false");
-    expect(carouselTrack).not.toHaveClass("agent-draft-component-row--file");
-
-    fireEvent.click(fileButton);
-
-    expect(agentButton).toHaveAttribute("aria-pressed", "false");
-    expect(fileButton).toHaveAttribute("aria-pressed", "true");
-    expect(carouselTrack).toHaveClass("agent-draft-component-row--file");
+    expect(workarea).not.toBeNull();
+    expect(workareaMain).not.toBeNull();
+    expect(workareaSide).not.toBeNull();
+    expect(container.querySelector(".agent-draft-footer")).toBeNull();
+    expect(container.querySelector(".agent-draft-workarea-copy")).toBeNull();
+    expect(container.querySelector(".agent-draft-panel-icon")).toBeNull();
+    expect(
+      within(workareaMain as HTMLElement).getByText("Click to launch an Agent")
+    ).toBeInTheDocument();
+    expect(
+      within(workareaSide as HTMLElement).getByText("Or drop files on the right side to open them")
+    ).toBeInTheDocument();
+    expect(within(workareaSide as HTMLElement).getByText("Drop files to open")).toBeInTheDocument();
   });
 
-  it("auto-rotates draft launcher carousel panels in compact layout", async () => {
-    vi.useFakeTimers();
-    const resizeObserver = installResizeObserverMock();
+  it("does not render the old agent and file editor panel titles", () => {
     const store = createDraftLauncherStore();
-
     const { container } = render(
       <Provider store={store}>
         <DraftLauncher workspaceId="ws-123" />
       </Provider>
     );
 
-    const launcher = container.querySelector(".agent-draft-launcher");
-    const agentButton = screen.getByRole("button", { name: "Agent" });
-    const fileButton = screen.getByRole("button", { name: "File Editor" });
-    const carouselTrack = container.querySelector(".agent-draft-component-row");
-
-    expect(launcher).not.toBeNull();
-    expect(carouselTrack).not.toHaveClass("agent-draft-component-row--file");
-
-    act(() => {
-      resizeObserver.resize(launcher as Element, 360);
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4000);
-    });
-
-    expect(agentButton).toHaveAttribute("aria-pressed", "false");
-    expect(fileButton).toHaveAttribute("aria-pressed", "true");
-    expect(carouselTrack).toHaveClass("agent-draft-component-row--file");
-  });
-
-  it("does not auto-rotate draft launcher carousel panels in wide layout", async () => {
-    vi.useFakeTimers();
-    const resizeObserver = installResizeObserverMock();
-    const store = createDraftLauncherStore();
-
-    const { container } = render(
-      <Provider store={store}>
-        <DraftLauncher workspaceId="ws-123" />
-      </Provider>
+    expect(screen.queryByText("File Editor")).not.toBeInTheDocument();
+    expect(container.querySelector(".agent-draft-carousel-dots")).toBeNull();
+    expect(container.querySelector(".agent-draft-component-row")).not.toHaveAttribute(
+      "data-active-panel"
     );
-
-    const launcher = container.querySelector(".agent-draft-launcher");
-    const agentButton = screen.getByRole("button", { name: "Agent" });
-    const fileButton = screen.getByRole("button", { name: "File Editor" });
-    const carouselTrack = container.querySelector(".agent-draft-component-row");
-
-    expect(launcher).not.toBeNull();
-
-    act(() => {
-      resizeObserver.resize(launcher as Element, 640);
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4000);
-    });
-
-    expect(agentButton).toHaveAttribute("aria-pressed", "true");
-    expect(fileButton).toHaveAttribute("aria-pressed", "false");
-    expect(carouselTrack).not.toHaveClass("agent-draft-component-row--file");
   });
 
   it("renders a draft drop label when pane drag hover is active", () => {
@@ -322,6 +320,7 @@ describe("DraftLauncher", () => {
 
   it("preserves session-start intent in diagnostics links for blocked providers", () => {
     mockUseProviderLauncher.mockReturnValue({
+      providers: createProviderLauncherValue().providers,
       states: {
         claude: {
           runtime: {
@@ -341,6 +340,9 @@ describe("DraftLauncher", () => {
           inlineError: "manual",
         },
         codex: createRuntimeState("codex"),
+        gemini: createRuntimeState("gemini"),
+        cursor: createRuntimeState("cursor"),
+        opencode: createRuntimeState("opencode"),
       },
       launch: vi.fn(),
     });
@@ -362,6 +364,58 @@ describe("DraftLauncher", () => {
       "href",
       "/diagnostics?context=session_start&workspaceId=ws-123&providerId=claude&paneId=pane-1&launchMode=assign"
     );
+  });
+
+  it("does not show manual install guidance for providers that are already available", () => {
+    mockUseProviderLauncher.mockReturnValue({
+      providers: createProviderLauncherValue().providers,
+      states: {
+        claude: createRuntimeState("claude"),
+        codex: createRuntimeState("codex"),
+        gemini: createRuntimeState("gemini"),
+        cursor: {
+          runtime: {
+            providerId: "cursor",
+            available: true,
+            missingCommands: [],
+            missingPrerequisites: [],
+            autoInstallSupported: false,
+            installReadiness: "ready",
+            manualGuideKeys: ["provider.install.cursor.manual"],
+            docUrls: {
+              provider: "https://cursor.com/docs/cli/installation",
+              prerequisites: {},
+            },
+          },
+          loading: false,
+        },
+        opencode: createRuntimeState("opencode"),
+      },
+      launch: vi.fn(),
+    });
+
+    const store = createDraftLauncherStore();
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    const cursorCard = container.querySelector(".agent-provider-card-cursor");
+
+    expect(cursorCard).not.toBeNull();
+    expect(
+      within(cursorCard as HTMLElement).queryByText(
+        "Install Cursor Agent from the official CLI installation guide, then make sure agent is available on PATH."
+      )
+    ).toBeNull();
+    expect(
+      within(cursorCard as HTMLElement).queryByRole("link", { name: "Open official docs" })
+    ).toBeNull();
+    expect(
+      within(cursorCard as HTMLElement).queryByRole("link", { name: "Open Diagnostics" })
+    ).toBeNull();
+    expect(within(cursorCard as HTMLElement).getByText("Start Session")).toBeInTheDocument();
   });
 
   it("highlights file drag-over state and opens the dropped workspace file in an editor pane", async () => {

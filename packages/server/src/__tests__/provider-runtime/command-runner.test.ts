@@ -22,9 +22,11 @@ function createChildProcessMock() {
   const child = new EventEmitter() as EventEmitter & {
     stdout: EventEmitter;
     stderr: EventEmitter;
+    kill: ReturnType<typeof vi.fn>;
   };
   child.stdout = stdout;
   child.stderr = stderr;
+  child.kill = vi.fn();
   return child;
 }
 
@@ -57,6 +59,7 @@ describe("runCommandAsString", () => {
       cwd: undefined,
       env: undefined,
       shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
   });
@@ -74,6 +77,7 @@ describe("runCommandAsString", () => {
       cwd: undefined,
       env: undefined,
       shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
   });
@@ -95,6 +99,7 @@ describe("runCommandAsString", () => {
       cwd: "/tmp/demo",
       env: { PATH: "/tmp/bin" },
       shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: false,
     });
   });
@@ -112,7 +117,13 @@ describe("runCommandAsString", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "npm",
       ["install", "-g", "@openai/codex"],
-      expect.objectContaining({ cwd: undefined, env: undefined, shell: true, windowsHide: true })
+      expect.objectContaining({
+        cwd: undefined,
+        env: undefined,
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      })
     );
   });
 
@@ -129,7 +140,13 @@ describe("runCommandAsString", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "C:\\tools\\vue-language-server.cmd",
       ["--version"],
-      expect.objectContaining({ cwd: undefined, env: undefined, shell: true, windowsHide: true })
+      expect.objectContaining({
+        cwd: undefined,
+        env: undefined,
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      })
     );
   });
 
@@ -146,7 +163,33 @@ describe("runCommandAsString", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "git",
       ["--version"],
-      expect.objectContaining({ cwd: undefined, env: undefined, shell: false, windowsHide: true })
+      expect.objectContaining({
+        cwd: undefined,
+        env: undefined,
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      })
     );
+  });
+
+  it("rejects with a typed timeout error when the subprocess exceeds timeoutMs", async () => {
+    vi.useFakeTimers();
+    const child = createChildProcessMock();
+    spawnMock.mockReturnValue(child);
+
+    const resultPromise = runCommandAsString("demo", ["generate"], {
+      timeoutMs: 25,
+    });
+    const expectation = expect(resultPromise).rejects.toMatchObject({
+      code: "command_timeout",
+      timeoutMs: 25,
+    });
+
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expectation;
+    expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+    vi.useRealTimers();
   });
 });

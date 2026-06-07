@@ -9,6 +9,7 @@ import {
   rename as fsRename,
   writeFile as fsWriteFile,
   mkdir,
+  realpath,
   rm,
   stat,
 } from "fs/promises";
@@ -52,8 +53,41 @@ async function statSafe(path: string) {
   }
 }
 
+async function assertResolvesInsideWorkspace(rootPath: string, absPath: string): Promise<void> {
+  const realRootPath = await realpath(rootPath).catch(() => null);
+  if (!realRootPath) {
+    throw { code: "path_escape", message: "Path escapes workspace root" };
+  }
+
+  let currentPath = absPath;
+  while (true) {
+    const resolvedCurrentPath = await realpath(currentPath).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+          return null;
+        }
+        throw error;
+      }
+    );
+
+    if (resolvedCurrentPath) {
+      if (!isPathInsideRoot(realRootPath, resolvedCurrentPath)) {
+        throw { code: "path_escape", message: "Path escapes workspace root" };
+      }
+      return;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      throw { code: "path_escape", message: "Path escapes workspace root" };
+    }
+    currentPath = parentPath;
+  }
+}
+
 export async function createFile(rootPath: string, relPath: string): Promise<void> {
   const abs = resolveSafe(rootPath, relPath);
+  await assertResolvesInsideWorkspace(rootPath, abs);
   const existing = await statSafe(abs);
 
   if (existing) {
@@ -66,6 +100,7 @@ export async function createFile(rootPath: string, relPath: string): Promise<voi
 
 export async function createDirectory(rootPath: string, relPath: string): Promise<void> {
   const abs = resolveSafe(rootPath, relPath);
+  await assertResolvesInsideWorkspace(rootPath, abs);
   const existing = await statSafe(abs);
 
   if (existing) {
@@ -77,6 +112,7 @@ export async function createDirectory(rootPath: string, relPath: string): Promis
 
 export async function deleteEntry(rootPath: string, relPath: string): Promise<void> {
   const abs = resolveSafe(rootPath, relPath);
+  await assertResolvesInsideWorkspace(rootPath, abs);
   const existing = await statSafe(abs);
 
   if (!existing) {
@@ -93,6 +129,8 @@ export async function renameEntry(
 ): Promise<void> {
   const fromAbs = resolveSafe(rootPath, fromPath);
   const toAbs = resolveSafe(rootPath, toPath);
+  await assertResolvesInsideWorkspace(rootPath, fromAbs);
+  await assertResolvesInsideWorkspace(rootPath, toAbs);
   const source = await statSafe(fromAbs);
   const target = await statSafe(toAbs);
   const fromParent = path.dirname(fromAbs);
@@ -158,6 +196,7 @@ export async function readFile(
   relPath: string
 ): Promise<FileReadResult> {
   const abs = resolveSafe(rootPath, relPath);
+  await assertResolvesInsideWorkspace(rootPath, abs);
 
   const imageType = getImageTypeInfo(relPath);
   if (imageType) {
@@ -205,6 +244,7 @@ export async function writeFile(
   baseHash?: string
 ): Promise<FileWriteResult> {
   const abs = resolveSafe(rootPath, relPath);
+  await assertResolvesInsideWorkspace(rootPath, abs);
 
   // Conflict check if baseHash provided
   if (baseHash) {

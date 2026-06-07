@@ -29,6 +29,16 @@ describe("GitPanel", () => {
     modified: [{ path: "src/app/AppController.tsx", status: "modified" }],
     untracked: [{ path: "tests/supervisor.test.ts", status: "untracked" }],
     deleted: [{ path: "src/legacy/deprecated.ts", status: "deleted" }],
+    conflicted: [],
+  };
+
+  const conflictedStatus: GitStatus = {
+    ...status,
+    staged: [],
+    modified: [],
+    untracked: [],
+    deleted: [],
+    conflicted: [{ path: "src/conflicted.ts", status: "conflicted" }],
   };
 
   const worktrees = [
@@ -372,6 +382,50 @@ describe("GitPanel", () => {
     expect(
       changes.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it("renders full directory paths for changed files", async () => {
+    const longDirectory = "packages/web/src/features/workspace/views/shared/";
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          ...status,
+          modified: [{ path: `${longDirectory}git-panel.test.tsx`, status: "modified" }],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      if (op === "git.branches") {
+        return { current: "feature/ai-agent", branches: [] };
+      }
+
+      if (op === "worktree.list") {
+        return { worktrees: [] };
+      }
+
+      if (op === "git.log") {
+        return { entries: [] };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const row = (await screen.findByText("git-panel.test.tsx")).closest(".git-row");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText(longDirectory)).toHaveClass("git-row-dir");
+    expect(screen.queryByText("packages/web/...")).toBeNull();
   });
 
   it("toggles the commit composer from the commit section header", async () => {
@@ -1166,6 +1220,37 @@ describe("GitPanel", () => {
     expect(within(changesSection as HTMLElement).getByText("deprecated.ts")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History0" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Latest Commit")).not.toBeInTheDocument();
+  });
+
+  it("renders unmerged conflict files in a merge changes section", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return conflictedStatus;
+      }
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const mergeChangesSection = (await screen.findByText("Merge Changes")).closest(
+      ".git-panel-section"
+    );
+    const changesSection = screen.getByText("Changes").closest(".git-panel-section");
+    expect(mergeChangesSection).not.toBeNull();
+    expect(changesSection).not.toBeNull();
+    expect(
+      within(mergeChangesSection as HTMLElement).getByText("conflicted.ts")
+    ).toBeInTheDocument();
+    expect(within(changesSection as HTMLElement).queryByText("conflicted.ts")).toBeNull();
+    expect(screen.getByRole("button", { name: "Merge Changes1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Changes0" })).toBeInTheDocument();
   });
 
   it("loads the latest 20 history entries by default and does not render a show-all control", async () => {
@@ -2685,16 +2770,19 @@ describe("GitPanel", () => {
       within(commitBlock as HTMLElement).getByRole("button", { name: "提交" })
     ).toBeInTheDocument();
 
-    const untrackedRow = screen.getByText("supervisor.test.ts").closest(".git-row");
-    expect(untrackedRow).not.toBeNull();
+    const modifiedRow = screen.getByText("AppController.tsx").closest(".git-row");
+    expect(modifiedRow).not.toBeNull();
     expect(
-      (untrackedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.untracked"]')
+      (modifiedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.modified"]')
     ).toBeTruthy();
-    expect((untrackedRow as HTMLElement).querySelector(".git-row-icon")).toBeTruthy();
+    expect((modifiedRow as HTMLElement).querySelector(".git-row-icon")).toBeTruthy();
     expect(
-      (untrackedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.untracked"]')
+      (modifiedRow as HTMLElement).querySelector('[data-icon-semantic="git.status.modified"]')
     ).toBeTruthy();
-    expect(within(untrackedRow as HTMLElement).queryByText("tests/")).toHaveClass("git-row-dir");
+    expect(within(modifiedRow as HTMLElement).queryByText("src/app/")).toHaveClass("git-row-dir");
+    const rowContent = (modifiedRow as HTMLElement).querySelector(".git-row-content");
+    expect(rowContent?.children[0]).toHaveClass("git-row-name");
+    expect(rowContent?.children[1]).toHaveClass("git-row-meta");
   });
 
   it("renders add and discard row actions on mobile like desktop", async () => {

@@ -1,4 +1,9 @@
-import type { DiagnosticsCheck, DiagnosticsResponse, Workspace } from "@coder-studio/core";
+import type {
+  DiagnosticsCheck,
+  DiagnosticsLspServiceEntry,
+  DiagnosticsResponse,
+  Workspace,
+} from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -48,13 +53,15 @@ function createWorkspace(id: string, path: string): Workspace {
 
 function createResponse(
   overrides: Partial<DiagnosticsResponse> = {},
-  checks: DiagnosticsCheck[] = []
+  checks: DiagnosticsCheck[] = [],
+  lspServices: DiagnosticsLspServiceEntry[] = []
 ): DiagnosticsResponse {
   return {
     context: "manual_check",
     canContinue: true,
     checks,
     metadata: {},
+    lspServices,
     ...overrides,
   };
 }
@@ -282,11 +289,113 @@ describe("DiagnosticsPage", () => {
     expect(screen.getByText("Current version: v24.1.0")).toBeInTheDocument();
   });
 
+  it("renders a separate read-only LSP services section", async () => {
+    const sendCommand = vi.fn().mockResolvedValue(
+      createResponse(
+        {
+          context: "session_start",
+          canContinue: false,
+          metadata: {
+            workspaceId: "ws-1",
+            workspacePath: "/repo",
+            providerId: "claude",
+            lspRuntimeContext: {
+              targetRuntime: "native",
+              managedInstallSupported: true,
+            },
+          },
+        },
+        [
+          {
+            id: "provider-missing",
+            code: "provider_cli_missing",
+            status: "needs_attention",
+            providerId: "claude",
+            missingCommands: ["claude"],
+          },
+        ],
+        [
+          {
+            serverKind: "typescript",
+            displayName: "TypeScript language server",
+            status: "installed",
+          },
+          {
+            serverKind: "python",
+            displayName: "Python language server",
+            status: "prerequisite_missing",
+            missingPrerequisites: ["python3"],
+          },
+          {
+            serverKind: "go",
+            displayName: "Go language server",
+            status: "install_failed",
+          },
+          {
+            serverKind: "rust",
+            displayName: "Rust language server",
+            status: "runtime_off",
+          },
+          {
+            serverKind: "vue",
+            displayName: "Vue language server",
+            status: "not_installed",
+          },
+        ]
+      )
+    );
+
+    renderDiagnostics(
+      "/diagnostics?context=session_start&workspaceId=ws-1&providerId=claude",
+      sendCommand
+    );
+
+    const results = await waitFor(() => {
+      const element = document.querySelector(".diagnostics-results");
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("Diagnostics results did not render");
+      }
+      return element;
+    });
+    const sectionOrder = Array.from(results.children).map((element) => element.className);
+
+    expect(await screen.findByText("LSP Services")).toBeInTheDocument();
+    expect(sectionOrder).toEqual(["diagnostics-issues", "diagnostics-section"]);
+    expect(screen.getByText("TypeScript language server")).toBeInTheDocument();
+    expect(screen.getByText("Python language server")).toBeInTheDocument();
+    expect(screen.getByText("Go language server")).toBeInTheDocument();
+    expect(screen.getByText("Rust language server")).toBeInTheDocument();
+    expect(screen.getByText("Vue language server")).toBeInTheDocument();
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(screen.getByText("Prerequisite missing")).toBeInTheDocument();
+    expect(screen.getByText("Install failed")).toBeInTheDocument();
+    expect(screen.getByText("Runtime off")).toBeInTheDocument();
+    expect(screen.getByText("Not installed")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "LSP services power editor features like diagnostics, go to definition, and hover. These statuses are informational only and do not block diagnostics."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Workspace context only affects runtime availability.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Install ownership is global to this app.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+  });
+
   it("installs a missing git dependency inline, accepts a sudo password, and rechecks on success", async () => {
     let diagnosticsCallCount = 0;
     let installGetCalls = 0;
     let submitted = false;
     let subscriptionHandler: ((topic: string, payload: unknown) => void) | undefined;
+    const subscribe = vi.fn(
+      (_topics: string[], handler: (topic: string, payload: unknown) => void) => {
+        subscriptionHandler = handler;
+        return () => {
+          subscriptionHandler = undefined;
+        };
+      }
+    );
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "diagnostics.get" || op === "diagnostics.recheck") {
         diagnosticsCallCount += 1;
@@ -382,12 +491,7 @@ describe("DiagnosticsPage", () => {
     const store = createStoreWithClient(sendCommand);
     store.set(wsClientAtom, {
       sendCommand,
-      subscribe: vi.fn((_topics: string[], handler: (topic: string, payload: unknown) => void) => {
-        subscriptionHandler = handler;
-        return () => {
-          subscriptionHandler = undefined;
-        };
-      }),
+      subscribe,
     } as never);
 
     render(
@@ -405,6 +509,12 @@ describe("DiagnosticsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Install Git" }));
     expect(await screen.findByText("Package manager: apt-get")).toBeInTheDocument();
     expect(screen.getByLabelText("Administrator password")).toHaveAttribute("type", "password");
+    await waitFor(() => {
+      expect(subscribe).toHaveBeenCalledWith(
+        ["systemDeps.install.job-1.output"],
+        expect.any(Function)
+      );
+    });
 
     act(() => {
       subscriptionHandler?.("systemDeps.install.job-1.output", {

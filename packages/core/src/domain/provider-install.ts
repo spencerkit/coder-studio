@@ -1,3 +1,9 @@
+import type {
+  ProviderCapabilityDescriptor,
+  ProviderKind,
+  ProviderStability,
+} from "../provider/definition";
+
 export interface ProviderInstallDocUrls {
   provider: string;
   prerequisites: Partial<Record<string, string>>;
@@ -5,6 +11,16 @@ export interface ProviderInstallDocUrls {
 
 export interface ProviderRuntimeStatusEntry {
   providerId: string;
+  displayName: string;
+  badge: string;
+  kind: ProviderKind;
+  stability?: ProviderStability;
+  supportsAgentInstructions?: boolean;
+  supportsAgentInstructionsGeneration?: boolean;
+  supportsSkillsMount?: boolean;
+  capability: "full" | "limited" | "unsupported";
+  capabilities: ProviderCapabilityDescriptor[];
+  requiredCommands: string[];
   available: boolean;
   missingCommands: string[];
   missingPrerequisites: string[];

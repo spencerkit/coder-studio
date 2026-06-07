@@ -2,12 +2,13 @@
  * Workspace Commands
  */
 
-import { readdir, realpath } from "node:fs/promises";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { WorkspacePaneNode } from "@coder-studio/core";
 import { z } from "zod";
 import { createDirectory } from "../fs/file-io.js";
+import { WorkspaceHistoryStore } from "../workspace/history-store.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -105,12 +106,34 @@ registerCommand(
     const basePath = resolveBrowsePath(args.path);
     const entries = await readdir(basePath, { withFileTypes: true });
 
-    const directories = entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => ({
-        name: entry.name,
-        path: join(basePath, entry.name),
-      }))
+    const directories = (
+      await Promise.all(
+        entries.map(async (entry) => {
+          if (entry.isDirectory()) {
+            return {
+              name: entry.name,
+              path: join(basePath, entry.name),
+            };
+          }
+
+          if (!entry.isSymbolicLink()) {
+            return null;
+          }
+
+          const entryPath = join(basePath, entry.name);
+          const entryStats = await stat(entryPath).catch(() => null);
+          if (!entryStats?.isDirectory()) {
+            return null;
+          }
+
+          return {
+            name: entry.name,
+            path: entryPath,
+          };
+        })
+      )
+    )
+      .filter((entry): entry is { name: string; path: string } => entry !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return {
@@ -154,9 +177,13 @@ registerCommand(
     path: z.string(),
   }),
   async (args, ctx) => {
-    return ctx.workspaceMgr.open({
+    const workspace = await ctx.workspaceMgr.open({
       path: args.path,
     });
+
+    new WorkspaceHistoryStore(ctx.settingsRepo).recordOpen(workspace.path);
+    await ctx.agentInstructionPublisher?.syncWorkspace(workspace.id);
+    return workspace;
   }
 );
 
@@ -198,6 +225,7 @@ registerCommand(
       bottomPanelHeight: z.number(),
       focusMode: z.boolean(),
       activeSessionId: z.string().optional(),
+      agentInstructionsExpanded: z.boolean().optional(),
       fileTreeExpandedDirs: z.array(z.string()).optional(),
       paneLayout: workspacePaneNodeSchema.optional(),
       openEditorPaths: z.array(z.string()).optional(),

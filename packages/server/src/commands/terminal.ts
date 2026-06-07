@@ -327,3 +327,18 @@ registerCommand(
     ctx.terminalMgr.resize(args.terminalId, args.cols, args.rows);
   }
 );
+
+// terminal.syncThemeBackground
+registerCommand(
+  "terminal.syncThemeBackground",
+  z.object({
+    workspaceId: z.string(),
+    themeBackground: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{3,8}$/)
+      .optional(),
+  }),
+  async (args, ctx) => {
+    ctx.terminalMgr.syncThemeBackgroundForWorkspace(args.workspaceId, args.themeBackground);
+  }
+);

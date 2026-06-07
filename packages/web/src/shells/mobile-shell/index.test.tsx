@@ -65,6 +65,10 @@ vi.mock("../../features/settings", () => ({
   SettingsPage: () => <div>SettingsPage</div>,
 }));
 
+vi.mock("../../features/work-analysis", () => ({
+  WorkAnalyticsPage: () => <div>WorkAnalyticsPage</div>,
+}));
+
 vi.mock("../../features/diagnostics", async () => {
   const actual = await vi.importActual<typeof import("../../features/diagnostics")>(
     "../../features/diagnostics"
@@ -434,7 +438,7 @@ function installMatchMediaMock(predicate: (query: string) => boolean) {
 function LocationProbe() {
   const location = useLocation();
 
-  return <div data-testid="location-display">{location.pathname}</div>;
+  return <div data-testid="location-display">{`${location.pathname}${location.search}`}</div>;
 }
 
 function renderMobileShell({
@@ -1147,6 +1151,26 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/diagnostics");
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+  });
+
+  it("renders WorkAnalyticsPage on mobile /analytics while auth status is still unknown", () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/analytics"]}>
+          <LocationProbe />
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.getByText("WorkAnalyticsPage")).toBeInTheDocument();
+    expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics");
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 

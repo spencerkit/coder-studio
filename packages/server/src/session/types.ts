@@ -16,7 +16,8 @@ export interface SessionUpdatePatch {
   completionPercent?: number;
   errorReason?: string;
   lastActiveAt?: number;
-  title?: string;
+  title?: string | null;
+  firstSubmittedUserInput?: string | null;
 }
 
 /**

@@ -70,6 +70,7 @@ interface GitPanelState {
   commitExpanded: boolean;
   worktreesExpanded: boolean;
   stagedExpanded: boolean;
+  mergeChangesExpanded: boolean;
   changesExpanded: boolean;
   historyExpanded: boolean;
 }
@@ -81,6 +82,7 @@ function createInitialGitPanelState(): GitPanelState {
     commitExpanded: true,
     worktreesExpanded: false,
     stagedExpanded: true,
+    mergeChangesExpanded: true,
     changesExpanded: true,
     historyExpanded: false,
   };
@@ -110,7 +112,6 @@ export const GitPanel: FC<GitPanelProps> = ({
   const {
     commitMessage,
     diffPreview,
-    gitState,
     groups,
     history,
     historyLoading,
@@ -141,6 +142,7 @@ export const GitPanel: FC<GitPanelProps> = ({
     changesExpanded,
     commitExpanded,
     historyExpanded,
+    mergeChangesExpanded,
     pendingWorktreeDeletePath,
     stagedExpanded,
     worktreeSurfaceView,
@@ -158,13 +160,19 @@ export const GitPanel: FC<GitPanelProps> = ({
     title: "changes",
     changes: [],
   };
+  const mergeChangesGroup = groups.find((group) => group.title === "mergeChanges") ?? {
+    title: "mergeChanges",
+    changes: [],
+  };
   const stagedCount = stagedGroup.changes.length;
+  const mergeChangesCount = mergeChangesGroup.changes.length;
   const unstagedCount = changesGroup.changes.length;
   const commitSectionLabel = commitExpanded
     ? t("git.commit_collapse_label")
     : t("git.commit_expand_label");
   const worktreesSectionLabel = `${t("worktree.list_title")}${list.items.length}`;
   const stagedSectionLabel = `${t("git.staged")}${stagedCount}`;
+  const mergeChangesSectionLabel = `${t("git.merge_changes")}${mergeChangesCount}`;
   const changesSectionLabel = `${t("git.changes")}${unstagedCount}`;
   const historySectionLabel = `${t("git.history")}${history.length}`;
 
@@ -452,6 +460,29 @@ export const GitPanel: FC<GitPanelProps> = ({
             onRequestDiscard={handleRequestDiscardSingle}
           />
 
+          {mergeChangesCount > 0 ? (
+            <GitChangeSection
+              expanded={mergeChangesExpanded}
+              group={mergeChangesGroup}
+              isLoading={isLoading}
+              mobile={isMobile}
+              sectionLabel={mergeChangesSectionLabel}
+              selectedPath={diffPreview?.path ?? null}
+              title={t("git.merge_changes")}
+              workspaceId={workspaceId}
+              emptyTitle={t("git.no_changes")}
+              onToggleExpanded={() =>
+                setPanelState((current) => ({
+                  ...current,
+                  mergeChangesExpanded: !current.mergeChangesExpanded,
+                }))
+              }
+              onViewDiff={openDiff}
+              onRunMutation={runGitMutation}
+              onRequestDiscard={handleRequestDiscardSingle}
+            />
+          ) : null}
+
           <GitChangeSection
             expanded={changesExpanded}
             group={changesGroup}
@@ -726,8 +757,6 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
   const fileName = pathParts[pathParts.length - 1] ?? change.path;
   const rawDirName = pathParts.length > 1 ? pathParts.slice(0, -1).join("/") : "";
   const dirName = rawDirName ? `${rawDirName}/` : "";
-  const compactDirName =
-    rawDirName.length > 14 ? `${rawDirName.split("/").slice(0, 2).join("/")}/…` : dirName;
   const toggleStageLabel = type === "staged" ? t("git.unstage") : t("git.stage");
   const discardLabel = t("git.discard");
   const toggleStageIcon = type === "staged" ? <Minus size={12} /> : <Plus size={12} />;
@@ -799,7 +828,7 @@ const GitChangeRow: FC<GitChangeRowProps> = ({
       <div className="git-row-content">
         <span className="git-row-name">{fileName}</span>
         <span className="git-row-meta">
-          {compactDirName ? <span className="git-row-dir">{compactDirName}</span> : null}
+          {dirName ? <span className="git-row-dir">{dirName}</span> : null}
           {change.oldPath ? <span className="git-row-rename">{change.oldPath}</span> : null}
         </span>
       </div>
@@ -939,6 +968,10 @@ function getResolvedChangeStatus(change: GitFileChange, type: GitChangeType) {
     return "untracked";
   }
 
+  if (type === "conflicted") {
+    return "conflicted";
+  }
+
   return "modified";
 }
 
@@ -947,6 +980,8 @@ function getChangeSemantic(change: GitFileChange, type: GitChangeType) {
 
   switch (status) {
     case "deleted":
+      return "git.status.deleted";
+    case "conflicted":
       return "git.status.deleted";
     case "untracked":
     case "added":
@@ -961,6 +996,8 @@ function getChangeSemantic(change: GitFileChange, type: GitChangeType) {
 function getStatusBadgeClass(status: ReturnType<typeof getResolvedChangeStatus>): string {
   switch (status) {
     case "deleted":
+      return "deleted";
+    case "conflicted":
       return "deleted";
     case "untracked":
     case "added":
@@ -988,6 +1025,8 @@ function getStatusBadgeLabel(
       return "A";
     case "renamed":
       return "R";
+    case "conflicted":
+      return "!";
     case "modified":
     default:
       return "M";

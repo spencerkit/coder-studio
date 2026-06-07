@@ -1,4 +1,8 @@
-import type { ProviderDefinition, ProviderRuntimeStatusResponse } from "@coder-studio/core";
+import {
+  type ProviderDefinition,
+  type ProviderRuntimeStatusResponse,
+  providerSupportsAgentInstructionsGeneration,
+} from "@coder-studio/core";
 import {
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
@@ -8,6 +12,8 @@ import {
 export interface RuntimeStatusDeps extends CommandCheckDeps {
   commandExists?: CommandAvailabilityCheck;
 }
+
+type RuntimeStatusEntry = ProviderRuntimeStatusResponse["providers"][string];
 
 function canAutoInstall(
   provider: ProviderDefinition,
@@ -114,6 +120,17 @@ export async function buildProviderRuntimeStatus(
 
     result.providers[provider.id] = {
       providerId: provider.id,
+      displayName: provider.displayName,
+      badge: provider.badge,
+      kind: provider.kind ?? "built_in",
+      stability: provider.stability,
+      supportsAgentInstructions:
+        provider.supportsAgentInstructions ?? Boolean(provider.agentInstructions?.publishTarget),
+      supportsAgentInstructionsGeneration: providerSupportsAgentInstructionsGeneration(provider),
+      supportsSkillsMount: provider.supportsSkillsMount ?? false,
+      capability: provider.capability ?? "unsupported",
+      capabilities: (provider.capabilities ?? []).map((capability) => ({ ...capability })),
+      requiredCommands: [...provider.requiredCommands],
       available,
       missingCommands,
       missingPrerequisites,
@@ -127,7 +144,7 @@ export async function buildProviderRuntimeStatus(
           : "unsupported_platform",
       manualGuideKeys: provider.install.manualGuideKeys,
       docUrls: provider.install.docUrls,
-    };
+    } as RuntimeStatusEntry;
   }
 
   return result;

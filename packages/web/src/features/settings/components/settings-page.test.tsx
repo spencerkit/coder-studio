@@ -1,4 +1,9 @@
-import type { MonitoringResponse, MonitoringSettings } from "@coder-studio/core";
+import type {
+  DiagnosticsCheck,
+  DiagnosticsResponse,
+  MonitoringResponse,
+  MonitoringSettings,
+} from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
@@ -10,12 +15,17 @@ import {
   serverInfoAtom,
   wsClientAtom,
 } from "../../../atoms/connection";
-import { activeWorkspaceIdAtom } from "../../../atoms/workspaces";
+import { activeWorkspaceIdAtom, workspacesAtom } from "../../../atoms/workspaces";
 import { CommandResultError } from "../../../ws/client";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
+import type {
+  WorkAnalysisDashboardProviderStatus,
+  WorkAnalysisDashboardRecord,
+  WorkAnalysisTimeRange,
+} from "../../work-analysis/types";
 import { SettingsPage } from "./settings-page";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -45,8 +55,24 @@ const appearanceMocks = vi.hoisted(() => ({
   uploadAppearanceAsset: vi.fn(),
 }));
 
+const echartsMock = vi.hoisted(() => {
+  const chart = {
+    dispose: vi.fn(),
+    resize: vi.fn(),
+    setOption: vi.fn(),
+  };
+  return {
+    chart,
+    init: vi.fn(() => chart),
+  };
+});
+
 vi.mock("../../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
+}));
+
+vi.mock("echarts", () => ({
+  init: echartsMock.init,
 }));
 
 vi.mock("../../../appearance", async () => {
@@ -85,6 +111,166 @@ function createConnectedStore(
   } as never);
 
   return store;
+}
+
+const DEFAULT_PROVIDER_LIST = [
+  {
+    id: "claude",
+    displayName: "Claude",
+    badge: "CL",
+    kind: "built_in",
+    stability: "stable",
+    supportsAgentInstructions: true,
+    supportsSkillsMount: true,
+    capability: "full",
+    capabilities: [],
+    requiredCommands: ["claude"],
+  },
+  {
+    id: "codex",
+    displayName: "Codex",
+    badge: "CX",
+    kind: "built_in",
+    stability: "stable",
+    supportsAgentInstructions: true,
+    supportsSkillsMount: true,
+    capability: "full",
+    capabilities: [],
+    requiredCommands: ["codex"],
+  },
+] as const;
+
+function buildSettingsDashboard(
+  overrides: {
+    errorMessage?: string;
+    projects?: string[];
+    providerStatuses?: WorkAnalysisDashboardProviderStatus[];
+    status?: WorkAnalysisDashboardRecord["scanState"]["status"];
+    timeRange?: WorkAnalysisTimeRange;
+    totalTokens?: number;
+  } = {}
+): WorkAnalysisDashboardRecord {
+  const timeRange = overrides.timeRange ?? { preset: "30d" };
+  const projects = overrides.projects ?? ["/repo/project"];
+  const providerStatuses = overrides.providerStatuses ?? [
+    {
+      providerId: "codex",
+      status: "supported",
+      sessionCount: 1,
+      parseErrorCount: 0,
+      warningCount: 0,
+    },
+  ];
+
+  return {
+    version: 1,
+    queryDigest: "dashboard-settings",
+    query: { timeRange },
+    mode: "auto",
+    requestedAt: Date.UTC(2026, 5, 6, 10),
+    scanState: {
+      mode: "auto",
+      status: overrides.status ?? "succeeded",
+      lastStartedAt: Date.UTC(2026, 5, 6, 9),
+      lastCompletedAt: Date.UTC(2026, 5, 6, 9, 1),
+      nextScheduledAt: Date.UTC(2026, 5, 6, 10),
+      errorMessage: overrides.errorMessage,
+      sourceDigest: "source-settings",
+      providerStatuses,
+    },
+    dashboard: {
+      generatedAt: Date.UTC(2026, 5, 6, 9, 1),
+      timeRange: {
+        startAt: Date.UTC(2026, 4, 7, 10),
+        endAt: Date.UTC(2026, 5, 6, 10),
+        label: "30d",
+      },
+      filters: { timeRange },
+      kpis: [
+        { key: "totalTokens", label: "总 Tokens", value: overrides.totalTokens ?? 205 },
+        { key: "sessions", label: "会话数", value: 1 },
+        { key: "activeTime", label: "活跃时间", value: 30 * 60 * 1000 },
+      ],
+      trends: {
+        tokenHourly: [
+          {
+            hourStart: Date.UTC(2026, 5, 6, 9),
+            inputTokens: 120,
+            outputTokens: 55,
+            cachedInputTokens: 30,
+            cacheCreationInputTokens: 0,
+            cacheReadInputTokens: 0,
+            reasoningOutputTokens: 12,
+            totalTokens: overrides.totalTokens ?? 205,
+            sessionCount: 1,
+            activeDurationMs: 30 * 60 * 1000,
+          },
+        ],
+        tokenDaily: [],
+        hourHeatmap: [],
+      },
+      rankings: {
+        projects: projects.map((projectPath, index) => ({
+          key: projectPath,
+          label: projectPath,
+          totalTokens: (overrides.totalTokens ?? 205) - index,
+          shareOfTokens: index === 0 ? 1 : 0.5,
+          sessionCount: 1,
+          activeDurationMs: 0,
+          subtitle: "1 session",
+        })),
+        models: [
+          {
+            key: "codex/gpt-5-codex",
+            label: "codex / gpt-5-codex",
+            totalTokens: overrides.totalTokens ?? 205,
+            shareOfTokens: 1,
+            sessionCount: 1,
+            activeDurationMs: 0,
+          },
+        ],
+        agents: [
+          {
+            key: "codex",
+            label: "codex",
+            totalTokens: overrides.totalTokens ?? 205,
+            shareOfTokens: 1,
+            sessionCount: 1,
+            activeDurationMs: 0,
+          },
+        ],
+      },
+      breakdowns: { tasks: [], tools: [], skills: [] },
+      quality: { providers: providerStatuses, warnings: [] },
+    },
+  };
+}
+
+function createDefaultCommandHandler(overrides?: {
+  settings?: Record<string, unknown>;
+  providers?: unknown[];
+  preview?: (args: unknown) => { preview: string };
+  monitoring?: MonitoringResponse;
+}) {
+  return vi.fn().mockImplementation(async (op: string, args: unknown) => {
+    if (op === "settings.get") {
+      return overrides?.settings ?? {};
+    }
+
+    if (op === "provider.list") {
+      return overrides?.providers ?? DEFAULT_PROVIDER_LIST;
+    }
+
+    if (op === "settings.previewCommand") {
+      return overrides?.preview?.(args) ?? { preview: "preview" };
+    }
+
+    if (op === "monitoring.get") {
+      return overrides?.monitoring ?? createMonitoringResponse();
+    }
+
+    return {};
+  });
 }
 
 function createDeferred<T>() {
@@ -142,6 +328,27 @@ function createMonitoringResponse(
       subprocessHistoryLimited: false,
     },
     telemetry: null,
+  };
+}
+
+function createDiagnosticsResponse(
+  overrides: Partial<DiagnosticsResponse> = {},
+  checks: DiagnosticsCheck[] = [
+    {
+      id: "git-ready",
+      code: "git_ready",
+      status: "ready",
+      version: "git version 2.49.0",
+    },
+  ]
+): DiagnosticsResponse {
+  return {
+    context: "manual_check",
+    canContinue: true,
+    checks,
+    metadata: {},
+    lspServices: [],
+    ...overrides,
   };
 }
 
@@ -255,23 +462,40 @@ describe("SettingsPage", () => {
   });
 
   it("refreshes settings when the load-error notice action is pressed", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("settings exploded"))
-      .mockResolvedValueOnce({});
+    let settingsGetCallCount = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "settings.get") {
+        settingsGetCallCount += 1;
+        if (settingsGetCallCount === 1) {
+          throw new Error("settings exploded");
+        }
+
+        return {};
+      }
+
+      return {};
+    });
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
 
     const refreshButton = await screen.findByRole("button", { name: "刷新" });
-    const callCountBeforeRefresh = sendCommand.mock.calls.length;
+    const settingsGetCallsBeforeRefresh = sendCommand.mock.calls.filter(
+      ([op]) => op === "settings.get"
+    ).length;
 
     await act(async () => {
       fireEvent.click(refreshButton);
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledTimes(callCountBeforeRefresh + 1);
+      expect(sendCommand.mock.calls.filter(([op]) => op === "settings.get").length).toBe(
+        settingsGetCallsBeforeRefresh + 1
+      );
     });
 
     await waitFor(() => {
@@ -324,15 +548,36 @@ describe("SettingsPage", () => {
     );
   });
 
-  it("wraps desktop settings content in the shared content surface", async () => {
-    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+  it("uses section-level desktop workspace modes inside the shared content surface", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "monitoring.get") {
+        return createMonitoringResponse();
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
 
-    await waitFor(() => {
-      expect(document.querySelector(".settings-content-surface")).toBeTruthy();
+    const contentSurface = await waitFor(() => {
+      const surface = document.querySelector(".settings-content-surface") as HTMLElement | null;
+      if (!surface) {
+        throw new Error("settings content surface did not render");
+      }
+      return surface;
     });
-    expect(document.querySelector(".settings-content-surface .settings-section")).toBeTruthy();
+    const workspace = contentSurface.querySelector(".settings-workspace") as HTMLElement | null;
+
+    expect(workspace).not.toBeNull();
+    expect(workspace).toHaveClass("settings-workspace--readable");
+    expect(workspace).not.toHaveClass("settings-workspace--wide");
+    expect(workspace?.querySelector(".settings-section")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "性能监控" }));
+
+    await waitFor(() => {
+      expect(document.querySelector(".settings-workspace.settings-workspace--wide")).not.toBeNull();
+    });
   });
 
   it("renders desktop and mobile settings entry icons through themed semantics", async () => {
@@ -360,7 +605,13 @@ describe("SettingsPage", () => {
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
     expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.monitoring"]')
+    ).toBeTruthy();
+    expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
+    ).toBeTruthy();
+    expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.analysis"]')
     ).toBeTruthy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
@@ -391,34 +642,399 @@ describe("SettingsPage", () => {
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.shortcuts"]')
     ).toBeTruthy();
     expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.monitoring"]')
+    ).toBeTruthy();
+    expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.analysis"]')
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
     ).toBeTruthy();
   });
 
-  it("opens diagnostics from the general settings section", async () => {
+  it("renders a work analysis section inside settings and loads workspace analysis data", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        expect(args).toEqual({ timeRange: { preset: "30d" } });
+        return buildSettingsDashboard({ projects: ["/repo/a", "/repo/b"], totalTokens: 205 });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+    store.set(connectionStatusAtom, "connected");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/repo/project",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 240,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "work.analysis.dashboard.get",
+        { timeRange: { preset: "30d" } },
+        undefined
+      );
+    });
+
+    expect(await screen.findByRole("heading", { name: "Token 趋势" })).toBeInTheDocument();
+    expect(screen.getByText("总 Tokens")).toBeInTheDocument();
+    expect(screen.getAllByText("205").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "项目 token 贡献排行" })).toBeInTheDocument();
+    expect(screen.getByText("/repo/a")).toBeInTheDocument();
+    expect(screen.getByText("/repo/b")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开分析页面" })).not.toBeInTheDocument();
+  });
+
+  it("renders dashboard records that do not include provider source summaries", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        return buildSettingsDashboard({ providerStatuses: [] });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+    store.set(connectionStatusAtom, "connected");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/repo/project",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 240,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
+
+    expect(await screen.findByRole("heading", { name: "Token 趋势" })).toBeInTheDocument();
+    expect(screen.getByText("总 Tokens")).toBeInTheDocument();
+  });
+
+  it("refreshes the dashboard index and renders the refreshed result", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        return buildSettingsDashboard({ totalTokens: 205 });
+      }
+
+      if (op === "work.analysis.dashboard.refresh") {
+        expect(args).toEqual({ timeRange: { preset: "30d" } });
+        return buildSettingsDashboard({ totalTokens: 409 });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+    store.set(connectionStatusAtom, "connected");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/repo/project",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 240,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("205").length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "立即刷新" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "work.analysis.dashboard.refresh",
+        { timeRange: { preset: "30d" } },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("409").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("keeps dashboard filter state inside the settings route", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        const query = args as { timeRange?: WorkAnalysisTimeRange; workspacePaths?: string[] };
+        return buildSettingsDashboard({
+          projects: query.workspacePaths ?? ["/repo/project", "/repo/other"],
+          timeRange: query.timeRange,
+        });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
+
+    fireEvent.click(await screen.findByRole("button", { name: /目录筛选/ }));
+
+    const popover = screen.getByRole("dialog", { name: "筛选目录" });
+    const projectCheckbox = within(popover).getByRole("checkbox", { name: "/repo/project" });
+    expect(projectCheckbox).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(projectCheckbox);
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenLastCalledWith(
+        "/settings?section=analysis&workspacePath=%2Frepo%2Fproject",
+        { replace: true }
+      );
+    });
+  });
+
+  it("renders failed analysis details for the selected work query", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        return buildSettingsDashboard({
+          status: "failed",
+          errorMessage: "Provider timed out while analyzing the transcript.",
+        });
+      }
+
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+    store.set(connectionStatusAtom, "connected");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    store.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/repo/project",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 240,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
+
+    expect(await screen.findByText("索引刷新失败")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) =>
+        content.includes("Provider timed out while analyzing the transcript.")
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("renders empty workspace and empty session notices in the analysis section", async () => {
+    const noWorkspaceSendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        return undefined;
+      }
+
+      return {};
+    });
+    const noWorkspaceStore = createConnectedStore(noWorkspaceSendCommand);
+    noWorkspaceStore.set(connectionStatusAtom, "connected");
+
+    const emptyWorkspaceView = renderSettingsPage(noWorkspaceStore, {
+      initialEntry: "/settings?section=analysis",
+    });
+
+    await waitFor(() => {
+      expect(noWorkspaceSendCommand).toHaveBeenCalledWith(
+        "work.analysis.dashboard.get",
+        { timeRange: { preset: "30d" } },
+        undefined
+      );
+    });
+    expect(await screen.findByText("暂无工作分析索引")).toBeInTheDocument();
+
+    emptyWorkspaceView.unmount();
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
+      }
+
+      if (op === "work.analysis.dashboard.get") {
+        return undefined;
+      }
+
+      return {};
+    });
+    const emptySessionStore = createConnectedStore(sendCommand);
+    emptySessionStore.set(connectionStatusAtom, "connected");
+    emptySessionStore.set(activeWorkspaceIdAtom, "ws-1");
+    emptySessionStore.set(workspacesAtom, {
+      "ws-1": {
+        id: "ws-1",
+        path: "/repo/project",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 2,
+        uiState: {
+          leftPanelWidth: 240,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    renderSettingsPage(emptySessionStore, { initialEntry: "/settings?section=analysis" });
+
+    expect(
+      await screen.findByText((content) => content.includes("暂无工作分析索引"))
+    ).toBeInTheDocument();
+  });
+
+  it("renders diagnostics as a dedicated settings section after analysis", async () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    const view = renderSettingsPage(store);
+
+    const nav = await waitFor(() => {
+      const element = view.container.querySelector(".settings-nav");
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("Settings nav did not render");
+      }
+      return element;
+    });
+    const labels = within(nav)
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim() ?? "");
+
+    expect(labels).toEqual([
+      "通用",
+      "Agents",
+      "外观",
+      "快捷键",
+      "性能监控",
+      "工作分析",
+      "环境与诊断",
+      "关于",
+    ]);
+  });
+
+  it("opens diagnostics from the dedicated diagnostics settings section", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "diagnostics.get") {
+        return createDiagnosticsResponse();
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
 
-    expect(screen.getByText(/诊断运行环境|Diagnose the runtime environment/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/诊断运行环境|Diagnose the runtime environment/)
+    ).not.toBeInTheDocument();
 
-    const diagnosticsButton = await waitFor(() => {
-      const button = document.querySelector(".settings-diagnostics-button");
-      if (!(button instanceof HTMLButtonElement)) {
-        throw new Error("Diagnostics button did not render");
-      }
-      return button;
+    fireEvent.click(screen.getByRole("button", { name: "环境与诊断" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "diagnostics.get",
+        {
+          context: "manual_check",
+          workspaceId: undefined,
+          workspacePath: undefined,
+          providerId: undefined,
+        },
+        undefined
+      );
     });
-    expect(diagnosticsButton).toHaveClass("settings-diagnostics-button");
-    fireEvent.click(diagnosticsButton);
 
-    expect(routerMocks.navigate).toHaveBeenCalledWith("/diagnostics?context=manual_check");
+    expect(document.querySelector(".diagnostics-page--embedded")).not.toBeNull();
+    expect(document.querySelector(".diagnostics-header")).toBeNull();
+    expect(screen.getByText(/git version 2\.49\.0/)).toBeInTheDocument();
+    expect(screen.queryByText("通知")).not.toBeInTheDocument();
+    expect(document.querySelector(".settings-diagnostics-button")).toBeNull();
   });
 
-  it("renders monitoring inside the settings content surface from section=monitoring", async () => {
+  it("renders monitoring inside the wide settings workspace from section=monitoring", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -482,8 +1098,11 @@ describe("SettingsPage", () => {
 
     const monitoringNavButton = await screen.findByRole("button", { name: "性能监控" });
     const contentSurface = document.querySelector(".settings-content-surface") as HTMLElement;
+    const workspace = document.querySelector(".settings-workspace") as HTMLElement;
 
     expect(monitoringNavButton).toHaveClass("settings-nav-item-active");
+    expect(workspace).toHaveClass("settings-workspace--wide");
+    expect(workspace).not.toHaveClass("settings-workspace--readable");
     expect(contentSurface).not.toHaveClass("settings-content-surface--monitoring");
     expect(within(contentSurface).getByText("主机概览")).toBeInTheDocument();
     expect(within(contentSurface).getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
@@ -1358,11 +1977,37 @@ describe("SettingsPage", () => {
     const buttons = within(mobileRoot).getAllByRole("button");
     const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
 
-    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键", "关于"]));
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "通用",
+        "Agents",
+        "性能监控",
+        "工作分析",
+        "环境与诊断",
+        "外观",
+        "快捷键",
+        "关于",
+      ])
+    );
     expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
-    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
+    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("性能监控"));
+    expect(labels.indexOf("性能监控")).toBeLessThan(labels.indexOf("工作分析"));
+    expect(labels.indexOf("工作分析")).toBeLessThan(labels.indexOf("环境与诊断"));
+    expect(labels.indexOf("环境与诊断")).toBeLessThan(labels.indexOf("外观"));
     expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
     expect(labels.indexOf("快捷键")).toBeLessThan(labels.indexOf("关于"));
+  });
+
+  it("does not render diagnostics actions inside general settings", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    renderSettingsPage(store);
+
+    expect(screen.getByText("通知")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/诊断运行环境|Diagnose the runtime environment/)
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".settings-diagnostics-button")).toBeNull();
   });
 
   it("renders the About section and saves update preferences through settings.update", async () => {
@@ -2073,6 +2718,65 @@ describe("SettingsPage", () => {
     expect(screen.queryByLabelText("Working Directory Override")).not.toBeInTheDocument();
   });
 
+  it("renders dynamically listed built-in providers in the agents settings section", async () => {
+    const sendCommand = createDefaultCommandHandler({
+      providers: [
+        ...DEFAULT_PROVIDER_LIST,
+        {
+          id: "gemini",
+          displayName: "Gemini",
+          badge: "GM",
+          kind: "built_in",
+          stability: "stable",
+          supportsAgentInstructions: false,
+          supportsSkillsMount: false,
+          capability: "limited",
+          capabilities: [],
+          requiredCommands: ["gemini"],
+        },
+        {
+          id: "cursor",
+          displayName: "Cursor Agent",
+          badge: "CS",
+          kind: "built_in",
+          stability: "stable",
+          supportsAgentInstructions: false,
+          supportsSkillsMount: false,
+          capability: "limited",
+          capabilities: [],
+          requiredCommands: ["agent"],
+        },
+        {
+          id: "opencode",
+          displayName: "OpenCode",
+          badge: "OC",
+          kind: "built_in",
+          stability: "stable",
+          supportsAgentInstructions: false,
+          supportsSkillsMount: false,
+          capability: "limited",
+          capabilities: [],
+          requiredCommands: ["opencode"],
+        },
+      ],
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("provider.list", {}, undefined);
+    });
+
+    expect(await screen.findByRole("tab", { name: "Gemini" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cursor Agent" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "OpenCode" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Claude" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Codex" })).toBeInTheDocument();
+  });
+
   it("retries loading provider settings after websocket becomes connected", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
       if (op === "settings.get") {
@@ -2167,6 +2871,19 @@ describe("SettingsPage", () => {
     expect(within(headerCopy as HTMLElement).queryByText("Coder Studio")).toBeNull();
     expect(within(headerCopy as HTMLElement).queryByText("设置已自动保存")).toBeNull();
     expect(document.querySelector(".settings-header__desktop")).toBeNull();
+  });
+
+  it("renders the desktop settings sidebar without the old summary header block", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+
+    expect(document.querySelector(".settings-sidebar")).not.toBeNull();
+    expect(document.querySelector(".settings-sidebar__top")).toBeNull();
+    expect(document.querySelector(".settings-sidebar__eyebrow")).toBeNull();
+    expect(document.querySelector(".settings-sidebar__title-row")).toBeNull();
+    expect(document.querySelector(".settings-sidebar__summary")).toBeNull();
   });
 
   it("renders a mobile category list and returns from detail content to the settings root", async () => {
@@ -2336,7 +3053,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("renders appearance theme and language controls with shared semantics", async () => {
+  it("renders theme controls first in appearance and moves language controls to general", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -2350,18 +3067,23 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "外观" }));
 
+    const appearanceGroupTitles = (await screen.findAllByRole("heading", { level: 3 })).map(
+      (heading) => heading.textContent
+    );
     const themePicker = await screen.findByRole("button", { name: "主题 Mint 深色" });
-    const chineseLanguagePill = screen.getByRole("button", { name: "中文" });
 
+    expect(appearanceGroupTitles[0]).toBe("主题");
     expect(themePicker).toHaveAccessibleDescription("选择应用主题");
-    expect(
-      screen.getByRole("group", {
-        name: "语言",
-      })
-    ).toHaveAccessibleDescription("选择界面语言");
+    expect(screen.queryByRole("group", { name: "语言" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
     expect(themePicker).toHaveAttribute("aria-haspopup", "listbox");
+
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+
+    const chineseLanguagePill = await screen.findByRole("button", { name: "中文" });
+
+    expect(screen.getByRole("group", { name: "语言" })).toHaveAccessibleDescription("选择界面语言");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -2380,6 +3102,9 @@ describe("SettingsPage", () => {
           "appearance.personalization.desktop.surfaceOpacity": 72,
           "appearance.personalization.mobile.surfaceOpacity": 64,
         };
+      }
+      if (op === "provider.list") {
+        return DEFAULT_PROVIDER_LIST;
       }
       return {};
     });
@@ -3624,7 +4349,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("updates language selection through the shared appearance pills", async () => {
+  it("updates language selection through the shared general pills", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -3636,7 +4361,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "中文" })).toHaveAttribute("aria-pressed", "true");
@@ -3680,7 +4405,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
     fireEvent.click(await screen.findByRole("button", { name: "English" }));
 
     await waitFor(() => {
