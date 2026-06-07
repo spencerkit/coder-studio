@@ -30,6 +30,31 @@ describe("WorkAnalysisRepo", () => {
     });
   });
 
+  it("closes the SQLite connection and can reopen the repository", () => {
+    const dir = mkdtempSync(join(tmpdir(), "work-analysis-repo-"));
+    const filePath = join(dir, "work-analysis.sqlite");
+    const repo = new WorkAnalysisRepo({ filePath });
+
+    repo.upsert({
+      id: "analysis-1",
+      queryDigest: "digest-1",
+      workspacePaths: ["/repo/app"],
+      timeRange: { preset: "7d" },
+      basicStatus: "succeeded",
+      deepStatus: "idle",
+    });
+
+    repo.close();
+    repo.close();
+
+    const reloaded = new WorkAnalysisRepo({ filePath });
+    expect(reloaded.findByQueryDigest("digest-1")).toMatchObject({
+      id: "analysis-1",
+      queryDigest: "digest-1",
+    });
+    reloaded.close();
+  });
+
   it("persists and clears the hourly dashboard index", () => {
     const dir = mkdtempSync(join(tmpdir(), "work-analysis-repo-"));
     const repo = new WorkAnalysisRepo({ filePath: join(dir, "work-analysis.sqlite") });

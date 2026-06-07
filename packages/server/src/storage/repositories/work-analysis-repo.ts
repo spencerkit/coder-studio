@@ -591,4 +591,14 @@ export class WorkAnalysisRepo {
       db.prepare("DELETE FROM work_analysis_index_meta").run();
     });
   }
+
+  close(): void {
+    if (!this.db) {
+      return;
+    }
+
+    this.db.close();
+    this.db = undefined;
+    this.initialized = false;
+  }
 }

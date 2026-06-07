@@ -558,6 +558,8 @@ export async function createServer(
     supervisorMgr.stop();
     monitoringService?.stop();
     updateService?.stop();
+    workAnalysisService.stopAutoScan();
+    workAnalysisRepo.close();
     terminalMgr.shutdown();
     wsHub.destroy();
     eventBus.clear();
