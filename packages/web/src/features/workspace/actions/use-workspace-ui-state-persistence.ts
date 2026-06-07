@@ -3,7 +3,11 @@ import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
-import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
+import {
+  type PaneNode,
+  paneLayoutAtomFamily,
+  toWorkspacePaneLayout,
+} from "../../agent-panes/atoms/pane-layout";
 import {
   activeFilePathAtomFamily,
   bottomPanelHeightAtomFamily,
@@ -26,6 +30,10 @@ function isWorkspace(value: unknown): value is Workspace {
   );
 }
 
+type WorkspaceUiStatePatch = Omit<Partial<Workspace["uiState"]>, "paneLayout"> & {
+  paneLayout?: Workspace["uiState"]["paneLayout"] | PaneNode;
+};
+
 export function useWorkspaceUiStatePersistence(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
@@ -33,7 +41,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
   const store = useStore();
 
   const persistUiState = useCallback(
-    async (patch: Partial<Workspace["uiState"]>) => {
+    async (patch: WorkspaceUiStatePatch) => {
       if (!workspaceId || workspaceId.startsWith("__workspace_")) {
         return false;
       }
@@ -45,6 +53,8 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
 
       const currentOpenEditorPaths = store.get(openEditorPathsAtomFamily(workspaceId));
       const currentActiveEditorPath = store.get(activeFilePathAtomFamily(workspaceId));
+      const currentPaneLayout = store.get(paneLayoutAtomFamily(workspaceId));
+      const { paneLayout: patchPaneLayout, ...restPatch } = patch;
       const shouldIncludeEditorState =
         workspace.uiState?.openEditorPaths !== undefined ||
         workspace.uiState?.activeEditorPath !== undefined ||
@@ -56,14 +66,14 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         leftPanelWidth: store.get(leftPanelWidthAtomFamily(workspaceId)),
         bottomPanelHeight: store.get(bottomPanelHeightAtomFamily(workspaceId)),
         focusMode: store.get(focusModeAtomFamily(workspaceId)),
-        paneLayout: store.get(paneLayoutAtomFamily(workspaceId)),
+        paneLayout: toWorkspacePaneLayout(patchPaneLayout ?? currentPaneLayout),
         ...(shouldIncludeEditorState
           ? {
               openEditorPaths: currentOpenEditorPaths,
               activeEditorPath: currentActiveEditorPath,
             }
           : {}),
-        ...patch,
+        ...restPatch,
       };
 
       setWorkspaces((previous) => {
@@ -96,10 +106,11 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
           return false;
         }
 
-        if (isWorkspace(result.data)) {
+        const persistedWorkspace = result.data;
+        if (isWorkspace(persistedWorkspace)) {
           setWorkspaces((previous) => ({
             ...previous,
-            [workspaceId]: result.data,
+            [workspaceId]: persistedWorkspace,
           }));
         }
 

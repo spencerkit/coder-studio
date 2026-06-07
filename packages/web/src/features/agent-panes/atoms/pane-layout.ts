@@ -4,10 +4,13 @@
  * Server-backed pane layout projection owned by the agent-panes feature.
  */
 
-import type { WorkspacePaneLeafKind, WorkspacePaneNode } from "@coder-studio/core";
+import type {
+  WorkspacePaneLeafKind,
+  WorkspacePaneNode,
+  WorkspacePaneSplit,
+} from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
-import { enforceSingleEditorPaneInvariant } from "../pane-layout-tree";
 
 /**
  * Pane layout by workspace (agent pane splits).
@@ -40,7 +43,7 @@ export const defaultPaneLayout: PaneNode = {
   leafKind: "draft",
 };
 
-export const paneLayoutAtomFamily = atomFamily((workspaceId: string) =>
+export const paneLayoutAtomFamily = atomFamily((_workspaceId: string) =>
   atom<PaneNode>(defaultPaneLayout)
 );
 
@@ -77,8 +80,53 @@ export function readLegacyPaneLayout(workspaceId: string): PaneNode | null {
 export function normalizePaneLayout(
   layout: WorkspacePaneNode | PaneNode | null | undefined
 ): PaneNode | null {
-  const normalized = normalizePaneLayoutNode(layout);
-  return normalized ? enforceSingleEditorPaneInvariant(normalized) : null;
+  return normalizePaneLayoutNode(layout);
+}
+
+export function toWorkspacePaneLayout(layout: WorkspacePaneNode | PaneNode): WorkspacePaneNode {
+  if (layout.type === "leaf") {
+    const leafKind = "leafKind" in layout ? layout.leafKind : undefined;
+    const sessionId =
+      "sessionId" in layout && typeof layout.sessionId === "string" ? layout.sessionId : undefined;
+
+    if ((leafKind === "session" || !leafKind) && sessionId) {
+      return {
+        id: layout.id,
+        type: "leaf",
+        leafKind: "session",
+        sessionId,
+      };
+    }
+
+    if (leafKind === "editor") {
+      return {
+        id: layout.id,
+        type: "leaf",
+        leafKind: "editor",
+      };
+    }
+
+    return {
+      id: layout.id,
+      type: "leaf",
+      leafKind: "draft",
+    };
+  }
+
+  const next: WorkspacePaneSplit = {
+    id: layout.id,
+    type: "split",
+  };
+
+  if (layout.direction) {
+    next.direction = layout.direction;
+  }
+
+  if (layout.children) {
+    next.children = layout.children.map((child) => toWorkspacePaneLayout(child));
+  }
+
+  return next;
 }
 
 function normalizePaneLayoutNode(

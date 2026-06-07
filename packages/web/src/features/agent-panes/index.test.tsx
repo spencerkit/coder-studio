@@ -18,6 +18,10 @@ import {
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
 import { AgentPanes } from "./index";
 
+function editorPaneStateKey(workspaceId: string, paneId: string): string {
+  return `${workspaceId}::${paneId}`;
+}
+
 type MockSessionCardProps = {
   dragState?: {
     isActiveDropTarget: boolean;
@@ -642,10 +646,9 @@ describe("AgentPanes", () => {
             id: "root",
             type: "split",
             direction: "horizontal",
-            ratio: 0.5,
             children: [
-              { id: "left", type: "leaf", sessionId: "sess_2" },
-              { id: "right", type: "leaf", sessionId: "sess_1" },
+              { id: "left", type: "leaf", leafKind: "session", sessionId: "sess_2" },
+              { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_1" },
             ],
           },
         }),
@@ -732,10 +735,9 @@ describe("AgentPanes", () => {
             id: "root",
             type: "split",
             direction: "horizontal",
-            ratio: 0.5,
             children: [
-              { id: "left", type: "leaf" },
-              { id: "right", type: "leaf", sessionId: "sess_1" },
+              { id: "left", type: "leaf", leafKind: "draft" },
+              { id: "right", type: "leaf", leafKind: "session", sessionId: "sess_1" },
             ],
           },
         }),
@@ -834,10 +836,19 @@ describe("AgentPanes", () => {
             id: expect.stringMatching(/^split-right-left-/),
             type: "split",
             direction: "horizontal",
-            ratio: 0.5,
             children: [
-              expect.objectContaining({ id: "left", type: "leaf", sessionId: "sess_1" }),
-              expect.objectContaining({ id: "right", type: "leaf", sessionId: "sess_2" }),
+              expect.objectContaining({
+                id: "left",
+                type: "leaf",
+                leafKind: "session",
+                sessionId: "sess_1",
+              }),
+              expect.objectContaining({
+                id: "right",
+                type: "leaf",
+                leafKind: "session",
+                sessionId: "sess_2",
+              }),
             ],
           }),
         }),
@@ -1865,7 +1876,7 @@ describe("AgentPanes", () => {
     expect(await screen.findByTestId("editor-pane-root")).toBeInTheDocument();
   });
 
-  it("reuses the existing editor pane when another draft launcher opens a file", async () => {
+  it("converts another draft launcher into a new editor pane when it opens a file", async () => {
     const { store } = createAgentPaneStore({
       id: "root",
       type: "split",
@@ -1875,6 +1886,10 @@ describe("AgentPanes", () => {
         { id: "right", type: "leaf", leafKind: "draft" },
       ],
     });
+    store.set(
+      editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "left")),
+      "src/left.tsx"
+    );
 
     render(
       <Provider store={store}>
@@ -1890,12 +1905,17 @@ describe("AgentPanes", () => {
       direction: "horizontal",
       children: [
         { id: "left", type: "leaf", leafKind: "editor" },
-        { id: "right", type: "leaf", leafKind: "draft" },
+        { id: "right", type: "leaf", leafKind: "editor" },
       ],
     });
-    expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("left");
-    expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBe("left");
-    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("right");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBe("right");
+    expect(store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "left")))).toBe(
+      "src/left.tsx"
+    );
+    expect(store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "right")))).toBe(
+      "src/app.tsx"
+    );
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
   });
 
@@ -1908,7 +1928,10 @@ describe("AgentPanes", () => {
     store.set(activeEditorPaneIdAtomFamily("ws-1"), "root");
     store.set(focusedEditorPaneIdAtomFamily("ws-1"), "root");
     store.set(activeFilePathAtomFamily("ws-1"), "src/global.tsx");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-1"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "root")),
+      "src/app.tsx"
+    );
     store.set(openFilesAtomFamily("ws-1"), {
       "src/global.tsx": {
         kind: "text",
@@ -1943,7 +1966,9 @@ describe("AgentPanes", () => {
     });
     expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBeNull();
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBeNull();
-    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "root")))).toBe(
+      null
+    );
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/global.tsx");
     expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({
       "src/global.tsx": expect.objectContaining({
@@ -1962,7 +1987,10 @@ describe("AgentPanes", () => {
     store.set(activeEditorPaneIdAtomFamily("ws-1"), "root");
     store.set(focusedEditorPaneIdAtomFamily("ws-1"), "root");
     store.set(activeFilePathAtomFamily("ws-1"), "src/app.tsx");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-1"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "root")),
+      "src/app.tsx"
+    );
     store.set(openFilesAtomFamily("ws-1"), {
       "src/app.tsx": {
         kind: "text",
@@ -1983,7 +2011,9 @@ describe("AgentPanes", () => {
     fireEvent.click(screen.getByRole("button", { name: "close-editor-root" }));
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
-    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "root")))).toBe(
+      null
+    );
     expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({
       "src/app.tsx": expect.objectContaining({
         path: "src/app.tsx",

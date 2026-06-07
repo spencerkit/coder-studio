@@ -10,6 +10,7 @@ import {
   activeEditorPaneIdAtomFamily,
   editorPaneActiveFilePathAtomFamily,
   focusedEditorPaneIdAtomFamily,
+  getEditorPaneStateKey,
 } from "../../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
@@ -91,7 +92,10 @@ describe("SearchPanel", () => {
     });
     store.set(activeEditorPaneIdAtomFamily("ws-test"), "root");
     store.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-test"), "src/panel.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-test", "root")),
+      "src/panel.tsx"
+    );
     store.set(openFilesAtomFamily("ws-test"), {
       "src/app.tsx": {
         kind: "text",
@@ -528,7 +532,9 @@ describe("SearchPanel", () => {
 
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
-    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-test"))).toBe("src/panel.tsx");
+    expect(
+      store.get(editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-test", "root")))
+    ).toBe("src/panel.tsx");
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
     expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
       workspaceId: "ws-test",

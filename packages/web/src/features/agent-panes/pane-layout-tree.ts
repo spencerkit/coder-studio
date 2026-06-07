@@ -453,11 +453,6 @@ export function closeDraftPaneById(node: PaneNode, paneId: string): PaneNode {
 }
 
 export function convertDraftPaneToEditor(node: PaneNode, paneId: string): PaneNode {
-  const existingEditorPaneId = findEditorPaneId(node);
-  if (existingEditorPaneId && existingEditorPaneId !== paneId) {
-    return node;
-  }
-
   return replaceLeafByPaneId(node, paneId, (leaf) => {
     if (!isDraftLeaf(leaf)) {
       return leaf;
@@ -721,57 +716,7 @@ function assignFirstDraftPane(node: PaneNode, sessionId: string): PaneNode | nul
 }
 
 export function enforceSingleEditorPaneInvariant(node: PaneNode): PaneNode {
-  return enforceSingleEditorPaneInvariantInternal(node, false).node;
-}
-
-function enforceSingleEditorPaneInvariantInternal(
-  node: PaneNode,
-  hasSeenEditorPane: boolean
-): { node: PaneNode; hasSeenEditorPane: boolean } {
-  if (node.type === "leaf") {
-    if (!isEditorLeaf(node)) {
-      return { node, hasSeenEditorPane };
-    }
-
-    if (hasSeenEditorPane) {
-      return {
-        node: createDraftLeaf(node.id),
-        hasSeenEditorPane,
-      };
-    }
-
-    return {
-      node,
-      hasSeenEditorPane: true,
-    };
-  }
-
-  const children = node.children ?? [];
-  let changed = false;
-  let nextHasSeenEditorPane = hasSeenEditorPane;
-  const nextChildren = children.map((child) => {
-    const result = enforceSingleEditorPaneInvariantInternal(child, nextHasSeenEditorPane);
-    if (result.node !== child) {
-      changed = true;
-    }
-    nextHasSeenEditorPane = result.hasSeenEditorPane;
-    return result.node;
-  });
-
-  if (!changed) {
-    return {
-      node,
-      hasSeenEditorPane: nextHasSeenEditorPane,
-    };
-  }
-
-  return {
-    node: {
-      ...node,
-      children: nextChildren,
-    },
-    hasSeenEditorPane: nextHasSeenEditorPane,
-  };
+  return node;
 }
 
 function splitLeafForNewSession(

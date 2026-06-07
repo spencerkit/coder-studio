@@ -7,6 +7,10 @@ export const focusedEditorPaneIdAtomFamily = atomFamily(() => atom<string | null
 
 export const activeEditorPaneIdAtomFamily = atomFamily(() => atom<string | null>(null));
 
+export function getEditorPaneStateKey(workspaceId: string, paneId: string): string {
+  return `${workspaceId}::${paneId}`;
+}
+
 export const editorPaneActiveFilePathAtomFamily = atomFamily(() => atom<string | null>(null));
 
 export const editorPaneModeAtomFamily = atomFamily(() => atom<WorkspaceEditorMode>("preview"));

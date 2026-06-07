@@ -5,6 +5,7 @@ import {
   normalizePaneLayout,
   readLegacyPaneLayout,
   readPaneRatio,
+  toWorkspacePaneLayout,
   writePaneRatio,
 } from "./pane-layout";
 
@@ -52,7 +53,7 @@ describe("pane layout storage helpers", () => {
     });
   });
 
-  it("normalizes persisted layouts back to a single editor pane", () => {
+  it("preserves multiple editor panes from persisted layouts", () => {
     expect(
       normalizePaneLayout({
         id: "root",
@@ -69,7 +70,7 @@ describe("pane layout storage helpers", () => {
       direction: "horizontal",
       children: [
         { id: "left", type: "leaf", leafKind: "editor" },
-        { id: "right", type: "leaf", leafKind: "draft" },
+        { id: "right", type: "leaf", leafKind: "editor" },
       ],
     });
   });
@@ -94,6 +95,29 @@ describe("pane layout storage helpers", () => {
         { id: "left", type: "leaf", leafKind: "draft" },
         { id: "center", type: "leaf", leafKind: "editor" },
         { id: "right", type: "leaf", leafKind: "draft" },
+      ],
+    });
+  });
+
+  it("serializes pane layouts to the strict workspace uiState schema", () => {
+    expect(
+      toWorkspacePaneLayout({
+        id: "root",
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.42,
+        children: [
+          { id: "left", type: "leaf", leafKind: "editor", sessionId: "ignored-session" },
+          { id: "right", type: "leaf", leafKind: "session", sessionId: "sess-1" },
+        ],
+      })
+    ).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "session", sessionId: "sess-1" },
       ],
     });
   });

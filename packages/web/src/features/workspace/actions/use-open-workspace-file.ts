@@ -7,10 +7,10 @@ import {
   editorPaneModeAtomFamily,
   editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
+  getEditorPaneStateKey,
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import {
-  findEditorPaneId,
   paneLayoutHasDraftPaneId,
   paneLayoutHasEditorPaneId,
 } from "../../agent-panes/pane-layout-tree";
@@ -28,11 +28,6 @@ export function useOpenWorkspaceFile(workspaceId: string) {
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
   const activeEditorPaneId = useAtomValue(activeEditorPaneIdAtomFamily(workspaceId));
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
-  const setEditorPaneActiveFilePath = useSetAtom(editorPaneActiveFilePathAtomFamily(workspaceId));
-  const setEditorPaneMode = useSetAtom(editorPaneModeAtomFamily(workspaceId));
-  const setEditorPanePendingNavigation = useSetAtom(
-    editorPanePendingNavigationAtomFamily(workspaceId)
-  );
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
   const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const setOpenEditorPaths = useSetAtom(openEditorPathsAtomFamily(workspaceId));
@@ -47,20 +42,21 @@ export function useOpenWorkspaceFile(workspaceId: string) {
       let targetEditorPaneId: string | null = null;
 
       if (options.targetDraftPaneId) {
-        const existingEditorPaneId = findEditorPaneId(paneLayout);
-        if (existingEditorPaneId) {
-          targetEditorPaneId = existingEditorPaneId;
-        } else if (paneLayoutHasDraftPaneId(paneLayout, options.targetDraftPaneId)) {
+        if (paneLayoutHasDraftPaneId(paneLayout, options.targetDraftPaneId)) {
           convertDraftPane(options.targetDraftPaneId);
           targetEditorPaneId = options.targetDraftPaneId;
         }
 
         if (targetEditorPaneId) {
+          const editorPaneStateKey = getEditorPaneStateKey(workspaceId, targetEditorPaneId);
           setFocusedEditorPaneId(targetEditorPaneId);
           setActiveEditorPaneId(targetEditorPaneId);
-          setEditorPaneMode(deriveEditorModeForPath(input.path));
-          setEditorPaneActiveFilePath(input.path);
-          setEditorPanePendingNavigation({
+          store.set(
+            editorPaneModeAtomFamily(editorPaneStateKey),
+            deriveEditorModeForPath(input.path)
+          );
+          store.set(editorPaneActiveFilePathAtomFamily(editorPaneStateKey), input.path);
+          store.set(editorPanePendingNavigationAtomFamily(editorPaneStateKey), {
             ...input,
             requestId: ++nextEditorPaneRequestIdRef.current,
           });
@@ -92,9 +88,6 @@ export function useOpenWorkspaceFile(workspaceId: string) {
       paneLayout,
       persistUiState,
       setActiveEditorPaneId,
-      setEditorPaneActiveFilePath,
-      setEditorPaneMode,
-      setEditorPanePendingNavigation,
       setEditorMode,
       setFocusedEditorPaneId,
       setOpenEditorPaths,

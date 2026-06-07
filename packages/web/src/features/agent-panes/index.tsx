@@ -5,7 +5,7 @@
  * Each panel contains a terminal showing agent output.
  */
 
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
@@ -25,6 +25,7 @@ import {
   editorPaneModeAtomFamily,
   editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
+  getEditorPaneStateKey,
 } from "./atoms/editor-panes";
 import { type PaneNode, readPaneRatio, writePaneRatio } from "./atoms/pane-layout";
 import { collectSessionIds, paneLayoutHasEditorPaneId } from "./pane-layout-tree";
@@ -64,6 +65,7 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const t = useTranslation();
   const paneDragEnabled = usePaneDragEnabled();
   const workspace = useAtomValue(activeWorkspaceAtom);
+  const paneActionsStore = useStore();
   const { workspaceId, sessions, paneLayout } = useWorkspaceSessions(workspace, {
     disabled: !hydrateSessions,
   });
@@ -76,12 +78,6 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const globalActiveFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
-  const editorPaneActiveFilePath = useAtomValue(editorPaneActiveFilePathAtomFamily(workspaceId));
-  const setEditorPaneActiveFilePath = useSetAtom(editorPaneActiveFilePathAtomFamily(workspaceId));
-  const setEditorPaneMode = useSetAtom(editorPaneModeAtomFamily(workspaceId));
-  const setEditorPanePendingNavigation = useSetAtom(
-    editorPanePendingNavigationAtomFamily(workspaceId)
-  );
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
   const { insertPaneAtEdge, swapPaneLeaves } = paneActions;
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
@@ -120,6 +116,10 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
 
   const handleCloseEditorPane = useCallback(
     (paneId: string) => {
+      const editorPaneStateKey = getEditorPaneStateKey(workspaceId, paneId);
+      const editorPaneActiveFilePath = paneActionsStore.get(
+        editorPaneActiveFilePathAtomFamily(editorPaneStateKey)
+      );
       const isOpenInGlobalEditor =
         editorPaneActiveFilePath === globalActiveFilePath ||
         Boolean(editorPaneActiveFilePath && openEditorPaths.includes(editorPaneActiveFilePath));
@@ -129,22 +129,20 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
       }
       paneActions.closeEditorPane(paneId);
       setActiveEditorPaneId((current) => (current === paneId ? null : current));
-      setEditorPaneActiveFilePath(null);
-      setEditorPaneMode("edit");
-      setEditorPanePendingNavigation(null);
+      paneActionsStore.set(editorPaneActiveFilePathAtomFamily(editorPaneStateKey), null);
+      paneActionsStore.set(editorPaneModeAtomFamily(editorPaneStateKey), "edit");
+      paneActionsStore.set(editorPanePendingNavigationAtomFamily(editorPaneStateKey), null);
       setFocusedEditorPaneId((current) => (current === paneId ? null : current));
     },
     [
       closePath,
-      editorPaneActiveFilePath,
       globalActiveFilePath,
       openEditorPaths,
       paneActions,
+      paneActionsStore,
       setActiveEditorPaneId,
-      setEditorPaneActiveFilePath,
-      setEditorPaneMode,
-      setEditorPanePendingNavigation,
       setFocusedEditorPaneId,
+      workspaceId,
     ]
   );
 

@@ -9,6 +9,7 @@ import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import {
   activeEditorPaneIdAtomFamily,
   editorPaneActiveFilePathAtomFamily,
+  getEditorPaneStateKey,
 } from "../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../agent-panes/atoms/pane-layout";
 import { updateStateAtom } from "../updates/atoms";
@@ -1636,7 +1637,10 @@ describe("WorkspacePage", () => {
         },
       },
     });
-    store.set(editorPaneActiveFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-test", "root")),
+      "src/app.tsx"
+    );
     store.set(activeEditorPaneIdAtomFamily("ws-test"), "root");
     store.set(paneLayoutAtomFamily("ws-test"), {
       id: "root",

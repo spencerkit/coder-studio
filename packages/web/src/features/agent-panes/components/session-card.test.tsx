@@ -241,6 +241,7 @@ describe("SessionCard", () => {
         paneLayout: {
           id: "root",
           type: "leaf",
+          leafKind: "session",
           sessionId: "sess_654321",
         },
       })

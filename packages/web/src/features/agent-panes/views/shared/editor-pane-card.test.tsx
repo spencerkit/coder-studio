@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { setWorkspacePathDragData } from "../../../../lib/workspace-path-drag";
 import { type OpenFile, openFilesAtomFamily } from "../../../workspace/atoms";
-import { editorPaneActiveFilePathAtomFamily } from "../../atoms/editor-panes";
+import {
+  editorPaneActiveFilePathAtomFamily,
+  getEditorPaneStateKey,
+} from "../../atoms/editor-panes";
 import { EditorPaneCard } from "./editor-pane-card";
 
 const mocks = vi.hoisted(() => ({
@@ -74,7 +77,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
 
     render(
       <Provider store={store}>
@@ -106,7 +112,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
 
     render(
       <Provider store={store}>
@@ -151,7 +160,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
 
     render(
       <Provider store={store}>
@@ -203,7 +215,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(editorPaneActiveFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
     store.set(openFilesAtomFamily("ws-123"), {
       "src/app.tsx": {
         kind: "text",

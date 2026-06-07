@@ -3,11 +3,11 @@ import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
 import type { DragEvent, FC } from "react";
 import { useState } from "react";
 import { ConfirmDialog, IconButton, Tooltip } from "../../../../components/ui";
+import { useTranslation } from "../../../../lib/i18n";
 import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
 } from "../../../../lib/workspace-path-drag";
-import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import {
   CodeEditorDesktopHeaderActions,
@@ -15,14 +15,15 @@ import {
 } from "../../../code-editor/views/shared/code-editor-host";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { openFilesAtomFamily } from "../../../workspace/atoms";
+import type { PaneDropPlacement } from "../../actions/pane-drag-types";
+import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
+import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 import {
   editorPaneActiveFilePathAtomFamily,
   editorPaneModeAtomFamily,
   editorPanePendingNavigationAtomFamily,
+  getEditorPaneStateKey,
 } from "../../atoms/editor-panes";
-import type { PaneDropPlacement } from "../../actions/pane-drag-types";
-import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
-import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 
 function getEditorPaneTitle(path: string | null, fallbackTitle: string): string {
   if (!path) {
@@ -59,9 +60,10 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const t = useTranslation();
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
-  const activeFilePathAtom = editorPaneActiveFilePathAtomFamily(workspaceId);
-  const editorModeAtom = editorPaneModeAtomFamily(workspaceId);
-  const pendingNavigationAtom = editorPanePendingNavigationAtomFamily(workspaceId);
+  const editorPaneStateKey = getEditorPaneStateKey(workspaceId, paneId);
+  const activeFilePathAtom = editorPaneActiveFilePathAtomFamily(editorPaneStateKey);
+  const editorModeAtom = editorPaneModeAtomFamily(editorPaneStateKey);
+  const pendingNavigationAtom = editorPanePendingNavigationAtomFamily(editorPaneStateKey);
   const activeFilePath = useAtomValue(activeFilePathAtom);
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const editorState = useCodeEditorActions({
