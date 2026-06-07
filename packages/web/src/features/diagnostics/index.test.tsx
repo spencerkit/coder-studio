@@ -388,6 +388,14 @@ describe("DiagnosticsPage", () => {
     let installGetCalls = 0;
     let submitted = false;
     let subscriptionHandler: ((topic: string, payload: unknown) => void) | undefined;
+    const subscribe = vi.fn(
+      (_topics: string[], handler: (topic: string, payload: unknown) => void) => {
+        subscriptionHandler = handler;
+        return () => {
+          subscriptionHandler = undefined;
+        };
+      }
+    );
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
       if (op === "diagnostics.get" || op === "diagnostics.recheck") {
         diagnosticsCallCount += 1;
@@ -483,12 +491,7 @@ describe("DiagnosticsPage", () => {
     const store = createStoreWithClient(sendCommand);
     store.set(wsClientAtom, {
       sendCommand,
-      subscribe: vi.fn((_topics: string[], handler: (topic: string, payload: unknown) => void) => {
-        subscriptionHandler = handler;
-        return () => {
-          subscriptionHandler = undefined;
-        };
-      }),
+      subscribe,
     } as never);
 
     render(
@@ -506,6 +509,12 @@ describe("DiagnosticsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Install Git" }));
     expect(await screen.findByText("Package manager: apt-get")).toBeInTheDocument();
     expect(screen.getByLabelText("Administrator password")).toHaveAttribute("type", "password");
+    await waitFor(() => {
+      expect(subscribe).toHaveBeenCalledWith(
+        ["systemDeps.install.job-1.output"],
+        expect.any(Function)
+      );
+    });
 
     act(() => {
       subscriptionHandler?.("systemDeps.install.job-1.output", {
