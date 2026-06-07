@@ -74,6 +74,7 @@ export interface UiState {
   fileTreeExpandedDirs?: string[];
   openEditorPaths?: string[];
   activeEditorPath?: string | null;
+  agentInstructionsExpanded?: boolean;
 }
 
 export interface WorkspaceLastViewedTarget {
@@ -82,10 +83,68 @@ export interface WorkspaceLastViewedTarget {
   updatedAt: number;
 }
 
-export interface WorkspaceIntelligenceRecommendedCommand {
-  key: "dev" | "test" | "build" | "lint";
+export interface WorkspaceHistoryEntry {
+  path: string;
+  name: string;
+  lastOpenedAt: number;
+}
+
+export interface WorkspaceIntelligenceCommandReference {
   command: string;
+}
+
+export interface WorkspaceIntelligenceRecommendedCommand
+  extends WorkspaceIntelligenceCommandReference {
+  key: "dev" | "test" | "build" | "lint";
   source: "package_json" | "makefile" | "detected";
+  intent?: "recommended_entrypoint";
+}
+
+export interface WorkspaceIntelligenceKeyDirectory {
+  path: string;
+  kind:
+    | "frontend"
+    | "backend"
+    | "providers"
+    | "shared"
+    | "cli"
+    | "docs"
+    | "tests"
+    | "scripts"
+    | "other";
+  reason: string;
+}
+
+export interface WorkspaceIntelligencePackageSummary {
+  path: string;
+  name?: string;
+  role:
+    | "frontend_ui"
+    | "backend_runtime"
+    | "provider_integrations"
+    | "shared_contracts"
+    | "cli_entrypoint"
+    | "shared_utilities"
+    | "shared_package";
+  scripts: string[];
+}
+
+export interface WorkspaceIntelligenceVerificationCommand
+  extends WorkspaceIntelligenceCommandReference {
+  reason: string;
+  priority: "verification" | "quality" | "dev";
+  intent?: "verification_workflow";
+}
+
+export type WorkspaceIntelligenceDocumentationKind = "readme" | "docs" | "guide" | "wiki";
+
+export interface WorkspaceIntelligenceDocumentationEntry {
+  path: string;
+  kind: WorkspaceIntelligenceDocumentationKind;
+}
+
+export interface WorkspaceIntelligenceDocEntry extends WorkspaceIntelligenceDocumentationEntry {
+  kind: "readme" | "docs";
 }
 
 export interface WorkspaceIntelligenceSummary {
@@ -104,21 +163,102 @@ export interface WorkspaceIntelligenceSummary {
     lint?: string;
   };
   recommendedCommands: WorkspaceIntelligenceRecommendedCommand[];
-  docs: Array<{
-    path: string;
-    kind: "readme" | "docs";
-  }>;
+  docs: WorkspaceIntelligenceDocEntry[];
+  workspaceKind?: "monorepo" | "node_app" | "unknown";
+  topLevelDirectories?: string[];
+  keyDirectories?: WorkspaceIntelligenceKeyDirectory[];
+  packages?: WorkspaceIntelligencePackageSummary[];
+  documentationEntries?: WorkspaceIntelligenceDocumentationEntry[];
+  verificationCommands?: WorkspaceIntelligenceVerificationCommand[];
+  fileConstraints?: string[];
   agentInstructions: {
     exists: boolean;
-    path: ".coder-studio/AGENTS.md";
+    path: ".coder-studio/agent.md";
   };
 }
 
+export const SYSTEM_AGENT_INSTRUCTIONS_PROVIDER_IDS = [
+  "codex",
+  "claude",
+  "gemini",
+  "opencode",
+] as const;
+
+export type SystemAgentInstructionsProviderId =
+  (typeof SYSTEM_AGENT_INSTRUCTIONS_PROVIDER_IDS)[number];
+
+export const SYSTEM_AGENT_INSTRUCTIONS_PATHS = {
+  codex: {
+    displayName: "Codex",
+    relPath: ".codex/AGENTS.md",
+    displayPath: "~/.codex/AGENTS.md",
+    editable: true,
+  },
+  claude: {
+    displayName: "Claude Code",
+    relPath: ".claude/CLAUDE.md",
+    displayPath: "~/.claude/CLAUDE.md",
+    editable: true,
+  },
+  gemini: {
+    displayName: "Gemini CLI",
+    relPath: ".gemini/GEMINI.md",
+    displayPath: "~/.gemini/GEMINI.md",
+    editable: true,
+  },
+  opencode: {
+    displayName: "OpenCode",
+    relPath: ".config/opencode/AGENTS.md",
+    displayPath: "~/.config/opencode/AGENTS.md",
+    editable: true,
+  },
+} as const satisfies Record<
+  SystemAgentInstructionsProviderId,
+  {
+    displayName: string;
+    relPath?: string;
+    displayPath: string;
+    editable: boolean;
+  }
+>;
+
 export interface AgentInstructionsDocument {
-  path: ".coder-studio/AGENTS.md";
+  path: string;
+  displayPath?: string;
   exists: boolean;
   content: string;
   baseHash?: string;
+}
+
+export type AgentInstructionsDocumentKind = "custom" | "system";
+
+export interface AgentInstructionsPanelProjectStatus {
+  path: ".coder-studio/agent.md";
+  displayPath: "项目 Agent.md";
+  exists: boolean;
+  stale: boolean;
+}
+
+export interface AgentInstructionsSystemStatusEntry {
+  providerId: SystemAgentInstructionsProviderId;
+  displayName: string;
+  path?: string;
+  displayPath: string;
+  exists: boolean;
+  editable: boolean;
+  status: "ready" | "missing" | "unsupported" | "error";
+  reason?: string;
+}
+
+export interface AgentInstructionsPanelStatus {
+  project: AgentInstructionsPanelProjectStatus;
+  system: AgentInstructionsSystemStatusEntry[];
+  document: AgentInstructionsPanelProjectStatus;
+}
+
+export interface AgentInstructionsSystemDocument extends AgentInstructionsDocument {
+  providerId: SystemAgentInstructionsProviderId;
+  displayPath: string;
 }
 
 export interface AgentInstructionsHealthIssue {
@@ -143,7 +283,7 @@ export interface AgentInstructionsHealthChecks {
 }
 
 export interface AgentInstructionsHealth {
-  path: ".coder-studio/AGENTS.md";
+  path: ".coder-studio/agent.md";
   exists: boolean;
   status: "healthy" | "warning" | "missing";
   checks: AgentInstructionsHealthChecks;
@@ -183,6 +323,11 @@ export interface AgentSessionMetadata {
   baselineGitHead?: string;
   baselineCapturedAt?: number;
   verificationRuns: AgentSessionVerificationRun[];
+  attachedAgentInstructions?: {
+    effectiveHash: string;
+    mode: "auto" | "manual";
+    attachedAt: number;
+  };
 }
 
 export interface SessionReviewWarning {
@@ -257,6 +402,11 @@ export interface Session {
    * their first message.
    */
   title?: string;
+  /**
+   * Full normalized first submitted instruction used for title hover details.
+   * Assigned together with `title` and never overwritten afterwards.
+   */
+  firstSubmittedUserInput?: string;
 }
 
 /**
@@ -285,9 +435,17 @@ export interface GitStatus {
   untracked: GitFileChange[];
   /** Worktree-only deletions (index unchanged, file removed in working tree). */
   deleted: GitFileChange[];
+  /** Unmerged files reported by porcelain v2 `u` records during merge conflicts. */
+  conflicted?: GitFileChange[];
 }
 
-export type GitChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
+export type GitChangeStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "untracked"
+  | "conflicted";
 
 export type GitDiffRenderMode = "text" | "image";
 
@@ -310,7 +468,7 @@ export interface GitCommitSummary {
 export interface GitCommitFileEntry {
   path: string;
   oldPath?: string;
-  status: Exclude<GitChangeStatus, "untracked">;
+  status: Exclude<GitChangeStatus, "untracked" | "conflicted">;
   renderAs: GitDiffRenderMode;
 }
 
@@ -358,6 +516,7 @@ export interface FileNode {
   size?: number;
   mtime?: number;
   isGitIgnored?: boolean;
+  isSymlink?: boolean;
 }
 
 export interface SearchContentMatch {
@@ -481,8 +640,13 @@ export interface ProviderConfig {
  *     replaced with an ellipsis ("…") so the total length is still at most
  *     SESSION_TITLE_MAX_LENGTH.
  */
-export function deriveSessionTitle(raw: string): string | undefined {
+export function normalizeSessionTitleInput(raw: string): string | undefined {
   const normalized = raw.replace(/\s+/g, " ").trim();
+  return normalized || undefined;
+}
+
+export function deriveSessionTitle(raw: string): string | undefined {
+  const normalized = normalizeSessionTitleInput(raw);
   if (!normalized) return undefined;
 
   if (normalized.length <= SESSION_TITLE_MAX_LENGTH) {

@@ -1,15 +1,14 @@
 import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
-
+import { debounceIdleHeuristics } from "../debounce-idle-heuristics.js";
 import { sharedFirstSkillMountDirectories } from "../skills/directories.js";
-import { type CodexConfig, codexConfigSchema } from "./config-schema.js";
-import { codexHeadlessDefinition } from "./headless.js";
-import { idleDebounceMs, idlePromptPatterns, sessionIdPatterns } from "./stdout-heuristics.js";
+import { type GeminiConfig, geminiConfigSchema } from "./config-schema.js";
+import { buildGeminiSupervisorEvalCommand } from "./supervisor-eval.js";
 
-export const codexInstallMetadata = {
+const geminiInstallMetadata = {
   prerequisites: ["npm"],
-  manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
+  manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.gemini.manual"],
   docUrls: {
-    provider: "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+    provider: "https://google-gemini.github.io/gemini-cli/docs/get-started/",
     prerequisites: {
       npm: "https://nodejs.org/en/download",
     },
@@ -25,12 +24,12 @@ export const codexInstallMetadata = {
         args: ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
       },
       {
-        id: "npm-install-codex",
+        id: "npm-install-gemini",
         kind: "provider",
-        targetCommand: "codex",
+        targetCommand: "gemini",
         requiresCommands: ["npm"],
         command: "npm",
-        args: ["install", "-g", "@openai/codex"],
+        args: ["install", "-g", "@google/gemini-cli"],
       },
     ],
     darwin: [
@@ -43,36 +42,36 @@ export const codexInstallMetadata = {
         args: ["install", "node"],
       },
       {
-        id: "npm-install-codex",
+        id: "npm-install-gemini",
         kind: "provider",
-        targetCommand: "codex",
+        targetCommand: "gemini",
         requiresCommands: ["npm"],
         command: "npm",
-        args: ["install", "-g", "@openai/codex"],
+        args: ["install", "-g", "@google/gemini-cli"],
       },
     ],
     linux: [
       {
-        id: "npm-install-codex",
+        id: "npm-install-gemini",
         kind: "provider",
-        targetCommand: "codex",
+        targetCommand: "gemini",
         requiresCommands: ["npm"],
         command: "npm",
-        args: ["install", "-g", "@openai/codex"],
+        args: ["install", "-g", "@google/gemini-cli"],
       },
     ],
   },
 } satisfies ProviderDefinition["install"];
 
-/**
- * Codex provider definition.
- */
-export const codexDefinition: ProviderDefinition = {
-  // ===== Metadata =====
-  id: "codex",
-  displayName: "Codex",
-  badge: "Codex",
+export const geminiDefinition: ProviderDefinition = {
+  id: "gemini",
+  displayName: "Gemini CLI",
+  badge: "Gemini",
   kind: "built_in",
+  stability: "stable",
+  supportsAgentInstructions: true,
+  supportsSkillsMount: true,
+  skillMountDirectories: sharedFirstSkillMountDirectories(".gemini"),
   capability: "full",
   capabilities: [
     { key: "interactive_session", supported: true, label: "Interactive session" },
@@ -81,16 +80,13 @@ export const codexDefinition: ProviderDefinition = {
     { key: "context_attach", supported: false, label: "Context attach" },
     { key: "review", supported: false, label: "Review" },
   ],
-  install: codexInstallMetadata,
-  supportsSkillsMount: true,
-  skillMountDirectories: sharedFirstSkillMountDirectories(".codex"),
-
-  // ===== Command construction =====
+  install: geminiInstallMetadata,
   buildCommand(config: ProviderConfig, ctx) {
-    const cfg = codexConfigSchema.parse(config);
+    const cfg = geminiConfigSchema.parse(config);
+    const modelArg = cfg.model ? ["--model", cfg.model] : [];
 
     return {
-      argv: ["codex", ...cfg.additionalArgs],
+      argv: ["gemini", ...modelArg, ...cfg.additionalArgs],
       env: {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
@@ -98,25 +94,30 @@ export const codexDefinition: ProviderDefinition = {
       cwd: ctx.workspacePath,
     };
   },
-
-  // ===== Configuration =====
-  configSchema: codexConfigSchema,
+  configSchema: geminiConfigSchema,
   defaultConfig: {
     additionalArgs: [],
     envVars: {},
-  } satisfies CodexConfig,
-
-  // ===== Runtime requirements =====
-  requiredCommands: ["codex"],
+  } satisfies GeminiConfig,
+  requiredCommands: ["gemini"],
   agentInstructions: {
     publishTarget: {
-      path: "AGENTS.md",
+      path: "GEMINI.md",
     },
   },
-  headless: codexHeadlessDefinition,
-  idleHeuristics: {
-    sessionIdPatterns,
-    idlePromptPatterns,
-    idleDebounceMs,
+  headless: {
+    supportedScenarios: ["supervisor_eval", "session_analysis", "agent_instructions_generate"],
+    buildCommand(config, scenario, req) {
+      if (
+        scenario !== "supervisor_eval" &&
+        scenario !== "session_analysis" &&
+        scenario !== "agent_instructions_generate"
+      ) {
+        return null;
+      }
+
+      return buildGeminiSupervisorEvalCommand(config, req);
+    },
   },
+  idleHeuristics: debounceIdleHeuristics,
 };

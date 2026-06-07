@@ -1,7 +1,8 @@
 import type { ProviderListItem } from "@coder-studio/core";
-import { useAtomValue } from "jotai";
+import { useAtom } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
+import { providerListAtom } from "../../../atoms/providers";
 import { useTranslation } from "../../../lib/i18n";
 
 interface UseAgentProvidersResult {
@@ -11,11 +12,19 @@ interface UseAgentProvidersResult {
   refresh: () => Promise<void>;
 }
 
+function normalizeProviders(providers: ProviderListItem[]): ProviderListItem[] {
+  return providers.map((provider) => ({
+    ...provider,
+    capabilities: provider.capabilities.map((capability) => ({ ...capability })),
+    requiredCommands: [...provider.requiredCommands],
+  }));
+}
+
 export function useAgentProviders(): UseAgentProvidersResult {
   const t = useTranslation();
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const [providers, setProviders] = useState<ProviderListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [dispatch] = useAtom(dispatchCommandAtom);
+  const [providers, setProviders] = useAtom(providerListAtom);
+  const [isLoading, setIsLoading] = useState(providers.length === 0);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -24,13 +33,12 @@ export function useAgentProviders(): UseAgentProvidersResult {
 
     const result = await dispatch<ProviderListItem[]>("provider.list", {});
     if (!result.ok || !result.data) {
-      setProviders([]);
       setError(result.error?.message ?? t("provider.load_failed"));
       setIsLoading(false);
       return;
     }
 
-    setProviders(result.data);
+    setProviders(normalizeProviders(result.data));
     setError(null);
     setIsLoading(false);
   }, [dispatch, t]);

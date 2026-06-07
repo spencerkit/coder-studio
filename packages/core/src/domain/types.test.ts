@@ -8,8 +8,9 @@ import type {
   GitFileDiffPayload,
   GitRevisionSource,
   SessionState,
+  WorkspaceHistoryEntry,
 } from "./types";
-import { deriveSessionTitle, SESSION_TITLE_MAX_LENGTH } from "./types";
+import { deriveSessionTitle, normalizeSessionTitleInput, SESSION_TITLE_MAX_LENGTH } from "./types";
 
 describe("deriveSessionTitle", () => {
   it("returns undefined for empty/whitespace-only input", () => {
@@ -44,6 +45,18 @@ describe("deriveSessionTitle", () => {
   });
 });
 
+describe("normalizeSessionTitleInput", () => {
+  it("returns the full normalized submitted input without truncating it", () => {
+    expect(normalizeSessionTitleInput("  hello   world this is a test\n")).toBe(
+      "hello world this is a test"
+    );
+  });
+
+  it("returns undefined for whitespace-only input", () => {
+    expect(normalizeSessionTitleInput("\n\t  ")).toBeUndefined();
+  });
+});
+
 describe("SessionState", () => {
   it("only allows the PTY-driven lifecycle states", () => {
     expectTypeOf<SessionState>().toEqualTypeOf<
@@ -55,6 +68,16 @@ describe("SessionState", () => {
 describe("CustomProviderSessionMode", () => {
   it("currently only allows interactive PTY-backed custom providers", () => {
     expectTypeOf<CustomProviderSessionMode>().toEqualTypeOf<"interactive">();
+  });
+});
+
+describe("WorkspaceHistoryEntry", () => {
+  it("captures path-based recent workspace metadata", () => {
+    expectTypeOf<WorkspaceHistoryEntry>().toEqualTypeOf<{
+      path: string;
+      name: string;
+      lastOpenedAt: number;
+    }>();
   });
 });
 
