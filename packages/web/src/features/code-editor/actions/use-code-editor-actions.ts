@@ -3,7 +3,7 @@ import type {
   GitCommitFileEntry,
   GitFileDiffPayload,
 } from "@coder-studio/core";
-import { useAtom, useAtomValue, useSetAtom, type PrimitiveAtom } from "jotai";
+import { type PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
@@ -23,10 +23,7 @@ import {
   openFilesAtomFamily,
   type WorkspaceEditorMode,
 } from "../../workspace/atoms";
-import {
-  type PendingEditorNavigation,
-  pendingEditorNavigationAtomFamily,
-} from "../atoms";
+import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
 import { parseSystemAgentInstructionsEditorPath } from "../system-agent-instructions-path";
 import {
@@ -100,7 +97,8 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   } | null>(null);
 
   const workspaceId = workspace?.id;
-  const activeFilePathAtom = options.activeFilePathAtom ?? activeFilePathAtomFamily(workspaceId ?? "");
+  const activeFilePathAtom =
+    options.activeFilePathAtom ?? activeFilePathAtomFamily(workspaceId ?? "");
   const editorModeAtom = options.editorModeAtom ?? editorModeAtomFamily(workspaceId ?? "");
   const pendingNavigationAtom =
     options.pendingNavigationAtom ?? pendingEditorNavigationAtomFamily(workspaceId ?? "");

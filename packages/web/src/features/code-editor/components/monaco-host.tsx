@@ -5,7 +5,7 @@
  * in the Git Diff feature and is deliberately not surfaced here.
  */
 
-import { useAtomValue, useSetAtom, type PrimitiveAtom } from "jotai";
+import { type PrimitiveAtom, useAtomValue, useSetAtom } from "jotai";
 import * as monaco from "monaco-editor";
 import { ICodeEditorService } from "monaco-editor/esm/vs/editor/browser/services/codeEditorService.js";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
