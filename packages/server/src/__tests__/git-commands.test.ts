@@ -304,6 +304,7 @@ describe("Git Commands", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toEqual(
       expect.objectContaining({
+        hasMore: false,
         entries: expect.arrayContaining([
           expect.objectContaining({
             subject: "Refresh command surface",
@@ -312,6 +313,71 @@ describe("Git Commands", () => {
         ]),
       })
     );
+  });
+
+  it("returns the next git.log page after a cursor", async () => {
+    for (const subject of [
+      "Second command commit",
+      "Third command commit",
+      "Fourth command commit",
+    ]) {
+      await writeFile(join(testDir, "sample.ts"), `${subject}\n`);
+      await execFileAsync("git", ["add", "."], { cwd: testDir });
+      await execFileAsync("git", ["commit", "-m", subject], { cwd: testDir });
+    }
+
+    const firstPage = await dispatch(
+      {
+        kind: "command",
+        id: "git-log-page-1",
+        op: "git.log",
+        args: {
+          workspaceId,
+          limit: 2,
+        },
+      },
+      ctx
+    );
+
+    expect(firstPage.ok).toBe(true);
+    expect(firstPage.data).toEqual(
+      expect.objectContaining({
+        hasMore: true,
+        entries: [
+          expect.objectContaining({ subject: "Fourth command commit" }),
+          expect.objectContaining({ subject: "Third command commit" }),
+        ],
+      })
+    );
+
+    const cursor = (firstPage.data as { entries: Array<{ sha: string }> }).entries[1]!.sha;
+    const secondPage = await dispatch(
+      {
+        kind: "command",
+        id: "git-log-page-2",
+        op: "git.log",
+        args: {
+          workspaceId,
+          limit: 2,
+          afterSha: cursor,
+        },
+      },
+      ctx
+    );
+
+    expect(secondPage.ok).toBe(true);
+    expect(secondPage.data).toEqual(
+      expect.objectContaining({
+        hasMore: false,
+        entries: [
+          expect.objectContaining({ subject: "Second command commit" }),
+          expect.objectContaining({ subject: "Initial commit" }),
+        ],
+      })
+    );
+    expect(
+      (secondPage.data as { entries: Array<{ sha: string }> }).entries.map((entry) => entry.sha)
+    ).not.toContain(cursor);
   });
 
   it("returns a commit patch for git.show", async () => {

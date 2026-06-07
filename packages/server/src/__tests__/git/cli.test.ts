@@ -770,18 +770,19 @@ describe("getGitHistory", () => {
 
     const history = await getGitHistory(testDir, 5);
 
-    expect(history).toHaveLength(2);
-    expect(history[0]).toEqual(
+    expect(history.hasMore).toBe(false);
+    expect(history.entries).toHaveLength(2);
+    expect(history.entries[0]).toEqual(
       expect.objectContaining({
         subject: "second commit",
         authorName: "Test",
       })
     );
-    expect(history[0]?.sha).toHaveLength(40);
-    expect(history[0]?.shortSha).toHaveLength(7);
-    expect(history[0]?.authoredAt).toBeTypeOf("number");
-    expect(history[0]!.authoredAt).toBeGreaterThanOrEqual(history[1]!.authoredAt);
-    expect(history[1]).toEqual(
+    expect(history.entries[0]?.sha).toHaveLength(40);
+    expect(history.entries[0]?.shortSha).toHaveLength(7);
+    expect(history.entries[0]?.authoredAt).toBeTypeOf("number");
+    expect(history.entries[0]!.authoredAt).toBeGreaterThanOrEqual(history.entries[1]!.authoredAt);
+    expect(history.entries[1]).toEqual(
       expect.objectContaining({
         subject: "first commit",
         authorName: "Test",
@@ -795,7 +796,45 @@ describe("getGitHistory", () => {
     const testDir = await mkdtemp(join(tmpdir(), "git-history-empty-"));
     await execFileAsync("git", ["init"], { cwd: testDir });
 
-    await expect(getGitHistory(testDir, 5)).resolves.toEqual([]);
+    await expect(getGitHistory(testDir, 5)).resolves.toEqual({
+      entries: [],
+      hasMore: false,
+    });
+
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it("returns paged commits after a cursor without duplicating the cursor", async () => {
+    const testDir = await mkdtemp(join(tmpdir(), "git-history-paged-"));
+    await execFileAsync("git", ["init"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: testDir });
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: testDir });
+
+    for (const subject of ["first commit", "second commit", "third commit", "fourth commit"]) {
+      await writeFile(join(testDir, "file.txt"), `${subject}\n`);
+      await execFileAsync("git", ["add", "."], { cwd: testDir });
+      await execFileAsync("git", ["commit", "-m", subject], { cwd: testDir });
+    }
+
+    const firstPage = await getGitHistory(testDir, { limit: 2 });
+
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.entries.map((entry) => entry.subject)).toEqual([
+      "fourth commit",
+      "third commit",
+    ]);
+
+    const secondPage = await getGitHistory(testDir, {
+      limit: 2,
+      afterSha: firstPage.entries[1]!.sha,
+    });
+
+    expect(secondPage.hasMore).toBe(false);
+    expect(secondPage.entries.map((entry) => entry.subject)).toEqual([
+      "second commit",
+      "first commit",
+    ]);
+    expect(secondPage.entries.map((entry) => entry.sha)).not.toContain(firstPage.entries[1]!.sha);
 
     await rm(testDir, { recursive: true, force: true });
   });

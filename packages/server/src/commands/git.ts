@@ -36,6 +36,14 @@ const gitCommitRevisionSchema = z
 
 const GIT_BACKGROUND_FETCH_TIMEOUT_MS = 30 * 1000;
 
+function debugGitHistoryCommand(message: string, details?: Record<string, unknown>) {
+  if (process.env.CODER_STUDIO_DEBUG_GIT_HISTORY !== "1") {
+    return;
+  }
+
+  console.log("[git-history]", message, details);
+}
+
 async function runGitNetworkOperation<T>(
   ctx: CommandContext,
   workspaceId: string,
@@ -131,6 +139,7 @@ registerCommand(
   z.object({
     workspaceId: z.string(),
     limit: z.number().int().min(1).max(50).optional(),
+    afterSha: gitCommitRevisionSchema.optional(),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
@@ -138,9 +147,27 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return {
-      entries: await getGitHistory(workspace.path, args.limit ?? 5),
-    };
+    debugGitHistoryCommand("command git.log request", {
+      workspaceId: args.workspaceId,
+      workspacePath: workspace.path,
+      limit: args.limit ?? 5,
+      afterSha: args.afterSha,
+    });
+
+    const history = await getGitHistory(workspace.path, {
+      limit: args.limit ?? 5,
+      afterSha: args.afterSha,
+    });
+
+    debugGitHistoryCommand("command git.log response", {
+      workspaceId: args.workspaceId,
+      entryCount: history.entries.length,
+      hasMore: history.hasMore,
+      firstSha: history.entries[0]?.sha,
+      lastSha: history.entries.at(-1)?.sha,
+    });
+
+    return history;
   }
 );
 

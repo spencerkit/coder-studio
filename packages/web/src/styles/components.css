@@ -17138,6 +17138,24 @@ body.is-dragging-pane .session-action-btn-drag {
   font-variant-numeric: tabular-nums;
 }
 
+.git-history-load-sentinel {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+}
+
+.git-history-load-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--sp-2);
+}
+
 .git-panel-status-strip {
   display: flex;
   align-items: center;
@@ -18566,15 +18584,18 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .git-panel-scroll {
   display: flex;
-  flex: 0 0 auto;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: var(--gap-tight);
   padding: var(--sp-4) calc(var(--sp-3) + var(--gap-compact)) calc(var(--sp-3) + var(--gap-compact));
-  overflow: visible;
+  overflow-y: auto;
 }
 
 .git-panel--desktop {
-  height: auto;
+  min-height: 0;
+  height: 100%;
 }
 
 .git-commit-block {
@@ -18689,6 +18710,12 @@ body.is-dragging-pane .session-action-btn-drag {
 
 .git-panel-section-history {
   min-height: 0;
+}
+
+.git-panel-section-body--history {
+  gap: 4px;
+  min-height: 0;
+  overflow: visible;
 }
 
 .git-panel-section-chevron.expanded {

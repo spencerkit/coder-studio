@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { GitStatus, TaskDefinition, TaskRun } from "@coder-studio/core";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -20,6 +20,14 @@ import {
 import { GitPanel } from "./git-panel";
 
 describe("GitPanel", () => {
+  const originalIntersectionObserver = global.IntersectionObserver;
+  let intersectionObserverInstances: Array<{
+    callback: IntersectionObserverCallback;
+    observe: ReturnType<typeof vi.fn>;
+    unobserve: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+  }> = [];
+
   const status: GitStatus = {
     branch: "feature/ai-agent",
     ahead: 0,
@@ -94,6 +102,20 @@ describe("GitPanel", () => {
     },
   ];
 
+  function createHistoryEntries(count: number) {
+    return Array.from({ length: count }, (_, index) => {
+      const ordinal = index + 1;
+      const shortSha = `feed${String(ordinal).padStart(3, "0")}`;
+      return {
+        sha: `${shortSha}${"0".repeat(40 - shortSha.length)}`,
+        shortSha,
+        subject: `commit ${ordinal}`,
+        authorName: "pallyoung",
+        authoredAt: Date.now() - index * 60_000,
+      };
+    });
+  }
+
   const unstagedOnlyStatus: GitStatus = {
     ...status,
     staged: [],
@@ -144,11 +166,41 @@ describe("GitPanel", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    intersectionObserverInstances = [];
+    class IntersectionObserverMock {
+      readonly observe = vi.fn();
+      readonly unobserve = vi.fn();
+      readonly disconnect = vi.fn();
+      readonly root: Element | Document | null;
+      readonly rootMargin: string;
+      readonly thresholds: readonly number[];
+
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        this.root = options?.root ?? null;
+        this.rootMargin = options?.rootMargin ?? "";
+        this.thresholds = Array.isArray(options?.threshold)
+          ? options.threshold
+          : [options?.threshold ?? 0];
+        intersectionObserverInstances.push({
+          callback,
+          observe: this.observe,
+          unobserve: this.unobserve,
+          disconnect: this.disconnect,
+        });
+      }
+
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    global.IntersectionObserver =
+      IntersectionObserverMock as unknown as typeof IntersectionObserver;
     window.localStorage.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    global.IntersectionObserver = originalIntersectionObserver;
     window.localStorage.clear();
   });
 
@@ -1361,6 +1413,490 @@ describe("GitPanel", () => {
     });
 
     expect(screen.queryByRole("button", { name: "Show all history" })).toBeNull();
+  });
+
+  it("loads and appends the next history page when the expanded history bottom is reached", async () => {
+    const nextHistoryEntries = [
+      {
+        sha: "7a91234000000000000000000000000000000000",
+        shortSha: "7a91234",
+        subject: "fix: append older git history",
+        authorName: "pallyoung",
+        authoredAt: Date.now() - 120_000,
+      },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        const logArgs = args as { afterSha?: string };
+        if (logArgs.afterSha) {
+          return {
+            entries: nextHistoryEntries,
+            hasMore: false,
+          };
+        }
+
+        return {
+          entries: historyEntries,
+          hasMore: true,
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "History2" }));
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(screen.getByText("Add worktree management surface spec")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(intersectionObserverInstances.length).toBeGreaterThan(0);
+    });
+    const sentinel = container.querySelector(".git-history-load-sentinel");
+    expect(sentinel).not.toBeNull();
+
+    await act(async () => {
+      intersectionObserverInstances[intersectionObserverInstances.length - 1]?.callback(
+        [
+          {
+            isIntersecting: true,
+            target: sentinel,
+          } as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+          afterSha: historyEntries[1]!.sha,
+        },
+        undefined
+      );
+    });
+
+    expect(await screen.findByText("fix: append older git history")).toBeInTheDocument();
+    expect(screen.getByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History3" })).toBeInTheDocument();
+  });
+
+  it("loads and appends the next history page when the git panel scrolls near the bottom", async () => {
+    const nextHistoryEntries = [
+      {
+        sha: "21c0ffee00000000000000000000000000000000",
+        shortSha: "21c0ffe",
+        subject: "chore: load older commits while scrolling",
+        authorName: "pallyoung",
+        authoredAt: Date.now() - 120_000,
+      },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        const logArgs = args as { afterSha?: string };
+        if (logArgs.afterSha) {
+          return {
+            entries: nextHistoryEntries,
+            hasMore: false,
+          };
+        }
+
+        return {
+          entries: historyEntries,
+          hasMore: true,
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "History2" }));
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+
+    const panelScrollRoot = container.querySelector(".git-panel-scroll");
+    expect(panelScrollRoot).not.toBeNull();
+    Object.defineProperties(panelScrollRoot, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 320 },
+      scrollTop: { configurable: true, value: 635 },
+    });
+
+    fireEvent.scroll(panelScrollRoot as HTMLElement);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+          afterSha: historyEntries[1]!.sha,
+        },
+        undefined
+      );
+    });
+
+    expect(
+      await screen.findByText("chore: load older commits while scrolling")
+    ).toBeInTheDocument();
+    expect(screen.getByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History3" })).toBeInTheDocument();
+  });
+
+  it("attempts to load the next page when a full initial history page omits hasMore", async () => {
+    const firstPageEntries = createHistoryEntries(20);
+    const nextHistoryEntries = [
+      {
+        sha: "9a91234000000000000000000000000000000000",
+        shortSha: "9a91234",
+        subject: "fix: load fallback history page",
+        authorName: "pallyoung",
+        authoredAt: Date.now() - 1_500_000,
+      },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        const logArgs = args as { afterSha?: string };
+        if (logArgs.afterSha) {
+          return {
+            entries: nextHistoryEntries,
+            hasMore: false,
+          };
+        }
+
+        return {
+          entries: firstPageEntries,
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "History20" }));
+    expect(await screen.findByText("commit 1")).toBeInTheDocument();
+
+    const panelScrollRoot = container.querySelector(".git-panel-scroll");
+    expect(panelScrollRoot).not.toBeNull();
+    Object.defineProperties(panelScrollRoot, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 320 },
+      scrollTop: { configurable: true, value: 635 },
+    });
+
+    fireEvent.scroll(panelScrollRoot as HTMLElement);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+          afterSha: firstPageEntries[19]!.sha,
+        },
+        undefined
+      );
+    });
+
+    expect(await screen.findByText("fix: load fallback history page")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History21" })).toBeInTheDocument();
+  });
+
+  it("attempts to load the next page when a full initial history page reports hasMore false", async () => {
+    const firstPageEntries = createHistoryEntries(20);
+    const nextHistoryEntries = [
+      {
+        sha: "7e570dd000000000000000000000000000000000",
+        shortSha: "7e570dd",
+        subject: "fix: probe full history page despite false hasMore",
+        authorName: "pallyoung",
+        authoredAt: Date.now() - 1_500_000,
+      },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        const logArgs = args as { afterSha?: string };
+        if (logArgs.afterSha) {
+          return {
+            entries: nextHistoryEntries,
+            hasMore: false,
+          };
+        }
+
+        return {
+          entries: firstPageEntries,
+          hasMore: false,
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "History20" }));
+    expect(await screen.findByText("commit 1")).toBeInTheDocument();
+
+    const panelScrollRoot = container.querySelector(".git-panel-scroll");
+    expect(panelScrollRoot).not.toBeNull();
+    Object.defineProperties(panelScrollRoot, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 320 },
+      scrollTop: { configurable: true, value: 635 },
+    });
+
+    fireEvent.scroll(panelScrollRoot as HTMLElement);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+          afterSha: firstPageEntries[19]!.sha,
+        },
+        undefined
+      );
+    });
+
+    expect(
+      await screen.findByText("fix: probe full history page despite false hasMore")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History21" })).toBeInTheDocument();
+  });
+
+  it("keeps history in the git panel scroll flow and loads the next page from the panel bottom", async () => {
+    const nextHistoryEntries = [
+      {
+        sha: "15c0ffee00000000000000000000000000000000",
+        shortSha: "15c0ffe",
+        subject: "fix: paginate from the git panel scroll root",
+        authorName: "pallyoung",
+        authoredAt: Date.now() - 120_000,
+      },
+    ];
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "git.status") {
+        return status;
+      }
+
+      if (op === "git.branches") {
+        return {
+          current: "feature/ai-agent",
+          branches: [],
+        };
+      }
+
+      if (op === "git.log") {
+        const logArgs = args as { afterSha?: string };
+        if (logArgs.afterSha) {
+          return {
+            entries: nextHistoryEntries,
+            hasMore: false,
+          };
+        }
+
+        return {
+          entries: historyEntries,
+          hasMore: true,
+        };
+      }
+
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { container } = render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "History2" }));
+    expect(await screen.findByText("feat: refresh source control surface")).toBeInTheDocument();
+
+    const historyBody = container.querySelector(".git-panel-section-body--history");
+    expect(historyBody).not.toBeNull();
+    Object.defineProperties(historyBody, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 320 },
+      scrollTop: { configurable: true, value: 635 },
+    });
+
+    fireEvent.scroll(historyBody as HTMLElement);
+
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "git.log",
+      {
+        workspaceId: "ws-test",
+        limit: 20,
+        afterSha: historyEntries[1]!.sha,
+      },
+      undefined
+    );
+
+    const panelScrollRoot = container.querySelector(".git-panel-scroll");
+    expect(panelScrollRoot).not.toBeNull();
+    Object.defineProperties(panelScrollRoot, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 320 },
+      scrollTop: { configurable: true, value: 635 },
+    });
+
+    fireEvent.scroll(panelScrollRoot as HTMLElement);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "git.log",
+        {
+          workspaceId: "ws-test",
+          limit: 20,
+          afterSha: historyEntries[1]!.sha,
+        },
+        undefined
+      );
+    });
+
+    expect(
+      await screen.findByText("fix: paginate from the git panel scroll root")
+    ).toBeInTheDocument();
+    expect(screen.getByText("feat: refresh source control surface")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History3" })).toBeInTheDocument();
   });
 
   it("renders compact shared empty shells for clean changes and empty history", async () => {
