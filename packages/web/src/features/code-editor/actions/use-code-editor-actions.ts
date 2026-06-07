@@ -3,7 +3,7 @@ import type {
   GitCommitFileEntry,
   GitFileDiffPayload,
 } from "@coder-studio/core";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { type PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
@@ -23,6 +23,7 @@ import {
   openFilesAtomFamily,
   type WorkspaceEditorMode,
 } from "../../workspace/atoms";
+import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
 import { parseSystemAgentInstructionsEditorPath } from "../system-agent-instructions-path";
 import {
@@ -33,6 +34,12 @@ import {
   shouldIgnorePendingEditorLoadResult,
 } from "./pending-editor-loads";
 import { usePreviewSession } from "./use-preview-session";
+
+interface CodeEditorActionsOptions {
+  activeFilePathAtom?: PrimitiveAtom<string | null>;
+  editorModeAtom?: PrimitiveAtom<WorkspaceEditorMode>;
+  pendingNavigationAtom?: PrimitiveAtom<PendingEditorNavigation | null>;
+}
 
 type FileReadTextPayload = {
   kind: "text";
@@ -68,7 +75,7 @@ function toSystemFileReadPayload(document: AgentInstructionsSystemDocument): Edi
   };
 }
 
-export function useCodeEditorActions() {
+export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   const t = useTranslation();
   const workspace = useAtomValue(activeWorkspaceAtom);
   const workspaceRootPath = workspace?.path;
@@ -90,9 +97,14 @@ export function useCodeEditorActions() {
   } | null>(null);
 
   const workspaceId = workspace?.id;
-  const [activeFilePath] = useAtom(activeFilePathAtomFamily(workspaceId ?? ""));
+  const activeFilePathAtom =
+    options.activeFilePathAtom ?? activeFilePathAtomFamily(workspaceId ?? "");
+  const editorModeAtom = options.editorModeAtom ?? editorModeAtomFamily(workspaceId ?? "");
+  const pendingNavigationAtom =
+    options.pendingNavigationAtom ?? pendingEditorNavigationAtomFamily(workspaceId ?? "");
+  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtom);
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
-  const [mode, setMode] = useAtom(editorModeAtomFamily(workspaceId ?? ""));
+  const [mode, setMode] = useAtom(editorModeAtom);
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId ?? ""));
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId ?? ""));
@@ -711,10 +723,23 @@ export function useCodeEditorActions() {
 
     if (currentFile?.path || activeFilePath) {
       closePath(currentFile?.path ?? activeFilePath ?? undefined);
+      if (options.activeFilePathAtom) {
+        setActiveFilePath(null);
+      }
     }
 
     setSaveError(null);
-  }, [activeFilePath, closePath, currentFile, diffPreview, mode, setDiffPreview, setMode]);
+  }, [
+    activeFilePath,
+    closePath,
+    currentFile,
+    diffPreview,
+    mode,
+    options.activeFilePathAtom,
+    setActiveFilePath,
+    setDiffPreview,
+    setMode,
+  ]);
 
   const toggleSvgTextMode = useCallback(() => {
     if (!workspaceId || !currentFile) {
@@ -937,6 +962,7 @@ export function useCodeEditorActions() {
     mode,
     openCommitFileDiff,
     openInDiffMode,
+    pendingNavigationAtom,
     saveError: activeSaveError,
     setMode: (nextMode: WorkspaceEditorMode) => {
       setMode(nextMode);

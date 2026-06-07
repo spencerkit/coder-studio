@@ -366,10 +366,12 @@ export interface AgentContextPackage {
   createdAt: number;
 }
 
+export type TerminalKind = "agent" | "shell" | "task";
+
 export interface Terminal {
   id: string;
   workspaceId: string;
-  kind: "agent" | "shell";
+  kind: TerminalKind;
   pid?: number;
   title: string;
   cwd: string;
@@ -381,6 +383,50 @@ export interface Terminal {
   createdAt: number;
   endedAt?: number;
   exitCode?: number;
+}
+
+export type TaskKind = "verify" | "test" | "lint" | "build" | "dev" | "custom";
+
+export type TaskSource =
+  | "coder-studio"
+  | "package-json"
+  | "pnpm-workspace"
+  | "cargo"
+  | "go"
+  | "python"
+  | "makefile"
+  | "inferred";
+
+export type TaskRunStatus = "queued" | "running" | "passed" | "failed" | "stopped";
+
+export interface TaskDefinition {
+  id: string;
+  workspaceId: string;
+  kind: TaskKind;
+  label: string;
+  command: string;
+  args: string[];
+  displayCommand?: string;
+  cwdPath?: string;
+  source: TaskSource;
+  priority: number;
+}
+
+export interface TaskRun {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  terminalId: string;
+  status: TaskRunStatus;
+  command: string;
+  args: string[];
+  cwdPath?: string;
+  startedAt: number;
+  finishedAt?: number;
+  exitCode?: number;
+  summary?: {
+    tailLines: string[];
+  };
 }
 
 export interface Session {
@@ -451,6 +497,25 @@ export type GitDiffRenderMode = "text" | "image";
 
 export type GitRevisionSource = "HEAD" | "INDEX" | "WORKTREE" | string;
 
+export interface GitDiffHunk {
+  id: string;
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  patch: string;
+  lines: string[];
+}
+
+export interface GitHunkOperation {
+  workspaceId: string;
+  path: string;
+  staged: boolean;
+  hunkId: string;
+  operation: "stage" | "unstage" | "discard";
+}
+
 export interface GitFileChange {
   path: string;
   oldPath?: string; // for renames
@@ -490,6 +555,7 @@ export interface GitFileDiffPayload {
   modifiedContent?: string;
   originalRevision?: GitRevisionSource;
   modifiedRevision?: GitRevisionSource;
+  hunks?: GitDiffHunk[];
 }
 
 export interface GitBranch {

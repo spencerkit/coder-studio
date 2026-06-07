@@ -145,6 +145,11 @@
     "reconnecting": "Reconnecting",
     "rejected": "Rejected"
   },
+  "bottom_panel": {
+    "tabs_label": "Bottom panel",
+    "terminal": "Terminal",
+    "tasks": "Tasks"
+  },
   "workspace": {
     "title": "Workspace",
     "tabs": "Workspace tabs",
@@ -175,6 +180,7 @@
       "search": "Search",
       "skills": "Skills",
       "source_control": "Source Control",
+      "extensions": "Extensions",
       "skills": "Skills",
       "open_editors": "Open Files",
       "workspace": "Workspace",
@@ -281,8 +287,20 @@
       },
       "source": {
         "skillhub": "skills-hub",
-        "local": "Local"
+        "local": "Local",
+        "builtin": "Built-in"
       }
+    },
+    "extensions": {
+      "title": "Extensions",
+      "empty_title": "No extension state",
+      "empty_body": "Status, progress, logs, and quick actions appear here.",
+      "status_title": "Status",
+      "progress_title": "Progress",
+      "logs_title": "Logs",
+      "quick_actions_title": "Quick Actions",
+      "progress_value": "{value}/{max}",
+      "action_failed": "Quick action failed"
     },
     "search": {
       "empty": "Type to search across file contents.",
@@ -568,6 +586,10 @@
     "title": "Terminal",
     "kicker": "TERMINAL",
     "new_terminal": "New Terminal",
+    "commands": "Commands",
+    "open_commands": "Open Commands",
+    "close_commands": "Close Commands",
+    "managed_task": "Managed",
     "close_terminal": "Close Terminal",
     "shell": "Shell Terminal",
     "agent": "Agent Terminal",
@@ -646,6 +668,37 @@
       "closed_body": "Reopen a new session to continue?",
       "closed_body_with_provider": "Reopen a {provider} session to continue?"
     }
+  },
+  "tasks": {
+    "kicker": "Managed commands",
+    "title": "Tasks",
+    "empty_title": "No tasks found",
+    "empty_body": "Add .coder-studio/tasks.json or package scripts to run verification here.",
+    "load_failed_title": "Failed to load tasks",
+    "load_failed_body": "Task discovery failed.",
+    "run_failed_title": "Failed to run task",
+    "run_failed_body": "The task could not be started.",
+    "stop_failed_title": "Failed to stop task",
+    "stop_failed_body": "The task could not be stopped.",
+    "quick_run_label": "Quick task {label}",
+    "quick_run_short": "Quick {label}",
+    "run_label": "Run {label}",
+    "rerun_label": "Rerun {label}",
+    "stop_label": "Stop {label}",
+    "insert_label": "Insert {label}",
+    "insert_hint": "Insert into current terminal",
+    "status_not_run": "Not run",
+    "status_queued": "Queued",
+    "status_running": "Running",
+    "status_passed": "Passed",
+    "status_failed": "Failed",
+    "status_stopped": "Stopped",
+    "last_verify": "Last verify: {status}",
+    "verification_status": "Verification: {status}",
+    "view_output": "View output",
+    "view_tasks": "View Tasks",
+    "rerun_verify": "Rerun Verify",
+    "no_verify_task": "No Verify task is available for this workspace."
   },
   "file": {
     "title": "Files",
@@ -763,6 +816,15 @@
     "discard": "Discard",
     "discard_all": "Discard All",
     "discard_failed_title": "Discard failed",
+    "stage_file": "Stage file",
+    "unstage_file": "Unstage file",
+    "discard_file": "Discard file",
+    "refresh_diff": "Refresh diff",
+    "stage_hunk": "Stage hunk",
+    "unstage_hunk": "Unstage hunk",
+    "discard_hunk": "Discard hunk",
+    "hunk_failed_title": "Hunk operation failed",
+    "hunk_failed_body": "The selected hunk could not be applied.",
     "discard_file_confirm_title": "Discard File Changes",
     "discard_file_confirm_message": "Are you sure you want to discard changes in \"{path}\"?",
     "discard_all_confirm_title": "Discard All Changes",

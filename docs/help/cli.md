@@ -86,6 +86,50 @@ coder-studio auth ban-list
 coder-studio auth unblock --ip 192.168.1.100
 ```
 
+### coder-studio identify
+
+输出当前进程是否运行在 Coder Studio Agent 会话中，以及可供 Agent 使用的工作区、会话、Provider 和 API 上下文。
+
+```bash
+coder-studio identify --json
+```
+
+在普通终端外部运行时会返回 `insideCoderStudio: false`。在 Coder Studio 启动的 Agent 终端中运行时，Agent 可以用这个命令避免猜测当前 workspace/session/provider。
+
+### coder-studio capabilities
+
+输出面向 Agent 的自动化能力清单，包括命令名、CLI 用法、权限需求、风险等级和示例。
+
+```bash
+coder-studio capabilities --json
+```
+
+Agent 应优先使用 JSON 输出做能力发现；如果某项能力不存在，说明当前版本还没有提供对应自动化入口。
+
+### Agent 自动化只读命令
+
+这些命令供 Agent 在任务执行中读取 Coder Studio 状态。它们会连接正在运行的 Coder Studio server；默认优先使用 `CODER_STUDIO_API_URL`，否则读取当前托管服务状态。必要时可以传入 `--api-url http://127.0.0.1:4173`。
+
+```bash
+# 列出工作区
+coder-studio workspace list --json
+
+# 列出指定工作区内的会话
+coder-studio session list --workspace ws_123 --json
+
+# 读取终端输出尾部，默认 4096 bytes
+coder-studio terminal read --terminal term_123 --bytes 4096 --json
+
+# 读取工作区 Git 状态
+coder-studio git status --workspace ws_123 --json
+
+# 读取指定文件的 Git diff；MVP 阶段 --path 必填
+coder-studio git diff --workspace ws_123 --path src/a.ts --json
+coder-studio git diff --workspace ws_123 --path src/a.ts --staged --json
+```
+
+这些命令当前只做读取，不会修改工作区、会话、终端或 Git 状态。Agent 应先运行 `coder-studio capabilities --json`，再根据返回的能力清单选择命令。
+
 ### coder-studio help
 
 显示完整的帮助信息，包括所有命令和选项。
@@ -108,6 +152,9 @@ coder-studio version
 coder-studio open    # 启动并打开浏览器（最常用）
 coder-studio status  # 随时检查服务状态
 coder-studio logs    # 出问题时查看日志
+coder-studio identify --json      # Agent 发现当前运行上下文
+coder-studio capabilities --json  # Agent 发现可用自动化能力
+coder-studio git status --workspace ws_123 --json  # Agent 读取 Git 状态
 coder-studio stop    # 停止服务
 ```
 

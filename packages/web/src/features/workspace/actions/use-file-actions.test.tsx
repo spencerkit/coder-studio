@@ -235,7 +235,7 @@ describe("useFileActions rename behavior", () => {
     expect(result.current.renameDialog?.error).toBe("Name cannot contain / or \\.");
   });
 
-  it("routes explorer file opens into the focused editor pane when one is active", async () => {
+  it("opens explorer files in the standalone editor when an editor pane is focused", async () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
@@ -256,7 +256,8 @@ describe("useFileActions rename behavior", () => {
       await Promise.resolve();
     });
 
-    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("pane-editor-1");
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
     expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
       path: "src/app.tsx",

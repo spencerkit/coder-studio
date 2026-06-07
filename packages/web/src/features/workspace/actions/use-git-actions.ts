@@ -75,10 +75,10 @@ export interface GitSyncAuthPromptState {
   details: GitAuthFailureDetails;
 }
 
-function isCommitPreview(
+function isWorktreeFileDiffPreview(
   preview: GitDiffPreview | null
-): preview is Extract<GitDiffPreview, { kind: "commit-file-list" | "commit-file-diff" }> {
-  return preview?.kind === "commit-file-list" || preview?.kind === "commit-file-diff";
+): preview is Extract<GitDiffPreview, { kind: "worktree-file-diff" }> {
+  return preview?.kind === "worktree-file-diff";
 }
 
 const GIT_SYNC_TIMEOUT_MS = 3 * 60 * 1000;
@@ -383,6 +383,41 @@ interface UseGitPanelActionsArgs {
   initialHistoryLimit?: number;
 }
 
+interface GitHistoryLogResult {
+  entries?: GitCommitSummary[];
+  hasMore?: boolean;
+}
+
+const GIT_HISTORY_DEBUG_STORAGE_KEY = "coder-studio.debug.gitHistory";
+
+function isGitHistoryDebugEnabled(): boolean {
+  if (typeof window === "undefined" || import.meta.env.MODE === "test") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(GIT_HISTORY_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function debugGitHistoryAction(message: string, details?: Record<string, unknown>) {
+  if (!isGitHistoryDebugEnabled()) {
+    return;
+  }
+
+  console.log("[git-history]", message, details);
+}
+
+function resolveHistoryHasMore(
+  responseHasMore: boolean | undefined,
+  entryCount: number,
+  limit: number
+): boolean {
+  return responseHasMore === true || entryCount >= limit;
+}
+
 export function getFirstChange(
   status: GitStatus
 ): { change: GitFileChange; type: GitChangeType } | null {
@@ -447,11 +482,13 @@ export function useGitPanelActions({
   const [commitMessage, setCommitMessage] = useAtom(commitMessageDraftAtomFamily(workspaceId));
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<GitCommitSummary[]>([]);
-  const [historyLimit, setHistoryLimit] = useState(initialHistoryLimit);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPageLoading, setHistoryPageLoading] = useState(false);
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscardConfirmation | null>(null);
   const isLoadingRef = useRef(false);
   const pendingReloadRef = useRef(false);
+  const historyPageLoadingRef = useRef(false);
 
   const updateBranchList = useCallback(
     (
@@ -499,6 +536,7 @@ export function useGitPanelActions({
         ...(result.data.mime ? { mime: result.data.mime } : {}),
         ...(result.data.originalPath ? { originalPath: result.data.originalPath } : {}),
         ...(result.data.modifiedPath ? { modifiedPath: result.data.modifiedPath } : {}),
+        ...(result.data.hunks ? { hunks: result.data.hunks } : {}),
         ...(result.data.originalContent !== undefined
           ? { originalContent: result.data.originalContent }
           : {}),
@@ -589,32 +627,126 @@ export function useGitPanelActions({
     updateBranchList(result.data);
   }, [dispatch, setBranchList, t, updateBranchList, workspaceId]);
 
-  const loadGitHistory = useCallback(
-    async (limit = historyLimit) => {
-      if (!workspaceId) {
+  const loadGitHistory = useCallback(async () => {
+    if (!workspaceId) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      const request = {
+        workspaceId,
+        limit: initialHistoryLimit,
+      };
+      debugGitHistoryAction("action load history request", request);
+
+      const result = await dispatch<GitHistoryLogResult>("git.log", request);
+      debugGitHistoryAction("action load history response", {
+        ok: result.ok,
+        error: result.error?.message,
+        dataIsArray: Array.isArray(result.data),
+        entryCount: Array.isArray(result.data?.entries) ? result.data.entries.length : null,
+        hasMore: result.data?.hasMore,
+        firstSha: result.data?.entries?.[0]?.sha,
+        lastSha: result.data?.entries?.at(-1)?.sha,
+      });
+
+      if (!result.ok) {
+        console.error("Failed to load git history:", result.error?.message);
+        setHistory([]);
+        setHistoryHasMore(false);
         return;
       }
 
-      setHistoryLoading(true);
-      try {
-        const result = await dispatch<{ entries?: GitCommitSummary[] }>("git.log", {
-          workspaceId,
-          limit,
-        });
+      const entries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+      const resolvedHasMore = resolveHistoryHasMore(
+        result.data?.hasMore,
+        entries.length,
+        initialHistoryLimit
+      );
+      debugGitHistoryAction("action resolved history pagination", {
+        responseHasMore: result.data?.hasMore,
+        entryCount: entries.length,
+        limit: initialHistoryLimit,
+        resolvedHasMore,
+      });
+      setHistory(entries);
+      setHistoryHasMore(resolvedHasMore);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [dispatch, initialHistoryLimit, workspaceId]);
 
-        if (!result.ok) {
-          console.error("Failed to load git history:", result.error?.message);
-          setHistory([]);
-          return;
-        }
+  const loadMoreGitHistory = useCallback(async () => {
+    if (!workspaceId || historyLoading || historyPageLoadingRef.current || !historyHasMore) {
+      debugGitHistoryAction("action skip load more history", {
+        hasWorkspaceId: Boolean(workspaceId),
+        historyLoading,
+        historyPageLoading: historyPageLoadingRef.current,
+        historyHasMore,
+        historyCount: history.length,
+      });
+      return;
+    }
 
-        setHistory(Array.isArray(result.data?.entries) ? result.data.entries : []);
-      } finally {
-        setHistoryLoading(false);
+    const cursor = history[history.length - 1]?.sha;
+    if (!cursor) {
+      debugGitHistoryAction("action skip load more history: missing cursor", {
+        historyCount: history.length,
+      });
+      return;
+    }
+
+    historyPageLoadingRef.current = true;
+    setHistoryPageLoading(true);
+    try {
+      const request = {
+        workspaceId,
+        limit: initialHistoryLimit,
+        afterSha: cursor,
+      };
+      debugGitHistoryAction("action load more history request", request);
+
+      const result = await dispatch<GitHistoryLogResult>("git.log", request);
+      debugGitHistoryAction("action load more history response", {
+        ok: result.ok,
+        error: result.error?.message,
+        dataIsArray: Array.isArray(result.data),
+        entryCount: Array.isArray(result.data?.entries) ? result.data.entries.length : null,
+        hasMore: result.data?.hasMore,
+        firstSha: result.data?.entries?.[0]?.sha,
+        lastSha: result.data?.entries?.at(-1)?.sha,
+      });
+
+      if (!result.ok) {
+        console.error("Failed to load more git history:", result.error?.message);
+        return;
       }
-    },
-    [dispatch, historyLimit, workspaceId]
-  );
+
+      const nextEntries = Array.isArray(result.data?.entries) ? result.data.entries : [];
+      const seen = new Set(history.map((entry) => entry.sha));
+      const appended = nextEntries.filter((entry) => !seen.has(entry.sha));
+      const resolvedHasMore =
+        resolveHistoryHasMore(result.data?.hasMore, nextEntries.length, initialHistoryLimit) &&
+        appended.length > 0;
+      setHistory((current) => {
+        const currentSeen = new Set(current.map((entry) => entry.sha));
+        const currentAppended = nextEntries.filter((entry) => !currentSeen.has(entry.sha));
+        return currentAppended.length > 0 ? [...current, ...currentAppended] : current;
+      });
+      debugGitHistoryAction("action resolved more history pagination", {
+        responseHasMore: result.data?.hasMore,
+        entryCount: nextEntries.length,
+        appendedCount: appended.length,
+        limit: initialHistoryLimit,
+        resolvedHasMore,
+      });
+      setHistoryHasMore(resolvedHasMore);
+    } finally {
+      historyPageLoadingRef.current = false;
+      setHistoryPageLoading(false);
+    }
+  }, [dispatch, history, historyHasMore, historyLoading, initialHistoryLimit, workspaceId]);
 
   const loadGitStatus = useCallback(async () => {
     if (!workspaceId) {
@@ -646,11 +778,7 @@ export function useGitPanelActions({
         return;
       }
 
-      if (isCommitPreview(diffPreview)) {
-        return;
-      }
-
-      if (!diffPreview) {
+      if (!isWorktreeFileDiffPreview(diffPreview)) {
         return;
       }
 
@@ -695,8 +823,8 @@ export function useGitPanelActions({
   }, [loadBranchList]);
 
   useEffect(() => {
-    void loadGitHistory(historyLimit);
-  }, [gitState?.headSha, historyLimit, loadGitHistory]);
+    void loadGitHistory();
+  }, [gitState?.headSha, loadGitHistory]);
 
   useEffect(() => {
     if (!gitState) {
@@ -707,11 +835,7 @@ export function useGitPanelActions({
       return;
     }
 
-    if (isCommitPreview(diffPreview)) {
-      return;
-    }
-
-    if (!diffPreview) {
+    if (!isWorktreeFileDiffPreview(diffPreview)) {
       return;
     }
 
@@ -923,11 +1047,11 @@ export function useGitPanelActions({
     groups,
     hasChanges,
     history,
-    historyLimit,
+    historyHasMore,
     historyLoading,
+    historyPageLoading,
     isLoading,
     pendingDiscard,
-    canShowMoreHistory: historyLimit < 10 && history.length > 0,
     setCommitMessage,
     handleCancelDiscard,
     handleCommit,
@@ -941,19 +1065,139 @@ export function useGitPanelActions({
     handleUnstagePaths: unstagePaths,
     loadGitStatus,
     loadGitHistory,
+    loadMoreGitHistory,
     openDiff,
     openHistoryDiff,
     requestDiff,
     runGitMutation,
-    showMoreHistory: () => setHistoryLimit(10),
     t,
   };
 }
 
 export function useGitDiffViewerActions(workspaceId: string) {
+  const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const preview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const setPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
+  const setGitState = useSetAtom(gitStateAtomFamily(workspaceId));
+  const pushToast = useSetAtom(pushToastAtom);
+
+  const refreshGitState = useCallback(async () => {
+    const result = await dispatch<GitStatus>("git.status", {
+      workspaceId,
+    });
+    if (result.ok && result.data) {
+      setGitState(result.data);
+    }
+    return result.ok;
+  }, [dispatch, setGitState, workspaceId]);
+
+  const refreshPreview = useCallback(
+    async (path: string, staged: boolean) => {
+      const refreshed = await dispatch<GitFileDiffPayload>("git.diff", {
+        workspaceId,
+        path,
+        staged,
+      });
+
+      if (refreshed.ok && refreshed.data) {
+        setPreview((current) =>
+          current?.kind === "worktree-file-diff" &&
+          current.path === path &&
+          Boolean(current.staged) === staged
+            ? {
+                ...current,
+                ...refreshed.data,
+              }
+            : current
+        );
+      }
+
+      if (!refreshed.ok) {
+        setPreview((current) =>
+          current?.kind === "worktree-file-diff" &&
+          current.path === path &&
+          Boolean(current.staged) === staged
+            ? null
+            : current
+        );
+      }
+
+      return refreshed.ok;
+    },
+    [dispatch, setPreview, workspaceId]
+  );
+
+  const runHunkOperation = useCallback(
+    async (input: {
+      path: string;
+      staged: boolean;
+      hunkId: string;
+      operation: "stage" | "unstage" | "discard";
+    }) => {
+      const result = await dispatch("git.hunk", {
+        workspaceId,
+        path: input.path,
+        staged: input.staged,
+        hunkId: input.hunkId,
+        operation: input.operation,
+      });
+
+      if (!result.ok) {
+        pushToast({
+          kind: "error",
+          title: t("git.hunk_failed_title"),
+          body: result.error?.message ?? t("git.hunk_failed_body"),
+        });
+        return false;
+      }
+
+      await refreshPreview(input.path, input.staged);
+      await refreshGitState();
+      return true;
+    },
+    [dispatch, pushToast, refreshGitState, refreshPreview, t, workspaceId]
+  );
+
+  const runFileOperation = useCallback(
+    async (input: {
+      path: string;
+      staged: boolean;
+      operation: "stage" | "unstage" | "discard";
+    }) => {
+      const op =
+        input.operation === "stage"
+          ? "git.stage"
+          : input.operation === "unstage"
+            ? "git.unstage"
+            : "git.discard";
+      const errorTitle =
+        input.operation === "stage"
+          ? t("git.stage_failed_title")
+          : input.operation === "unstage"
+            ? t("git.unstage_failed_title")
+            : t("git.discard_failed_title");
+      const result = await dispatch(op, {
+        workspaceId,
+        paths: [input.path],
+      });
+
+      if (!result.ok) {
+        pushToast({
+          kind: "error",
+          title: errorTitle,
+          body: result.error?.message,
+        });
+        return false;
+      }
+
+      await refreshPreview(input.path, input.staged);
+      await refreshGitState();
+      return true;
+    },
+    [dispatch, pushToast, refreshGitState, refreshPreview, t, workspaceId]
+  );
 
   return {
     closePreview: () => {
@@ -961,6 +1205,9 @@ export function useGitDiffViewerActions(workspaceId: string) {
       setPreview(null);
     },
     preview,
+    refreshPreview,
+    runFileOperation,
+    runHunkOperation,
   };
 }
 

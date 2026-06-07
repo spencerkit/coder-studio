@@ -58,6 +58,7 @@ export interface GitWorktreeFileDiffPreview extends LegacyGitDiffPreviewShape {
   kind: "worktree-file-diff";
   path: string;
   diff: string;
+  hunks?: GitFileDiffPayload["hunks"];
   mime?: GitFileDiffPayload["mime"];
   originalPath?: GitFileDiffPayload["originalPath"];
   modifiedPath?: GitFileDiffPayload["modifiedPath"];

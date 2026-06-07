@@ -11,7 +11,7 @@ interface SkillsPanelProps {
   refreshToken?: number;
 }
 
-type Translate = (key: string, params?: Record<string, unknown>) => string;
+type Translate = (key: string, params?: Record<string, string | number>) => string;
 type SkillTargetSummaryState = "mounted" | "unmounted" | "unconfigured";
 
 interface SkillTargetSummary {
@@ -305,6 +305,8 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                 <div className="skills-panel__library-list" id={libraryPanelId}>
                   {sortedLibrary.map((skill) => {
                     const mounts = mountsBySkillSlug[skill.slug] ?? [];
+                    const sourceLabel =
+                      skill.source === "builtin" ? t("workspace.skills.source.builtin") : null;
                     const expanded = panelState.expandedSkillSlugs.includes(skill.slug);
                     const toggleLabel = expanded
                       ? t("skills.skill_row_collapse_label", { name: skill.displayName })
@@ -320,6 +322,11 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                             <div className="skills-panel__card-head">
                               <h3 className="skills-panel__card-title">{skill.displayName}</h3>
                             </div>
+                            {sourceLabel ? (
+                              <p className="skills-panel__card-slug">
+                                {skill.slug} · {sourceLabel}
+                              </p>
+                            ) : null}
                             {skill.description ? (
                               <Tooltip content={skill.description}>
                                 <p className="skills-panel__card-description skills-panel__card-description--truncated">

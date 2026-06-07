@@ -58,6 +58,17 @@ function requireSkillTargetSupport(ctx: CommandContext): asserts ctx is CommandC
   }
 }
 
+function requireBuiltinSkillSyncSupport(ctx: CommandContext): asserts ctx is CommandContext & {
+  builtinSkillSyncMgr: NonNullable<CommandContext["builtinSkillSyncMgr"]>;
+} {
+  if (!ctx.builtinSkillSyncMgr) {
+    throw {
+      code: "builtin_skills_unavailable",
+      message: "Built-in skill sync is not configured",
+    };
+  }
+}
+
 async function listTargets(ctx: CommandContext) {
   requireSkillTargetSupport(ctx);
   requireSkillHealthSupport(ctx);
@@ -138,6 +149,25 @@ registerCommand("skills.library.list", z.object({}), async (_args, ctx) => {
     };
   });
 });
+
+registerCommand("skills.builtin.sync", z.object({}), async (_args, ctx) => {
+  requireBuiltinSkillSyncSupport(ctx);
+  return ctx.builtinSkillSyncMgr.sync();
+});
+
+registerCommand(
+  "skills.builtin.setMountEnabled",
+  z.object({
+    providerId: z.string().trim().min(1),
+    skillSlug: z.string().trim().min(1),
+    enabled: z.boolean(),
+  }),
+  async (args, ctx) => {
+    requireBuiltinSkillSyncSupport(ctx);
+    ctx.builtinSkillSyncMgr.setMountEnabled(args.providerId, args.skillSlug, args.enabled);
+    return ctx.builtinSkillSyncMgr.sync();
+  }
+);
 
 registerCommand(
   "skills.install.start",

@@ -76,7 +76,7 @@ describe("activation commands", () => {
     });
   });
 
-  it("rejects non-activation commands for websocket clients without an active lease", async () => {
+  it("allows read-only automation commands for websocket clients without an active lease", async () => {
     const broadcaster = {
       broadcast: vi.fn(),
       sendToClient: vi.fn(() => true),
@@ -96,6 +96,32 @@ describe("activation commands", () => {
       "ws-a"
     );
 
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([{ id: "workspace-1" }]);
+  });
+
+  it("rejects non-allowlisted commands for websocket clients without an active lease", async () => {
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => createMockRequest()),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "00000000-0000-4000-8000-000000000003",
+        op: "workspace.open",
+        args: {
+          path: "/tmp/project",
+        },
+      },
+      ctx,
+      "ws-a"
+    );
+
     expect(result.ok).toBe(false);
     expect(result.error).toEqual({
       code: "activation_required",
@@ -103,7 +129,7 @@ describe("activation commands", () => {
     });
   });
 
-  it("rejects non-activation websocket commands when metadata lookup returns undefined", async () => {
+  it("rejects non-allowlisted websocket commands when metadata lookup returns undefined", async () => {
     const broadcaster = {
       broadcast: vi.fn(),
       sendToClient: vi.fn(() => true),
@@ -116,8 +142,10 @@ describe("activation commands", () => {
       {
         kind: "command",
         id: "00000000-0000-4000-8000-000000000004",
-        op: "workspace.list",
-        args: {},
+        op: "workspace.open",
+        args: {
+          path: "/tmp/project",
+        },
       },
       ctx,
       "ws-a"

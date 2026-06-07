@@ -1,3 +1,4 @@
+import type { TaskDefinition, TaskRun } from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
@@ -11,6 +12,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
 import { supervisorsAtom } from "../../supervisor/atoms";
+import { taskStateAtomFamily } from "../../tasks/atoms";
 import { paneLayoutAtomFamily } from "../atoms/pane-layout";
 import { SessionCard } from "../views/shared/session-card";
 
@@ -25,6 +27,32 @@ vi.mock("../actions/use-pane-drag-enabled", () => ({
 const mockXtermHost = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="mock-xterm-host" data-readonly={String(props.readOnly)} />
 ));
+
+const verifyTask: TaskDefinition = {
+  id: "verify",
+  workspaceId: "ws-123",
+  kind: "verify",
+  label: "Verify",
+  command: "pnpm",
+  args: ["ci:verify"],
+  cwdPath: ".",
+  source: "package-json",
+  priority: 900,
+};
+
+const failedVerifyRun: TaskRun = {
+  id: "run-verify-1",
+  workspaceId: "ws-123",
+  taskId: "verify",
+  terminalId: "term-verify",
+  status: "failed",
+  command: "pnpm",
+  args: ["ci:verify"],
+  cwdPath: ".",
+  startedAt: 100,
+  finishedAt: 200,
+  exitCode: 1,
+};
 
 function getLastXtermHostProps() {
   const lastCall = mockXtermHost.mock.calls[mockXtermHost.mock.calls.length - 1];
@@ -213,6 +241,7 @@ describe("SessionCard", () => {
         paneLayout: {
           id: "root",
           type: "leaf",
+          leafKind: "session",
           sessionId: "sess_654321",
         },
       })
@@ -243,6 +272,29 @@ describe("SessionCard", () => {
         terminalKind: "agent",
       })
     );
+  });
+
+  it("surfaces the latest verify result in the session card", () => {
+    const { store } = createSessionStore({
+      terminalId: "term-live",
+      state: "running",
+      endedAt: undefined,
+    });
+    store.set(taskStateAtomFamily("ws-123"), {
+      tasks: [verifyTask],
+      runs: [failedVerifyRun],
+      loading: false,
+    });
+
+    render(
+      <Provider store={store}>
+        <SessionCard sessionId="sess_123456" />
+      </Provider>
+    );
+
+    expect(screen.getByText("Last verify: Failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View output" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rerun Verify" })).toBeInTheDocument();
   });
 
   it("renders a pane drag handle button in the header actions on desktop", () => {

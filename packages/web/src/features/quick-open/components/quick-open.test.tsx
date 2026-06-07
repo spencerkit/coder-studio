@@ -135,7 +135,7 @@ describe("QuickOpen", () => {
     expect(store.get(quickOpenOpenAtom)).toBe(false);
   });
 
-  it("routes quick open selections into the focused editor pane", async () => {
+  it("opens quick open selections in the standalone editor when an editor pane is focused", async () => {
     const sendCommand = vi.fn().mockResolvedValue({
       files: [{ path: "src/app.tsx", name: "app.tsx", kind: "file" }],
     });
@@ -166,7 +166,8 @@ describe("QuickOpen", () => {
 
     fireEvent.click(screen.getByRole("option", { name: /app\.tsx/i }));
 
-    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
   });
 });

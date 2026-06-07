@@ -1,4 +1,5 @@
 export const SKILL_INSTALL_STATES = ["installed", "installing", "failed"] as const;
+export const SKILL_LIBRARY_SOURCES = ["skillhub", "local", "builtin"] as const;
 export const SKILL_LIBRARY_ITEM_STATES = [
   "unmounted",
   "partially_mounted",
@@ -15,6 +16,7 @@ export const SKILL_MOUNT_STATUSES = [
 export const SKILL_TARGET_HEALTH_STATES = ["healthy", "warning", "error", "unconfigured"] as const;
 
 type SkillInstallState = (typeof SKILL_INSTALL_STATES)[number];
+export type SkillLibrarySource = (typeof SKILL_LIBRARY_SOURCES)[number];
 type SkillMountStatus = (typeof SKILL_MOUNT_STATUSES)[number];
 type SkillTargetHealthState = (typeof SKILL_TARGET_HEALTH_STATES)[number];
 
@@ -27,12 +29,16 @@ export interface SkillLibraryEntry {
   displayName: string;
   description?: string;
   version: string;
-  source: "skillhub" | "local";
+  source: SkillLibrarySource;
   libraryPath: string;
   installState: SkillInstallState;
   installedAt: number;
   updatedAt: number;
   lastError?: string;
+  builtin?: {
+    defaultEnabled: boolean;
+    autoMount: boolean;
+  };
 }
 
 export interface AgentSkillTargetEntry {

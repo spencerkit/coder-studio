@@ -2,6 +2,7 @@ import {
   isSkillMountStatus,
   SKILL_INSTALL_STATES,
   SKILL_LIBRARY_ITEM_STATES,
+  SKILL_LIBRARY_SOURCES,
   SKILL_MOUNT_STATUSES,
   SKILL_TARGET_HEALTH_STATES,
 } from "./skill-management.js";
@@ -18,6 +19,10 @@ describe("skill management domain", () => {
       "fully_mounted",
       "error",
     ]);
+  });
+
+  it("exports stable skill library sources", () => {
+    expect(SKILL_LIBRARY_SOURCES).toEqual(["skillhub", "local", "builtin"]);
   });
 
   it("exports stable mount statuses", () => {

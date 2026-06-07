@@ -5,6 +5,7 @@
  * Written by: WS event handler for terminal.*.output
  */
 
+import type { TerminalKind } from "@coder-studio/core";
 import { atom } from "jotai";
 import { atomFamily } from "jotai-family";
 
@@ -35,7 +36,7 @@ export const terminalOutputAtomFamily = atomFamily((_terminalId: string) =>
 export interface TerminalMeta {
   id: string;
   workspaceId: string;
-  kind: "agent" | "shell";
+  kind: TerminalKind;
   alive: boolean;
   exitCode?: number;
   title?: string;
@@ -49,6 +50,10 @@ export const terminalIdsAtomFamily = atomFamily((_workspaceId: string) => atom<s
 
 export const terminalActiveIdAtomFamily = atomFamily((_workspaceId: string) =>
   atom<string | null>(null)
+);
+
+export const terminalCommandSidePanelOpenAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<boolean>(false)
 );
 
 /**

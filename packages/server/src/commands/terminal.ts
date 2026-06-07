@@ -37,6 +37,9 @@ const TerminalInputSchema = z.union([
   }),
 ]);
 
+const DEFAULT_TERMINAL_READ_BYTES = 4096;
+const MAX_TERMINAL_READ_BYTES = 65_536;
+
 const pendingTerminalInput = new Map<number, { args: TerminalInputBinaryArgs; payload: Buffer }>();
 let nextOutboundBinaryStreamId = 0;
 
@@ -143,6 +146,25 @@ registerCommand(
       .getAll()
       .map((terminal) => terminal.toDTO())
       .filter((terminal) => terminal.workspaceId === args.workspaceId);
+  }
+);
+
+// terminal.read
+registerCommand(
+  "terminal.read",
+  z.object({
+    terminalId: z.string(),
+    bytes: z.number().int().positive().max(MAX_TERMINAL_READ_BYTES).optional(),
+  }),
+  async (args, ctx) => {
+    const bytes = args.bytes ?? DEFAULT_TERMINAL_READ_BYTES;
+    const tail = ctx.terminalMgr.getRingBufferTail(args.terminalId, bytes);
+
+    return {
+      terminalId: args.terminalId,
+      bytes,
+      text: tail.toString("utf8"),
+    };
   }
 );
 

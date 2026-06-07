@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
-import { desktopSidebarViewAtomFamily } from "../../atoms/layout";
+import { type DesktopSidebarView, desktopSidebarViewAtomFamily } from "../../atoms/layout";
 import { WorkspaceDesktopView } from "./workspace-desktop-view";
 
 vi.mock("../../../../lib/i18n", () => ({
@@ -16,6 +16,7 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.sidebar.explorer": "Explorer",
       "workspace.sidebar.search": "Search",
       "workspace.sidebar.source_control": "Source Control",
+      "workspace.sidebar.extensions": "Extensions",
       "workspace.sidebar.label": "Workspace Sidebar",
       "workspace.sidebar.workspace": "Workspace",
       "workspace.sidebar.open_editors": "Open Files",
@@ -25,6 +26,15 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.search.placeholder": "Search",
       "workspace.agent_instructions.project_title": "Project Agent.md",
       "workspace.agent_instructions.token_trend.title": "Token Trend",
+      "workspace.extensions.title": "Extensions",
+      "workspace.extensions.empty_title": "No extension state",
+      "workspace.extensions.empty_body": "Status, progress, logs, and quick actions appear here.",
+      "workspace.extensions.status_title": "Status",
+      "workspace.extensions.progress_title": "Progress",
+      "workspace.extensions.logs_title": "Logs",
+      "workspace.extensions.quick_actions_title": "Quick Actions",
+      "workspace.extensions.progress_value": "{{value}}/{{max}}",
+      "workspace.extensions.action_failed": "Quick action failed",
       "common.loading": "Loading",
       "topbar.current_project": "Current Project",
     };
@@ -53,8 +63,8 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorHost: () => <div data-testid="code-editor-host" />,
 }));
 
-vi.mock("../../../terminal-panel", () => ({
-  TerminalPanel: () => <div data-testid="terminal-panel" />,
+vi.mock("../shared/workspace-bottom-panel", () => ({
+  WorkspaceBottomPanel: () => <div data-testid="workspace-bottom-panel">Terminal Tasks</div>,
 }));
 
 vi.mock("../../../topbar", () => ({
@@ -95,18 +105,29 @@ vi.mock("../shared/agent-instructions-section", () => ({
   ),
 }));
 
-vi.mock("../shared/agent-instructions-token-trend", () => ({
-  AgentInstructionsTokenTrend: ({ workspacePath }: { workspacePath: string }) => (
-    <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
+vi.mock("../shared/agent-token-trend-section", () => ({
+  AgentTokenTrendSection: ({ workspacePath }: { workspacePath: string }) => (
+    <section className="workspace-sidebar-section workspace-agent-token-trend-section">
+      <h2 className="workspace-sidebar-section__title">Token Trend</h2>
+      <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
+    </section>
   ),
 }));
 
-function renderDesktopView(
-  activeView: "explorer" | "search" | "source-control" | "agent-instructions"
-) {
+vi.mock("../shared/workspace-extension-state-panel", () => ({
+  WorkspaceExtensionStatePanel: () => (
+    <div>
+      <h2>Extensions</h2>
+      <p>No extension state</p>
+    </div>
+  ),
+}));
+
+function renderDesktopView(activeView: DesktopSidebarView) {
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, {
+    subscribe: vi.fn(() => vi.fn()),
     sendCommand: vi.fn().mockImplementation(async (op: string) => {
       if (op === "session.list") {
         return [];
@@ -153,6 +174,10 @@ function renderDesktopView(
   );
 }
 
+function renderWorkspaceDesktopView() {
+  renderDesktopView("explorer");
+}
+
 describe("WorkspaceDesktopView", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -178,15 +203,41 @@ describe("WorkspaceDesktopView", () => {
     const trendSection = trendHeading.closest(".workspace-sidebar-section");
     const agentInstructionsSection = screen.getByTestId("agent-instructions-section");
 
+    if (!trendSection) {
+      throw new Error("Expected token trend section to render");
+    }
     expect(trendSection).toHaveClass("workspace-agent-token-trend-section");
     expect(screen.getByTestId("agent-token-trend")).toHaveAttribute(
       "data-workspace-path",
       "/tmp/ws-test"
     );
     expect(
-      trendSection?.compareDocumentPosition(agentInstructionsSection) &
+      trendSection.compareDocumentPosition(agentInstructionsSection) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(agentInstructionsSection).not.toContainElement(screen.getByTestId("agent-token-trend"));
+  });
+
+  it("renders the shared workspace bottom panel on desktop", () => {
+    renderWorkspaceDesktopView();
+
+    expect(screen.getByTestId("workspace-bottom-panel")).toHaveTextContent("Terminal Tasks");
+  });
+
+  it("hides the extension-state activity bar entry", () => {
+    renderDesktopView("explorer");
+
+    expect(screen.queryByRole("button", { name: "Extensions" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Extensions" })).toBeNull();
+    expect(screen.queryByText("No extension state")).toBeNull();
+  });
+
+  it("does not open the extension-state panel from the desktop numeric shortcuts", () => {
+    renderDesktopView("explorer");
+
+    fireEvent.keyDown(window, { key: "6", ctrlKey: true });
+
+    expect(screen.queryByRole("heading", { level: 2, name: "Extensions" })).toBeNull();
+    expect(screen.queryByText("No extension state")).toBeNull();
   });
 });

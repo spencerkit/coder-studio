@@ -1,7 +1,9 @@
 // Protocol
 
+export * from "./domain/automation";
 export * from "./domain/diagnostics";
 export * from "./domain/events";
+export * from "./domain/extension-state";
 export * from "./domain/lsp";
 export * from "./domain/mcp";
 export * from "./domain/monitoring";

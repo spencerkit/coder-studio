@@ -4,6 +4,7 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  callCoderStudioCommand,
   clearAuthBlockByIp,
   confirmYesNo,
   getServerStatus,
@@ -17,6 +18,7 @@ const {
   stopRunningServer,
   writeCliConfig,
 } = vi.hoisted(() => ({
+  callCoderStudioCommand: vi.fn(),
   clearAuthBlockByIp: vi.fn(),
   confirmYesNo: vi.fn(),
   getServerStatus: vi.fn(),
@@ -64,6 +66,10 @@ vi.mock("./browser.js", () => ({
   openBrowser,
 }));
 
+vi.mock("./automation-command-client.js", () => ({
+  callCoderStudioCommand,
+}));
+
 import { main } from "./cli";
 import { parseArgs, RUNTIME_CONFIG_ERROR } from "./parse-args";
 
@@ -79,6 +85,7 @@ beforeEach(() => {
   confirmYesNo.mockResolvedValue(false);
   isInteractiveSession.mockReturnValue(true);
   openBrowser.mockResolvedValue(undefined);
+  callCoderStudioCommand.mockResolvedValue({ ok: true });
   getServerStatus.mockResolvedValue({
     status: "stopped",
     pid: null,
@@ -559,6 +566,111 @@ describe("main", () => {
     expect(clearAuthBlockByIp).toHaveBeenCalledWith("198.51.100.24");
     expect(logSpy).toHaveBeenCalledWith("Unblocked IP: 198.51.100.24");
   });
+
+  it("prints identify output", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["identify", "--json"]);
+
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      insideCoderStudio: false,
+    });
+  });
+
+  it("prints capabilities output", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["capabilities", "--json"]);
+
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual(
+      expect.objectContaining({
+        version: 1,
+        commands: expect.arrayContaining([expect.objectContaining({ name: "git.status" })]),
+      })
+    );
+  });
+
+  it("prints workspace list output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce([{ id: "ws-1", path: "/repo" }]);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["workspace", "list", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "workspace.list",
+      args: {},
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual([
+      { id: "ws-1", path: "/repo" },
+    ]);
+  });
+
+  it("prints session list output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce([{ id: "sess-1", workspaceId: "ws-1" }]);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["session", "list", "--workspace", "ws-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "session.list",
+      args: { workspaceId: "ws-1" },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual([
+      { id: "sess-1", workspaceId: "ws-1" },
+    ]);
+  });
+
+  it("prints terminal read output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ terminalId: "term-1", text: "ready\n" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["terminal", "read", "--terminal", "term-1", "--bytes", "4096", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "terminal.read",
+      args: { terminalId: "term-1", bytes: 4096 },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      terminalId: "term-1",
+      text: "ready\n",
+    });
+  });
+
+  it("prints git status output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ branch: "main", entries: [] });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["git", "status", "--workspace", "ws-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "git.status",
+      args: { workspaceId: "ws-1" },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      branch: "main",
+      entries: [],
+    });
+  });
+
+  it("prints git diff output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ diff: "diff --git a/a b/a\n" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["git", "diff", "--workspace", "ws-1", "--path", "src/a.ts", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "git.diff",
+      args: { workspaceId: "ws-1", path: "src/a.ts" },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      diff: "diff --git a/a b/a\n",
+    });
+  });
 });
 
 describe("parseArgs", () => {
@@ -648,6 +760,68 @@ describe("parseArgs", () => {
       command: "auth",
       authCommand: "unblock",
       ip: "198.51.100.24",
+    });
+  });
+
+  it("parses identify command with json output", () => {
+    expect(parseArgs(["identify", "--json"])).toEqual({
+      command: "identify",
+      json: true,
+    });
+  });
+
+  it("parses capabilities command with json output", () => {
+    expect(parseArgs(["capabilities", "--json"])).toEqual({
+      command: "capabilities",
+      json: true,
+    });
+  });
+
+  it("parses workspace list command with json output", () => {
+    expect(parseArgs(["workspace", "list", "--json"])).toEqual({
+      command: "workspace",
+      workspaceCommand: "list",
+      json: true,
+    });
+  });
+
+  it("parses session list command with workspace and json output", () => {
+    expect(parseArgs(["session", "list", "--workspace", "ws-1", "--json"])).toEqual({
+      command: "session",
+      sessionCommand: "list",
+      workspaceId: "ws-1",
+      json: true,
+    });
+  });
+
+  it("parses terminal read command with terminal id and byte limit", () => {
+    expect(parseArgs(["terminal", "read", "--terminal", "term-1", "--bytes", "4096"])).toEqual({
+      command: "terminal",
+      terminalCommand: "read",
+      terminalId: "term-1",
+      bytes: 4096,
+    });
+  });
+
+  it("parses git status command with workspace and json output", () => {
+    expect(parseArgs(["git", "status", "--workspace", "ws-1", "--json"])).toEqual({
+      command: "git",
+      gitCommand: "status",
+      workspaceId: "ws-1",
+      json: true,
+    });
+  });
+
+  it("parses git diff command with workspace, path, staged, and json output", () => {
+    expect(
+      parseArgs(["git", "diff", "--workspace", "ws-1", "--path", "src/a.ts", "--staged", "--json"])
+    ).toEqual({
+      command: "git",
+      gitCommand: "diff",
+      workspaceId: "ws-1",
+      path: "src/a.ts",
+      staged: true,
+      json: true,
     });
   });
 
@@ -835,6 +1009,26 @@ describe("parseArgs", () => {
 
   it("rejects unknown flags on non-config commands", () => {
     expect(() => parseArgs(["status", "--bogus"])).toThrow("Unknown option: --bogus");
+  });
+
+  it("rejects json output on unsupported commands", () => {
+    expect(() => parseArgs(["status", "--json"])).toThrow("Unknown option: --json");
+  });
+
+  it("requires workspace id for session list", () => {
+    expect(() => parseArgs(["session", "list"])).toThrow("Missing workspace value");
+  });
+
+  it("requires terminal id for terminal read", () => {
+    expect(() => parseArgs(["terminal", "read"])).toThrow("Missing terminal value");
+  });
+
+  it("requires workspace id for git status", () => {
+    expect(() => parseArgs(["git", "status"])).toThrow("Missing workspace value");
+  });
+
+  it("requires path for git diff", () => {
+    expect(() => parseArgs(["git", "diff", "--workspace", "ws-1"])).toThrow("Missing path value");
   });
 
   it("allows config-time host-only updates", () => {

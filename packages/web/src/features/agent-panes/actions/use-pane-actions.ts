@@ -11,7 +11,6 @@ import {
   closeEditorPaneById,
   closePaneBySessionId,
   convertDraftPaneToEditor,
-  enforceSingleEditorPaneInvariant,
   insertPaneAtEdge as insertPaneNodeAtEdge,
   removePaneBySessionId,
   replaceSessionInPane,
@@ -31,10 +30,9 @@ export function usePaneActions(workspaceId: string) {
     (update: PaneNode | ((current: PaneNode) => PaneNode)) => {
       const current = store.get(paneLayoutAtomFamily(workspaceId));
       const next = typeof update === "function" ? update(current) : update;
-      const normalized = enforceSingleEditorPaneInvariant(next);
-      setPaneLayout(normalized);
-      void persistUiState({ paneLayout: normalized });
-      return normalized;
+      setPaneLayout(next);
+      void persistUiState({ paneLayout: next });
+      return next;
     },
     [persistUiState, setPaneLayout, store, workspaceId]
   );

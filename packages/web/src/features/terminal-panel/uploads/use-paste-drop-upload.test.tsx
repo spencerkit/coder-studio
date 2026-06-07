@@ -160,7 +160,7 @@ describe("usePasteDropUpload", () => {
     expect(result.current.busy).toBe(false);
   });
 
-  it("collects pasted image files as pending previews and does not send terminal input", async () => {
+  it("uploads pasted image files and sends quoted path without collecting pending previews", async () => {
     const store = createStore();
     const { result } = renderHook(
       () =>
@@ -180,16 +180,10 @@ describe("usePasteDropUpload", () => {
       await flushAsyncWork();
     });
 
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(sendInput).not.toHaveBeenCalled();
-    expect(result.current.pendingImages).toHaveLength(1);
-    expect(result.current.pendingImages[0]).toMatchObject({
-      id: expect.any(String),
-      file: expect.any(File),
-      previewUrl: "blob:preview-1",
-      name: "paste.png",
-      type: "image/png",
-    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(sendInput).toHaveBeenCalledWith("'/abs/a.txt' ");
+    expect(result.current.pendingImages).toEqual([]);
+    expect(createObjectURL).not.toHaveBeenCalled();
     expect(store.get(toastsAtom)).toEqual([]);
   });
 
@@ -249,7 +243,7 @@ describe("usePasteDropUpload", () => {
     expect(sendInput.mock.calls[0]?.[0]).toBe("'/abs/a.txt' '/abs/b file.txt' ");
   });
 
-  it("collects image clipboard content through the explicit clipboard handler until upload is requested", async () => {
+  it("uploads image clipboard content through the explicit clipboard handler without collecting pending previews", async () => {
     const store = createStore();
     const clipboardRead = vi
       .fn()
@@ -283,9 +277,10 @@ describe("usePasteDropUpload", () => {
 
     expect(clipboardRead).toHaveBeenCalledTimes(1);
     expect(clipboardReadText).not.toHaveBeenCalled();
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(sendInput).not.toHaveBeenCalled();
-    expect(result.current.pendingImages).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(sendInput).toHaveBeenCalledWith("'/abs/a.txt' ");
+    expect(result.current.pendingImages).toEqual([]);
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 
   it("uploads pending images only when called and keeps previews for the submit owner", async () => {
@@ -326,8 +321,19 @@ describe("usePasteDropUpload", () => {
     expect(revokeObjectURL).not.toHaveBeenCalled();
   });
 
-  it("appends image previews when a second image paste is collected", async () => {
+  it("uploads repeated image paste events without appending pending previews", async () => {
     const store = createStore();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          files: [{ path: "/abs/paste.png", originalName: "paste.png", size: 1 }],
+        }),
+      })
+    );
     createObjectURL.mockReturnValueOnce("blob:preview-1").mockReturnValueOnce("blob:preview-2");
     const { result } = renderHook(
       () =>
@@ -351,11 +357,12 @@ describe("usePasteDropUpload", () => {
       await flushAsyncWork();
     });
 
-    expect(result.current.pendingImages).toHaveLength(2);
-    expect(result.current.pendingImages.map((image) => image.name)).toEqual([
-      "first.png",
-      "second.png",
-    ]);
+    expect(result.current.pendingImages).toEqual([]);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(sendInput).toHaveBeenCalledTimes(2);
+    expect(sendInput).toHaveBeenNthCalledWith(1, "'/abs/paste.png' ");
+    expect(sendInput).toHaveBeenNthCalledWith(2, "'/abs/paste.png' ");
+    expect(createObjectURL).not.toHaveBeenCalled();
     expect(revokeObjectURL).not.toHaveBeenCalled();
   });
 
@@ -403,7 +410,7 @@ describe("usePasteDropUpload", () => {
     });
   });
 
-  it("falls back to clipboard text when no clipboard files are available", async () => {
+  it("falls back to clipboard text when no clipboard image files are available", async () => {
     const store = createStore();
     const clipboardRead = vi.fn().mockResolvedValue([]);
     const clipboardReadText = vi.fn().mockResolvedValue("ls -la");

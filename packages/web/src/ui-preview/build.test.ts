@@ -1,22 +1,19 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { build, type InlineConfig } from "vite";
 import { afterEach, describe, expect, it } from "vitest";
 import viteConfig from "../../vite.config";
 
-const tempDirs: string[] = [];
+const uiPreviewBuildDir = join(process.cwd(), ".vite-ui-preview-build");
 
 afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  rmSync(uiPreviewBuildDir, { recursive: true, force: true });
 });
 
 describe("ui-preview build outputs", () => {
   it("emits ui-preview.html as a production entry", async () => {
-    const outDir = mkdtempSync(join(process.cwd(), ".vite-ui-preview-build-"));
-    tempDirs.push(outDir);
+    rmSync(uiPreviewBuildDir, { recursive: true, force: true });
     const resolvedConfig =
       typeof viteConfig === "function"
         ? ((await viteConfig({
@@ -31,10 +28,10 @@ describe("ui-preview build outputs", () => {
       configFile: false,
       build: {
         ...resolvedConfig.build,
-        outDir,
+        outDir: uiPreviewBuildDir,
       },
     });
 
-    expect(() => readFileSync(join(outDir, "ui-preview.html"), "utf8")).not.toThrow();
+    expect(() => readFileSync(join(uiPreviewBuildDir, "ui-preview.html"), "utf8")).not.toThrow();
   }, 60_000);
 });

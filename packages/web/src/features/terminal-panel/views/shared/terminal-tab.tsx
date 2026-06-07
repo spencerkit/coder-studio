@@ -33,6 +33,9 @@ export function TerminalTab({ id, index, isActive, onSelect, onClose }: Terminal
         value={id}
       >
         <span className="terminal-tab-title">{title}</span>
+        {meta?.kind === "task" ? (
+          <span className="terminal-managed-badge">{t("terminal.managed_task")}</span>
+        ) : null}
       </Tab>
       <IconButton
         aria-label={t("action.close")}

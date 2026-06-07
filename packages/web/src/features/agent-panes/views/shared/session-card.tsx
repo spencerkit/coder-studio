@@ -5,8 +5,8 @@
  * status indicators, and control buttons.
  */
 
-import type { Session, SessionState } from "@coder-studio/core";
-import { useAtomValue, useSetAtom } from "jotai";
+import type { Session, SessionState, TaskRun } from "@coder-studio/core";
+import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -14,12 +14,20 @@ import { pendingFocusSessionAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionByIdAtomFamily, sessionsAtom } from "../../../../atoms/sessions";
 import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
-import { IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
+import { Button, IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useTerminalThemeBackground } from "../../../../theme";
+import { bottomPanelActiveTabAtomFamily } from "../../../bottom-panel";
+import { pushToastAtom } from "../../../notifications/atoms";
 import { PanelHeader } from "../../../shared/components/panel-header";
 import { useSupervisor } from "../../../supervisor/actions/use-supervisor";
 import { SupervisorCard } from "../../../supervisor/views/shared/supervisor-card";
+import { latestVerifyRunAtomFamily, taskStateAtomFamily } from "../../../tasks/atoms";
+import {
+  terminalActiveIdAtomFamily,
+  terminalIdsAtomFamily,
+  terminalMetaAtomFamily,
+} from "../../../terminal-panel/atoms";
 import { XtermHost } from "../../../terminal-panel/views/shared/xterm-host";
 import { usePersistWorkspaceLastViewedTarget } from "../../../workspace/actions/use-persist-workspace-last-viewed-target";
 import { useWorkspaceUiStatePersistence } from "../../../workspace/actions/use-workspace-ui-state-persistence";
@@ -75,8 +83,16 @@ export const SessionCard: FC<SessionCardProps> = ({
 }) => {
   const t = useTranslation();
   const session = useAtomValue(sessionByIdAtomFamily(sessionId));
+  const workspaceIdForTasks = session?.workspaceId ?? "__workspace_empty__";
+  const taskState = useAtomValue(taskStateAtomFamily(workspaceIdForTasks));
+  const latestVerifyRun = useAtomValue(latestVerifyRunAtomFamily(workspaceIdForTasks));
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
+  const setTaskState = useSetAtom(taskStateAtomFamily(workspaceIdForTasks));
+  const setBottomPanelTab = useSetAtom(bottomPanelActiveTabAtomFamily(workspaceIdForTasks));
+  const setActiveTerminalId = useSetAtom(terminalActiveIdAtomFamily(workspaceIdForTasks));
+  const pushToast = useSetAtom(pushToastAtom);
+  const store = useStore();
   const themeBackground = useTerminalThemeBackground();
   const workspace = useAtomValue(
     workspaceByIdAtomFamily(session?.workspaceId ?? "__workspace_empty__")
@@ -121,6 +137,59 @@ export const SessionCard: FC<SessionCardProps> = ({
   const isActiveSession = workspace?.uiState.activeSessionId === session.id;
   const isRunning = session.state === "running";
   const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
+  const verifyTask = taskState.tasks.find(
+    (task) => task.kind === "verify" || task.id === latestVerifyRun?.taskId
+  );
+
+  const activateVerifyTerminal = (run: TaskRun) => {
+    const title = `Task: ${verifyTask?.label ?? "Verify"}`;
+    store.set(terminalMetaAtomFamily(run.terminalId), {
+      id: run.terminalId,
+      workspaceId: session.workspaceId,
+      kind: "task",
+      alive: run.status === "running" || run.status === "queued",
+      exitCode: run.exitCode,
+      title,
+    });
+    store.set(terminalIdsAtomFamily(session.workspaceId), (current) =>
+      current.includes(run.terminalId) ? current : [...current, run.terminalId]
+    );
+    setActiveTerminalId(run.terminalId);
+    setBottomPanelTab("terminal");
+  };
+
+  const rerunVerify = async () => {
+    if (!verifyTask) {
+      pushToast({
+        kind: "info",
+        title: t("tasks.title"),
+        body: t("tasks.no_verify_task"),
+      });
+      return null;
+    }
+
+    const result = await dispatch<TaskRun>("task.rerun", {
+      workspaceId: session.workspaceId,
+      taskId: verifyTask.id,
+      themeBackground,
+    });
+    if (!result.ok || !result.data) {
+      pushToast({
+        kind: "error",
+        title: t("tasks.run_failed_title"),
+        body: result.error?.message ?? t("tasks.run_failed_body"),
+      });
+      return null;
+    }
+
+    activateVerifyTerminal(result.data);
+    setTaskState((previous) => ({
+      ...previous,
+      runs: [result.data!, ...previous.runs.filter((run) => run.taskId !== verifyTask.id)],
+    }));
+    return result.data;
+  };
+
   const handleClosedSessionContinue = async () => {
     const createResult = await dispatch<Session>("session.create", {
       workspaceId: session.workspaceId,
@@ -304,6 +373,32 @@ export const SessionCard: FC<SessionCardProps> = ({
         <>
           <SupervisorCard sessionId={session.id} workspaceId={session.workspaceId} />
         </>
+      ) : null}
+
+      {latestVerifyRun ? (
+        <div className={`session-card-verify session-card-verify--${latestVerifyRun.status}`}>
+          <span>
+            {t("tasks.last_verify", {
+              status: t(`tasks.status_${latestVerifyRun.status}`),
+            })}
+          </span>
+          <span className="session-card-verify-command">
+            {[latestVerifyRun.command, ...latestVerifyRun.args].join(" ")}
+            {latestVerifyRun.exitCode !== undefined ? ` · exit ${latestVerifyRun.exitCode}` : ""}
+          </span>
+          <div className="session-card-verify-actions">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => activateVerifyTerminal(latestVerifyRun)}
+            >
+              {t("tasks.view_output")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void rerunVerify()}>
+              {t("tasks.rerun_verify")}
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       <div className="session-terminal">

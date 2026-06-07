@@ -50,6 +50,7 @@ const translations: Record<string, string> = {
   "workspace.skills.status.failed": "Failed",
   "workspace.skills.source.skillhub": "skills-hub",
   "workspace.skills.source.local": "Local",
+  "workspace.skills.source.builtin": "Built-in",
   "skills.mount_state.unmounted": "Unmounted",
   "skills.mount_state.partially_mounted": "Partially mounted",
   "skills.mount_state.fully_mounted": "Fully mounted",
@@ -112,7 +113,7 @@ describe("SkillsPanel", () => {
       writable: true,
       value: originalFocus,
     });
-    delete (document as Document & { activeElement?: Element }).activeElement;
+    Reflect.deleteProperty(document, "activeElement");
   });
 
   it("loads and renders skill library entries", async () => {
@@ -276,6 +277,45 @@ describe("SkillsPanel", () => {
 
     expect(within(skillCard).queryByText(/code-review/)).toBeNull();
     expect(within(skillCard).queryByText("Local")).toBeNull();
+  });
+
+  it("shows built-in source labels for built-in skills", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "skills.library.list") {
+        return [
+          {
+            slug: "coder-studio-automation",
+            displayName: "Coder Studio Automation",
+            description: "Teach agents to discover Coder Studio automation",
+            version: "1.0.0",
+            source: "builtin",
+            libraryPath: "/skills/builtin/coder-studio-automation",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+            mountedProviderIds: ["codex"],
+            mountStatus: "partially_mounted",
+            errorCount: 0,
+            builtin: { defaultEnabled: true, autoMount: true },
+          },
+        ];
+      }
+
+      if (op === "skills.health.scan") {
+        return { targets: [], mounts: [] };
+      }
+
+      if (op === "skills.targets.list") {
+        return [];
+      }
+
+      return [];
+    });
+
+    renderPanel(sendCommand);
+
+    expect(await screen.findByText("Coder Studio Automation")).toBeInTheDocument();
+    expect(screen.getByText(/coder-studio-automation/)).toHaveTextContent("Built-in");
   });
 
   it("shows an empty state when the library has no entries", async () => {

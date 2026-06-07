@@ -4,10 +4,16 @@ import type {
   CustomProviderSessionMode,
   GitCommitDetail,
   GitCommitFileEntry,
+  GitDiffHunk,
   GitDiffRenderMode,
   GitFileDiffPayload,
+  GitHunkOperation,
   GitRevisionSource,
   SessionState,
+  TaskDefinition,
+  TaskRun,
+  Terminal,
+  TerminalKind,
   WorkspaceHistoryEntry,
 } from "./types";
 import { deriveSessionTitle, normalizeSessionTitleInput, SESSION_TITLE_MAX_LENGTH } from "./types";
@@ -99,5 +105,80 @@ describe("Git history diff contracts", () => {
     expectTypeOf<GitCommitDetail["commit"]["parentSha"]>().toEqualTypeOf<string | undefined>();
     expectTypeOf<GitCommitDetail["files"][number]["renderAs"]>().toEqualTypeOf<"text" | "image">();
     expectTypeOf<GitFileDiffPayload["originalRevision"]>().toEqualTypeOf<string | undefined>();
+  });
+});
+
+describe("Task contracts", () => {
+  it("defines managed workspace task definitions", () => {
+    expectTypeOf<TaskDefinition>().toEqualTypeOf<{
+      id: string;
+      workspaceId: string;
+      kind: "verify" | "test" | "lint" | "build" | "dev" | "custom";
+      label: string;
+      command: string;
+      args: string[];
+      displayCommand?: string;
+      cwdPath?: string;
+      source:
+        | "coder-studio"
+        | "package-json"
+        | "pnpm-workspace"
+        | "cargo"
+        | "go"
+        | "python"
+        | "makefile"
+        | "inferred";
+      priority: number;
+    }>();
+  });
+
+  it("defines managed task run state", () => {
+    expectTypeOf<TaskRun>().toEqualTypeOf<{
+      id: string;
+      workspaceId: string;
+      taskId: string;
+      terminalId: string;
+      status: "queued" | "running" | "passed" | "failed" | "stopped";
+      command: string;
+      args: string[];
+      cwdPath?: string;
+      startedAt: number;
+      finishedAt?: number;
+      exitCode?: number;
+      summary?: {
+        tailLines: string[];
+      };
+    }>();
+  });
+
+  it("allows task terminals as managed terminal DTOs", () => {
+    expectTypeOf<TerminalKind>().toEqualTypeOf<"agent" | "shell" | "task">();
+    expectTypeOf<Terminal["kind"]>().toEqualTypeOf<TerminalKind>();
+  });
+});
+
+describe("Git hunk contracts", () => {
+  it("defines hunk descriptors returned by diff payloads", () => {
+    expectTypeOf<GitDiffHunk>().toEqualTypeOf<{
+      id: string;
+      header: string;
+      oldStart: number;
+      oldLines: number;
+      newStart: number;
+      newLines: number;
+      patch: string;
+      lines: string[];
+    }>();
+    expectTypeOf<GitFileDiffPayload["hunks"]>().toEqualTypeOf<GitDiffHunk[] | undefined>();
+  });
+
+  it("defines server-validated hunk operations", () => {
+    expectTypeOf<GitHunkOperation>().toEqualTypeOf<{
+      workspaceId: string;
+      path: string;
+      staged: boolean;
+      hunkId: string;
+      operation: "stage" | "unstage" | "discard";
+    }>();
   });
 });

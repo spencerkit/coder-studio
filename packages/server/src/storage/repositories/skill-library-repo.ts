@@ -49,7 +49,10 @@ export class SkillLibraryRepo {
     const discovered = scanLocalSkillEntries(this.input.localSkillRoots ?? []);
 
     for (const entry of discovered) {
-      persisted[entry.slug] = entry;
+      const existing = persisted[entry.slug];
+      if (!existing || existing.source === "local") {
+        persisted[entry.slug] = entry;
+      }
     }
 
     return persisted;

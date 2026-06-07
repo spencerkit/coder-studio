@@ -21,6 +21,7 @@ import {
 } from "../git/cli.js";
 import { getFileDiff } from "../git/diff.js";
 import { getGitCommitDetail, getGitCommitFileDiff } from "../git/history.js";
+import { applyGitHunkOperation } from "../git/hunk-operations.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { registerCommand } from "../ws/dispatch.js";
 import { emitGitStateChanged } from "./git-events.js";
@@ -34,6 +35,14 @@ const gitCommitRevisionSchema = z
   .regex(/^[0-9a-fA-F]{7,64}$/, "Invalid git commit revision");
 
 const GIT_BACKGROUND_FETCH_TIMEOUT_MS = 30 * 1000;
+
+function debugGitHistoryCommand(message: string, details?: Record<string, unknown>) {
+  if (process.env.CODER_STUDIO_DEBUG_GIT_HISTORY !== "1") {
+    return;
+  }
+
+  console.log("[git-history]", message, details);
+}
 
 async function runGitNetworkOperation<T>(
   ctx: CommandContext,
@@ -100,12 +109,15 @@ registerCommand(
   }
 );
 
-// git.log
+// git.hunk
 registerCommand(
-  "git.log",
+  "git.hunk",
   z.object({
     workspaceId: z.string(),
-    limit: z.number().int().min(1).max(50).optional(),
+    path: z.string(),
+    staged: z.boolean(),
+    hunkId: z.string(),
+    operation: z.enum(["stage", "unstage", "discard"]),
   }),
   async (args, ctx) => {
     const workspace = ctx.workspaceMgr.get(args.workspaceId);
@@ -113,9 +125,49 @@ registerCommand(
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
 
-    return {
-      entries: await getGitHistory(workspace.path, args.limit ?? 5),
-    };
+    await applyGitHunkOperation(workspace.path, args);
+    emitGitStateChanged(ctx, args.workspaceId, {
+      worktreeChanged: true,
+    });
+    return {};
+  }
+);
+
+// git.log
+registerCommand(
+  "git.log",
+  z.object({
+    workspaceId: z.string(),
+    limit: z.number().int().min(1).max(50).optional(),
+    afterSha: gitCommitRevisionSchema.optional(),
+  }),
+  async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+    }
+
+    debugGitHistoryCommand("command git.log request", {
+      workspaceId: args.workspaceId,
+      workspacePath: workspace.path,
+      limit: args.limit ?? 5,
+      afterSha: args.afterSha,
+    });
+
+    const history = await getGitHistory(workspace.path, {
+      limit: args.limit ?? 5,
+      afterSha: args.afterSha,
+    });
+
+    debugGitHistoryCommand("command git.log response", {
+      workspaceId: args.workspaceId,
+      entryCount: history.entries.length,
+      hasMore: history.hasMore,
+      firstSha: history.entries[0]?.sha,
+      lastSha: history.entries.at(-1)?.sha,
+    });
+
+    return history;
   }
 );
 

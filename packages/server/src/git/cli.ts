@@ -181,18 +181,53 @@ export async function getGitStatus(cwd: string): Promise<GitStatus> {
   };
 }
 
+export interface GitHistoryOptions {
+  limit?: number;
+  afterSha?: string;
+}
+
+export interface GitHistoryResult {
+  entries: GitCommitSummary[];
+  hasMore: boolean;
+}
+
+function debugGitHistory(message: string, details?: Record<string, unknown>) {
+  if (process.env.CODER_STUDIO_DEBUG_GIT_HISTORY !== "1") {
+    return;
+  }
+
+  console.log("[git-history]", message, details);
+}
+
 /**
  * Get recent commit history for the current HEAD.
  */
-export async function getGitHistory(cwd: string, limit = 5): Promise<GitCommitSummary[]> {
+export async function getGitHistory(
+  cwd: string,
+  options: number | GitHistoryOptions = 5
+): Promise<GitHistoryResult> {
+  const limit = Math.max(1, typeof options === "number" ? options : (options.limit ?? 5));
+  const afterSha = typeof options === "number" ? undefined : options.afterSha;
+  const pageSize = limit + 1;
+  const revisionArgs = afterSha ? ["--skip=1", "--end-of-options", afterSha] : [];
+
   try {
+    debugGitHistory("server get history request", {
+      cwd,
+      limit,
+      pageSize,
+      afterSha,
+      revisionArgs,
+    });
+
     const { stdout } = await runGit(cwd, [
       "log",
-      `--max-count=${Math.max(1, limit)}`,
+      `--max-count=${pageSize}`,
       "--format=%H%x1f%h%x1f%s%x1f%an%x1f%at%x1e",
+      ...revisionArgs,
     ]);
 
-    return stdout
+    const entries = stdout
       .split("\x1e")
       .map((record) => record.trim())
       .filter((record) => record.length > 0)
@@ -208,9 +243,30 @@ export async function getGitHistory(cwd: string, limit = 5): Promise<GitCommitSu
         };
       })
       .filter((entry) => entry.sha && entry.subject);
+
+    debugGitHistory("server get history response", {
+      cwd,
+      limit,
+      afterSha,
+      rawRecordCount: stdout.split("\x1e").filter((record) => record.trim().length > 0).length,
+      parsedCount: entries.length,
+      returnedCount: entries.slice(0, limit).length,
+      hasMore: entries.length > limit,
+      firstSha: entries[0]?.sha,
+      lastReturnedSha: entries.slice(0, limit).at(-1)?.sha,
+      extraSha: entries[limit]?.sha,
+    });
+
+    return {
+      entries: entries.slice(0, limit),
+      hasMore: entries.length > limit,
+    };
   } catch (error) {
     if (error instanceof GitError && /does not have any commits yet/i.test(error.stderr)) {
-      return [];
+      return {
+        entries: [],
+        hasMore: false,
+      };
     }
 
     throw error;

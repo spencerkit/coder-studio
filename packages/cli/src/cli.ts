@@ -2,6 +2,8 @@ import { existsSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { clearAuthBlockByIp, listAuthBlocks } from "./auth-control.js";
+import { printCapabilities, printIdentify } from "./automation-client.js";
+import { callCoderStudioCommand } from "./automation-command-client.js";
 import { openBrowser } from "./browser.js";
 import { type CliConfig, readCliConfig, writeCliConfig } from "./config-store.js";
 import { readLogExcerpt } from "./log-excerpt.js";
@@ -76,6 +78,12 @@ COMMANDS:
   status   Show the managed server status
   logs     Show the managed server logs
   help     Show this help message
+  identify      Print Coder Studio agent runtime context
+  capabilities  Print agent-facing automation capabilities
+  workspace     Read workspace automation data
+  session       Read session automation data
+  terminal      Read terminal automation data
+  git           Read git automation data
   version  Show version
 
 OPTIONS:
@@ -99,6 +107,13 @@ EXAMPLES:
   coder-studio open --restart
   coder-studio status
   coder-studio logs
+  coder-studio identify --json
+  coder-studio capabilities --json
+  coder-studio workspace list --json
+  coder-studio session list --workspace ws_123 --json
+  coder-studio terminal read --terminal term_123 --bytes 4096 --json
+  coder-studio git status --workspace ws_123 --json
+  coder-studio git diff --workspace ws_123 --path src/a.ts --json
   coder-studio stop
   coder-studio config --host 0.0.0.0 --port 8080
 `);
@@ -135,6 +150,35 @@ EXAMPLES:
 
 function showVersion(): void {
   console.log(`@spencer-kit/coder-studio v${getCliVersion(import.meta.url)}`);
+}
+
+function printCommandResult(result: unknown, options: { json?: boolean } = {}): void {
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "text" in result &&
+    typeof (result as { text?: unknown }).text === "string"
+  ) {
+    console.log((result as { text: string }).text);
+    return;
+  }
+
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "diff" in result &&
+    typeof (result as { diff?: unknown }).diff === "string"
+  ) {
+    console.log((result as { diff: string }).diff);
+    return;
+  }
+
+  console.log(JSON.stringify(result, null, 2));
 }
 
 function formatAuthBlocks(blocks: Awaited<ReturnType<typeof listAuthBlocks>>): string {
@@ -294,6 +338,83 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 
   if (args.command === "version") {
     showVersion();
+    return;
+  }
+
+  if (args.command === "identify") {
+    printIdentify({ json: args.json });
+    return;
+  }
+
+  if (args.command === "capabilities") {
+    printCapabilities({ json: args.json });
+    return;
+  }
+
+  if (args.command === "workspace" && args.workspaceCommand === "list") {
+    printCommandResult(
+      await callCoderStudioCommand({
+        apiUrl: args.apiUrl,
+        op: "workspace.list",
+        args: {},
+      }),
+      { json: args.json }
+    );
+    return;
+  }
+
+  if (args.command === "session" && args.sessionCommand === "list") {
+    printCommandResult(
+      await callCoderStudioCommand({
+        apiUrl: args.apiUrl,
+        op: "session.list",
+        args: { workspaceId: args.workspaceId! },
+      }),
+      { json: args.json }
+    );
+    return;
+  }
+
+  if (args.command === "terminal" && args.terminalCommand === "read") {
+    printCommandResult(
+      await callCoderStudioCommand({
+        apiUrl: args.apiUrl,
+        op: "terminal.read",
+        args: {
+          terminalId: args.terminalId!,
+          ...(args.bytes !== undefined ? { bytes: args.bytes } : {}),
+        },
+      }),
+      { json: args.json }
+    );
+    return;
+  }
+
+  if (args.command === "git" && args.gitCommand === "status") {
+    printCommandResult(
+      await callCoderStudioCommand({
+        apiUrl: args.apiUrl,
+        op: "git.status",
+        args: { workspaceId: args.workspaceId! },
+      }),
+      { json: args.json }
+    );
+    return;
+  }
+
+  if (args.command === "git" && args.gitCommand === "diff") {
+    printCommandResult(
+      await callCoderStudioCommand({
+        apiUrl: args.apiUrl,
+        op: "git.diff",
+        args: {
+          workspaceId: args.workspaceId!,
+          ...(args.path !== undefined ? { path: args.path } : {}),
+          ...(args.staged === true ? { staged: true } : {}),
+        },
+      }),
+      { json: args.json }
+    );
     return;
   }
 

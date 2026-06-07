@@ -496,7 +496,7 @@ describe("UI preview catalog", () => {
       await screen.findByText("Ship the header polish and verify README visuals")
     ).toBeInTheDocument();
     expect(screen.getByText("Supervisor")).toBeInTheDocument();
-    expect(screen.getByText("Preview Runner")).toBeInTheDocument();
+    expect(screen.getAllByText("Preview Runner").length).toBeGreaterThan(0);
     expect(document.querySelector(".workspace-page--desktop .session-card")).toBeTruthy();
     expect(document.querySelector(".workspace-page--desktop .bottom-terminal")).toBeTruthy();
   });

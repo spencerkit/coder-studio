@@ -1,19 +1,29 @@
 import { useAtomValue } from "jotai";
 import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
-import type { FC } from "react";
+import type { DragEvent, FC } from "react";
 import { useState } from "react";
 import { ConfirmDialog, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import {
+  getWorkspacePathDragPayload,
+  hasWorkspacePathDragType,
+} from "../../../../lib/workspace-path-drag";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import {
   CodeEditorDesktopHeaderActions,
   CodeEditorHost,
 } from "../../../code-editor/views/shared/code-editor-host";
 import { PanelHeader } from "../../../shared/components/panel-header";
-import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../../workspace/atoms";
+import { openFilesAtomFamily } from "../../../workspace/atoms";
 import type { PaneDropPlacement } from "../../actions/pane-drag-types";
 import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
 import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
+import {
+  editorPaneActiveFilePathAtomFamily,
+  editorPaneModeAtomFamily,
+  editorPanePendingNavigationAtomFamily,
+  getEditorPaneStateKey,
+} from "../../atoms/editor-panes";
 
 function getEditorPaneTitle(path: string | null, fallbackTitle: string): string {
   if (!path) {
@@ -33,6 +43,7 @@ interface EditorPaneCardProps {
   paneId: string;
   workspaceId: string;
   onClosePane: (paneId: string) => void;
+  onOpenFile?: (paneId: string, path: string) => void;
   onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
   onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
 }
@@ -42,14 +53,24 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   paneId,
   workspaceId,
   onClosePane,
+  onOpenFile,
   onPaneDragStart,
   onSplitPane,
 }) => {
   const t = useTranslation();
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
-  const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const [isFileDropTarget, setIsFileDropTarget] = useState(false);
+  const editorPaneStateKey = getEditorPaneStateKey(workspaceId, paneId);
+  const activeFilePathAtom = editorPaneActiveFilePathAtomFamily(editorPaneStateKey);
+  const editorModeAtom = editorPaneModeAtomFamily(editorPaneStateKey);
+  const pendingNavigationAtom = editorPanePendingNavigationAtomFamily(editorPaneStateKey);
+  const activeFilePath = useAtomValue(activeFilePathAtom);
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
-  const editorState = useCodeEditorActions();
+  const editorState = useCodeEditorActions({
+    activeFilePathAtom,
+    editorModeAtom,
+    pendingNavigationAtom,
+  });
   const supportsPaneDrag = usePaneDragEnabled();
   const canDragPane = supportsPaneDrag && Boolean(onPaneDragStart);
   const title = getEditorPaneTitle(activeFilePath, t("agent_panes.file_editor"));
@@ -75,14 +96,50 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
     setCloseConfirmOpen(false);
     onClosePane(paneId);
   };
+  const handleWorkspaceFileDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!onOpenFile || !hasWorkspacePathDragType(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    setIsFileDropTarget(true);
+  };
+  const handleWorkspaceFileDragLeave = () => {
+    setIsFileDropTarget(false);
+  };
+  const handleWorkspaceFileDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!onOpenFile || !hasWorkspacePathDragType(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsFileDropTarget(false);
+
+    const payload = getWorkspacePathDragPayload(event.dataTransfer);
+    if (!payload || payload.workspaceId !== workspaceId || payload.kind !== "file") {
+      return;
+    }
+
+    onOpenFile(paneId, payload.path);
+  };
 
   return (
     <div
-      className={`session-card agent-pane editor-pane-card${dragState?.isDragging ? " editor-pane-card--dragging" : ""}${dragState?.isActiveDropTarget ? " editor-pane-card--drop-target" : ""}`}
+      className={`session-card agent-pane editor-pane-card${dragState?.isDragging ? " editor-pane-card--dragging" : ""}${dragState?.isActiveDropTarget || isFileDropTarget ? " editor-pane-card--drop-target" : ""}`}
       data-pane-id={paneId}
       data-testid={`editor-pane-${paneId}`}
+      onDragLeaveCapture={handleWorkspaceFileDragLeave}
+      onDragOverCapture={handleWorkspaceFileDragOver}
+      onDropCapture={handleWorkspaceFileDrop}
     >
-      {dragOverlayPlacement ? (
+      {isFileDropTarget ? (
+        <div className="pane-drop-overlay pane-drop-overlay--draft">
+          <div className="pane-drop-overlay__center">{t("agent_panes.open_in_editor")}</div>
+        </div>
+      ) : dragOverlayPlacement ? (
         <div className={`pane-drop-overlay pane-drop-overlay--${dragOverlayPlacement}`}>
           {dragOverlayPlacement === "center" ? (
             <div className="pane-drop-overlay__center">{t("agent_panes.swap")}</div>

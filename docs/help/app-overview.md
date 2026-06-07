@@ -49,6 +49,16 @@ Provider 需要在本地独立安装。Coder Studio 会在启动会话时调用�
 - **Shell 终端**：你自己手动创建的终端，用于执行命令
 - **Agent 终端**：每个 Agent 会话对应的终端，用于查看 Agent 的执行输出
 
+### Skills（技能）
+
+技能是分发给 Agent 的本地说明文件，用来教 Agent 在特定场景下如何行动。Coder Studio 会内置一组第一方技能，并在服务启动时同步到支持技能挂载的 Provider。
+
+内置技能的 MVP 重点是：
+
+- 让 Agent 通过 `coder-studio identify --json` 识别当前 workspace、session 和 provider
+- 让 Agent 通过 `coder-studio capabilities --json` 发现可用自动化命令
+- 在任务结束前提醒 Agent 检查 Git 变更、测试结果和残余风险
+
 ### Settings（设置）
 
 设置页面提供以下配置：
@@ -70,6 +80,7 @@ Coder Studio 使用响应式界面，同一服务同时支持：
 - 想让 AI Agent 在本地项目里工作，同时你能实时看到它的操作
 - 想在同一个界面里查看代码、Git 变更和终端输出
 - 需要同时管理多个 Agent 会话
+- 想让 Agent 自动识别 Coder Studio 运行上下文并选择可用 CLI 自动化能力
 - 想在手机上也方便地监控 Agent 进度
 
 ## 常见问题

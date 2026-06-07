@@ -2,13 +2,14 @@
  * Git diff operations.
  */
 
-import type { GitFileDiffPayload, GitRevisionSource } from "@coder-studio/core";
+import type { GitDiffHunk, GitFileDiffPayload, GitRevisionSource } from "@coder-studio/core";
 import { mkdtemp, readFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
 import { resolveSafe } from "../fs/file-io.js";
 import { getImageTypeInfo } from "../fs/image.js";
 import { GitError, runGit } from "./cli.js";
+import { parseDiffHunks } from "./hunks.js";
 
 export interface FileDiffResult {
   diff: string;
@@ -21,6 +22,7 @@ export interface FileDiffResult {
   mime?: string;
   originalPath?: string;
   modifiedPath?: string;
+  hunks?: GitDiffHunk[];
 }
 
 interface HistoricalDiffInput {
@@ -260,6 +262,7 @@ async function buildTextDiffResult(
     status,
     originalContent: payload.originalContent,
     modifiedContent: payload.modifiedContent,
+    hunks: parseDiffHunks({ diff: payload.diff, path: filePath, staged }),
   };
 }
 

@@ -304,6 +304,7 @@ describe("Git Commands", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toEqual(
       expect.objectContaining({
+        hasMore: false,
         entries: expect.arrayContaining([
           expect.objectContaining({
             subject: "Refresh command surface",
@@ -312,6 +313,71 @@ describe("Git Commands", () => {
         ]),
       })
     );
+  });
+
+  it("returns the next git.log page after a cursor", async () => {
+    for (const subject of [
+      "Second command commit",
+      "Third command commit",
+      "Fourth command commit",
+    ]) {
+      await writeFile(join(testDir, "sample.ts"), `${subject}\n`);
+      await execFileAsync("git", ["add", "."], { cwd: testDir });
+      await execFileAsync("git", ["commit", "-m", subject], { cwd: testDir });
+    }
+
+    const firstPage = await dispatch(
+      {
+        kind: "command",
+        id: "git-log-page-1",
+        op: "git.log",
+        args: {
+          workspaceId,
+          limit: 2,
+        },
+      },
+      ctx
+    );
+
+    expect(firstPage.ok).toBe(true);
+    expect(firstPage.data).toEqual(
+      expect.objectContaining({
+        hasMore: true,
+        entries: [
+          expect.objectContaining({ subject: "Fourth command commit" }),
+          expect.objectContaining({ subject: "Third command commit" }),
+        ],
+      })
+    );
+
+    const cursor = (firstPage.data as { entries: Array<{ sha: string }> }).entries[1]!.sha;
+    const secondPage = await dispatch(
+      {
+        kind: "command",
+        id: "git-log-page-2",
+        op: "git.log",
+        args: {
+          workspaceId,
+          limit: 2,
+          afterSha: cursor,
+        },
+      },
+      ctx
+    );
+
+    expect(secondPage.ok).toBe(true);
+    expect(secondPage.data).toEqual(
+      expect.objectContaining({
+        hasMore: false,
+        entries: [
+          expect.objectContaining({ subject: "Second command commit" }),
+          expect.objectContaining({ subject: "Initial commit" }),
+        ],
+      })
+    );
+    expect(
+      (secondPage.data as { entries: Array<{ sha: string }> }).entries.map((entry) => entry.sha)
+    ).not.toContain(cursor);
   });
 
   it("returns a commit patch for git.show", async () => {
@@ -577,6 +643,63 @@ describe("Git Commands", () => {
     expect(result.ok).toBe(true);
     const { stdout } = await execFileAsync("git", ["status", "--short"], { cwd: testDir });
     expect(stdout).not.toContain("scratch.txt");
+  });
+
+  it("applies a git.hunk operation and emits worktree refresh hints", async () => {
+    await writeFile(
+      join(testDir, "sample.ts"),
+      [
+        "export const value = 2;",
+        "export const spacer1 = 1;",
+        "export const spacer2 = 2;",
+        "export const spacer3 = 3;",
+        "export const spacer4 = 4;",
+        "export const spacer5 = 5;",
+        "export const spacer6 = 6;",
+        "export const tail = true;",
+        "",
+      ].join("\n")
+    );
+    const diffResult = await dispatch(
+      {
+        kind: "command",
+        id: "git-diff-for-hunk",
+        op: "git.diff",
+        args: {
+          workspaceId,
+          path: "sample.ts",
+        },
+      },
+      ctx
+    );
+    expect(diffResult.ok).toBe(true);
+    const hunkId = (diffResult.data as { hunks?: Array<{ id: string }> }).hunks?.[0]?.id;
+    expect(hunkId).toMatch(/^hunk_/);
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "git-hunk-stage",
+        op: "git.hunk",
+        args: {
+          workspaceId,
+          path: "sample.ts",
+          staged: false,
+          hunkId,
+          operation: "stage",
+        },
+      },
+      ctx
+    );
+
+    expect(result).toMatchObject({ ok: true, data: {} });
+    expect(eventBus.emit).toHaveBeenCalledWith({
+      type: "git.state.changed",
+      workspaceId,
+      treeChanged: undefined,
+      branchChanged: undefined,
+      worktreeChanged: true,
+    });
   });
 
   it("fetches remote refs and emits branchChanged via git.fetch", async () => {

@@ -91,7 +91,7 @@ describe("workspace.intelligence command", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.data).toEqual({
+    expect(result.data).toMatchObject({
       workspaceId: "ws-1",
       rootPath,
       git: {

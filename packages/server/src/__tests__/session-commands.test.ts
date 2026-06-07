@@ -235,6 +235,76 @@ describe("Session Commands", () => {
       }
     });
 
+    it("injects Coder Studio runtime context into agent terminal env", async () => {
+      const testDir = join(tmpdir(), `coder-studio-session-env-${Date.now()}`);
+      mkdirSync(join(testDir, ".git"), { recursive: true });
+      writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
+
+      const createdSpecs: Array<{ env?: Record<string, string> }> = [];
+      terminalMgrStub = {
+        create: (spec: { env?: Record<string, string> }) => {
+          createdSpecs.push(spec);
+          return { id: "terminal-env-1" };
+        },
+        kill: async () => {},
+        close: async () => {},
+      } as unknown as TerminalManager;
+      sessionMgr = new SessionManager({
+        terminalMgr: terminalMgrStub,
+        eventBus,
+        db: sessionDbStub,
+        broadcaster,
+        providerRegistry: [],
+        providerConfigRepo: createProviderConfigRepo(join(stateDir, "provider-configs-env.json")),
+        runtimeContext: {
+          apiUrl: "http://127.0.0.1:4173",
+        },
+      });
+      ctx.sessionMgr = sessionMgr;
+      ctx.providerRegistry = providerRegistry as ProviderDefinition[];
+      ctx.providerRuntimeDeps = {
+        commandExists: async (command: string) => command === "claude",
+      };
+
+      try {
+        const openResult = await dispatch(
+          {
+            kind: "command",
+            id: "workspace-env",
+            op: "workspace.open",
+            args: { path: testDir },
+          },
+          ctx
+        );
+
+        expect(openResult.ok).toBe(true);
+
+        const result = await dispatch(
+          {
+            kind: "command",
+            id: "session-env",
+            op: "session.create",
+            args: {
+              workspaceId: openResult.data!.id,
+              providerId: "claude",
+            },
+          },
+          ctx
+        );
+
+        expect(result.ok).toBe(true);
+        expect(createdSpecs[0]?.env).toMatchObject({
+          CODER_STUDIO: "1",
+          CODER_STUDIO_WORKSPACE_ID: openResult.data!.id,
+          CODER_STUDIO_SESSION_ID: expect.stringMatching(/^sess_/),
+          CODER_STUDIO_PROVIDER_ID: "claude",
+          CODER_STUDIO_API_URL: "http://127.0.0.1:4173",
+        });
+      } finally {
+        rmSync(testDir, { recursive: true, force: true });
+      }
+    });
+
     it("launches a custom provider through the existing session.create flow", async () => {
       const testDir = join(tmpdir(), `coder-studio-custom-provider-session-${Date.now()}`);
       mkdirSync(join(testDir, ".git"), { recursive: true });

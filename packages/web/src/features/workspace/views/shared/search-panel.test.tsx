@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 
 import type { SearchSessionStartResult } from "@coder-studio/core";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { CommandResultError } from "../../../../ws/client";
 import {
   activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
   focusedEditorPaneIdAtomFamily,
+  getEditorPaneStateKey,
 } from "../../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../../code-editor/atoms";
@@ -90,6 +92,10 @@ describe("SearchPanel", () => {
     });
     store.set(activeEditorPaneIdAtomFamily("ws-test"), "root");
     store.set(focusedEditorPaneIdAtomFamily("ws-test"), "root");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-test", "root")),
+      "src/panel.tsx"
+    );
     store.set(openFilesAtomFamily("ws-test"), {
       "src/app.tsx": {
         kind: "text",
@@ -524,6 +530,11 @@ describe("SearchPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /3.*needle/i }));
 
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(
+      store.get(editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-test", "root")))
+    ).toBe("src/panel.tsx");
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
     expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
       workspaceId: "ws-test",

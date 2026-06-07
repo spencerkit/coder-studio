@@ -2,11 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
+import { setWorkspacePathDragData } from "../../../../lib/workspace-path-drag";
+import { type OpenFile, openFilesAtomFamily } from "../../../workspace/atoms";
 import {
-  activeFilePathAtomFamily,
-  type OpenFile,
-  openFilesAtomFamily,
-} from "../../../workspace/atoms";
+  editorPaneActiveFilePathAtomFamily,
+  getEditorPaneStateKey,
+} from "../../atoms/editor-panes";
 import { EditorPaneCard } from "./editor-pane-card";
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +40,30 @@ vi.mock("../../../code-editor/views/shared/code-editor-host", () => ({
   CodeEditorDesktopHeaderActions: mocks.mockCodeEditorDesktopHeaderActions,
 }));
 
+function createWorkspaceFileDataTransfer(workspaceId: string, path: string) {
+  const values = new Map<string, string>();
+  const types: string[] = [];
+  const dataTransfer: Pick<DataTransfer, "effectAllowed" | "getData" | "setData" | "types"> = {
+    types,
+    effectAllowed: "uninitialized" as DataTransfer["effectAllowed"],
+    setData: vi.fn((type: string, value: string) => {
+      if (!types.includes(type)) {
+        types.push(type);
+      }
+      values.set(type, value);
+    }),
+    getData: vi.fn((type: string) => values.get(type) ?? ""),
+  };
+
+  setWorkspacePathDragData(dataTransfer, {
+    workspaceId,
+    path,
+    kind: "file",
+  });
+
+  return dataTransfer;
+}
+
 describe("EditorPaneCard", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -52,7 +77,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(activeFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
 
     render(
       <Provider store={store}>
@@ -75,6 +103,56 @@ describe("EditorPaneCard", () => {
     expect(onPaneDragStart).toHaveBeenCalledWith(expect.objectContaining({ paneId: "pane-1" }));
   });
 
+  it("opens workspace file drops in the editor pane instead of letting the editor insert text", () => {
+    const store = createStore();
+    const onClosePane = vi.fn();
+    const onSplitPane = vi.fn();
+    const onOpenFile = vi.fn();
+    const parentDrop = vi.fn();
+
+    mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
+    store.set(localeAtom, "en");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
+
+    render(
+      <Provider store={store}>
+        <div onDrop={parentDrop}>
+          <EditorPaneCard
+            workspaceId="ws-123"
+            paneId="pane-1"
+            onClosePane={onClosePane}
+            onOpenFile={onOpenFile}
+            onSplitPane={onSplitPane}
+          />
+        </div>
+      </Provider>
+    );
+
+    const editorPane = screen.getByTestId("editor-pane-pane-1");
+    const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOver, "dataTransfer", {
+      value: createWorkspaceFileDataTransfer("ws-123", "src/dropped.ts"),
+    });
+
+    fireEvent(editorPane, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: createWorkspaceFileDataTransfer("ws-123", "src/dropped.ts"),
+    });
+
+    fireEvent(editorPane, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(parentDrop).not.toHaveBeenCalled();
+    expect(onOpenFile).toHaveBeenCalledWith("pane-1", "src/dropped.ts");
+  });
+
   it("renders editor pane actions and delegates split and close callbacks", () => {
     const store = createStore();
     const onClosePane = vi.fn();
@@ -82,7 +160,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(activeFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
 
     render(
       <Provider store={store}>
@@ -134,7 +215,10 @@ describe("EditorPaneCard", () => {
 
     mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
     store.set(localeAtom, "en");
-    store.set(activeFilePathAtomFamily("ws-123"), "src/app.tsx");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
     store.set(openFilesAtomFamily("ws-123"), {
       "src/app.tsx": {
         kind: "text",

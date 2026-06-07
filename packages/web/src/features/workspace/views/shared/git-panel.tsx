@@ -1,10 +1,11 @@
-import type { GitCommitSummary, GitFileChange, WorktreeInfo } from "@coder-studio/core";
-import { atom, useAtom, useAtomValue } from "jotai";
+import type { GitCommitSummary, GitFileChange, TaskRun, WorktreeInfo } from "@coder-studio/core";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { atomFamily } from "jotai-family";
 import { ChevronDown, ChevronRight, Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type { FC, MouseEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
+import { dispatchCommandAtom } from "../../../../atoms/connection";
 import {
   ConfirmDialog,
   EmptyState,
@@ -14,6 +15,10 @@ import {
   Tooltip,
 } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
+import { useTerminalThemeBackground } from "../../../../theme";
+import { pushToastAtom } from "../../../notifications/atoms";
+import { latestVerifyRunAtomFamily, taskStateAtomFamily } from "../../../tasks/atoms";
+import { terminalCommandSidePanelOpenAtomFamily } from "../../../terminal-panel/atoms";
 import {
   type GitChangeType,
   type GitPanelChangeItem,
@@ -23,6 +28,79 @@ import { useWorktreeManagementActions } from "../../actions/use-worktree-managem
 import type { GitDiffPreview } from "../../atoms";
 import { getFileNodeSemantic } from "./file-tree-icon-semantics";
 import { WorktreeManagerSurface } from "./worktree-manager-surface";
+
+const HISTORY_LOAD_THRESHOLD_PX = 48;
+const GIT_HISTORY_DEBUG_STORAGE_KEY = "coder-studio.debug.gitHistory";
+
+interface GitHistoryDebugElementSnapshot {
+  tag: string;
+  className: string;
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  remainingScroll: number;
+  overflowY: string;
+  canScroll: boolean;
+}
+
+function isGitHistoryDebugEnabled(): boolean {
+  if (typeof window === "undefined" || import.meta.env.MODE === "test") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(GIT_HISTORY_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function getGitHistoryDebugElementSnapshot(
+  element: Element | null
+): GitHistoryDebugElementSnapshot | null {
+  if (!(element instanceof HTMLElement)) {
+    return null;
+  }
+
+  const style = window.getComputedStyle(element);
+  return {
+    tag: element.tagName.toLowerCase(),
+    className: element.className,
+    scrollTop: element.scrollTop,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+    remainingScroll: element.scrollHeight - element.scrollTop - element.clientHeight,
+    overflowY: style.overflowY,
+    canScroll: element.scrollHeight > element.clientHeight,
+  };
+}
+
+function getGitHistoryScrollAncestors(element: HTMLElement | null) {
+  const ancestors: GitHistoryDebugElementSnapshot[] = [];
+  let current = element?.parentElement ?? null;
+
+  while (current && ancestors.length < 8) {
+    const snapshot = getGitHistoryDebugElementSnapshot(current);
+    if (snapshot && (snapshot.canScroll || /auto|scroll|overlay/.test(snapshot.overflowY))) {
+      ancestors.push(snapshot);
+    }
+    current = current.parentElement;
+  }
+
+  return ancestors;
+}
+
+function getGitHistoryDebugRect(rect: DOMRectReadOnly | null | undefined) {
+  return rect?.toJSON?.() ?? rect ?? null;
+}
+
+function debugGitHistory(message: string, details?: Record<string, unknown>) {
+  if (!isGitHistoryDebugEnabled()) {
+    return;
+  }
+
+  console.log("[git-history]", message, details);
+}
 
 const gitPanelEmptyStateStyle = {
   minHeight: "auto",
@@ -109,13 +187,23 @@ export const GitPanel: FC<GitPanelProps> = ({
   );
   const locale = useAtomValue(localeAtom) === "zh" ? "zh" : "en";
   const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
+  const pushToast = useSetAtom(pushToastAtom);
+  const setCommandSidePanelOpen = useSetAtom(terminalCommandSidePanelOpenAtomFamily(workspaceId));
+  const taskState = useAtomValue(taskStateAtomFamily(workspaceId));
+  const latestVerifyRun = useAtomValue(latestVerifyRunAtomFamily(workspaceId));
+  const setTaskState = useSetAtom(taskStateAtomFamily(workspaceId));
+  const themeBackground = useTerminalThemeBackground();
   const {
     commitMessage,
     diffPreview,
     groups,
     history,
+    historyHasMore,
     historyLoading,
+    historyPageLoading,
     isLoading,
+    loadMoreGitHistory,
     pendingDiscard,
     setCommitMessage,
     handleCancelDiscard,
@@ -137,6 +225,8 @@ export const GitPanel: FC<GitPanelProps> = ({
   });
   const { currentWorktree, hasWorkspace, list, loadWorktrees, openWorktree, removeWorktreeByPath } =
     useWorktreeManagementActions(workspaceId);
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const historyLoadSentinelRef = useRef<HTMLDivElement | null>(null);
   const worktreeAutoLoadAttemptedRef = useRef(false);
   const {
     changesExpanded,
@@ -194,6 +284,170 @@ export const GitPanel: FC<GitPanelProps> = ({
     void loadWorktrees();
   }, [hasWorkspace, list.lastLoadedAt, list.loading, loadWorktrees]);
 
+  const requestMoreHistory = useCallback(() => {
+    if (!historyExpanded || !historyHasMore || historyLoading || historyPageLoading) {
+      debugGitHistory("skip load more request", {
+        historyExpanded,
+        historyHasMore,
+        historyLoading,
+        historyPageLoading,
+        historyCount: history.length,
+      });
+      return;
+    }
+
+    debugGitHistory("request load more", {
+      historyCount: history.length,
+      cursor: history[history.length - 1]?.sha,
+    });
+    void loadMoreGitHistory();
+  }, [
+    history,
+    historyExpanded,
+    historyHasMore,
+    historyLoading,
+    historyPageLoading,
+    loadMoreGitHistory,
+  ]);
+
+  const handleGitPanelScroll = useCallback(() => {
+    const root = scrollRootRef.current;
+    if (!root) {
+      debugGitHistory("scroll event without scroll root");
+      return;
+    }
+
+    const remainingScroll = root.scrollHeight - root.scrollTop - root.clientHeight;
+    debugGitHistory("panel scroll", {
+      root: getGitHistoryDebugElementSnapshot(root),
+      ancestors: getGitHistoryScrollAncestors(root),
+      threshold: HISTORY_LOAD_THRESHOLD_PX,
+      historyExpanded,
+      historyHasMore,
+      historyLoading,
+      historyPageLoading,
+    });
+    if (remainingScroll <= HISTORY_LOAD_THRESHOLD_PX) {
+      requestMoreHistory();
+    }
+  }, [historyExpanded, historyHasMore, historyLoading, historyPageLoading, requestMoreHistory]);
+
+  useEffect(() => {
+    debugGitHistory("panel state", {
+      workspaceId,
+      variant,
+      root: getGitHistoryDebugElementSnapshot(scrollRootRef.current),
+      historyExpanded,
+      historyHasMore,
+      historyLoading,
+      historyPageLoading,
+      historyCount: history.length,
+    });
+  }, [
+    workspaceId,
+    variant,
+    history.length,
+    historyExpanded,
+    historyHasMore,
+    historyLoading,
+    historyPageLoading,
+  ]);
+
+  useEffect(() => {
+    if (!isGitHistoryDebugEnabled()) {
+      return;
+    }
+
+    const root = scrollRootRef.current;
+    if (!root) {
+      debugGitHistory("debug listener skipped: no scroll root");
+      return;
+    }
+
+    const handleNativeRootScroll = () => {
+      debugGitHistory("native root scroll", {
+        root: getGitHistoryDebugElementSnapshot(root),
+        ancestors: getGitHistoryScrollAncestors(root),
+      });
+    };
+
+    const handleCapturedScroll = (event: Event) => {
+      debugGitHistory("captured scroll", {
+        target: getGitHistoryDebugElementSnapshot(event.target as Element | null),
+        root: getGitHistoryDebugElementSnapshot(root),
+        ancestors: getGitHistoryScrollAncestors(root),
+      });
+    };
+
+    root.addEventListener("scroll", handleNativeRootScroll, { passive: true });
+    window.addEventListener("scroll", handleCapturedScroll, true);
+    debugGitHistory("debug listener attached", {
+      root: getGitHistoryDebugElementSnapshot(root),
+      ancestors: getGitHistoryScrollAncestors(root),
+    });
+
+    return () => {
+      root.removeEventListener("scroll", handleNativeRootScroll);
+      window.removeEventListener("scroll", handleCapturedScroll, true);
+      debugGitHistory("debug listener detached");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!historyExpanded || !historyHasMore || typeof IntersectionObserver === "undefined") {
+      debugGitHistory("observer skipped", {
+        historyExpanded,
+        historyHasMore,
+        intersectionObserverAvailable: typeof IntersectionObserver !== "undefined",
+      });
+      return;
+    }
+
+    const root = scrollRootRef.current;
+    const sentinel = historyLoadSentinelRef.current;
+    if (!root || !sentinel) {
+      debugGitHistory("observer skipped: missing root or sentinel", {
+        hasRoot: Boolean(root),
+        hasSentinel: Boolean(sentinel),
+        root: getGitHistoryDebugElementSnapshot(root),
+      });
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        debugGitHistory("observer entries", {
+          entries: entries.map((entry) => ({
+            isIntersecting: entry.isIntersecting,
+            intersectionRatio: entry.intersectionRatio,
+            boundingClientRect: getGitHistoryDebugRect(entry.boundingClientRect),
+            rootBounds: getGitHistoryDebugRect(entry.rootBounds),
+          })),
+          root: getGitHistoryDebugElementSnapshot(root),
+        });
+        if (entries.some((entry) => entry.isIntersecting)) {
+          requestMoreHistory();
+        }
+      },
+      {
+        root,
+        rootMargin: `${HISTORY_LOAD_THRESHOLD_PX}px 0px`,
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    debugGitHistory("observer attached", {
+      root: getGitHistoryDebugElementSnapshot(root),
+      sentinel: getGitHistoryDebugElementSnapshot(sentinel),
+      ancestors: getGitHistoryScrollAncestors(root),
+    });
+    return () => {
+      observer.disconnect();
+      debugGitHistory("observer detached");
+    };
+  }, [historyExpanded, historyHasMore, requestMoreHistory]);
+
   const canCommit = Boolean(commitMessage.trim()) && stagedCount > 0;
   const shouldRenderWorktreeSection =
     hasWorkspace ||
@@ -204,6 +458,9 @@ export const GitPanel: FC<GitPanelProps> = ({
     pendingWorktreeDelete !== null;
   const showWorktreeCount = !isMobile || list.items.length > 0;
   const showHistoryCount = !isMobile || history.length > 0;
+  const verifyTask = taskState.tasks.find(
+    (task) => task.kind === "verify" || task.id === latestVerifyRun?.taskId
+  );
 
   useEffect(() => {
     if (!toolbarAction || variant !== "desktop") {
@@ -245,6 +502,37 @@ export const GitPanel: FC<GitPanelProps> = ({
     await openWorktree(worktree.path);
   };
 
+  const rerunVerify = async () => {
+    if (!verifyTask) {
+      pushToast({
+        kind: "info",
+        title: t("tasks.title"),
+        body: t("tasks.no_verify_task"),
+      });
+      return null;
+    }
+
+    const result = await dispatch<TaskRun>("task.rerun", {
+      workspaceId,
+      taskId: verifyTask.id,
+      themeBackground,
+    });
+    if (!result.ok || !result.data) {
+      pushToast({
+        kind: "error",
+        title: t("tasks.run_failed_title"),
+        body: result.error?.message ?? t("tasks.run_failed_body"),
+      });
+      return null;
+    }
+
+    setTaskState((previous) => ({
+      ...previous,
+      runs: [result.data!, ...previous.runs.filter((run) => run.taskId !== verifyTask.id)],
+    }));
+    return result.data;
+  };
+
   const closePendingWorktreeDelete = () => {
     setPanelState((current) => ({
       ...current,
@@ -255,7 +543,25 @@ export const GitPanel: FC<GitPanelProps> = ({
   return (
     <>
       <div className={`git-panel git-panel--${variant}`}>
-        <div className="git-panel-scroll">
+        <div className="git-panel-scroll" ref={scrollRootRef} onScroll={handleGitPanelScroll}>
+          {latestVerifyRun ? (
+            <div
+              className={`git-verification-banner git-verification-banner--${latestVerifyRun.status}`}
+            >
+              <span>
+                {t("tasks.verification_status", {
+                  status: t(`tasks.status_${latestVerifyRun.status}`),
+                })}
+              </span>
+              <button type="button" onClick={() => setCommandSidePanelOpen(true)}>
+                {t("tasks.view_tasks")}
+              </button>
+              <button type="button" onClick={() => void rerunVerify()}>
+                {t("tasks.rerun_verify")}
+              </button>
+            </div>
+          ) : null}
+
           <section className="git-panel-section git-commit-block">
             <div className="git-panel-section-header">
               <button
@@ -555,21 +861,34 @@ export const GitPanel: FC<GitPanelProps> = ({
             </div>
 
             {historyExpanded ? (
-              <div className="git-panel-section-body">
+              <div className="git-panel-section-body git-panel-section-body--history">
                 {historyLoading && history.length === 0 ? (
                   <GitPanelEmptyState title={t("common.loading")} />
                 ) : history.length === 0 ? (
                   <GitPanelEmptyState title={t("git.no_commits")} />
                 ) : (
-                  history.map((entry, index) => (
-                    <GitHistoryRow
-                      key={entry.sha}
-                      entry={entry}
-                      isCurrent={index === 0}
-                      locale={locale}
-                      onOpen={openHistoryDiff}
-                    />
-                  ))
+                  <>
+                    {history.map((entry, index) => (
+                      <GitHistoryRow
+                        key={entry.sha}
+                        entry={entry}
+                        isCurrent={index === 0}
+                        locale={locale}
+                        onOpen={openHistoryDiff}
+                      />
+                    ))}
+                    {historyHasMore || historyPageLoading ? (
+                      <div
+                        aria-hidden={!historyPageLoading}
+                        className="git-history-load-sentinel"
+                        ref={historyLoadSentinelRef}
+                      >
+                        {historyPageLoading ? (
+                          <span className="git-history-load-status">{t("common.loading")}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}

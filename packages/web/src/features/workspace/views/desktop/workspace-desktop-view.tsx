@@ -5,7 +5,6 @@ import { EmptyState } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
-import { TerminalPanel } from "../../../terminal-panel";
 import { TopBar } from "../../../topbar";
 import { useWorkspaceFullscreen } from "../../actions/use-workspace-fullscreen";
 import { useWorkspaceNavigationShortcuts } from "../../actions/use-workspace-navigation-shortcuts";
@@ -19,6 +18,7 @@ import { GitPanel } from "../shared/git-panel";
 import { SearchPanel } from "../shared/search-panel";
 import { SkillsPanel } from "../shared/skills-panel";
 import { WorkspaceActivityBar } from "../shared/workspace-activity-bar";
+import { WorkspaceBottomPanel } from "../shared/workspace-bottom-panel";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -61,8 +61,9 @@ const WorkspaceDesktopScene: FC = () => {
   } = useWorkspaceScreenModel();
   const setSidebarCollapsed = useSetAtom(sidebarCollapsedAtom);
   const activeSidebarView = sanitizeDesktopSidebarView(desktopSidebarView);
+  const workspaceId = workspace?.id ?? "__workspace_placeholder__";
 
-  useWorkspaceNavigationShortcuts(workspace.id);
+  useWorkspaceNavigationShortcuts(workspaceId);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -107,12 +108,17 @@ const WorkspaceDesktopScene: FC = () => {
       if (event.key === "5") {
         event.preventDefault();
         setDesktopSidebarView("skills");
+        return;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [setDesktopSidebarView, setSidebarCollapsed]);
+
+  if (!workspace) {
+    return null;
+  }
 
   return (
     <div ref={fullscreenRootRef} className="workspace-page workspace-page--desktop">
@@ -188,13 +194,14 @@ const WorkspaceDesktopScene: FC = () => {
 
         <div className="workspace-main-area">
           <div className="workspace-main-stage">
+            <div className="agent-panes" aria-hidden={mainAreaMode === "editor" ? true : undefined}>
+              <AgentPanes hydrateSessions={false} />
+            </div>
             {mainAreaMode === "editor" ? (
-              <CodeEditorHost />
-            ) : (
-              <div className="agent-panes">
-                <AgentPanes hydrateSessions={false} />
+              <div className="workspace-main-stage__editor-overlay">
+                <CodeEditorHost />
               </div>
-            )}
+            ) : null}
           </div>
 
           {!focusMode && terminalPanelVisible && (
@@ -213,7 +220,7 @@ const WorkspaceDesktopScene: FC = () => {
               className="workspace-bottom-panel"
               style={{ height: `${bottomPanelHeight}px` }}
             >
-              <TerminalPanel />
+              <WorkspaceBottomPanel workspaceId={workspace.id} />
             </div>
           )}
         </div>

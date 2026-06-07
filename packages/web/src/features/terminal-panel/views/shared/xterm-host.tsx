@@ -619,7 +619,7 @@ interface XtermHostProps {
   /** Marks the session prioritized by workspace UI state */
   isActiveSession?: boolean;
   /** Stable terminal kind for cold-start routing, with store metadata as fallback */
-  terminalKind?: "agent" | "shell";
+  terminalKind?: "agent" | "shell" | "task";
   /** Container element ref for sizing */
   containerRef?: React.RefObject<HTMLDivElement>;
   /** Closed session CTA label */

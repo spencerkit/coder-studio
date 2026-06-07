@@ -52,6 +52,7 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       write: vi.fn(),
       resize: vi.fn(),
       syncThemeBackgroundForWorkspace: vi.fn(),
+      getRingBufferTail: vi.fn().mockReturnValue(Buffer.from("")),
     } as never,
     eventBus: {} as never,
     broadcaster: {
@@ -74,6 +75,89 @@ describe("terminal commands", () => {
   function createWorkspaceDir(): string {
     return mkdtempSync(join(tmpdir(), "terminal-commands-"));
   }
+
+  it("returns task terminals from terminal.list", async () => {
+    const taskTerminal: Terminal = {
+      id: "term-task",
+      workspaceId: "ws-1",
+      kind: "task",
+      title: "Task: Verify",
+      cwd: "/tmp/workspace",
+      argv: ["pnpm", "ci:verify"],
+      cols: 120,
+      rows: 30,
+      alive: true,
+      createdAt: 1,
+    };
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn(() => [
+          {
+            toDTO: () => taskTerminal,
+          },
+        ]),
+        replay: vi.fn(),
+        snapshot: vi.fn(),
+        kill: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        write: vi.fn(),
+        resize: vi.fn(),
+        syncThemeBackgroundForWorkspace: vi.fn(),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-list-task-1",
+        op: "terminal.list",
+        args: { workspaceId: "ws-1" },
+      },
+      ctx,
+      "client-1"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([taskTerminal]);
+  });
+
+  it("returns terminal output tail for terminal.read", async () => {
+    const ctx = createContext({
+      terminalMgr: {
+        create: vi.fn(),
+        getAll: vi.fn().mockReturnValue([]),
+        replay: vi.fn(),
+        snapshot: vi.fn(),
+        kill: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined),
+        write: vi.fn(),
+        resize: vi.fn(),
+        syncThemeBackgroundForWorkspace: vi.fn(),
+        getRingBufferTail: vi.fn().mockReturnValue(Buffer.from("ready\n")),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-read-1",
+        op: "terminal.read",
+        args: {
+          terminalId: "term-1",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      terminalId: "term-1",
+      bytes: 4096,
+      text: "ready\n",
+    });
+    expect(ctx.terminalMgr.getRingBufferTail).toHaveBeenCalledWith("term-1", 4096);
+  });
 
   it("returns binary metadata and sends replay payload to requesting client", async () => {
     const replayData = Buffer.from("replay payload");

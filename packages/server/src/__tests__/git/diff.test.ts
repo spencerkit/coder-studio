@@ -55,6 +55,22 @@ describe("git diff operations", () => {
       expect(diff.diff).toContain("modified");
     });
 
+    it("includes hunk descriptors for text diffs", async () => {
+      await writeFile(join(testDir, "initial.txt"), "modified");
+      const diff = await getFileDiff(testDir, "initial.txt");
+
+      expect(diff.hunks).toHaveLength(1);
+      expect(diff.hunks?.[0]).toMatchObject({
+        header: "@@ -1 +1 @@",
+        oldStart: 1,
+        oldLines: 1,
+        newStart: 1,
+        newLines: 1,
+      });
+      expect(diff.hunks?.[0]?.patch).toContain("-initial");
+      expect(diff.hunks?.[0]?.patch).toContain("+modified");
+    });
+
     it("should get empty diff for unchanged file", async () => {
       const diff = await getFileDiff(testDir, "initial.txt");
       expect(diff.diff).toBe("");

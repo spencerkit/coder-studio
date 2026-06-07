@@ -7,6 +7,7 @@ export const Topics = {
 
   // Workspace-level
   workspaceMeta: (id: string) => `workspace.${id}.meta`,
+  workspaceExtensionState: (id: string) => `workspace.${id}.extension.state`,
   workspaceFsDirty: (id: string) => `workspace.${id}.fs.dirty`,
   workspaceGitState: (id: string) => `workspace.${id}.git.state`,
   workspaceLspDiagnostics: (workspaceId: string) => `workspace.${workspaceId}.lsp.diagnostics`,
@@ -31,6 +32,12 @@ export const Topics = {
   terminalExit: (workspaceId: string, terminalId: string) =>
     `workspace.${workspaceId}.terminal.${terminalId}.exit`,
   terminalsAll: (workspaceId: string) => `workspace.${workspaceId}.terminal.*`,
+
+  // Task-level
+  workspaceTaskDiscovered: (workspaceId: string) => `workspace.${workspaceId}.task.discovered`,
+  workspaceTaskRun: (workspaceId: string, runId: string) =>
+    `workspace.${workspaceId}.task.${runId}`,
+  workspaceTasksAll: (workspaceId: string) => `workspace.${workspaceId}.task.*`,
 
   // Notification
   notificationToast: "notification.toast",

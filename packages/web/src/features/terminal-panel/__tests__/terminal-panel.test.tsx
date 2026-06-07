@@ -1,4 +1,4 @@
-import { Topics } from "@coder-studio/core";
+import { type TaskDefinition, Topics } from "@coder-studio/core";
 import {
   act,
   fireEvent,
@@ -30,7 +30,13 @@ import {
 import { TerminalPanel } from "../views/shared/terminal-panel";
 
 const mockXtermHost = vi.fn(
-  ({ terminalId, terminalKind }: { terminalId: string; terminalKind?: "agent" | "shell" }) => (
+  ({
+    terminalId,
+    terminalKind,
+  }: {
+    terminalId: string;
+    terminalKind?: "agent" | "shell" | "task";
+  }) => (
     <div data-testid="xterm-host" data-terminal-kind={terminalKind}>
       {terminalId}
     </div>
@@ -38,7 +44,7 @@ const mockXtermHost = vi.fn(
 );
 
 vi.mock("../views/shared/xterm-host", () => ({
-  XtermHost: (props: { terminalId: string; terminalKind?: "agent" | "shell" }) =>
+  XtermHost: (props: { terminalId: string; terminalKind?: "agent" | "shell" | "task" }) =>
     mockXtermHost(props),
 }));
 
@@ -61,10 +67,26 @@ describe("TerminalPanel", () => {
     store.set(localeAtom, "en");
   }
 
+  const buildTask = (
+    overrides: Partial<TaskDefinition> & Pick<TaskDefinition, "id" | "label" | "displayCommand">
+  ): TaskDefinition => ({
+    id: overrides.id,
+    workspaceId: "ws-test",
+    kind: "custom",
+    label: overrides.label,
+    command: "pnpm",
+    args: [overrides.id],
+    displayCommand: overrides.displayCommand,
+    cwdPath: ".",
+    source: "package-json",
+    priority: 100,
+    ...overrides,
+  });
+
   it("keeps rendering when the first terminal is created after mount", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -147,7 +169,7 @@ describe("TerminalPanel", () => {
   it("renders the new terminal immediately from terminal.create result before the created event arrives", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -209,7 +231,8 @@ describe("TerminalPanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
     });
-    expect(mockXtermHost.mock.calls.at(-1)?.[0]).toEqual(
+    const lastXtermHostCall = mockXtermHost.mock.calls[mockXtermHost.mock.calls.length - 1];
+    expect(lastXtermHostCall?.[0]).toEqual(
       expect.objectContaining({
         terminalId: "term_2",
         terminalKind: "shell",
@@ -220,9 +243,131 @@ describe("TerminalPanel", () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it("renders shared tab semantics for desktop terminal tabs and supports keyboard switching", async () => {
+  it("opens package commands from the toolbar button next to new terminal", async () => {
+    const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const fullBuildCommand =
+      "vite build --mode production && tsc -p tsconfig.json --noEmit --pretty false";
+    const tasks = [
+      buildTask({
+        id: "dev",
+        label: "dev",
+        displayCommand: "vite --host 0.0.0.0",
+      }),
+      buildTask({
+        id: "build",
+        label: "build",
+        displayCommand: fullBuildCommand,
+      }),
+    ];
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+        ]);
+      }
+
+      if (op === "task.list") {
+        return Promise.resolve(tasks);
+      }
+
+      if (op === "task.history") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand, sendTerminalInput } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
+
+    const toolbarRight = document.querySelector(".terminal-toolbar-right");
+    const toolbarButtons = within(toolbarRight as HTMLElement).getAllByRole("button");
+    const newTerminalIndex = toolbarButtons.findIndex(
+      (button) => button.getAttribute("aria-label") === "New Terminal"
+    );
+    const commandButtonIndex = toolbarButtons.findIndex(
+      (button) => button.getAttribute("aria-label") === "Open Commands"
+    );
+    expect(commandButtonIndex).toBe(newTerminalIndex + 1);
+    const commandButton = toolbarButtons[commandButtonIndex]!;
+
+    await user.click(commandButton);
+
+    const sidePanel = await screen.findByRole("complementary", { name: "Commands" });
+    expect(sidePanel).toHaveClass("terminal-command-side-panel");
+    expect(sidePanel.querySelector(".terminal-command-side-panel__list")).toHaveClass(
+      "terminal-command-side-panel__list--scroll"
+    );
+    expect(within(sidePanel).getByText("vite --host 0.0.0.0")).toBeInTheDocument();
+    const buildCommand = within(sidePanel).getByText(fullBuildCommand);
+    expect(buildCommand).toBeInTheDocument();
+    expect(buildCommand.closest(".terminal-command-side-panel__row")).toHaveAttribute(
+      "title",
+      fullBuildCommand
+    );
+
+    await user.click(within(sidePanel).getByRole("button", { name: "Insert build" }));
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenCalledTimes(1);
+    });
+    const [terminalId, bytes, activity, submittedText] = sendTerminalInput.mock.calls[0]!;
+    expect(terminalId).toBe("term_1");
+    expect(new TextDecoder().decode(bytes)).toBe(fullBuildCommand);
+    expect(activity).toBe("typing");
+    expect(submittedText).toBeUndefined();
+    expect(sendCommand).not.toHaveBeenCalledWith("task.run", expect.anything(), expect.anything());
+    expect(store.get(terminalActiveIdAtomFamily("ws-test"))).toBe("term_1");
+  });
+
+  it("does not render the desktop terminal tab bar and keeps selector switching", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -287,31 +432,30 @@ describe("TerminalPanel", () => {
       </Provider>
     );
 
-    const tablist = await screen.findByRole("tablist", { name: "Terminal Sessions" });
-    const firstTab = screen.getByRole("tab", { name: "Workspace Shell" });
-    const secondTab = screen.getByRole("tab", { name: "Workspace Shell 2" });
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
 
-    expect(tablist).toHaveClass("bottom-terminal-tabs");
-    expect(firstTab).toHaveAttribute("aria-selected", "true");
-    expect(secondTab).toHaveAttribute("aria-selected", "false");
+    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+    expect(document.querySelector(".bottom-terminal-tabs")).not.toBeInTheDocument();
 
-    firstTab.focus();
-    fireEvent.keyDown(firstTab, { key: "ArrowRight" });
+    const selectorTrigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(selectorTrigger).toBeTruthy();
+
+    await user.click(selectorTrigger!);
+    await user.click(screen.getByRole("button", { name: "Workspace Shell 2" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
     });
-
-    expect(screen.getByRole("tab", { name: "Workspace Shell 2" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
   });
 
-  it("closes an inactive terminal tab without switching to it first", async () => {
+  it("does not render desktop terminal tab close controls for inactive terminals", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -376,11 +520,26 @@ describe("TerminalPanel", () => {
       </Provider>
     );
 
-    const inactiveTab = await screen.findByRole("tab", { name: "Workspace Shell 2" });
-    const inactiveShell = inactiveTab.closest(".terminal-tab-shell");
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
 
-    expect(inactiveShell).not.toBeNull();
-    await user.click(within(inactiveShell as HTMLElement).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("tab", { name: "Workspace Shell 2" })).toBeNull();
+    expect(document.querySelector(".terminal-tab-shell")).not.toBeInTheDocument();
+
+    const selectorTrigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(selectorTrigger).toBeTruthy();
+
+    await user.click(selectorTrigger!);
+    const dialog = screen.getByRole("dialog", { name: "Terminal Sessions" });
+    const inactiveItem = within(dialog)
+      .getByText("Workspace Shell 2")
+      .closest(".terminal-selector-item");
+
+    expect(inactiveItem).not.toBeNull();
+    await user.click(within(inactiveItem as HTMLElement).getByRole("button", { name: "Close" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -393,13 +552,12 @@ describe("TerminalPanel", () => {
     });
 
     expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
-    expect(screen.queryByRole("tab", { name: "Workspace Shell 2" })).toBeNull();
-    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Terminal Sessions" })).toBeNull();
   });
 
   it("shows an error toast when terminal creation fails", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -457,7 +615,7 @@ describe("TerminalPanel", () => {
   it("ignores agent terminals and keeps the shell panel empty", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -502,9 +660,102 @@ describe("TerminalPanel", () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
+  it("shows shell and task terminals but excludes agent terminals", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term-shell",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "bash",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+          {
+            id: "term-task",
+            workspaceId: "ws-test",
+            kind: "task",
+            title: "Task: Verify",
+            cwd: "/tmp/ws-test",
+            argv: ["pnpm", "ci:verify"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 2,
+          },
+          {
+            id: "term-agent",
+            workspaceId: "ws-test",
+            kind: "agent",
+            title: "Codex",
+            cwd: "/tmp/ws-test",
+            argv: ["codex"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 3,
+          },
+        ]);
+      }
+
+      return Promise.resolve([]);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    expect((await screen.findAllByText(/bash/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+
+    const selectorTrigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(selectorTrigger).toBeTruthy();
+
+    await user.click(selectorTrigger!);
+
+    const dialog = screen.getByRole("dialog", { name: "Terminal Sessions" });
+    expect(within(dialog).getByRole("button", { name: /Task: Verify/ })).toBeInTheDocument();
+    expect(within(dialog).queryByText("Codex")).not.toBeInTheDocument();
+  });
+
   it("renders the empty-state create action with shared button compatibility classes", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -674,7 +925,7 @@ describe("TerminalPanel", () => {
   it("caches terminal output to atom for shell terminals before xterm-host subscribes", async () => {
     const store = createStore();
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -737,7 +988,7 @@ describe("TerminalPanel", () => {
 
   it("leaves the mobile fullscreen title slot blank when no terminal exists", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -789,7 +1040,7 @@ describe("TerminalPanel", () => {
 
   it("renders the mobile fullscreen terminal toolbar as a single compact chrome row", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -881,7 +1132,7 @@ describe("TerminalPanel", () => {
 
   it("renders a static mobile fullscreen title when only one terminal exists", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -955,7 +1206,7 @@ describe("TerminalPanel", () => {
 
   it("keeps mobile fullscreen terminal actions together in the toolbar when header actions are available", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1068,7 +1319,7 @@ describe("TerminalPanel", () => {
 
   it("keeps only one terminal switcher in mobile fullscreen mode", async () => {
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1146,7 +1397,7 @@ describe("TerminalPanel", () => {
   it("uses MobileSelectSheet for the mobile terminal selector", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1274,7 +1525,7 @@ describe("TerminalPanel", () => {
   it("uses Popover for the desktop terminal selector open/select/close flow", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);
@@ -1387,7 +1638,7 @@ describe("TerminalPanel", () => {
   it("closes an inactive terminal from the desktop selector close action", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const subscribe = vi.fn((topics: string[], handler: EventHandler) => {
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
       return () => {
         handlers = handlers.filter((candidate) => candidate !== handler);

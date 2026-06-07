@@ -34,7 +34,7 @@ describe("pane-layout-tree", () => {
     });
   });
 
-  it("keeps the existing editor leaf when another draft tries to convert", () => {
+  it("converts another draft leaf even when an editor leaf already exists", () => {
     const layout: PaneNode = {
       id: "root",
       type: "split",
@@ -45,10 +45,18 @@ describe("pane-layout-tree", () => {
       ],
     };
 
-    expect(convertDraftPaneToEditor(layout, "right")).toBe(layout);
+    expect(convertDraftPaneToEditor(layout, "right")).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { id: "left", type: "leaf", leafKind: "editor" },
+        { id: "right", type: "leaf", leafKind: "editor" },
+      ],
+    });
   });
 
-  it("collapses extra editor leaves back to drafts when enforcing the invariant", () => {
+  it("preserves multiple editor leaves when normalizing the old invariant", () => {
     const layout: PaneNode = {
       id: "root",
       type: "split",
@@ -59,15 +67,7 @@ describe("pane-layout-tree", () => {
       ],
     };
 
-    expect(enforceSingleEditorPaneInvariant(layout)).toEqual({
-      id: "root",
-      type: "split",
-      direction: "horizontal",
-      children: [
-        { id: "left", type: "leaf", leafKind: "editor" },
-        { id: "right", type: "leaf", leafKind: "draft" },
-      ],
-    });
+    expect(enforceSingleEditorPaneInvariant(layout)).toBe(layout);
     expect(findEditorPaneId(layout)).toBe("left");
   });
 

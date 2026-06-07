@@ -43,6 +43,10 @@ export interface SessionLogger {
   warn(context: Record<string, unknown>, message: string): void;
 }
 
+export interface SessionRuntimeContext {
+  apiUrl?: string;
+}
+
 export interface SessionManagerDeps {
   terminalMgr: TerminalManager;
   eventBus: EventBus;
@@ -50,6 +54,7 @@ export interface SessionManagerDeps {
   broadcaster: Broadcaster;
   providerRegistry: ProviderDefinition[];
   providerConfigRepo: ProviderConfigRepo;
+  runtimeContext?: SessionRuntimeContext;
   logger?: SessionLogger;
 }
 
@@ -290,7 +295,13 @@ export class SessionManager {
       cwd: cmd.cwd,
       env: {
         ...cmd.env,
+        CODER_STUDIO: "1",
+        CODER_STUDIO_WORKSPACE_ID: req.workspaceId,
         CODER_STUDIO_SESSION_ID: sessionId,
+        CODER_STUDIO_PROVIDER_ID: req.providerId,
+        ...(this.deps.runtimeContext?.apiUrl
+          ? { CODER_STUDIO_API_URL: this.deps.runtimeContext.apiUrl }
+          : {}),
       },
       title: req.provider.displayName,
       themeBackground: req.themeBackground,

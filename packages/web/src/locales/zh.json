@@ -145,6 +145,11 @@
     "reconnecting": "重连中",
     "rejected": "被拒绝"
   },
+  "bottom_panel": {
+    "tabs_label": "底部面板",
+    "terminal": "终端",
+    "tasks": "任务"
+  },
   "workspace": {
     "title": "工作区",
     "tabs": "工作区标签",
@@ -175,6 +180,7 @@
       "search": "搜索",
       "skills": "Skills",
       "source_control": "源代码管理",
+      "extensions": "扩展状态",
       "skills": "技能",
       "open_editors": "打开的文件",
       "workspace": "工作区",
@@ -281,8 +287,20 @@
       },
       "source": {
         "skillhub": "skills-hub",
-        "local": "本地"
+        "local": "本地",
+        "builtin": "内置"
       }
+    },
+    "extensions": {
+      "title": "扩展状态",
+      "empty_title": "暂无扩展状态",
+      "empty_body": "状态、进度、日志和快捷操作会显示在这里。",
+      "status_title": "状态",
+      "progress_title": "进度",
+      "logs_title": "日志",
+      "quick_actions_title": "快捷操作",
+      "progress_value": "{value}/{max}",
+      "action_failed": "快捷操作失败"
     },
     "search": {
       "empty": "输入关键词以搜索文件内容。",
@@ -568,6 +586,10 @@
     "title": "终端",
     "kicker": "TERMINAL",
     "new_terminal": "新建终端",
+    "commands": "命令",
+    "open_commands": "打开命令",
+    "close_commands": "关闭命令",
+    "managed_task": "托管",
     "close_terminal": "关闭终端",
     "shell": "Shell 终端",
     "agent": "Agent 终端",
@@ -646,6 +668,37 @@
       "closed_body": "是否重新打开一个新会话继续。",
       "closed_body_with_provider": "是否重新打开一个 {provider} 会话继续。"
     }
+  },
+  "tasks": {
+    "kicker": "托管命令",
+    "title": "任务",
+    "empty_title": "未发现任务",
+    "empty_body": "添加 .coder-studio/tasks.json 或 package scripts 后可在这里运行验证。",
+    "load_failed_title": "任务加载失败",
+    "load_failed_body": "任务发现失败。",
+    "run_failed_title": "任务运行失败",
+    "run_failed_body": "无法启动该任务。",
+    "stop_failed_title": "任务停止失败",
+    "stop_failed_body": "无法停止该任务。",
+    "quick_run_label": "快速任务 {label}",
+    "quick_run_short": "快速 {label}",
+    "run_label": "运行 {label}",
+    "rerun_label": "重新运行 {label}",
+    "stop_label": "停止 {label}",
+    "insert_label": "插入 {label}",
+    "insert_hint": "插入到当前终端",
+    "status_not_run": "未运行",
+    "status_queued": "排队中",
+    "status_running": "运行中",
+    "status_passed": "通过",
+    "status_failed": "失败",
+    "status_stopped": "已停止",
+    "last_verify": "最近验证：{status}",
+    "verification_status": "验证：{status}",
+    "view_output": "查看输出",
+    "view_tasks": "查看任务",
+    "rerun_verify": "重新验证",
+    "no_verify_task": "当前工作区没有可用的 Verify 任务。"
   },
   "file": {
     "title": "文件",
@@ -763,6 +816,15 @@
     "discard": "放弃",
     "discard_all": "放弃全部",
     "discard_failed_title": "放弃失败",
+    "stage_file": "暂存文件",
+    "unstage_file": "取消暂存文件",
+    "discard_file": "放弃文件改动",
+    "refresh_diff": "刷新差异",
+    "stage_hunk": "暂存此段",
+    "unstage_hunk": "取消暂存此段",
+    "discard_hunk": "放弃此段",
+    "hunk_failed_title": "Hunk 操作失败",
+    "hunk_failed_body": "无法应用选中的改动段。",
     "discard_file_confirm_title": "放弃文件更改",
     "discard_file_confirm_message": "确定要放弃 “{path}” 的更改吗？",
     "discard_all_confirm_title": "放弃所有更改",

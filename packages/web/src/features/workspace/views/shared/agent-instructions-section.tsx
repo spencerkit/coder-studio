@@ -71,45 +71,49 @@ export const AgentInstructionsSection: FC<AgentInstructionsSectionProps> = ({ wo
         : t("workspace.agent_instructions.status.ready");
 
   return (
-    <section className="workspace-sidebar-section workspace-agent-instructions">
-      <div className="workspace-sidebar-section__header workspace-agent-instructions__header">
-        <div className="workspace-sidebar-section__header-main workspace-agent-instructions__header-main">
-          <Tooltip content={toggleLabel}>
-            <IconButton
-              aria-label={t("workspace.agent_instructions.toggle_expand")}
-              aria-expanded={isExpanded}
-              className="workspace-sidebar-section__chevron workspace-agent-instructions__toggle"
-              icon={isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              onClick={() => {
-                void setExpanded(!isExpanded);
-              }}
-              size="sm"
-            />
-          </Tooltip>
-          <div className="workspace-agent-instructions__title-row">
-            <h2 className="workspace-sidebar-section__title workspace-agent-instructions__title">
-              {panelTitle}
-            </h2>
-            <Tooltip content={t("workspace.agent_instructions.summary_tooltip")}>
+    <>
+      <section className="workspace-sidebar-section workspace-agent-instructions">
+        <div className="workspace-sidebar-section__header workspace-agent-instructions__header">
+          <div className="workspace-sidebar-section__header-main workspace-agent-instructions__header-main">
+            <Tooltip content={toggleLabel}>
               <IconButton
-                aria-label={t("workspace.agent_instructions.summary_help")}
-                className="workspace-agent-instructions__title-help"
-                icon={<Info size={12} />}
+                aria-label={t("workspace.agent_instructions.toggle_expand")}
+                aria-expanded={isExpanded}
+                className="workspace-sidebar-section__chevron workspace-agent-instructions__toggle"
+                icon={isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                onClick={() => {
+                  void setExpanded(!isExpanded);
+                }}
                 size="sm"
               />
             </Tooltip>
+            <div className="workspace-agent-instructions__title-row">
+              <h2 className="workspace-sidebar-section__title workspace-agent-instructions__title">
+                {panelTitle}
+              </h2>
+              <Tooltip content={t("workspace.agent_instructions.summary_tooltip")}>
+                <IconButton
+                  aria-label={t("workspace.agent_instructions.summary_help")}
+                  className="workspace-agent-instructions__title-help"
+                  icon={<Info size={12} />}
+                  size="sm"
+                />
+              </Tooltip>
+            </div>
           </div>
         </div>
-      </div>
 
-      {isExpanded ? (
-        <div className="workspace-agent-instructions__body">
-          {error ? (
-            <Notice className="workspace-agent-instructions__notice" message={error} tone="error" />
-          ) : null}
+        {isExpanded ? (
+          <div className="workspace-agent-instructions__body">
+            {error ? (
+              <Notice
+                className="workspace-agent-instructions__notice"
+                message={error}
+                tone="error"
+              />
+            ) : null}
 
-          {status ? (
-            <>
+            {status ? (
               <div className="workspace-agent-instructions__group">
                 <div className="workspace-agent-instructions__status" aria-label={projectTitle}>
                   <div className="workspace-agent-instructions__status-main">
@@ -172,111 +176,105 @@ export const AgentInstructionsSection: FC<AgentInstructionsSectionProps> = ({ wo
                   </div>
                 </div>
               </div>
+            ) : null}
 
-              {systemStatus.length > 0 ? (
-                <div className="workspace-agent-instructions__group">
-                  <div className="workspace-agent-instructions__group-header">
-                    <div className="workspace-sidebar-section__header-main workspace-agent-instructions__group-header-main">
-                      <Tooltip content={systemToggleLabel}>
-                        <IconButton
-                          aria-controls={systemPanelId}
-                          aria-expanded={isSystemExpanded}
-                          aria-label={systemToggleLabel}
-                          className="workspace-sidebar-section__chevron workspace-agent-instructions__group-toggle"
-                          icon={
-                            isSystemExpanded ? (
-                              <ChevronDown size={14} />
-                            ) : (
-                              <ChevronRight size={14} />
-                            )
-                          }
-                          onClick={() => {
-                            setSystemExpanded((current) => !current);
-                          }}
-                          size="sm"
-                        />
-                      </Tooltip>
-                      <div className="workspace-agent-instructions__title-row">
-                        <h3 className="workspace-sidebar-section__title workspace-agent-instructions__group-title">
-                          {systemTitle}
-                        </h3>
-                        <Tooltip content={t("workspace.agent_instructions.system_tooltip")}>
-                          <IconButton
-                            aria-label={t("workspace.agent_instructions.system_help")}
-                            className="workspace-agent-instructions__title-help"
-                            icon={<Info size={12} />}
-                            size="sm"
-                          />
-                        </Tooltip>
-                      </div>
+            {!isEmpty && !status ? (
+              <p className="workspace-agent-instructions__state">{t("common.loading")}</p>
+            ) : null}
+
+            <AgentInstructionsGenerateDialog
+              error={null}
+              loading={false}
+              mode={generationDialog?.mode ?? "generate"}
+              model={generationDialog?.model ?? ""}
+              open={generationDialog?.open ?? false}
+              providerId={generationDialog?.providerId ?? ""}
+              providerOptions={generationDialog?.options ?? []}
+              onClose={closeGenerateDialog}
+              onModelChange={setGenerateDialogModel}
+              onProviderChange={setGenerateDialogProviderId}
+              onSubmit={submitGenerateDialog}
+            />
+          </div>
+        ) : null}
+      </section>
+
+      {status && systemStatus.length > 0 ? (
+        <section className="workspace-sidebar-section workspace-agent-instructions">
+          <div className="workspace-sidebar-section__header workspace-agent-instructions__header">
+            <div className="workspace-sidebar-section__header-main workspace-agent-instructions__header-main">
+              <Tooltip content={systemToggleLabel}>
+                <IconButton
+                  aria-controls={systemPanelId}
+                  aria-expanded={isSystemExpanded}
+                  aria-label={systemToggleLabel}
+                  className="workspace-sidebar-section__chevron workspace-agent-instructions__toggle"
+                  icon={isSystemExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  onClick={() => {
+                    setSystemExpanded((current) => !current);
+                  }}
+                  size="sm"
+                />
+              </Tooltip>
+              <div className="workspace-agent-instructions__title-row">
+                <h2 className="workspace-sidebar-section__title workspace-agent-instructions__title">
+                  {systemTitle}
+                </h2>
+                <Tooltip content={t("workspace.agent_instructions.system_tooltip")}>
+                  <IconButton
+                    aria-label={t("workspace.agent_instructions.system_help")}
+                    className="workspace-agent-instructions__title-help"
+                    icon={<Info size={12} />}
+                    size="sm"
+                  />
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+
+          {isSystemExpanded ? (
+            <div className="workspace-agent-instructions__body" id={systemPanelId}>
+              <div className="workspace-agent-instructions__system-list">
+                {systemStatus.map((entry) => (
+                  <div className="workspace-agent-instructions__system-row" key={entry.providerId}>
+                    <div className="workspace-agent-instructions__system-main">
+                      <span className="workspace-agent-instructions__system-name">
+                        {entry.displayName}
+                      </span>
+                      <span className="workspace-agent-instructions__system-path">
+                        {entry.displayPath}
+                      </span>
                     </div>
+                    <span className="workspace-agent-instructions__system-status">
+                      {getSystemStatusLabel(entry, t)}
+                    </span>
+                    {entry.editable ? (
+                      <Button
+                        aria-label={t("workspace.agent_instructions.system_edit", {
+                          name: entry.displayName,
+                        })}
+                        className="workspace-agent-instructions__status-action"
+                        loading={busyAction === "edit"}
+                        onClick={() => {
+                          void editSystem(entry);
+                        }}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        {t("workspace.agent_instructions.edit_short")}
+                      </Button>
+                    ) : (
+                      <span className="workspace-agent-instructions__system-unsupported">
+                        {t("workspace.agent_instructions.system_unsupported")}
+                      </span>
+                    )}
                   </div>
-                  {isSystemExpanded ? (
-                    <div className="workspace-agent-instructions__system-list" id={systemPanelId}>
-                      {systemStatus.map((entry) => (
-                        <div
-                          className="workspace-agent-instructions__system-row"
-                          key={entry.providerId}
-                        >
-                          <div className="workspace-agent-instructions__system-main">
-                            <span className="workspace-agent-instructions__system-name">
-                              {entry.displayName}
-                            </span>
-                            <span className="workspace-agent-instructions__system-path">
-                              {entry.displayPath}
-                            </span>
-                          </div>
-                          <span className="workspace-agent-instructions__system-status">
-                            {getSystemStatusLabel(entry, t)}
-                          </span>
-                          {entry.editable ? (
-                            <Button
-                              aria-label={t("workspace.agent_instructions.system_edit", {
-                                name: entry.displayName,
-                              })}
-                              className="workspace-agent-instructions__status-action"
-                              loading={busyAction === "edit"}
-                              onClick={() => {
-                                void editSystem(entry);
-                              }}
-                              size="sm"
-                              variant="ghost"
-                            >
-                              {t("workspace.agent_instructions.edit_short")}
-                            </Button>
-                          ) : (
-                            <span className="workspace-agent-instructions__system-unsupported">
-                              {t("workspace.agent_instructions.system_unsupported")}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
+                ))}
+              </div>
+            </div>
           ) : null}
-
-          {!isEmpty && !status ? (
-            <p className="workspace-agent-instructions__state">{t("common.loading")}</p>
-          ) : null}
-
-          <AgentInstructionsGenerateDialog
-            error={null}
-            loading={false}
-            mode={generationDialog?.mode ?? "generate"}
-            model={generationDialog?.model ?? ""}
-            open={generationDialog?.open ?? false}
-            providerId={generationDialog?.providerId ?? ""}
-            providerOptions={generationDialog?.options ?? []}
-            onClose={closeGenerateDialog}
-            onModelChange={setGenerateDialogModel}
-            onProviderChange={setGenerateDialogProviderId}
-            onSubmit={submitGenerateDialog}
-          />
-        </div>
+        </section>
       ) : null}
-    </section>
+    </>
   );
 };

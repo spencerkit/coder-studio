@@ -6,6 +6,8 @@
 
 import "./workspace.js";
 import "./workspace-activity.js";
+import "./workspace-extension-state.js";
+import "./automation.js";
 import "./activation.js";
 import "./connection.js";
 import "./recovery.js";
@@ -13,6 +15,7 @@ import "./session.js";
 import "./session-metadata.js";
 import "./session-review.js";
 import "./terminal.js";
+import "./task.js";
 import "./file.js";
 import "./git.js";
 import "./agent-instructions.js";

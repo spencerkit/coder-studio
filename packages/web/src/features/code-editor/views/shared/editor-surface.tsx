@@ -25,8 +25,31 @@ interface EditorSurfaceProps {
   chrome?: CodeEditorChrome;
 }
 
+type TextDiffPreview = Extract<
+  NonNullable<CodeEditorState["activeDiffChange"]>,
+  {
+    kind: "worktree-file-diff" | "commit-file-diff" | "search-replace-file-diff";
+  }
+>;
+
 function getFileName(path: string): string {
   return path.split(/[\\/]/).pop() || path;
+}
+
+function getTextDiffFilePath(preview: TextDiffPreview, fallbackPath?: string): string {
+  if (preview.kind === "worktree-file-diff" || preview.kind === "commit-file-diff") {
+    return preview.modifiedPath ?? preview.path ?? fallbackPath ?? "diff.patch";
+  }
+
+  return preview.path ?? fallbackPath ?? "diff.patch";
+}
+
+function getTextDiffModifiedContent(preview: TextDiffPreview): string {
+  if (preview.kind === "worktree-file-diff" || preview.kind === "commit-file-diff") {
+    return preview.modifiedContent ?? preview.diff ?? "";
+  }
+
+  return preview.modifiedContent ?? "";
 }
 
 export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }) => {
@@ -44,6 +67,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     handleSave,
     hasUnsavedChangesOutsideDiff,
     mode,
+    pendingNavigationAtom,
     saveError,
     workspace,
   } = state;
@@ -243,14 +267,9 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
             />
           ) : canRenderTextDiff ? (
             <MonacoDiffHost
-              filePath={
-                textDiffPreview.modifiedPath ??
-                textDiffPreview.path ??
-                currentFile?.path ??
-                "diff.patch"
-              }
+              filePath={getTextDiffFilePath(textDiffPreview, currentFile?.path)}
               originalContent={textDiffPreview.originalContent ?? ""}
-              modifiedContent={textDiffPreview.modifiedContent ?? textDiffPreview.diff ?? ""}
+              modifiedContent={getTextDiffModifiedContent(textDiffPreview)}
             />
           ) : canRenderImageDiff && imageDiffPath && imageDiffMime ? (
             <ImageDiffPreview
@@ -274,6 +293,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
               workspaceRootPath={isSystemTextFile ? undefined : workspace.path}
               filePath={currentTextFile.displayPath ?? currentTextFile.path}
               content={currentTextFile.content}
+              pendingNavigationAtom={pendingNavigationAtom}
               standalone={isSystemTextFile}
               onContentChange={handleContentChange}
               onSave={handleSave}

@@ -7,7 +7,10 @@ build/
 output/
 .cache/
 .turbo/
+.vite-style-build/
 .vite-style-build-*/
+.vite-ui-preview-build/
+.vite-ui-preview-build-*/
 
 # Test outputs
 coverage/
