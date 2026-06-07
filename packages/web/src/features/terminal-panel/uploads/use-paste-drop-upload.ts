@@ -360,7 +360,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         }
 
         if (files.length > 0) {
-          collectPendingFiles(files);
+          await handleFiles(files);
           return;
         }
       }
@@ -396,7 +396,7 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       });
       throw error;
     }
-  }, [collectPendingFiles, enabled, handleText, pushToast, t]);
+  }, [enabled, handleFiles, handleText, pushToast, t]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -410,18 +410,14 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         return;
       }
 
-      const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
-      const otherFiles = Array.from(files).filter((file) => !file.type.startsWith("image/"));
+      const filesArray = Array.from(files);
 
       event.preventDefault();
       event.stopPropagation();
 
-      if (imageFiles.length > 0) {
-        collectPendingFiles(imageFiles);
-      }
-      if (otherFiles.length > 0) {
-        void handleFiles(otherFiles);
-      }
+      // Pasted files upload immediately and write their paths into the terminal.
+      // This keeps image paste useful without feeding the pending preview strip.
+      void handleFiles(filesArray);
     };
 
     const onDrop = (event: DragEvent) => {
