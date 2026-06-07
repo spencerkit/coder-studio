@@ -1,4 +1,4 @@
-import { codexDefinition } from "@coder-studio/providers";
+import { codexDefinition, providerRegistry } from "@coder-studio/providers";
 import { describe, expect, it, vi } from "vitest";
 import { ProviderInstallManager } from "../../provider-runtime/install-manager.js";
 
@@ -252,5 +252,166 @@ describe("ProviderInstallManager", () => {
     expect(execFile).toHaveBeenCalledWith("npm", ["install", "-g", "@openai/codex"], {
       windowsHide: true,
     });
+  });
+
+  it("executes Gemini's npm install strategy on Linux", async () => {
+    let geminiInstalled = false;
+    const commandExists = vi.fn(async (command: string) => {
+      if (command === "npm") {
+        return true;
+      }
+      if (command === "gemini") {
+        return geminiInstalled;
+      }
+      return false;
+    });
+    const execFile = vi.fn(async (file: string, args: string[]) => {
+      if (file === "npm" && args.join(" ") === "install -g @google/gemini-cli") {
+        geminiInstalled = true;
+        return { stdout: "installed gemini", stderr: "" };
+      }
+
+      throw new Error(`unexpected execFile call: ${file} ${args.join(" ")}`);
+    });
+    const manager = new ProviderInstallManager(providerRegistry, {
+      platform: "linux",
+      commandExists,
+      runCommand: execFile,
+    });
+
+    const job = await manager.start("gemini");
+
+    expect(job.strategyIds).toEqual(["npm-install-gemini"]);
+    expect(job.steps.map((step) => step.id)).toEqual([
+      "install-provider-gemini",
+      "verify-provider-gemini",
+    ]);
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(execFile).toHaveBeenCalledWith("npm", ["install", "-g", "@google/gemini-cli"], {
+      windowsHide: true,
+    });
+  });
+
+  it("executes OpenCode's npm install strategy on Linux", async () => {
+    let opencodeInstalled = false;
+    const commandExists = vi.fn(async (command: string) => {
+      if (command === "npm") {
+        return true;
+      }
+      if (command === "opencode") {
+        return opencodeInstalled;
+      }
+      return false;
+    });
+    const execFile = vi.fn(async (file: string, args: string[]) => {
+      if (file === "npm" && args.join(" ") === "install -g opencode-ai") {
+        opencodeInstalled = true;
+        return { stdout: "installed opencode", stderr: "" };
+      }
+
+      throw new Error(`unexpected execFile call: ${file} ${args.join(" ")}`);
+    });
+    const manager = new ProviderInstallManager(providerRegistry, {
+      platform: "linux",
+      commandExists,
+      runCommand: execFile,
+    });
+
+    const job = await manager.start("opencode");
+
+    expect(job.strategyIds).toEqual(["npm-install-opencode"]);
+    expect(job.steps.map((step) => step.id)).toEqual([
+      "install-provider-opencode",
+      "verify-provider-opencode",
+    ]);
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(execFile).toHaveBeenCalledWith("npm", ["install", "-g", "opencode-ai"], {
+      windowsHide: true,
+    });
+  });
+
+  it("executes Cursor Agent's official install script on Linux", async () => {
+    let agentInstalled = false;
+    const commandExists = vi.fn(async (command: string) => {
+      if (command === "bash") {
+        return true;
+      }
+      if (command === "agent") {
+        return agentInstalled;
+      }
+      return false;
+    });
+    const execFile = vi.fn(async (file: string, args: string[]) => {
+      if (
+        file === "bash" &&
+        args[0] === "-lc" &&
+        args[1] === "curl https://cursor.com/install -fsS | bash"
+      ) {
+        agentInstalled = true;
+        return { stdout: "installed cursor agent", stderr: "" };
+      }
+
+      throw new Error(`unexpected execFile call: ${file} ${args.join(" ")}`);
+    });
+    const manager = new ProviderInstallManager(providerRegistry, {
+      platform: "linux",
+      commandExists,
+      runCommand: execFile,
+    });
+
+    const job = await manager.start("cursor");
+
+    expect(job.strategyIds).toEqual(["cursor-install-script"]);
+    expect(job.steps.map((step) => step.id)).toEqual([
+      "install-provider-agent",
+      "verify-provider-cursor",
+    ]);
+
+    await vi.waitFor(() => {
+      expect(manager.get(job.jobId)?.status).toBe("succeeded");
+    });
+
+    expect(execFile).toHaveBeenCalledWith(
+      "bash",
+      ["-lc", "curl https://cursor.com/install -fsS | bash"],
+      { windowsHide: true }
+    );
+  });
+
+  it("keeps Cursor Agent manual-only on native Windows", async () => {
+    const manager = new ProviderInstallManager(providerRegistry, {
+      platform: "win32",
+      commandExists: vi.fn(async () => false),
+      runCommand: vi.fn(async () => ({ stdout: "", stderr: "" })),
+    });
+
+    const job = await manager.start("cursor");
+
+    expect(job).toMatchObject({
+      providerId: "cursor",
+      status: "failed",
+      strategyIds: [],
+      failure: {
+        code: "unsupported_platform",
+        providerId: "cursor",
+        missingCommands: ["agent"],
+      },
+    });
+    expect(job.steps).toEqual([
+      expect.objectContaining({
+        id: "install-provider-agent",
+        kind: "check",
+        command: "agent",
+        status: "failed",
+      }),
+    ]);
   });
 });

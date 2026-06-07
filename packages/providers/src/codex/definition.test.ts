@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ProviderConfig } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { codexDefinition, codexInstallMetadata } from "./definition.js";
@@ -16,6 +18,18 @@ describe("Codex Provider Definition", () => {
 
     it("should require codex command", () => {
       expect(codexDefinition.requiredCommands).toEqual(["codex"]);
+    });
+
+    it("uses the shared skill directory as the default mount target", () => {
+      expect(codexDefinition.supportsSkillsMount).toBe(true);
+      expect(codexDefinition.skillMountDirectories).toEqual([
+        join(homedir(), ".agents", "skills"),
+        join(homedir(), ".codex", "skills"),
+      ]);
+    });
+
+    it("publishes agent instructions to the official AGENTS.md file", () => {
+      expect(codexDefinition.agentInstructions?.publishTarget?.path).toBe("AGENTS.md");
     });
 
     it("should expose install metadata", () => {
@@ -132,13 +146,14 @@ describe("Codex Provider Definition", () => {
     });
   });
 
-  describe("buildSupervisorEvalCommand", () => {
+  describe("headless", () => {
     it("builds a supervisor eval command with codex exec --json", () => {
-      const result = codexDefinition.buildSupervisorEvalCommand?.(
+      const result = codexDefinition.headless?.buildCommand(
         {
           additionalArgs: [],
           envVars: { OPENAI_API_KEY: "sk-openai" },
         },
+        "supervisor_eval",
         {
           prompt: "Return strict JSON",
           sessionId: "sess-1",
@@ -160,11 +175,12 @@ describe("Codex Provider Definition", () => {
     });
 
     it("places additionalArgs before the prompt positional", () => {
-      const result = codexDefinition.buildSupervisorEvalCommand?.(
+      const result = codexDefinition.headless?.buildCommand(
         {
           additionalArgs: ["-c", 'model_reasoning_effort="low"'],
           envVars: {},
         },
+        "supervisor_eval",
         {
           prompt: "Return strict JSON",
           sessionId: "sess-1",
@@ -181,12 +197,13 @@ describe("Codex Provider Definition", () => {
     });
 
     it("passes the model override through to codex exec", () => {
-      const result = codexDefinition.buildSupervisorEvalCommand?.(
+      const result = codexDefinition.headless?.buildCommand(
         {
           model: "gpt-4.1",
           additionalArgs: [],
           envVars: {},
         },
+        "supervisor_eval",
         {
           prompt: "Return strict JSON",
           sessionId: "sess-1",
@@ -196,6 +213,111 @@ describe("Codex Provider Definition", () => {
       );
 
       expect(result?.argv).toEqual(expect.arrayContaining(["-m", "o3"]));
+    });
+
+    it("supports supervisor and agent-instructions headless scenarios", () => {
+      expect(codexDefinition.headless?.supportedScenarios).toEqual([
+        "supervisor_eval",
+        "agent_instructions_generate",
+        "session_analysis",
+      ]);
+    });
+
+    it("builds a headless codex exec command for agent instructions generation", () => {
+      const result = codexDefinition.headless!.buildCommand(
+        {
+          additionalArgs: ["-c", 'model_reasoning_effort="low"'],
+          envVars: { CODEX_ENV: "1" },
+        },
+        "agent_instructions_generate",
+        {
+          prompt: "Generate agent instructions",
+          sessionId: "sess-1",
+          workspacePath: "/workspace",
+        }
+      );
+
+      expect(result.argv).toEqual([
+        "codex",
+        "exec",
+        "--json",
+        "-s",
+        "read-only",
+        "--skip-git-repo-check",
+        "-c",
+        'model_reasoning_effort="low"',
+        "Generate agent instructions",
+      ]);
+      expect(result.cwd).toBe("/workspace");
+      expect(result.env).toEqual({
+        CODEX_ENV: "1",
+        CODER_STUDIO_SESSION_ID: "sess-1",
+      });
+    });
+
+    it("passes through optional model and api key", () => {
+      const result = codexDefinition.headless!.buildCommand(
+        {
+          additionalArgs: [],
+          envVars: {},
+        },
+        "agent_instructions_generate",
+        {
+          prompt: "Generate agent instructions",
+          sessionId: "sess-1",
+          workspacePath: "/workspace",
+          model: "o3",
+          apiKey: "sk-openai",
+        }
+      );
+
+      expect(result.argv).toEqual([
+        "codex",
+        "exec",
+        "--json",
+        "-s",
+        "read-only",
+        "--skip-git-repo-check",
+        "-m",
+        "o3",
+        "Generate agent instructions",
+      ]);
+      expect(result.env).toEqual({
+        OPENAI_API_KEY: "sk-openai",
+        CODER_STUDIO_SESSION_ID: "sess-1",
+      });
+    });
+
+    it("reuses the same transport assembly as supervisor eval", () => {
+      const config: ProviderConfig = {
+        additionalArgs: ["-c", 'model_reasoning_effort="low"'],
+        envVars: { CODEX_ENV: "1" },
+      };
+      const req = {
+        prompt: "Generate agent instructions",
+        sessionId: "sess-1",
+        workspacePath: "/workspace",
+        model: "o3",
+        apiKey: "sk-openai",
+      };
+
+      expect(
+        codexDefinition.headless!.buildCommand(config, "agent_instructions_generate", req)
+      ).toEqual(codexDefinition.headless?.buildCommand(config, "supervisor_eval", req));
+    });
+
+    it("returns null for unsupported headless scenarios", () => {
+      expect(
+        codexDefinition.headless?.buildCommand(
+          { additionalArgs: [], envVars: {} },
+          "unsupported_headless_scenario" as never,
+          {
+            prompt: "ignored",
+            sessionId: "sess-1",
+            workspacePath: "/workspace",
+          }
+        )
+      ).toBeNull();
     });
   });
 

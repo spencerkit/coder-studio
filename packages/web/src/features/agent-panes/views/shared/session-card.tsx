@@ -114,6 +114,7 @@ export const SessionCard: FC<SessionCardProps> = ({
   }
 
   const sessionTitle = session.title?.trim() || formatSessionLabel(session.id);
+  const sessionTitleTooltip = session.firstSubmittedUserInput?.trim();
   const providerLabel = formatProviderLabel(session.providerId);
   const sessionStateLabel = formatSessionStateLabel(session.state, t);
   const terminalReadOnly = terminalReadOnlyOverride ?? !isSessionInteractive(session.state);
@@ -197,6 +198,7 @@ export const SessionCard: FC<SessionCardProps> = ({
       <PanelHeader
         className={isRunning ? "session-header--running" : undefined}
         title={sessionTitle}
+        titleTooltip={sessionTitleTooltip}
         metaPlacement="inline"
         status={
           <StatusDot

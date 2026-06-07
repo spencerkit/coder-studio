@@ -35,38 +35,82 @@ describe("provider.list command", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.data).toEqual([
-      {
-        id: "claude",
-        displayName: "Claude Code",
-        badge: "Claude",
-        kind: "built_in",
-        capability: "full",
-        capabilities: [
-          { key: "interactive_session", supported: true, label: "Interactive session" },
-          { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
-          { key: "idle_detection", supported: true, label: "Idle detection" },
-          { key: "context_attach", supported: false, label: "Context attach" },
-          { key: "review", supported: false, label: "Review" },
-        ],
-        requiredCommands: ["claude"],
-      },
-      {
-        id: "codex",
-        displayName: "Codex",
-        badge: "Codex",
-        kind: "built_in",
-        capability: "full",
-        capabilities: [
-          { key: "interactive_session", supported: true, label: "Interactive session" },
-          { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
-          { key: "idle_detection", supported: true, label: "Idle detection" },
-          { key: "context_attach", supported: false, label: "Context attach" },
-          { key: "review", supported: false, label: "Review" },
-        ],
-        requiredCommands: ["codex"],
-      },
-    ]);
+    expect(result.data).toEqual(
+      expect.arrayContaining([
+        {
+          id: "claude",
+          displayName: "Claude Code",
+          badge: "Claude",
+          kind: "built_in",
+          stability: undefined,
+          supportsAgentInstructions: true,
+          supportsAgentInstructionsGeneration: true,
+          supportsSkillsMount: true,
+          capability: "full",
+          capabilities: [
+            { key: "interactive_session", supported: true, label: "Interactive session" },
+            { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+            { key: "idle_detection", supported: true, label: "Idle detection" },
+            { key: "context_attach", supported: false, label: "Context attach" },
+            { key: "review", supported: false, label: "Review" },
+          ],
+          requiredCommands: ["claude"],
+        },
+        {
+          id: "codex",
+          displayName: "Codex",
+          badge: "Codex",
+          kind: "built_in",
+          stability: undefined,
+          supportsAgentInstructions: true,
+          supportsAgentInstructionsGeneration: true,
+          supportsSkillsMount: true,
+          capability: "full",
+          capabilities: [
+            { key: "interactive_session", supported: true, label: "Interactive session" },
+            { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+            { key: "idle_detection", supported: true, label: "Idle detection" },
+            { key: "context_attach", supported: false, label: "Context attach" },
+            { key: "review", supported: false, label: "Review" },
+          ],
+          requiredCommands: ["codex"],
+        },
+        expect.objectContaining({
+          id: "gemini",
+          displayName: "Gemini CLI",
+          kind: "built_in",
+          stability: "stable",
+          supportsAgentInstructions: true,
+          supportsAgentInstructionsGeneration: true,
+          supportsSkillsMount: true,
+          capability: "full",
+          requiredCommands: ["gemini"],
+        }),
+        expect.objectContaining({
+          id: "cursor",
+          displayName: "Cursor Agent",
+          kind: "built_in",
+          stability: "stable",
+          supportsAgentInstructions: true,
+          supportsAgentInstructionsGeneration: true,
+          supportsSkillsMount: true,
+          capability: "full",
+          requiredCommands: ["agent"],
+        }),
+        expect.objectContaining({
+          id: "opencode",
+          displayName: "OpenCode",
+          kind: "built_in",
+          stability: "experimental",
+          supportsAgentInstructions: true,
+          supportsAgentInstructionsGeneration: false,
+          supportsSkillsMount: true,
+          capability: "limited",
+          requiredCommands: ["opencode"],
+        }),
+      ])
+    );
+    expect(result.data).toHaveLength(providerRegistry.length);
   });
 
   it("includes custom providers already present in the command context registry", async () => {
@@ -111,6 +155,7 @@ describe("provider.list command", () => {
         expect.objectContaining({
           id: "review-bot",
           kind: "custom",
+          supportsAgentInstructionsGeneration: false,
           requiredCommands: ["review-bot"],
         }),
       ])

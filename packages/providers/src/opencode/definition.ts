@@ -1,15 +1,13 @@
 import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
+import { debounceIdleHeuristics } from "../debounce-idle-heuristics.js";
+import { opencodeSkillMountDirectories } from "../skills/directories.js";
+import { type OpenCodeConfig, opencodeConfigSchema } from "./config-schema.js";
 
-import { sharedFirstSkillMountDirectories } from "../skills/directories.js";
-import { type CodexConfig, codexConfigSchema } from "./config-schema.js";
-import { codexHeadlessDefinition } from "./headless.js";
-import { idleDebounceMs, idlePromptPatterns, sessionIdPatterns } from "./stdout-heuristics.js";
-
-export const codexInstallMetadata = {
+const opencodeInstallMetadata = {
   prerequisites: ["npm"],
-  manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.codex.manual"],
+  manualGuideKeys: ["provider.install.nodejs.manual", "provider.install.opencode.manual"],
   docUrls: {
-    provider: "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
+    provider: "https://github.com/anomalyco/opencode#installation",
     prerequisites: {
       npm: "https://nodejs.org/en/download",
     },
@@ -25,12 +23,12 @@ export const codexInstallMetadata = {
         args: ["install", "--id", "OpenJS.NodeJS.LTS", "--exact", "--silent"],
       },
       {
-        id: "npm-install-codex",
+        id: "npm-install-opencode",
         kind: "provider",
-        targetCommand: "codex",
+        targetCommand: "opencode",
         requiresCommands: ["npm"],
         command: "npm",
-        args: ["install", "-g", "@openai/codex"],
+        args: ["install", "-g", "opencode-ai"],
       },
     ],
     darwin: [
@@ -43,54 +41,51 @@ export const codexInstallMetadata = {
         args: ["install", "node"],
       },
       {
-        id: "npm-install-codex",
+        id: "npm-install-opencode",
         kind: "provider",
-        targetCommand: "codex",
+        targetCommand: "opencode",
         requiresCommands: ["npm"],
         command: "npm",
-        args: ["install", "-g", "@openai/codex"],
+        args: ["install", "-g", "opencode-ai"],
       },
     ],
     linux: [
       {
-        id: "npm-install-codex",
+        id: "npm-install-opencode",
         kind: "provider",
-        targetCommand: "codex",
+        targetCommand: "opencode",
         requiresCommands: ["npm"],
         command: "npm",
-        args: ["install", "-g", "@openai/codex"],
+        args: ["install", "-g", "opencode-ai"],
       },
     ],
   },
 } satisfies ProviderDefinition["install"];
 
-/**
- * Codex provider definition.
- */
-export const codexDefinition: ProviderDefinition = {
-  // ===== Metadata =====
-  id: "codex",
-  displayName: "Codex",
-  badge: "Codex",
+export const opencodeDefinition: ProviderDefinition = {
+  id: "opencode",
+  displayName: "OpenCode",
+  badge: "OpenCode",
   kind: "built_in",
-  capability: "full",
+  stability: "experimental",
+  supportsAgentInstructions: true,
+  supportsSkillsMount: true,
+  skillMountDirectories: opencodeSkillMountDirectories(),
+  capability: "limited",
   capabilities: [
     { key: "interactive_session", supported: true, label: "Interactive session" },
-    { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+    { key: "supervisor_eval", supported: false, label: "Supervisor evaluation" },
     { key: "idle_detection", supported: true, label: "Idle detection" },
     { key: "context_attach", supported: false, label: "Context attach" },
     { key: "review", supported: false, label: "Review" },
   ],
-  install: codexInstallMetadata,
-  supportsSkillsMount: true,
-  skillMountDirectories: sharedFirstSkillMountDirectories(".codex"),
-
-  // ===== Command construction =====
+  install: opencodeInstallMetadata,
   buildCommand(config: ProviderConfig, ctx) {
-    const cfg = codexConfigSchema.parse(config);
+    const cfg = opencodeConfigSchema.parse(config);
+    const modelArg = cfg.model ? ["--model", cfg.model] : [];
 
     return {
-      argv: ["codex", ...cfg.additionalArgs],
+      argv: ["opencode", ...modelArg, ...cfg.additionalArgs],
       env: {
         ...cfg.envVars,
         CODER_STUDIO_SESSION_ID: ctx.sessionId,
@@ -98,25 +93,16 @@ export const codexDefinition: ProviderDefinition = {
       cwd: ctx.workspacePath,
     };
   },
-
-  // ===== Configuration =====
-  configSchema: codexConfigSchema,
+  configSchema: opencodeConfigSchema,
   defaultConfig: {
     additionalArgs: [],
     envVars: {},
-  } satisfies CodexConfig,
-
-  // ===== Runtime requirements =====
-  requiredCommands: ["codex"],
+  } satisfies OpenCodeConfig,
+  requiredCommands: ["opencode"],
   agentInstructions: {
     publishTarget: {
       path: "AGENTS.md",
     },
   },
-  headless: codexHeadlessDefinition,
-  idleHeuristics: {
-    sessionIdPatterns,
-    idlePromptPatterns,
-    idleDebounceMs,
-  },
+  idleHeuristics: debounceIdleHeuristics,
 };

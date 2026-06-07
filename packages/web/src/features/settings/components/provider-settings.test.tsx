@@ -12,6 +12,14 @@ import {
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 
 const editorMountSpy = vi.fn();
+const providerCapabilities = [
+  { key: "interactive_session", supported: true, label: "Interactive Session" },
+  { key: "supervisor_eval", supported: true, label: "Supervisor Eval" },
+] as const;
+const limitedProviderCapabilities = [
+  { key: "interactive_session", supported: true, label: "Interactive Session" },
+  { key: "supervisor_eval", supported: false, label: "Supervisor Eval" },
+] as const;
 
 vi.mock("./config-editor", () => ({
   ConfigEditor: ({
@@ -83,14 +91,60 @@ function renderHarness({
   }),
 } = {}) {
   const providers: ProviderInfo[] = [
-    { id: "claude", displayName: "Claude" },
-    { id: "codex", displayName: "Codex" },
+    {
+      id: "claude",
+      displayName: "Claude",
+      badge: "Claude",
+      kind: "built_in",
+      stability: "stable",
+      capability: "full",
+      capabilities: [...providerCapabilities],
+    },
+    {
+      id: "codex",
+      displayName: "Codex",
+      badge: "Codex",
+      kind: "built_in",
+      stability: "stable",
+      capability: "full",
+      capabilities: [...providerCapabilities],
+    },
+    {
+      id: "gemini",
+      displayName: "Gemini CLI",
+      badge: "Gemini",
+      kind: "built_in",
+      stability: "stable",
+      capability: "full",
+      capabilities: [...providerCapabilities],
+    },
+    {
+      id: "cursor",
+      displayName: "Cursor Agent",
+      badge: "Cursor",
+      kind: "built_in",
+      stability: "stable",
+      capability: "full",
+      capabilities: [...providerCapabilities],
+    },
+    {
+      id: "opencode",
+      displayName: "OpenCode",
+      badge: "OpenCode",
+      kind: "built_in",
+      stability: "experimental",
+      capability: "limited",
+      capabilities: [...limitedProviderCapabilities],
+    },
   ];
 
   function Harness() {
     const [additionalArgsById, setAdditionalArgsById] = useState<Record<string, string>>({
       claude: "--verbose",
       codex: "--sandbox",
+      gemini: "--yolo",
+      cursor: "--fast",
+      opencode: "--local",
     });
 
     return (
@@ -123,7 +177,7 @@ describe("ProviderSettings desktop", () => {
   });
 
   it("defaults to base settings and switches to config files explicitly", async () => {
-    renderHarness();
+    const { container } = renderHarness();
 
     expect(screen.getByRole("tablist", { name: "Agents" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
@@ -136,6 +190,12 @@ describe("ProviderSettings desktop", () => {
     const input = await screen.findByLabelText("启动命令参数");
     expect(input).toHaveValue("--verbose");
     expect(input).toHaveClass("input", "textarea", "settings-provider-args-input");
+    expect(container.querySelector(".settings-provider-base-layout")).not.toBeNull();
+    expect(container.querySelector(".settings-provider-base-main")).toBeNull();
+    expect(container.querySelector(".settings-provider-base-side")).toBeNull();
+    expect(
+      container.querySelectorAll(".settings-provider-base-layout > .settings-group")
+    ).toHaveLength(3);
 
     expect(screen.getByRole("tablist", { name: "配置" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "基础配置" })).toHaveAttribute("aria-selected", "true");
@@ -165,6 +225,36 @@ describe("ProviderSettings desktop", () => {
     expect(screen.getByRole("tab", { name: "配置文件" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("config-editor-codex")).toBeInTheDocument();
     expect(screen.queryByLabelText("启动命令参数")).not.toBeInTheDocument();
+  });
+
+  it("shows Gemini Cursor and OpenCode settings sections", async () => {
+    renderHarness();
+
+    expect(screen.getByRole("tab", { name: "Gemini CLI" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cursor Agent" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "OpenCode" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Gemini CLI" }));
+
+    expect(screen.getByRole("tab", { name: "Gemini CLI" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByRole("heading", { name: "Gemini CLI" })).toBeInTheDocument();
+    expect(screen.getByText("Gemini")).toBeInTheDocument();
+    expect(screen.getAllByText("完整支持").length).toBeGreaterThan(0);
+    expect(screen.getByText("稳定")).toBeInTheDocument();
+    expect(screen.getByText(/Interactive Session, Supervisor Eval/)).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "配置文件" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "OpenCode" }));
+
+    expect(screen.getByRole("tab", { name: "OpenCode" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "OpenCode" })).toBeInTheDocument();
+    expect(screen.getAllByText("有限支持").length).toBeGreaterThan(0);
+    expect(screen.getByText("实验性")).toBeInTheDocument();
+    expect(screen.getByText(/Interactive Session/)).toBeInTheDocument();
+    expect(screen.queryByText(/Supervisor Eval/)).not.toBeInTheDocument();
   });
 
   it("keeps command preview scoped to the provider that requested it", async () => {
