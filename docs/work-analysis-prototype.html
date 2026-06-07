@@ -1,0 +1,1926 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>工作分析 - 单页原型</title>
+      <link rel="icon" href="data:," />
+      <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a1014;
+        --bg-2: #0d151b;
+        --panel: #101920;
+        --panel-2: #131d26;
+        --panel-3: #16212b;
+        --line: #22313d;
+        --line-soft: #1a2630;
+        --text: #e6edf3;
+        --text-2: #a0afbb;
+        --text-3: #728190;
+        --blue: #63b0ff;
+        --teal: #5fd4b8;
+        --green: #77d7ac;
+        --amber: #efb35f;
+        --red: #ff8f9f;
+        --shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+        --radius: 12px;
+        --radius-sm: 8px;
+        --mono: "SFMono-Regular", "Cascadia Mono", "Menlo", monospace;
+        --sans:
+          "Inter", "PingFang SC", "Hiragino Sans GB", "SF Pro Display", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        background:
+          linear-gradient(180deg, #0a1014 0%, #0b1117 100%);
+        color: var(--text);
+        line-height: 1.5;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .app {
+        min-height: 100vh;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(10, 16, 20, 0.88);
+        backdrop-filter: blur(16px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 220px;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, rgba(95, 212, 184, 0.24), rgba(99, 176, 255, 0.22));
+        border: 1px solid rgba(95, 212, 184, 0.28);
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      .brand-copy {
+        display: grid;
+        gap: 2px;
+      }
+
+      .brand-copy strong {
+        font-size: 14px;
+        letter-spacing: 0.02em;
+      }
+
+      .brand-copy span {
+        font-size: 12px;
+        color: var(--text-3);
+      }
+
+      .topbar-search {
+        flex: 1;
+        min-width: 180px;
+        max-width: 520px;
+        height: 40px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text);
+      }
+
+      .topbar-search::placeholder {
+        color: var(--text-3);
+      }
+
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text);
+        cursor: pointer;
+        transition:
+          transform 120ms ease,
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+        border-color: rgba(95, 212, 184, 0.3);
+        background: rgba(95, 212, 184, 0.06);
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, rgba(95, 212, 184, 0.24), rgba(99, 176, 255, 0.2));
+        border-color: rgba(95, 212, 184, 0.32);
+      }
+
+      .page {
+        display: grid;
+        gap: 18px;
+        padding: 22px 24px 28px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)),
+          var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .hero-copy {
+        min-width: 0;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--text-3);
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 24px;
+        height: 1px;
+        background: rgba(95, 212, 184, 0.55);
+      }
+
+      .hero h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+        line-height: 1.12;
+        letter-spacing: 0;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 880px;
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      .hero-meta {
+        display: grid;
+        gap: 10px;
+        align-content: start;
+        justify-items: end;
+        text-align: right;
+      }
+
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-2);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .pill.active {
+        color: var(--text);
+        border-color: rgba(95, 212, 184, 0.28);
+        background: rgba(95, 212, 184, 0.08);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 0 3px rgba(119, 215, 172, 0.12);
+      }
+
+      .filters {
+        display: grid;
+        gap: 14px;
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+      }
+
+      .filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .filter-label {
+        color: var(--text-3);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .workspace-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 0 10px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-2);
+        font-size: 12px;
+      }
+
+      .chip strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .chip.success {
+        border-color: rgba(119, 215, 172, 0.25);
+        background: rgba(119, 215, 172, 0.08);
+      }
+
+      .chip.warning {
+        border-color: rgba(239, 179, 95, 0.25);
+        background: rgba(239, 179, 95, 0.08);
+      }
+
+      .chip.danger {
+        border-color: rgba(255, 143, 159, 0.24);
+        background: rgba(255, 143, 159, 0.08);
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+        gap: 14px;
+      }
+
+      .stat {
+        padding: 16px 16px 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+        min-height: 108px;
+      }
+
+      .stat .label {
+        font-size: 12px;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .stat .value {
+        margin-top: 12px;
+        font-family: var(--mono);
+        font-size: 26px;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .stat .helper {
+        margin-top: 10px;
+        color: var(--text-2);
+        font-size: 12px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 18px;
+        align-items: start;
+      }
+
+      .main-stack {
+        display: grid;
+        gap: 18px;
+        min-width: 0;
+      }
+
+      .side-rail {
+        display: grid;
+        gap: 18px;
+        min-width: 0;
+        position: sticky;
+        top: 82px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .panel .panel-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 18px 18px 0;
+      }
+
+      .panel .panel-head h2 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0;
+      }
+
+      .panel .panel-head p {
+        margin: 6px 0 0;
+        color: var(--text-2);
+        font-size: 13px;
+      }
+
+      .panel .panel-body {
+        padding: 18px;
+      }
+
+      .panel-tight .panel-body {
+        padding-top: 14px;
+      }
+
+      .subtle {
+        color: var(--text-2);
+      }
+
+      .trend-wrap {
+        display: grid;
+        gap: 14px;
+      }
+
+      .trend-svg {
+        width: 100%;
+        height: auto;
+        min-height: 300px;
+        overflow: visible;
+      }
+
+      .trend-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        color: var(--text-2);
+        font-size: 12px;
+      }
+
+      .mini-grid {
+        display: grid;
+        grid-template-columns: repeat(24, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .hour-cell {
+        min-width: 0;
+        min-height: 76px;
+        padding: 8px 8px 7px;
+        border-radius: 10px;
+        border: 1px solid var(--line-soft);
+        background: #0e171d;
+        display: grid;
+        gap: 4px;
+        align-content: start;
+        color: var(--text-2);
+      }
+
+      .hour-cell strong {
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.1;
+      }
+
+      .hour-cell span {
+        font-size: 11px;
+      }
+
+      .ranking-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .ranking-list {
+        display: grid;
+        gap: 11px;
+      }
+
+      .ranking-item {
+        display: grid;
+        gap: 6px;
+      }
+
+      .ranking-top {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: baseline;
+      }
+
+      .ranking-top strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+      }
+
+      .ranking-top .idx {
+        color: var(--text-3);
+        font-size: 12px;
+        font-family: var(--mono);
+      }
+
+      .bar {
+        height: 8px;
+        border-radius: 999px;
+        background: #0d151b;
+        border: 1px solid var(--line-soft);
+        overflow: hidden;
+      }
+
+      .bar > span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(95, 212, 184, 0.8), rgba(99, 176, 255, 0.82));
+      }
+
+      .ranking-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        font-size: 12px;
+        color: var(--text-2);
+      }
+
+      .breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .list-row {
+        display: grid;
+        gap: 6px;
+      }
+
+      .list-row-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .list-row-head strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+      }
+
+      .list-row-head span {
+        font-size: 12px;
+        color: var(--text-2);
+        font-family: var(--mono);
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        color: var(--text-2);
+        font-size: 12px;
+      }
+
+      .sessions-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+      }
+
+      .session-table {
+        display: grid;
+        gap: 6px;
+      }
+
+      .session-head,
+      .session-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) 96px 1fr 110px 96px 84px 108px;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .session-head {
+        padding: 0 10px;
+        color: var(--text-3);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .session-row {
+        padding: 12px 10px;
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: #0d151b;
+        color: var(--text);
+        cursor: pointer;
+        text-align: left;
+        transition:
+          transform 120ms ease,
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+
+      .session-row:hover {
+        transform: translateY(-1px);
+        border-color: rgba(95, 212, 184, 0.26);
+        background: #111b22;
+      }
+
+      .session-row.selected {
+        border-color: rgba(95, 212, 184, 0.4);
+        background: rgba(95, 212, 184, 0.06);
+      }
+
+      .session-main {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .session-title {
+        font-size: 13px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-subtitle {
+        font-size: 12px;
+        color: var(--text-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cell {
+        font-size: 12px;
+        color: var(--text-2);
+        min-width: 0;
+      }
+
+      .cell strong {
+        color: var(--text);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+        padding: 0 9px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-2);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .badge.success {
+        color: #b0ebd4;
+        border-color: rgba(119, 215, 172, 0.24);
+        background: rgba(119, 215, 172, 0.08);
+      }
+
+      .badge.warning {
+        color: #f6cf8d;
+        border-color: rgba(239, 179, 95, 0.24);
+        background: rgba(239, 179, 95, 0.08);
+      }
+
+      .badge.danger {
+        color: #ffbec8;
+        border-color: rgba(255, 143, 159, 0.24);
+        background: rgba(255, 143, 159, 0.08);
+      }
+
+      .detail {
+        display: grid;
+        gap: 14px;
+      }
+
+      .detail-header {
+        display: grid;
+        gap: 10px;
+      }
+
+      .detail-header h3 {
+        margin: 0;
+        font-size: 17px;
+      }
+
+      .detail-header p {
+        margin: 0;
+        color: var(--text-2);
+        font-size: 13px;
+      }
+
+      .detail-stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .detail-card {
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid var(--line-soft);
+        background: #0d151b;
+      }
+
+      .detail-card .k {
+        font-size: 11px;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .detail-card .v {
+        margin-top: 6px;
+        font-size: 14px;
+        color: var(--text);
+        font-family: var(--mono);
+      }
+
+      .detail-section {
+        display: grid;
+        gap: 10px;
+      }
+
+      .detail-section h4 {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-2);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .detail-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .detail-list .line {
+        padding: 10px 11px;
+        border-radius: 10px;
+        border: 1px solid var(--line-soft);
+        background: #0d151b;
+        color: var(--text-2);
+        font-size: 12px;
+      }
+
+      .detail-list .line strong {
+        color: var(--text);
+      }
+
+      .provider-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .provider-row {
+        display: grid;
+        gap: 6px;
+      }
+
+      .provider-top {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .provider-top strong {
+        font-size: 13px;
+      }
+
+      .provider-top span {
+        color: var(--text-2);
+        font-size: 12px;
+      }
+
+      .quality-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .quality-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 11px;
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: #0d151b;
+      }
+
+      .quality-item strong {
+        font-size: 13px;
+      }
+
+      .quality-item span {
+        color: var(--text-2);
+        font-size: 12px;
+        font-family: var(--mono);
+      }
+
+      .cap-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .cap {
+        display: grid;
+        gap: 4px;
+        padding: 10px 11px;
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: #0d151b;
+      }
+
+      .cap .k {
+        font-size: 11px;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .cap .v {
+        font-size: 13px;
+      }
+
+      .cap .v.full {
+        color: #b0ebd4;
+      }
+
+      .cap .v.partial {
+        color: #f6cf8d;
+      }
+
+      .cap .v.none {
+        color: #ffbec8;
+      }
+
+      .note {
+        padding: 14px 16px;
+        border: 1px solid rgba(239, 179, 95, 0.2);
+        border-radius: 10px;
+        background: rgba(239, 179, 95, 0.07);
+        color: #f6cf8d;
+        font-size: 13px;
+      }
+
+      .footer-note {
+        color: var(--text-3);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .muted {
+        color: var(--text-2);
+      }
+
+      .mono {
+        font-family: var(--mono);
+        letter-spacing: 0;
+      }
+
+      .spacer {
+        height: 4px;
+      }
+
+      @media (max-width: 1180px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .side-rail {
+          position: static;
+        }
+      }
+
+      @media (max-width: 940px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-meta {
+          justify-items: start;
+          text-align: left;
+        }
+
+        .topbar {
+          flex-wrap: wrap;
+        }
+
+        .brand {
+          min-width: 0;
+        }
+
+        .topbar-search {
+          order: 3;
+          width: 100%;
+          max-width: none;
+        }
+
+        .ranking-grid,
+        .breakdown-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .session-head,
+        .session-row {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .session-head {
+          display: none;
+        }
+
+        .session-row {
+          gap: 8px;
+        }
+
+        .detail-stats,
+        .cap-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .mini-grid {
+          grid-template-columns: repeat(12, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">WA</div>
+          <div class="brand-copy">
+            <strong>工作分析</strong>
+            <span>单页原型 · 现有能力全量合并</span>
+          </div>
+        </div>
+        <input
+          class="topbar-search"
+          type="text"
+          placeholder="搜索会话、工具、Skill、命令、任务、workspace"
+          aria-label="搜索"
+        />
+        <div class="topbar-actions">
+          <button class="btn" type="button">导出</button>
+          <button class="btn btn-primary" type="button">立即刷新索引</button>
+        </div>
+      </header>
+
+      <main class="page">
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">work analysis / unified view</div>
+            <h1>把会话、事件、工具、任务、证据放在同一页里看</h1>
+            <p>
+              这是一版基于现有功能的完整原型。当前日志可以稳定做到会话级、事件级、工具级、任务级统计；
+              Skill 调用次数可以单独归因到 provider 级别，但 skill 内部 prompt 的 token 切分仍然不可见。
+            </p>
+          </div>
+          <div class="hero-meta">
+            <div class="meta-row">
+              <span class="badge success"><span class="status-dot"></span> 已更新</span>
+              <span class="badge">自动扫描</span>
+              <span class="badge">近 30 天</span>
+            </div>
+            <div class="meta-row">
+              <span class="pill active">Codex 188</span>
+              <span class="pill">Claude 142</span>
+              <span class="pill">OpenCode 48</span>
+              <span class="pill">Cursor 0</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="filters">
+          <div class="filter-row">
+            <span class="filter-label">时间范围</span>
+            <span class="pill active">24h</span>
+            <span class="pill">7d</span>
+            <span class="pill">30d</span>
+            <span class="pill">90d</span>
+            <span class="pill">自定义</span>
+          </div>
+          <div class="filter-row">
+            <span class="filter-label">workspace</span>
+            <div class="workspace-pills">
+              <span class="chip success"><strong>/home/spencer/workspace/coder-studio</strong></span>
+              <span class="chip">/repo/agent-studio</span>
+              <span class="chip">/repo/sdk-integration</span>
+              <span class="chip">/repo/infra-tools</span>
+            </div>
+          </div>
+          <div class="filter-row">
+            <span class="filter-label">数据来源</span>
+            <span class="chip success">Codex 可解析</span>
+            <span class="chip warning">Claude 部分解析</span>
+            <span class="chip success">OpenCode 可解析</span>
+            <span class="chip danger">Cursor 未挂载</span>
+          </div>
+        </section>
+
+        <section class="stats-grid" id="statsGrid"></section>
+
+        <div class="layout">
+          <section class="main-stack">
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Token 趋势</h2>
+                  <p>按照当前筛选范围自动切换展示粒度。这里保留小时 / 6 小时 / 日的自适应表现。</p>
+                </div>
+                <span class="badge">自适应粒度</span>
+              </div>
+              <div class="panel-body trend-wrap">
+                <svg class="trend-svg" viewBox="0 0 1000 300" aria-label="Token 趋势图" role="img">
+                  <defs>
+                    <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="rgba(95, 212, 184, 0.34)" />
+                      <stop offset="100%" stop-color="rgba(95, 212, 184, 0.02)" />
+                    </linearGradient>
+                  </defs>
+                  <g id="trendGrid"></g>
+                  <path id="trendArea" fill="url(#trendFill)" stroke="none"></path>
+                  <path id="trendLine" fill="none" stroke="rgba(95, 212, 184, 0.92)" stroke-width="3"></path>
+                  <g id="trendDots"></g>
+                  <g id="trendLabels"></g>
+                </svg>
+                <div class="trend-meta" id="trendMeta"></div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>24 小时消耗分布</h2>
+                  <p>按本地时区汇总同一小时段的 token 消耗，快速看峰值时段和低谷时段。</p>
+                </div>
+                <span class="badge">hour heatmap</span>
+              </div>
+              <div class="panel-body">
+                <div class="mini-grid" id="heatmapGrid"></div>
+                <div class="spacer"></div>
+                <div class="legend">
+                  <span>低消耗</span>
+                  <span class="mono">▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇</span>
+                  <span>高消耗</span>
+                  <span>颜色越深代表该小时段消耗越高</span>
+                </div>
+              </div>
+            </article>
+
+            <section class="ranking-grid">
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>项目 token 贡献</h2>
+                    <p>按 workspace 归因后的总量排行。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="ranking-list" id="projectRankings"></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>模型 token 贡献</h2>
+                    <p>不同 provider / model 的消耗分布。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="ranking-list" id="modelRankings"></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Agent token 贡献</h2>
+                    <p>按 provider / agent 维度查看主消耗来源。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="ranking-list" id="agentRankings"></div>
+                </div>
+              </article>
+            </section>
+
+            <section class="breakdown-grid">
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>任务类型归因</h2>
+                    <p>coding / debugging / planning 等任务的 token 和会话占比。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="list" id="taskBreakdown"></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>工具调用归因</h2>
+                    <p>按 toolName 汇总，Skill 已单独拆出。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="list" id="toolBreakdown"></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Skill 调用归因</h2>
+                    <p>按 provider 统计 Skill 调用次数，token 仍然不能拆到 skill 内部。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="list" id="skillBreakdown"></div>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>命令归因</h2>
+                    <p>按 commandLabel 聚合，适合看 test / build / git / search。</p>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="list" id="commandBreakdown"></div>
+                </div>
+              </article>
+            </section>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>会话列表</h2>
+                  <p>选中一条会话后，右侧会显示该会话的证据、事件、token 构成和信号。</p>
+                </div>
+                <span class="badge">click row</span>
+              </div>
+              <div class="panel-body sessions-grid">
+                <div class="session-table">
+                  <div class="session-head">
+                    <span>会话</span>
+                    <span>provider</span>
+                    <span>workspace</span>
+                    <span>task</span>
+                    <span>tokens</span>
+                    <span>duration</span>
+                    <span>signals</span>
+                  </div>
+                  <div id="sessionRows"></div>
+                </div>
+              </div>
+            </article>
+
+            <div class="footer-note">
+              当前原型展示的是现有日志分析能力的合并视图。它可以做到会话、事件、工具、任务级统计；
+              Skill 调用次数可以单独归因，内部 token 切分仍然不可见。
+            </div>
+          </section>
+
+          <aside class="side-rail">
+            <article class="panel panel-tight">
+              <div class="panel-head">
+                <div>
+                  <h2>当前选中会话</h2>
+                  <p>点击任意行切换右侧明细。</p>
+                </div>
+              </div>
+              <div class="panel-body detail" id="sessionDetail"></div>
+            </article>
+
+            <article class="panel panel-tight">
+              <div class="panel-head">
+                <div>
+                  <h2>数据来源</h2>
+                  <p>provider 状态和解析覆盖。</p>
+                </div>
+              </div>
+              <div class="panel-body provider-list" id="providerList"></div>
+            </article>
+
+            <article class="panel panel-tight">
+              <div class="panel-head">
+                <div>
+                  <h2>覆盖率 / 质量</h2>
+                  <p>展示当前日志口径的可用性。</p>
+                </div>
+              </div>
+              <div class="panel-body quality-list" id="qualityList"></div>
+            </article>
+
+            <article class="panel panel-tight">
+              <div class="panel-head">
+                <div>
+                  <h2>能力矩阵</h2>
+                  <p>现有分析输出的能力边界。</p>
+                </div>
+              </div>
+              <div class="panel-body cap-grid" id="capGrid"></div>
+            </article>
+
+            <article class="note">
+              这版原型刻意把“能算到哪里”写清楚了。它不是埋点方案，也不是理想状态，
+              而是把当前能从日志里稳定拿到的信息全部放进同一页。
+            </article>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const data = {
+        stats: [
+          {
+            label: "总 token",
+            value: 15692728,
+            helper: "近 30 天，按会话汇总",
+            format: "token",
+          },
+          {
+            label: "输入 / 输出",
+            value: "9.6M / 6.1M",
+            helper: "输出占比 39%",
+            format: "text",
+          },
+          {
+            label: "会话数",
+            value: 390,
+            helper: "其中 318 有完整 usage",
+            format: "int",
+          },
+          {
+            label: "活跃时长",
+            value: 1576800000,
+            helper: "按会话跨度求和",
+            format: "duration",
+          },
+          {
+            label: "Top 项目占比",
+            value: 0.34,
+            helper: "/repo/agent-studio",
+            format: "percent",
+          },
+          {
+            label: "Tool 调用",
+            value: 1321,
+            helper: "Bash / Read / Edit / MCP / Task，不含 Skill",
+            format: "int",
+          },
+          {
+            label: "任务类型",
+            value: 13,
+            helper: "coding, debugging, planning ...",
+            format: "int",
+          },
+          {
+            label: "Skill 调用",
+            value: 61,
+            helper: "按 provider 归因",
+            format: "int",
+          },
+        ],
+        trend: [
+          { label: "05/08", tokens: 920000, input: 580000, output: 340000, sessions: 18 },
+          { label: "05/11", tokens: 1140000, input: 730000, output: 410000, sessions: 22 },
+          { label: "05/14", tokens: 980000, input: 610000, output: 370000, sessions: 19 },
+          { label: "05/17", tokens: 1310000, input: 820000, output: 490000, sessions: 27 },
+          { label: "05/20", tokens: 1490000, input: 920000, output: 570000, sessions: 31 },
+          { label: "05/23", tokens: 1230000, input: 760000, output: 470000, sessions: 24 },
+          { label: "05/26", tokens: 1670000, input: 1030000, output: 640000, sessions: 35 },
+          { label: "05/29", tokens: 1550000, input: 960000, output: 590000, sessions: 33 },
+          { label: "06/01", tokens: 1380000, input: 840000, output: 540000, sessions: 29 },
+          { label: "06/03", tokens: 1760000, input: 1090000, output: 670000, sessions: 36 },
+          { label: "06/05", tokens: 1620000, input: 1010000, output: 610000, sessions: 34 },
+          { label: "06/06", tokens: 1710000, input: 1040000, output: 670000, sessions: 37 },
+        ],
+        heatmap: [
+          0.08, 0.05, 0.04, 0.03, 0.03, 0.04, 0.07, 0.14,
+          0.21, 0.33, 0.42, 0.58, 0.74, 0.81, 0.76, 0.7,
+          0.62, 0.55, 0.48, 0.36, 0.28, 0.2, 0.16, 0.11,
+        ].map((intensity, hour) => ({
+          hour,
+          intensity,
+          tokens: Math.round(43000 + intensity * 146000),
+          sessions: Math.max(2, Math.round(3 + intensity * 21)),
+        })),
+        rankings: {
+          projects: [
+            { label: "/repo/agent-studio", tokens: 5210000, sessions: 102, share: 0.33, subtitle: "Codex dominant" },
+            { label: "/home/spencer/workspace/coder-studio", tokens: 4010000, sessions: 88, share: 0.26, subtitle: "analysis and UI work" },
+            { label: "/repo/sdk-integration", tokens: 2620000, sessions: 61, share: 0.17, subtitle: "Claude partial coverage" },
+            { label: "/repo/infra-tools", tokens: 1830000, sessions: 48, share: 0.12, subtitle: "build and deploy focus" },
+            { label: "/repo/mobile-shell", tokens: 1390000, sessions: 36, share: 0.09, subtitle: "read-heavy sessions" },
+          ],
+          models: [
+            { label: "codex / gpt-4.1", tokens: 5420000, sessions: 112, share: 0.35, subtitle: "high edit density" },
+            { label: "claude / sonnet-4", tokens: 3980000, sessions: 84, share: 0.25, subtitle: "tool rich, partial logs" },
+            { label: "codex / o4-mini", tokens: 2250000, sessions: 57, share: 0.15, subtitle: "short bursts" },
+            { label: "opencode / default", tokens: 1940000, sessions: 48, share: 0.12, subtitle: "shell heavy" },
+            { label: "claude / haiku", tokens: 1180000, sessions: 29, share: 0.08, subtitle: "exploration spikes" },
+          ],
+          agents: [
+            { label: "Codex", tokens: 6420000, sessions: 188, share: 0.41, subtitle: "largest session count" },
+            { label: "Claude", tokens: 5110000, sessions: 142, share: 0.32, subtitle: "warning: partial parse" },
+            { label: "OpenCode", tokens: 1840000, sessions: 48, share: 0.12, subtitle: "mostly command activity" },
+            { label: "Cursor", tokens: 0, sessions: 0, share: 0, subtitle: "missing_root" },
+          ],
+        },
+        breakdowns: {
+          tasks: [
+            { label: "coding", tokens: 4210000, sessions: 134, share: 0.27, metric: "turns 182" },
+            { label: "debugging", tokens: 3010000, sessions: 88, share: 0.19, metric: "retries 46" },
+            { label: "exploration", tokens: 2440000, sessions: 71, share: 0.16, metric: "read heavy" },
+            { label: "planning", tokens: 1740000, sessions: 54, share: 0.11, metric: "plan mode 22" },
+            { label: "refactoring", tokens: 1580000, sessions: 36, share: 0.10, metric: "edit dense" },
+            { label: "delegation", tokens: 1100000, sessions: 20, share: 0.07, metric: "agent spawn 14" },
+            { label: "testing", tokens: 920000, sessions: 23, share: 0.06, metric: "command heavy" },
+          ],
+          tools: [
+            { label: "Bash", tokens: 3920000, sessions: 124, share: 0.25, metric: "useCount 518" },
+            { label: "Read", tokens: 2740000, sessions: 111, share: 0.17, metric: "read only 36" },
+            { label: "Edit", tokens: 2430000, sessions: 97, share: 0.15, metric: "retry aware" },
+            { label: "Search", tokens: 1780000, sessions: 74, share: 0.11, metric: "explore 62" },
+            { label: "Task", tokens: 960000, sessions: 29, share: 0.06, metric: "plan mode 20" },
+            { label: "MCP", tokens: 840000, sessions: 18, share: 0.05, metric: "external tools" },
+            { label: "Other", tokens: 620000, sessions: 13, share: 0.04, metric: "misc" },
+          ],
+          commands: [
+            { label: "pnpm test", tokens: 1340000, sessions: 44, share: 0.22, metric: "test loops" },
+            { label: "pnpm build", tokens: 1020000, sessions: 31, share: 0.17, metric: "build / deploy" },
+            { label: "git status", tokens: 870000, sessions: 29, share: 0.14, metric: "git aware" },
+            { label: "rg", tokens: 820000, sessions: 34, share: 0.13, metric: "search heavy" },
+            { label: "npm install", tokens: 710000, sessions: 21, share: 0.11, metric: "setup work" },
+            { label: "jest", tokens: 620000, sessions: 18, share: 0.10, metric: "testing" },
+            { label: "cargo test", tokens: 380000, sessions: 10, share: 0.06, metric: "targeted checks" },
+            { label: "docker build", tokens: 270000, sessions: 8, share: 0.04, metric: "infra" },
+          ],
+        },
+        providers: [
+          { id: "codex", label: "Codex", status: "supported", sessions: 188, parseErrors: 0, warnings: 0, totalTokens: 6420000, skillCalls: 40 },
+          { id: "claude", label: "Claude", status: "partial", sessions: 142, parseErrors: 3, warnings: 2, totalTokens: 5110000, skillCalls: 16 },
+          { id: "opencode", label: "OpenCode", status: "supported", sessions: 48, parseErrors: 0, warnings: 0, totalTokens: 1840000, skillCalls: 5 },
+          { id: "cursor", label: "Cursor", status: "missing_root", sessions: 0, parseErrors: 0, warnings: 0, totalTokens: 0, skillCalls: 0 },
+        ],
+        coverage: {
+          sessionCount: 390,
+          callCount: 512,
+          callsWithTotalTokens: 389,
+          estimatedCallCount: 123,
+          sessionCoverageRate: 0.89,
+        },
+        quality: [
+          { label: "usage 覆盖", value: "89%", detail: "318 sessions 有完整 usage" },
+          { label: "解析错误", value: "3", detail: "Claude 日志里存在坏行" },
+          { label: "文件时钟", value: "47", detail: "仅能依赖 file mtime 的记录" },
+          { label: "空日志 provider", value: "1", detail: "Cursor missing_root" },
+        ],
+        capabilities: [
+          { key: "workspacePath", label: "workspace", value: "full", detail: "session 级" },
+          { key: "timestamps", label: "time", value: "full", detail: "explicit / file_mtime" },
+          { key: "sessionCounts", label: "session", value: "full", detail: "按 provider 聚合" },
+          { key: "toolCounts", label: "tool", value: "full", detail: "byTool / byCommand；Skill 独立统计" },
+          { key: "modelIdentity", label: "model", value: "full", detail: "provider / model" },
+          { key: "tokenUsage", label: "token", value: "full", detail: "total / input / output" },
+          { key: "cacheUsage", label: "cache", value: "partial", detail: "Claude / Codex 部分" },
+          { key: "reasoningUsage", label: "reasoning", value: "partial", detail: "provider 差异大" },
+          { key: "costEstimation", label: "cost", value: "partial", detail: "估算而非账单" },
+          { key: "skillPromptSplit", label: "skill prompt", value: "none", detail: "无法从日志恢复" },
+        ],
+        sessions: [
+          {
+            id: "codex-2411",
+            provider: "Codex",
+            workspace: "/repo/agent-studio",
+            model: "gpt-4.1",
+            task: "debugging",
+            tokens: 148000,
+            inputTokens: 85600,
+            outputTokens: 58400,
+            cachedTokens: 10400,
+            duration: "28m",
+            turnCount: 6,
+            toolCount: 14,
+            title: "修复 workspace refresh token 重放",
+            signals: ["edit", "command", "git"],
+            badges: ["ship", "retry"],
+            status: "high token",
+            evidence: [
+              { role: "user", text: "定位 refresh token 在重载后丢失的问题。", time: "09:14" },
+              { role: "tool", text: "Read packages/web/src/features/workspace/actions/use-workspace-refresh-actions.tsx", time: "09:16" },
+              { role: "command", text: "pnpm test packages/web/src/features/workspace/actions", time: "09:19" },
+              { role: "tool", text: "Edit packages/web/src/features/workspace/views/shared/file-tree-panel.tsx", time: "09:23" },
+            ],
+          },
+          {
+            id: "claude-7782",
+            provider: "Claude",
+            workspace: "/home/spencer/workspace/coder-studio",
+            model: "sonnet-4",
+            task: "exploration",
+            tokens: 112400,
+            inputTokens: 70200,
+            outputTokens: 42100,
+            cachedTokens: 6100,
+            duration: "22m",
+            turnCount: 5,
+            toolCount: 9,
+            title: "分析 work-analysis 结构边界",
+            signals: ["read", "search"],
+            badges: ["partial", "read-heavy"],
+            status: "partial log",
+            evidence: [
+              { role: "user", text: "只看现有日志，最多能拆到什么层级？", time: "11:02" },
+              { role: "tool", text: "Search packages/server/src/work-analysis", time: "11:04" },
+              { role: "command", text: "rg -n \"byTool|byCommand|tasks\" packages/server/src/work-analysis", time: "11:07" },
+              { role: "assistant", text: "当前只能做到会话 / 工具 / 任务级统计。", time: "11:12" },
+            ],
+          },
+          {
+            id: "opencode-1420",
+            provider: "OpenCode",
+            workspace: "/repo/sdk-integration",
+            model: "default",
+            task: "planning",
+            tokens: 87400,
+            inputTokens: 54100,
+            outputTokens: 24500,
+            cachedTokens: 8800,
+            duration: "18m",
+            turnCount: 4,
+            toolCount: 7,
+            title: "整理 SDK 接口迁移计划",
+            signals: ["plan", "task"],
+            badges: ["planning"],
+            status: "short burst",
+            evidence: [
+              { role: "user", text: "先给我一个迁移路线图。", time: "14:41" },
+              { role: "tool", text: "Task plan: break into API compatibility, logging, rollout", time: "14:43" },
+              { role: "command", text: "npm run lint", time: "14:47" },
+            ],
+          },
+          {
+            id: "codex-2993",
+            provider: "Codex",
+            workspace: "/repo/infra-tools",
+            model: "o4-mini",
+            task: "testing",
+            tokens: 97600,
+            inputTokens: 56200,
+            outputTokens: 28400,
+            cachedTokens: 3000,
+            duration: "14m",
+            turnCount: 3,
+            toolCount: 8,
+            title: "验证发布脚本和构建路径",
+            signals: ["bash", "git"],
+            badges: ["test"],
+            status: "command heavy",
+            evidence: [
+              { role: "user", text: "确认 build / deploy 脚本能跑通。", time: "16:21" },
+              { role: "command", text: "pnpm build", time: "16:23" },
+              { role: "command", text: "git status --short", time: "16:26" },
+            ],
+          },
+          {
+            id: "claude-4912",
+            provider: "Claude",
+            workspace: "/repo/mobile-shell",
+            model: "haiku",
+            task: "refactoring",
+            tokens: 69300,
+            inputTokens: 41200,
+            outputTokens: 19800,
+            cachedTokens: 2800,
+            duration: "11m",
+            turnCount: 4,
+            toolCount: 6,
+            title: "压缩 mobile shell 结构",
+            signals: ["edit"],
+            badges: ["refactor"],
+            status: "edit dense",
+            evidence: [
+              { role: "user", text: "帮我收敛 mobile shell 组件的层级。", time: "18:08" },
+              { role: "tool", text: "Edit packages/web/src/shells/mobile-shell/index.tsx", time: "18:10" },
+              { role: "assistant", text: "已把状态拆到更小的作用域。", time: "18:14" },
+            ],
+          },
+        ],
+      };
+
+      const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+      const pct = new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 0 });
+      const pct1 = new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 1 });
+
+      function formatDuration(ms) {
+        const totalMinutes = Math.max(0, Math.round(ms / 60000));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      }
+
+      function formatStatValue(stat) {
+        if (stat.format === "token") return fmt.format(stat.value);
+        if (stat.format === "duration") return formatDuration(stat.value);
+        if (stat.format === "percent") return pct.format(stat.value);
+        if (stat.format === "int") return fmt.format(stat.value);
+        return stat.value;
+      }
+
+      function toneForStatus(status) {
+        if (status === "supported" || status === "full") return "success";
+        if (status === "partial") return "warning";
+        if (status === "missing_root" || status === "none") return "danger";
+        return "";
+      }
+
+      function renderStats() {
+        const root = document.getElementById("statsGrid");
+        root.innerHTML = data.stats
+          .map(
+            (stat) => `
+              <article class="stat">
+                <div class="label">${stat.label}</div>
+                <div class="value">${formatStatValue(stat)}</div>
+                <div class="helper">${stat.helper}</div>
+              </article>
+            `
+          )
+          .join("");
+      }
+
+      function buildChartPath(points, width, height, padding, useArea) {
+        const maxValue = Math.max(...points.map((point) => point.tokens), 1);
+        const innerWidth = width - padding * 2;
+        const innerHeight = height - padding * 2;
+        const x = (index) =>
+          padding + (points.length <= 1 ? innerWidth / 2 : (index / (points.length - 1)) * innerWidth);
+        const y = (value) => height - padding - (value / maxValue) * innerHeight;
+        const line = points
+          .map((point, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(2)},${y(point.tokens).toFixed(2)}`)
+          .join(" ");
+        if (!useArea) return line;
+        return `${line} L${x(points.length - 1).toFixed(2)},${height - padding} L${padding},${height - padding} Z`;
+      }
+
+      function renderTrendChart() {
+        const width = 1000;
+        const height = 300;
+        const padding = 42;
+        const grid = document.getElementById("trendGrid");
+        const area = document.getElementById("trendArea");
+        const line = document.getElementById("trendLine");
+        const dots = document.getElementById("trendDots");
+        const labels = document.getElementById("trendLabels");
+        const meta = document.getElementById("trendMeta");
+        const points = data.trend;
+        const maxValue = Math.max(...points.map((point) => point.tokens));
+        const ticks = 4;
+
+        grid.innerHTML = "";
+        for (let i = 0; i <= ticks; i += 1) {
+          const y = padding + ((height - padding * 2) / ticks) * i;
+          const value = maxValue - (maxValue / ticks) * i;
+          grid.insertAdjacentHTML(
+            "beforeend",
+            `
+              <line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" stroke="rgba(34,49,61,0.8)" stroke-dasharray="4 6" />
+              <text x="${padding - 10}" y="${y + 4}" text-anchor="end" fill="#728190" font-size="11" font-family="var(--mono)">${fmt.format(Math.round(value))}</text>
+            `
+          );
+        }
+
+        const path = buildChartPath(points, width, height, padding, false);
+        const areaPath = buildChartPath(points, width, height, padding, true);
+        line.setAttribute("d", path);
+        area.setAttribute("d", areaPath);
+
+        const innerWidth = width - padding * 2;
+        const innerHeight = height - padding * 2;
+        const x = (index) =>
+          padding + (points.length <= 1 ? innerWidth / 2 : (index / (points.length - 1)) * innerWidth);
+        const y = (value) => height - padding - (value / maxValue) * innerHeight;
+
+        dots.innerHTML = points
+          .map(
+            (point, index) => `
+              <circle cx="${x(index)}" cy="${y(point.tokens)}" r="4.5" fill="#0a1014" stroke="rgba(95,212,184,0.95)" stroke-width="3">
+                <title>${point.label} · ${fmt.format(point.tokens)} tokens</title>
+              </circle>
+            `
+          )
+          .join("");
+
+        labels.innerHTML = points
+          .map((point, index) => {
+            const shouldShow = index % 2 === 0 || index === points.length - 1;
+            if (!shouldShow) return "";
+            return `
+              <text x="${x(index)}" y="${height - 14}" text-anchor="middle" fill="#728190" font-size="11" font-family="var(--mono)">${point.label}</text>
+            `;
+          })
+          .join("");
+
+        const peak = points.reduce((best, point) => (point.tokens > best.tokens ? point : best), points[0]);
+        const latest = points[points.length - 1];
+        meta.innerHTML = `
+          <span>峰值：${peak.label} · ${fmt.format(peak.tokens)} tokens</span>
+          <span>最新：${latest.label} · ${fmt.format(latest.tokens)} tokens</span>
+          <span>平均：${fmt.format(Math.round(points.reduce((sum, point) => sum + point.tokens, 0) / points.length))} tokens</span>
+          <span>会话峰值：${fmt.format(Math.max(...points.map((point) => point.sessions)))} sessions</span>
+        `;
+      }
+
+      function renderHeatmap() {
+        const root = document.getElementById("heatmapGrid");
+        root.innerHTML = data.heatmap
+          .map((hour) => {
+            const alpha = 0.06 + hour.intensity * 0.5;
+            const label = `${String(hour.hour).padStart(2, "0")}:00-${String(hour.hour).padStart(2, "0")}:59`;
+            return `
+              <div class="hour-cell" title="${label} · ${fmt.format(hour.tokens)} tokens · ${fmt.format(hour.sessions)} sessions" style="background: rgba(8, 16, 20, 0.85); border-color: rgba(95,212,184,${0.08 + hour.intensity * 0.28}); box-shadow: inset 0 0 0 1px rgba(255,255,255,${0.01 + hour.intensity * 0.02}); position: relative;">
+                <span style="position:absolute; inset:0; border-radius:10px; background: rgba(95,212,184,${alpha}); pointer-events:none;"></span>
+                <strong style="position:relative;">${String(hour.hour).padStart(2, "0")}:00</strong>
+                <span style="position:relative;">${fmt.format(hour.tokens)}</span>
+                <span style="position:relative;">${fmt.format(hour.sessions)} sessions</span>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function renderRankings() {
+        const renderList = (rootId, items) => {
+          const root = document.getElementById(rootId);
+          const max = Math.max(...items.map((item) => item.tokens), 1);
+          root.innerHTML = items
+            .map(
+              (item, index) => `
+                <div class="ranking-item">
+                  <div class="ranking-top">
+                    <span class="idx">${String(index + 1).padStart(2, "0")}</span>
+                    <strong title="${item.label}">${item.label}</strong>
+                    <span class="mono">${fmt.format(item.tokens)}</span>
+                  </div>
+                  <div class="bar"><span style="width:${Math.max(2, (item.tokens / max) * 100)}%"></span></div>
+                  <div class="ranking-meta">
+                    <span>${pct1.format(item.share)}</span>
+                    <span>${fmt.format(item.sessions)} sessions</span>
+                    <span>${item.subtitle}</span>
+                  </div>
+                </div>
+              `
+            )
+            .join("");
+        };
+
+        renderList("projectRankings", data.rankings.projects);
+        renderList("modelRankings", data.rankings.models);
+        renderList("agentRankings", data.rankings.agents);
+      }
+
+      function renderBreakdowns() {
+        const renderList = (rootId, items) => {
+          const root = document.getElementById(rootId);
+          const max = Math.max(...items.map((item) => item.tokens), 1);
+          root.innerHTML = items
+            .map(
+              (item) => `
+                <div class="list-row">
+                  <div class="list-row-head">
+                    <strong title="${item.label}">${item.label}</strong>
+                    <span class="mono">${fmt.format(item.tokens)}</span>
+                  </div>
+                  <div class="bar"><span style="width:${Math.max(2, (item.tokens / max) * 100)}%"></span></div>
+                  <div class="ranking-meta">
+                    <span>${pct1.format(item.share)}</span>
+                    <span>${fmt.format(item.sessions)} sessions</span>
+                    <span>${item.metric}</span>
+                  </div>
+                </div>
+              `
+            )
+            .join("");
+        };
+
+        renderList("taskBreakdown", data.breakdowns.tasks);
+        renderList("toolBreakdown", data.breakdowns.tools);
+        renderSkillBreakdown();
+        renderList("commandBreakdown", data.breakdowns.commands);
+      }
+
+      function renderSkillBreakdown() {
+        const root = document.getElementById("skillBreakdown");
+        const items = data.providers
+          .map((provider) => ({
+            label: provider.label,
+            calls: provider.skillCalls,
+            sessions: provider.sessions,
+            status: provider.status,
+          }))
+          .sort((left, right) => right.calls - left.calls || left.label.localeCompare(right.label));
+        const totalCalls = Math.max(items.reduce((sum, item) => sum + item.calls, 0), 1);
+        const max = Math.max(...items.map((item) => item.calls), 1);
+        root.innerHTML = items
+          .map(
+            (item) => `
+              <div class="list-row">
+                <div class="list-row-head">
+                  <strong title="${item.label}">${item.label}</strong>
+                  <span class="mono">${fmt.format(item.calls)} calls</span>
+                </div>
+                <div class="bar"><span style="width:${Math.max(2, (item.calls / max) * 100)}%"></span></div>
+                <div class="ranking-meta">
+                  <span>${pct1.format(item.calls / totalCalls)}</span>
+                  <span>${fmt.format(item.sessions)} sessions</span>
+                  <span>${item.status === "missing_root" ? "no logs" : "toolName=Skill"}</span>
+                </div>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function renderSessionRows() {
+        const root = document.getElementById("sessionRows");
+        root.innerHTML = data.sessions
+          .map(
+            (session) => `
+              <button class="session-row" type="button" data-session-id="${session.id}">
+                <div class="session-main">
+                  <div class="session-title">${session.title}</div>
+                  <div class="session-subtitle">${session.id}</div>
+                </div>
+                <div class="cell"><strong>${session.provider}</strong></div>
+                <div class="cell">${session.workspace}</div>
+                <div class="cell"><strong>${session.task}</strong></div>
+                <div class="cell mono">${fmt.format(session.tokens)}</div>
+                <div class="cell">${session.duration}</div>
+                <div class="cell">${session.signals.map((signal) => `<span class="badge" style="margin: 0 6px 6px 0;">${signal}</span>`).join("")}</div>
+              </button>
+            `
+          )
+          .join("");
+      }
+
+      function renderProviderList() {
+        const root = document.getElementById("providerList");
+        root.innerHTML = data.providers
+          .map((provider) => {
+            const tone = toneForStatus(provider.status);
+            const label =
+              provider.status === "supported"
+                ? "可解析"
+                : provider.status === "partial"
+                  ? "部分解析"
+                  : provider.status === "missing_root"
+                    ? "未安装"
+                    : "未知";
+            return `
+              <div class="provider-row">
+                <div class="provider-top">
+                  <strong>${provider.label}</strong>
+                  <span class="badge ${tone}">${label}</span>
+                </div>
+                <div class="ranking-meta">
+                  <span>${fmt.format(provider.sessions)} sessions</span>
+                  <span>${fmt.format(provider.parseErrors)} parse errors</span>
+                  <span>${fmt.format(provider.warnings)} warnings</span>
+                  <span>${fmt.format(provider.skillCalls)} skill calls</span>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+      }
+
+      function renderQuality() {
+        const root = document.getElementById("qualityList");
+        root.innerHTML = data.quality
+          .map(
+            (item) => `
+              <div class="quality-item">
+                <div>
+                  <strong>${item.label}</strong>
+                  <div class="subtle" style="font-size:12px; margin-top:4px;">${item.detail}</div>
+                </div>
+                <span>${item.value}</span>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function renderCapabilities() {
+        const root = document.getElementById("capGrid");
+        root.innerHTML = data.capabilities
+          .map(
+            (cap) => `
+              <div class="cap">
+                <div class="k">${cap.label}</div>
+                <div class="v ${toneForStatus(cap.value)}">${cap.value}</div>
+                <div class="subtle" style="font-size:12px;">${cap.detail}</div>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function renderSessionDetail(session) {
+        const root = document.getElementById("sessionDetail");
+        const signalBadges = session.signals
+          .map((signal) => `<span class="badge">${signal}</span>`)
+          .join("");
+        const evidenceHtml = session.evidence
+          .map(
+            (entry) => `
+              <div class="line">
+                <strong>${entry.role}</strong> · ${entry.time}
+                <div style="margin-top:5px;">${entry.text}</div>
+              </div>
+            `
+          )
+          .join("");
+        root.innerHTML = `
+          <div class="detail-header">
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <span class="badge success">${session.provider}</span>
+              <span class="badge">${session.model}</span>
+              <span class="badge">${session.task}</span>
+              <span class="badge ${session.status.includes("partial") ? "warning" : ""}">${session.status}</span>
+            </div>
+            <h3>${session.title}</h3>
+            <p>${session.workspace}</p>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">${session.badges.map((badge) => `<span class="pill active">${badge}</span>`).join("")}</div>
+          </div>
+          <div class="detail-stats">
+            <div class="detail-card">
+              <div class="k">tokens</div>
+              <div class="v">${fmt.format(session.tokens)}</div>
+            </div>
+            <div class="detail-card">
+              <div class="k">duration</div>
+              <div class="v">${session.duration}</div>
+            </div>
+            <div class="detail-card">
+              <div class="k">turns</div>
+              <div class="v">${fmt.format(session.turnCount)}</div>
+            </div>
+            <div class="detail-card">
+              <div class="k">tools</div>
+              <div class="v">${fmt.format(session.toolCount)}</div>
+            </div>
+          </div>
+          <div class="detail-section">
+            <h4>Usage split</h4>
+            <div class="detail-list">
+              <div class="line"><strong>Input</strong> ${fmt.format(session.inputTokens)} · <strong>Output</strong> ${fmt.format(session.outputTokens)} · <strong>Cached</strong> ${fmt.format(session.cachedTokens)}</div>
+            </div>
+          </div>
+          <div class="detail-section">
+            <h4>Signals</h4>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">${signalBadges}</div>
+          </div>
+          <div class="detail-section">
+            <h4>Evidence</h4>
+            <div class="detail-list">${evidenceHtml}</div>
+          </div>
+          <div class="detail-section">
+            <h4>Analysis boundary</h4>
+            <div class="note" style="margin:0;">
+              这里可以继续往下看事件、工具、Skill 和任务；Skill 调用可以单独归因到 provider，但内部 prompt 的精确 token 账本仍然拿不到。
+            </div>
+          </div>
+        `;
+      }
+
+      function selectSession(id) {
+        const session = data.sessions.find((item) => item.id === id) || data.sessions[0];
+        renderSessionDetail(session);
+        document.querySelectorAll(".session-row").forEach((row) => {
+          row.classList.toggle("selected", row.dataset.sessionId === session.id);
+        });
+      }
+
+      function wireSessions() {
+        document.getElementById("sessionRows").addEventListener("click", (event) => {
+          const row = event.target.closest(".session-row");
+          if (!row) return;
+          selectSession(row.dataset.sessionId);
+        });
+      }
+
+      renderStats();
+      renderTrendChart();
+      renderHeatmap();
+      renderRankings();
+      renderBreakdowns();
+      renderSessionRows();
+      renderProviderList();
+      renderQuality();
+      renderCapabilities();
+      wireSessions();
+      selectSession(data.sessions[0].id);
+    </script>
+  </body>
+</html>
