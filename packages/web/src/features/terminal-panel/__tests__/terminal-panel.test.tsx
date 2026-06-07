@@ -227,7 +227,8 @@ describe("TerminalPanel", () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 
-  it("renders shared tab semantics for desktop terminal tabs and supports keyboard switching", async () => {
+  it("does not render the desktop terminal tab bar and keeps selector switching", async () => {
+    const user = userEvent.setup();
     const store = createStore();
     const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
@@ -294,28 +295,27 @@ describe("TerminalPanel", () => {
       </Provider>
     );
 
-    const tablist = await screen.findByRole("tablist", { name: "Terminal Sessions" });
-    const firstTab = screen.getByRole("tab", { name: "Workspace Shell" });
-    const secondTab = screen.getByRole("tab", { name: "Workspace Shell 2" });
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
 
-    expect(tablist).toHaveClass("bottom-terminal-tabs");
-    expect(firstTab).toHaveAttribute("aria-selected", "true");
-    expect(secondTab).toHaveAttribute("aria-selected", "false");
+    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+    expect(document.querySelector(".bottom-terminal-tabs")).not.toBeInTheDocument();
 
-    firstTab.focus();
-    fireEvent.keyDown(firstTab, { key: "ArrowRight" });
+    const selectorTrigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(selectorTrigger).toBeTruthy();
+
+    await user.click(selectorTrigger!);
+    await user.click(screen.getByRole("button", { name: "Workspace Shell 2" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_2");
     });
-
-    expect(screen.getByRole("tab", { name: "Workspace Shell 2" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
   });
 
-  it("closes an inactive terminal tab without switching to it first", async () => {
+  it("does not render desktop terminal tab close controls for inactive terminals", async () => {
     const user = userEvent.setup();
     const store = createStore();
     const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
@@ -383,11 +383,26 @@ describe("TerminalPanel", () => {
       </Provider>
     );
 
-    const inactiveTab = await screen.findByRole("tab", { name: "Workspace Shell 2" });
-    const inactiveShell = inactiveTab.closest(".terminal-tab-shell");
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
 
-    expect(inactiveShell).not.toBeNull();
-    await user.click(within(inactiveShell as HTMLElement).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("tab", { name: "Workspace Shell 2" })).toBeNull();
+    expect(document.querySelector(".terminal-tab-shell")).not.toBeInTheDocument();
+
+    const selectorTrigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(selectorTrigger).toBeTruthy();
+
+    await user.click(selectorTrigger!);
+    const dialog = screen.getByRole("dialog", { name: "Terminal Sessions" });
+    const inactiveItem = within(dialog)
+      .getByText("Workspace Shell 2")
+      .closest(".terminal-selector-item");
+
+    expect(inactiveItem).not.toBeNull();
+    await user.click(within(inactiveItem as HTMLElement).getByRole("button", { name: "Close" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -400,8 +415,7 @@ describe("TerminalPanel", () => {
     });
 
     expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
-    expect(screen.queryByRole("tab", { name: "Workspace Shell 2" })).toBeNull();
-    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Terminal Sessions" })).toBeNull();
   });
 
   it("shows an error toast when terminal creation fails", async () => {
@@ -510,6 +524,7 @@ describe("TerminalPanel", () => {
   });
 
   it("shows shell and task terminals but excludes agent terminals", async () => {
+    const user = userEvent.setup();
     const store = createStore();
     const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
       handlers.push(handler);
@@ -587,8 +602,18 @@ describe("TerminalPanel", () => {
     );
 
     expect((await screen.findAllByText(/bash/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText("Task: Verify")).toBeInTheDocument();
-    expect(screen.queryByText("Codex")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Terminal Sessions" })).toBeNull();
+
+    const selectorTrigger = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".terminal-selector-btn")
+    )[0];
+    expect(selectorTrigger).toBeTruthy();
+
+    await user.click(selectorTrigger!);
+
+    const dialog = screen.getByRole("dialog", { name: "Terminal Sessions" });
+    expect(within(dialog).getByRole("button", { name: /Task: Verify/ })).toBeInTheDocument();
+    expect(within(dialog).queryByText("Codex")).not.toBeInTheDocument();
   });
 
   it("renders the empty-state create action with shared button compatibility classes", async () => {

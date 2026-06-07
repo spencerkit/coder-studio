@@ -7,8 +7,6 @@ import {
   IconButton,
   Popover,
   Select,
-  TabList,
-  Tabs,
   ThemedIcon,
   Tooltip,
 } from "../../../../components/ui";
@@ -18,7 +16,6 @@ import { useTerminalActions } from "../../actions/use-terminal-actions";
 import { terminalMetaAtomFamily } from "../../atoms";
 import { formatTerminalTitle } from "../../components/title-format";
 import { TerminalSelectorItem } from "./terminal-selector-item";
-import { TerminalTab } from "./terminal-tab";
 import { XtermHost } from "./xterm-host";
 
 interface TerminalPanelProps {
@@ -32,7 +29,7 @@ interface TerminalPanelProps {
  * PRD §11.2:
  *   - Bottom panel layout with resizer
  *   - Toolbar: kicker, title, selector, close, add buttons
- *   - Multi-terminal support with tabs
+ *   - Multi-terminal support with selector
  *   - xterm.js rendering area
  *   - Empty state when no terminals
  */
@@ -63,7 +60,6 @@ export function TerminalPanel({
   const selectedTerminalId = activeTerminalId ?? terminalIds[0] ?? "";
   const isMobileFullscreen = chrome === "mobile-fullscreen";
   const showSelector = hasTerminals && (!isMobileFullscreen || terminalIds.length > 1);
-  const showTabs = terminalIds.length > 1 && !isMobileFullscreen;
   const terminalSelectorOptions = terminalIds.map((id, index) => {
     const terminalMeta = store.get(terminalMetaAtomFamily(id));
 
@@ -327,27 +323,6 @@ export function TerminalPanel({
           />
         ) : (
           <>
-            {showTabs ? (
-              <Tabs
-                aria-label={t("terminal.selector.title")}
-                className="bottom-terminal-tabs-nav"
-                onValueChange={handleSwitchTerminal}
-                value={selectedTerminalId}
-              >
-                <TabList className="bottom-terminal-tabs">
-                  {terminalIds.map((id, index) => (
-                    <TerminalTab
-                      key={id}
-                      id={id}
-                      index={index}
-                      isActive={id === selectedTerminalId}
-                      onSelect={() => handleSwitchTerminal(id)}
-                      onClose={() => handleCloseTerminal(id)}
-                    />
-                  ))}
-                </TabList>
-              </Tabs>
-            ) : null}
             {activeTerminalMeta && activeWorkspaceId && (
               <div className="bottom-terminal-xterm">
                 <XtermHost
