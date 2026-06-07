@@ -10,6 +10,7 @@ import { NotFoundPage } from "../../features/not-found";
 import { ToastContainer } from "../../features/notifications";
 import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
+import { WorkAnalyticsPage } from "../../features/work-analysis";
 import { WorkspaceMobileView } from "../../features/workspace/views/mobile/workspace-mobile-view";
 import { BranchQuickPick } from "../../features/workspace/views/shared/branch-quick-pick";
 import { WorkspaceRouteGate } from "../../features/workspace/views/shared/workspace-route-gate";
@@ -34,6 +35,7 @@ export function MobileShell() {
   const authUnknown = authEnabled === null;
   const shouldBypassAuthLoading =
     location.pathname.startsWith("/settings") ||
+    location.pathname.startsWith("/analytics") ||
     location.pathname.startsWith("/diagnostics") ||
     location.pathname === "/session-gate";
 
@@ -63,6 +65,7 @@ export function MobileShell() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/session-gate" element={<SessionGatePage />} />
             <Route path="/diagnostics" element={<DiagnosticsPage />} />
+            <Route path="/analytics" element={<WorkAnalyticsPage />} />
             <Route
               path="/workspace"
               element={

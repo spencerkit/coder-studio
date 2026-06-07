@@ -25,7 +25,7 @@ import {
   gitStateAtomFamily,
 } from "../atoms";
 
-export type GitChangeType = "staged" | "modified" | "untracked" | "deleted";
+export type GitChangeType = "staged" | "conflicted" | "modified" | "untracked" | "deleted";
 
 export interface GitPanelChangeItem {
   change: GitFileChange;
@@ -388,6 +388,7 @@ export function getFirstChange(
 ): { change: GitFileChange; type: GitChangeType } | null {
   const groups: Array<{ title: string; type: GitChangeType; changes: GitFileChange[] }> = [
     { title: "staged", type: "staged", changes: status.staged },
+    { title: "conflicted", type: "conflicted", changes: status.conflicted ?? [] },
     { title: "modified", type: "modified", changes: status.modified },
     { title: "deleted", type: "deleted", changes: status.deleted },
     { title: "untracked", type: "untracked", changes: status.untracked },
@@ -408,6 +409,7 @@ export function getChangeByPath(
 ): { change: GitFileChange; type: GitChangeType } | null {
   const groups: Array<{ type: GitChangeType; changes: GitFileChange[] }> = [
     { type: "staged", changes: status.staged },
+    { type: "conflicted", changes: status.conflicted ?? [] },
     { type: "modified", changes: status.modified },
     { type: "deleted", changes: status.deleted },
     { type: "untracked", changes: status.untracked },
@@ -879,6 +881,7 @@ export function useGitPanelActions({
   const hasChanges = Boolean(
     gitState &&
       (gitState.staged.length > 0 ||
+        (gitState.conflicted?.length ?? 0) > 0 ||
         gitState.modified.length > 0 ||
         gitState.untracked.length > 0 ||
         gitState.deleted.length > 0)
@@ -890,6 +893,13 @@ export function useGitPanelActions({
         {
           title: "staged",
           changes: (gitState?.staged ?? []).map((change) => ({ change, type: "staged" as const })),
+        },
+        {
+          title: "mergeChanges",
+          changes: (gitState?.conflicted ?? []).map((change) => ({
+            change,
+            type: "conflicted" as const,
+          })),
         },
         {
           title: "changes",

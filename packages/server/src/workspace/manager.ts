@@ -28,6 +28,7 @@ export interface WorkspaceManagerDeps {
   eventBus: EventBus;
   broadcaster?: Broadcaster;
   autoFetch?: AutoFetchRuntime;
+  onDirty?: (workspaceId: string, reason: string) => void;
   teardown?: (workspaceId: string) => void | Promise<void>;
   onClose?: (workspaceId: string) => void | Promise<void>;
   logger?: WatcherLogger;
@@ -73,7 +74,13 @@ export class WorkspaceManager {
 
     this.watchers.set(
       workspaceId,
-      new WorkspaceWatcher(workspaceId, rootPath, this.deps.broadcaster, this.logger)
+      new WorkspaceWatcher(
+        workspaceId,
+        rootPath,
+        this.deps.broadcaster,
+        this.logger,
+        this.deps.onDirty
+      )
     );
   }
 

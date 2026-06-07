@@ -20,7 +20,8 @@ export interface TerminalSpec {
    * COLORFGBG so child TUIs (Claude Code, Codex, …) can pick a matching
    * light/dark color scheme. This is the only signal that survives the
    * Windows ConPTY layer, which otherwise intercepts OSC 11 background
-   * queries and forces TUIs into their dark fallback.
+   * queries. On Windows the server also injects OSC 11 responses directly
+   * for TUIs such as Gemini CLI that rely on that escape sequence.
    */
   themeBackground?: string;
 }

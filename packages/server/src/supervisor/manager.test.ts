@@ -38,23 +38,50 @@ type MockSupervisorManagerDeps = {
 function createProvider(): ProviderDefinition {
   return {
     id: "claude",
+    displayName: "Claude",
+    badge: "Claude",
+    kind: "built_in",
     capability: "full",
-    buildSupervisorEvalCommand: vi.fn(() => ({
-      argv: [
-        "node",
-        "-e",
-        `process.stdout.write(${JSON.stringify(
-          JSON.stringify({
-            mode: "evaluate",
-            status: "continue",
-            reason: "Need more work",
-            guidance: "continue with the work",
-          })
-        )})`,
-      ],
+    capabilities: [
+      { key: "interactive_session", supported: true, label: "Interactive session" },
+      { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
+    ],
+    install: {
+      prerequisites: [],
+      manualGuideKeys: [],
+      docUrls: {
+        provider: "https://example.test/provider",
+        prerequisites: {},
+      },
+      strategies: {},
+    },
+    buildCommand: () => ({
+      argv: ["node", "-e", 'process.stdout.write("noop")'],
       cwd: process.cwd(),
       env: {},
-    })),
+    }),
+    configSchema: { parse: (value: unknown) => value } as ProviderDefinition["configSchema"],
+    defaultConfig: {},
+    requiredCommands: [],
+    headless: {
+      supportedScenarios: ["supervisor_eval"],
+      buildCommand: vi.fn(() => ({
+        argv: [
+          "node",
+          "-e",
+          `process.stdout.write(${JSON.stringify(
+            JSON.stringify({
+              mode: "evaluate",
+              status: "continue",
+              reason: "Need more work",
+              guidance: "continue with the work",
+            })
+          )})`,
+        ],
+        cwd: process.cwd(),
+        env: {},
+      })),
+    },
   } as unknown as ProviderDefinition;
 }
 

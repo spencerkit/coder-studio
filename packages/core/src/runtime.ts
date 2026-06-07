@@ -72,7 +72,16 @@ export function writeRuntimeConfig(config: RuntimeConfig): void {
 
 export function deleteRuntimeConfig(): void {
   const runtimePath = getRuntimePath();
-  if (existsSync(runtimePath)) {
+  if (!existsSync(runtimePath)) {
+    return;
+  }
+
+  try {
     unlinkSync(runtimePath);
+  } catch (error) {
+    const candidate = error as { code?: string };
+    if (candidate.code !== "ENOENT") {
+      throw error;
+    }
   }
 }

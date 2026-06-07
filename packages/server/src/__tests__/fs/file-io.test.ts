@@ -2,7 +2,7 @@
  * Tests for file-io operations.
  */
 
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join, win32 } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -80,6 +80,19 @@ describe("readFile", () => {
 
   it("should throw for non-existent file", async () => {
     await expect(readWorkspaceFile("ws-1", testDir, "nonexistent.txt")).rejects.toThrow();
+  });
+
+  it("rejects symlinked files that resolve outside the workspace root", async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), "fileio-outside-"));
+    const outsideFile = join(outsideDir, "secret.txt");
+    await writeFile(outsideFile, "secret");
+    await symlink(outsideFile, join(testDir, "escape.txt"));
+
+    await expect(readWorkspaceFile("ws-1", testDir, "escape.txt")).rejects.toMatchObject({
+      code: "path_escape",
+    });
+
+    await rm(outsideDir, { recursive: true, force: true });
   });
 
   it("should return an image descriptor with a signed-in asset URL for png files", async () => {
@@ -168,6 +181,19 @@ describe("writeFile", () => {
 
     // Try to write with outdated baseHash
     await expect(writeWorkspaceFile(testDir, "test.txt", "Updated", "wronghash")).rejects.toThrow();
+  });
+
+  it("rejects writing through symlinked files outside the workspace root", async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), "fileio-outside-"));
+    const outsideFile = join(outsideDir, "secret.txt");
+    await writeFile(outsideFile, "secret");
+    await symlink(outsideFile, join(testDir, "escape.txt"));
+
+    await expect(writeWorkspaceFile(testDir, "escape.txt", "updated")).rejects.toMatchObject({
+      code: "path_escape",
+    });
+
+    await rm(outsideDir, { recursive: true, force: true });
   });
 });
 
@@ -282,5 +308,18 @@ describe("deleteEntry", () => {
     await expect(deleteEntry(testDir, "../outside.txt")).rejects.toMatchObject({
       code: "path_escape",
     });
+  });
+
+  it("rejects deleting symlinked files outside the workspace root", async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), "fileio-outside-"));
+    const outsideFile = join(outsideDir, "secret.txt");
+    await writeFile(outsideFile, "secret");
+    await symlink(outsideFile, join(testDir, "escape.txt"));
+
+    await expect(deleteEntry(testDir, "escape.txt")).rejects.toMatchObject({
+      code: "path_escape",
+    });
+
+    await rm(outsideDir, { recursive: true, force: true });
   });
 });

@@ -38,8 +38,8 @@ describe("provider presets", () => {
     expect(first[0]).not.toBe(second[0]);
 
     const activeProviderIds = new Set(providerRegistry.map((provider) => provider.id));
-    for (const preset of first) {
-      expect(activeProviderIds.has(preset.id)).toBe(false);
-    }
+    expect(activeProviderIds.has("gemini-cli")).toBe(false);
+    expect(activeProviderIds.has("aider")).toBe(false);
+    expect(activeProviderIds.has("opencode")).toBe(true);
   });
 });

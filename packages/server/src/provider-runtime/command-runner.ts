@@ -5,6 +5,7 @@ export type CommandRunnerOptions = {
   windowsHide?: boolean;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
 };
 
 export interface CommandRunnerResult {
@@ -28,11 +29,32 @@ export async function runCommandAsString(
       cwd: options?.cwd,
       env: options?.env,
       shell: shouldUseShellForCommand(file, process.platform),
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: options?.windowsHide ?? true,
     });
 
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    let settled = false;
+    const timeoutId =
+      typeof options?.timeoutMs === "number" && options.timeoutMs > 0
+        ? setTimeout(() => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            child.kill?.("SIGKILL");
+            reject(
+              Object.assign(new Error(`Command timed out after ${options.timeoutMs}ms`), {
+                code: "command_timeout",
+                timeoutMs: options.timeoutMs,
+                stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+                stderr: Buffer.concat(stderrChunks).toString("utf8"),
+              })
+            );
+          }, options.timeoutMs)
+        : null;
+    timeoutId?.unref?.();
 
     child.stdout?.on("data", (chunk: string | Buffer) => {
       stdoutChunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
@@ -43,6 +65,13 @@ export async function runCommandAsString(
     });
 
     child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       reject(
         Object.assign(error, {
           stdout: Buffer.concat(stdoutChunks).toString("utf8"),
@@ -52,6 +81,13 @@ export async function runCommandAsString(
     });
 
     child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       const stdout = Buffer.concat(stdoutChunks).toString("utf8");
       const stderr = Buffer.concat(stderrChunks).toString("utf8");
 

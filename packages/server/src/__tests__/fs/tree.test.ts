@@ -2,7 +2,7 @@
  * Tests for file tree builder (lazy loading version).
  */
 
-import { mkdir, mkdir as mkdirAsync, rmdir, writeFile } from "fs/promises";
+import { mkdir, mkdir as mkdirAsync, rmdir, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -161,5 +161,54 @@ describe("readTree", () => {
       kind: "dir",
       isGitIgnored: false,
     });
+  });
+
+  it("shows symlinked files and directories using the target kind", async () => {
+    await mkdirAsync(join(testDir, "real-dir"));
+    await writeFile(join(testDir, "real-file.txt"), "content");
+    await symlink(join(testDir, "real-dir"), join(testDir, "linked-dir"), "dir");
+    await symlink(join(testDir, "real-file.txt"), join(testDir, "linked-file.txt"));
+
+    const result = await readTree(testDir);
+
+    expect(result.children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "linked-dir",
+          path: "linked-dir",
+          kind: "dir",
+          isSymlink: true,
+        }),
+        expect.objectContaining({
+          name: "linked-file.txt",
+          path: "linked-file.txt",
+          kind: "file",
+          isSymlink: true,
+        }),
+      ])
+    );
+  });
+
+  it("lists external symlink directories but rejects expanding them", async () => {
+    const outsideDir = join(tmpdir(), `tree-test-outside-${Date.now()}`);
+    await mkdirAsync(outsideDir);
+    await symlink(outsideDir, join(testDir, "external-dir"), "dir");
+
+    const rootResult = await readTree(testDir);
+    expect(rootResult.children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "external-dir",
+          kind: "dir",
+          isSymlink: true,
+        }),
+      ])
+    );
+
+    await expect(readTree(testDir, "external-dir")).rejects.toMatchObject({
+      code: "path_escape",
+    });
+
+    await rmdir(outsideDir);
   });
 });

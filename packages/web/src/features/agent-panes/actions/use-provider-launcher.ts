@@ -1,15 +1,18 @@
 import type {
   ProviderInstallFailure,
   ProviderInstallJobSnapshot,
+  ProviderListItem,
   ProviderRuntimeStatusEntry,
   ProviderRuntimeStatusResponse,
   Session,
 } from "@coder-studio/core";
-import { useEffect, useRef, useState } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DispatchCommand } from "../../../atoms/connection";
+import { providerListAtom, providerRuntimeStatusAtom } from "../../../atoms/providers";
 import { useTerminalThemeBackground } from "../../../theme";
 
-export type ProviderId = "claude" | "codex";
+export type ProviderId = string;
 
 export interface ProviderCardState {
   runtime?: ProviderRuntimeStatusEntry;
@@ -19,6 +22,7 @@ export interface ProviderCardState {
 }
 
 interface UseProviderLauncherResult {
+  providers: ProviderListItem[];
   states: Record<ProviderId, ProviderCardState>;
   launch: (providerId: ProviderId) => Promise<void>;
 }
@@ -27,9 +31,37 @@ function canAutoInstall(runtime: ProviderRuntimeStatusEntry): boolean {
   return runtime.autoInstallSupported && runtime.installReadiness === "ready";
 }
 
-function createFallbackRuntimeEntry(providerId: ProviderId): ProviderRuntimeStatusEntry {
+function createFallbackProvider(providerId: string): ProviderListItem {
+  const title = providerId
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+
   return {
-    providerId,
+    id: providerId,
+    displayName: title,
+    badge: title,
+    kind: "built_in",
+    capability: "unsupported",
+    capabilities: [],
+    requiredCommands: [],
+  };
+}
+
+function createFallbackRuntimeEntry(provider: ProviderListItem): ProviderRuntimeStatusEntry {
+  return {
+    providerId: provider.id,
+    displayName: provider.displayName,
+    badge: provider.badge,
+    kind: provider.kind,
+    stability: provider.stability,
+    supportsAgentInstructions: provider.supportsAgentInstructions,
+    supportsAgentInstructionsGeneration: provider.supportsAgentInstructionsGeneration,
+    supportsSkillsMount: provider.supportsSkillsMount,
+    capability: provider.capability,
+    capabilities: provider.capabilities.map((capability) => ({ ...capability })),
+    requiredCommands: [...provider.requiredCommands],
     available: true,
     missingCommands: [],
     missingPrerequisites: [],
@@ -43,19 +75,35 @@ function createFallbackRuntimeEntry(providerId: ProviderId): ProviderRuntimeStat
   };
 }
 
+function normalizeProviders(
+  providers?: ProviderListItem[],
+  providerRuntimeStatus?: ProviderRuntimeStatusResponse["providers"]
+): ProviderListItem[] {
+  const orderedProviders = Array.isArray(providers) ? [...providers] : [];
+  const providerIds = new Set(orderedProviders.map((provider) => provider.id));
+
+  for (const providerId of Object.keys(providerRuntimeStatus ?? {})) {
+    if (!providerIds.has(providerId)) {
+      orderedProviders.push(createFallbackProvider(providerId));
+    }
+  }
+
+  return orderedProviders;
+}
+
 function buildStateMap(
+  providerList: ProviderListItem[],
   providers?: ProviderRuntimeStatusResponse["providers"]
 ): Record<ProviderId, ProviderCardState> {
-  return {
-    claude: {
-      runtime: providers?.claude ?? createFallbackRuntimeEntry("claude"),
-      loading: false,
-    },
-    codex: {
-      runtime: providers?.codex ?? createFallbackRuntimeEntry("codex"),
-      loading: false,
-    },
-  };
+  return Object.fromEntries(
+    providerList.map((provider) => [
+      provider.id,
+      {
+        runtime: providers?.[provider.id] ?? createFallbackRuntimeEntry(provider),
+        loading: false,
+      },
+    ])
+  );
 }
 
 export function useProviderLauncher(
@@ -64,39 +112,77 @@ export function useProviderLauncher(
   onSessionCreated: (session: Session, providerId: ProviderId) => void,
   _continuation?: { paneId?: string; launchMode?: "assign" | "replace" }
 ): UseProviderLauncherResult {
-  const [states, setStates] = useState<Record<ProviderId, ProviderCardState>>(buildStateMap());
+  const cachedProviders = useAtomValue(providerListAtom);
+  const providerRuntimeStatus = useAtomValue(providerRuntimeStatusAtom);
+  const setProviderRuntimeStatus = useSetAtom(providerRuntimeStatusAtom);
+  const [states, setStates] = useState<Record<ProviderId, ProviderCardState>>(() =>
+    buildStateMap(cachedProviders)
+  );
+  const providers = useMemo(
+    () => normalizeProviders(cachedProviders, providerRuntimeStatus),
+    [cachedProviders, providerRuntimeStatus]
+  );
+  const cachedProvidersRef = useRef<ProviderListItem[]>(cachedProviders);
+  const providersRef = useRef<ProviderListItem[]>(providers);
   const pollingTimers = useRef<Partial<Record<ProviderId, number>>>({});
   const themeBackground = useTerminalThemeBackground();
+
+  useEffect(() => {
+    cachedProvidersRef.current = cachedProviders;
+    providersRef.current = providers;
+    setStates((prev) =>
+      Object.fromEntries(
+        providers.map((provider) => [
+          provider.id,
+          {
+            runtime:
+              providerRuntimeStatus?.[provider.id] ??
+              prev[provider.id]?.runtime ??
+              createFallbackRuntimeEntry(provider),
+            installJob: prev[provider.id]?.installJob,
+            loading: prev[provider.id]?.loading ?? false,
+            inlineError: prev[provider.id]?.inlineError,
+          },
+        ])
+      )
+    );
+  }, [cachedProviders, providerRuntimeStatus, providers]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadStatus = async () => {
-      const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
+      const runtimeResult = await dispatch<ProviderRuntimeStatusResponse>(
+        "provider.runtimeStatus",
+        {}
+      );
+
       if (cancelled) {
         return;
       }
 
-      if (!result.ok || !result.data) {
-        setStates((prev) => ({
-          claude: { ...prev.claude, ...buildStateMap().claude },
-          codex: { ...prev.codex, ...buildStateMap().codex },
-        }));
-        return;
-      }
+      const nextProviderList = cachedProvidersRef.current;
+      const nextProviderRuntimeStatus = runtimeResult.ok
+        ? runtimeResult.data?.providers
+        : undefined;
+      const nextProviders = normalizeProviders(nextProviderList, nextProviderRuntimeStatus);
+      const nextStates = buildStateMap(nextProviders, nextProviderRuntimeStatus);
 
-      const nextStates = buildStateMap(result.data.providers);
-
-      setStates((prev) => ({
-        claude: {
-          ...prev.claude,
-          ...nextStates.claude,
-        },
-        codex: {
-          ...prev.codex,
-          ...nextStates.codex,
-        },
-      }));
+      setProviderRuntimeStatus(nextProviderRuntimeStatus);
+      providersRef.current = nextProviders;
+      setStates((prev) =>
+        Object.fromEntries(
+          nextProviders.map((provider) => [
+            provider.id,
+            {
+              ...nextStates[provider.id],
+              installJob: prev[provider.id]?.installJob,
+              loading: prev[provider.id]?.loading ?? false,
+              inlineError: prev[provider.id]?.inlineError,
+            },
+          ])
+        )
+      );
     };
 
     void loadStatus();
@@ -109,7 +195,7 @@ export function useProviderLauncher(
         }
       }
     };
-  }, [dispatch]);
+  }, [dispatch, setProviderRuntimeStatus]);
 
   const refreshStatus = async (): Promise<void> => {
     const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
@@ -117,20 +203,28 @@ export function useProviderLauncher(
       return;
     }
 
-    const nextStates = buildStateMap(result.data.providers);
+    const nextProviderList = normalizeProviders(providersRef.current, result.data.providers);
+    const nextStates = buildStateMap(nextProviderList, result.data.providers);
 
-    setStates((prev) => ({
-      claude: {
-        ...prev.claude,
-        runtime: nextStates.claude.runtime,
-        loading: false,
-      },
-      codex: {
-        ...prev.codex,
-        runtime: nextStates.codex.runtime,
-        loading: false,
-      },
-    }));
+    providersRef.current = nextProviderList;
+    setProviderRuntimeStatus(result.data.providers);
+
+    setStates((prev) =>
+      Object.fromEntries(
+        nextProviderList.map((provider) => {
+          const nextState = nextStates[provider.id];
+
+          return [
+            provider.id,
+            {
+              ...prev[provider.id],
+              runtime: nextState?.runtime ?? createFallbackRuntimeEntry(provider),
+              loading: false,
+            },
+          ];
+        })
+      )
+    );
   };
 
   const updateFailureState = (
@@ -144,12 +238,12 @@ export function useProviderLauncher(
         ...prev[providerId],
         loading: false,
         inlineError,
-        installJob: prev[providerId].installJob
+        installJob: prev[providerId]?.installJob
           ? {
-              ...prev[providerId].installJob!,
+              ...prev[providerId].installJob,
               failure,
             }
-          : prev[providerId].installJob,
+          : prev[providerId]?.installJob,
       },
     }));
   };
@@ -174,7 +268,8 @@ export function useProviderLauncher(
   };
 
   const launch = async (providerId: ProviderId): Promise<void> => {
-    const runtime = states[providerId].runtime;
+    const state = states[providerId];
+    const runtime = state?.runtime;
     if (!runtime) {
       return;
     }
@@ -337,5 +432,5 @@ export function useProviderLauncher(
     pollingTimers.current[providerId] = window.setTimeout(poll, 1500);
   };
 
-  return { states, launch };
+  return { providers, states, launch };
 }

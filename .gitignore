@@ -7,6 +7,7 @@ build/
 output/
 .cache/
 .turbo/
+.vite-style-build-*/
 
 # Test outputs
 coverage/
@@ -38,6 +39,12 @@ temp/
 # Worktrees
 .worktrees/
 .claude/
+
+# Local agent instruction overrides
+/AGENTS.md
+/AGENTS.override.md
+/CLAUDE.local.md
+/GEMINI.md
 
 # Acceptance runtime artifacts
 docs/验收报告/**/*.json
@@ -72,4 +79,3 @@ tsconfig.tsbuildinfo
 # Rust build artefacts (from lsp-test/ fixture or any ad-hoc cargo)
 target/
 Cargo.lock
-

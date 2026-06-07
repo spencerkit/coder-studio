@@ -11,6 +11,8 @@ const DEFAULT_WATCHER_IGNORED_PATTERNS: RegExp[] = [
   /\.DS_Store/,
   /Thumbs\.db/,
   /(^|\/)\.playwright-mcp(\/|$)/,
+  /(^|\/)(AGENTS\.md|AGENTS\.override\.md|CLAUDE\.local\.md|GEMINI\.md)$/,
+  /(^|\/)\.claude\/CLAUDE\.md$/,
   // Git internals that are transient or churn-heavy. We KEEP HEAD, refs/,
   // worktrees/, packed-refs, index, and config so branch/worktree state can
   // still be observed; this list only removes paths that either (a) cause

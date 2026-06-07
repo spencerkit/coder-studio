@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settings Desktop Wide Layout Preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f6f8;
+        --bg-elevated: #ffffff;
+        --bg-soft: #eef2f5;
+        --bg-sidebar: #ecf0f3;
+        --line: #d7dde3;
+        --line-strong: #c4ccd4;
+        --text: #13202b;
+        --text-secondary: #536273;
+        --text-tertiary: #748396;
+        --accent: #1d6fd8;
+        --accent-soft: rgba(29, 111, 216, 0.1);
+        --success: #1d8f62;
+        --warning: #a06a00;
+        --danger: #b5474f;
+        --shadow: 0 10px 30px rgba(16, 24, 40, 0.06);
+        --radius-lg: 16px;
+        --radius-md: 12px;
+        --radius-sm: 10px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          "SF Pro Display",
+          "Segoe UI",
+          "PingFang SC",
+          "Hiragino Sans GB",
+          sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(29, 111, 216, 0.08), transparent 28%),
+          linear-gradient(180deg, #f8fafb 0%, #f2f5f7 100%);
+        color: var(--text);
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: 72px 1fr 44px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 28px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.82);
+        backdrop-filter: blur(18px);
+      }
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .back {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.8);
+        color: var(--text-secondary);
+        font-size: 14px;
+      }
+
+      .title-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .kicker {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.15;
+      }
+
+      .header-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--text-secondary);
+        font-size: 14px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+
+      .body {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 264px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        padding: 22px 16px;
+        border-right: 1px solid var(--line);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+          var(--bg-sidebar);
+      }
+
+      .sidebar-group {
+        margin-bottom: 22px;
+      }
+
+      .sidebar-label {
+        margin: 0 10px 10px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+        font-weight: 700;
+      }
+
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 42px;
+        padding: 0 12px;
+        border-radius: 12px;
+        color: var(--text-secondary);
+      }
+
+      .nav-item.active {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .nav-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.58);
+        border: 1px solid rgba(19, 32, 43, 0.06);
+        font-size: 13px;
+      }
+
+      .content {
+        min-width: 0;
+        overflow: auto;
+        padding: 28px;
+      }
+
+      .workspace {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .hero {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .hero-copy {
+        max-width: 760px;
+      }
+
+      .hero h2 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        line-height: 1.1;
+      }
+
+      .hero p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .button {
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.75);
+        color: var(--text);
+        font-size: 14px;
+      }
+
+      .button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .summary-card,
+      .panel {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(19, 32, 43, 0.08);
+        border-radius: var(--radius-lg);
+      }
+
+      .summary-card {
+        padding: 18px 18px 16px;
+      }
+
+      .summary-label {
+        margin-bottom: 12px;
+        color: var(--text-tertiary);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-weight: 700;
+      }
+
+      .summary-value {
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .summary-note {
+        color: var(--text-secondary);
+        font-size: 14px;
+      }
+
+      .main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .panel-title {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+
+      .panel-desc {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .panel-badge {
+        padding: 8px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .setting-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .setting-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr);
+        gap: 16px;
+        align-items: center;
+        padding: 16px 0;
+        border-top: 1px solid rgba(19, 32, 43, 0.08);
+      }
+
+      .setting-row:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+
+      .setting-title {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .setting-copy {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .control-box {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .toggle {
+        width: 52px;
+        height: 30px;
+        border-radius: 999px;
+        background: rgba(29, 111, 216, 0.22);
+        position: relative;
+      }
+
+      .toggle::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 25px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .select {
+        min-width: 180px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--text-secondary);
+        font-size: 14px;
+        text-align: left;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .note-card {
+        padding: 16px;
+        border-radius: var(--radius-md);
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+      }
+
+      .note-title {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .note-card p,
+      .note-card li {
+        color: var(--text-secondary);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .subgrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .mini {
+        padding: 16px;
+        border-radius: var(--radius-md);
+        background: var(--bg-elevated);
+        border: 1px solid var(--line);
+      }
+
+      .mini .label {
+        color: var(--text-tertiary);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+      }
+
+      .mini .value {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 28px;
+        color: var(--text-tertiary);
+        border-top: 1px solid var(--line);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1200px) {
+        .summary-grid,
+        .subgrid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .main-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="header-left">
+          <div class="back">← Back</div>
+          <div class="title-wrap">
+            <div class="kicker">Desktop Settings Redesign</div>
+            <h1>Settings</h1>
+          </div>
+        </div>
+        <div class="header-meta">
+          <div class="pill"><span class="dot"></span> Autosave enabled</div>
+          <div>v0.2.6</div>
+        </div>
+      </header>
+
+      <div class="body">
+        <aside class="sidebar">
+          <div class="sidebar-group">
+            <p class="sidebar-label">Runtime</p>
+            <div class="nav">
+              <div class="nav-item"><span class="nav-icon">G</span>General</div>
+              <div class="nav-item active"><span class="nav-icon">M</span>Monitoring</div>
+              <div class="nav-item"><span class="nav-icon">P</span>Providers</div>
+            </div>
+          </div>
+          <div class="sidebar-group">
+            <p class="sidebar-label">Interface</p>
+            <div class="nav">
+              <div class="nav-item"><span class="nav-icon">A</span>Appearance</div>
+              <div class="nav-item"><span class="nav-icon">S</span>Shortcuts</div>
+              <div class="nav-item"><span class="nav-icon">I</span>About</div>
+            </div>
+          </div>
+        </aside>
+
+        <main class="content">
+          <div class="workspace">
+            <section class="hero">
+              <div class="hero-copy">
+                <h2>Monitoring now uses the full workspace width</h2>
+                <p>
+                  The global rounded card is removed. The page shell stays flat, while summary
+                  blocks, controls, and helper content become local panels. This gives complex
+                  settings room to breathe on large desktop screens.
+                </p>
+              </div>
+              <div class="hero-actions">
+                <div class="button">Open diagnostics</div>
+                <div class="button primary">Apply profile</div>
+              </div>
+            </section>
+
+            <section class="summary-grid">
+              <div class="summary-card">
+                <div class="summary-label">Runtime Mode</div>
+                <div class="summary-value">Standard</div>
+                <div class="summary-note">Host and managed process sampling are enabled.</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">Refresh Interval</div>
+                <div class="summary-value">5s</div>
+                <div class="summary-note">Lower cadence keeps overhead controlled.</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">Host Pressure</div>
+                <div class="summary-value">Moderate</div>
+                <div class="summary-note">CPU 41%, memory 68%, no throttling detected.</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">Managed Processes</div>
+                <div class="summary-value">18</div>
+                <div class="summary-note">Across 3 workspaces and 6 active agent sessions.</div>
+              </div>
+            </section>
+
+            <section class="main-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <div>
+                    <h3 class="panel-title">Performance Monitoring</h3>
+                    <p class="panel-desc">
+                      Wide-mode sections can show explanation, status, and controls at the same
+                      time instead of compressing everything into a narrow single column.
+                    </p>
+                  </div>
+                  <div class="panel-badge">Wide Section</div>
+                </div>
+
+                <div class="setting-list">
+                  <div class="setting-row">
+                    <div>
+                      <p class="setting-title">Enable monitoring</p>
+                      <p class="setting-copy">
+                        Master switch for runtime sampling and status summaries. Disabling this
+                        stops server-side collection and hides monitoring details in the app.
+                      </p>
+                    </div>
+                    <div class="control-box">
+                      <div class="toggle"></div>
+                    </div>
+                  </div>
+
+                  <div class="setting-row">
+                    <div>
+                      <p class="setting-title">Sampling level</p>
+                      <p class="setting-copy">
+                        Choose how deep the system should inspect managed processes. Higher levels
+                        improve drill-down but cost more CPU budget.
+                      </p>
+                    </div>
+                    <div class="control-box">
+                      <div class="select">Standard</div>
+                    </div>
+                  </div>
+
+                  <div class="setting-row">
+                    <div>
+                      <p class="setting-title">Refresh frequency</p>
+                      <p class="setting-copy">
+                        Set how often the monitoring page and related summaries are refreshed from
+                        the server. This stays readable because the controls have more lateral
+                        space.
+                      </p>
+                    </div>
+                    <div class="control-box">
+                      <div class="select">Every 5 seconds</div>
+                    </div>
+                  </div>
+
+                  <div class="setting-row">
+                    <div>
+                      <p class="setting-title">Subprocess drill-down</p>
+                      <p class="setting-copy">
+                        Capture subprocess-level attribution for active workspaces. This is now
+                        easier to explain because helper content can live beside the main form.
+                      </p>
+                    </div>
+                    <div class="control-box">
+                      <div class="toggle"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stack">
+                <div class="panel">
+                  <div class="panel-header">
+                    <div>
+                      <h3 class="panel-title">Operator Notes</h3>
+                      <p class="panel-desc">
+                        The right rail is optional. It carries context that used to compete with the
+                        form in the same narrow column.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="note-card">
+                    <p class="note-title">Why this layout works better</p>
+                    <ul>
+                      <li>Summary stays visible above the controls.</li>
+                      <li>Instructions do not push switches downward.</li>
+                      <li>Longer labels and values wrap less aggressively.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="panel">
+                  <div class="panel-header">
+                    <div>
+                      <h3 class="panel-title">Status Snapshot</h3>
+                      <p class="panel-desc">Example of local panels replacing the old global card.</p>
+                    </div>
+                  </div>
+                  <div class="subgrid">
+                    <div class="mini">
+                      <div class="label">CPU</div>
+                      <div class="value">41%</div>
+                      <div class="summary-note">host average</div>
+                    </div>
+                    <div class="mini">
+                      <div class="label">Memory</div>
+                      <div class="value">7.4 GB</div>
+                      <div class="summary-note">used by managed tree</div>
+                    </div>
+                    <div class="mini">
+                      <div class="label">Load Avg</div>
+                      <div class="value">2.8</div>
+                      <div class="summary-note">15-minute window</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+
+      <footer class="footer">
+        <div>Autosave changes immediately</div>
+        <div>Preview: flat desktop shell + wide monitoring section</div>
+      </footer>
+    </div>
+  </body>
+</html>

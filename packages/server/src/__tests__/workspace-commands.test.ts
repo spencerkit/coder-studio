@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { EventBus } from "../bus/event-bus.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
+import { WORKSPACE_HISTORY_KEY } from "../workspace/history-store.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
 import { dispatch } from "../ws/dispatch.js";
@@ -92,6 +93,186 @@ describe("Workspace Commands", () => {
     });
   });
 
+  describe("workspace.history.list", () => {
+    it("returns an empty list by default", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-empty",
+          op: "workspace.history.list",
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([]);
+    });
+
+    it("records successful workspace opens in newest-first order", async () => {
+      const olderDir = join(tmpdir(), `workspace-history-older-${Date.now()}`);
+      const newerDir = join(tmpdir(), `workspace-history-newer-${Date.now()}`);
+      await mkdir(olderDir, { recursive: true });
+      await mkdir(newerDir, { recursive: true });
+
+      await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-open-older",
+          op: "workspace.open",
+          args: {
+            path: olderDir,
+          },
+        },
+        ctx
+      );
+
+      await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-open-newer",
+          op: "workspace.open",
+          args: {
+            path: newerDir,
+          },
+        },
+        ctx
+      );
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-list-newest-first",
+          op: "workspace.history.list",
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([
+        expect.objectContaining({
+          path: newerDir,
+          name: expect.stringMatching(/^workspace-history-newer-/),
+        }),
+        expect.objectContaining({
+          path: olderDir,
+          name: expect.stringMatching(/^workspace-history-older-/),
+        }),
+      ]);
+    });
+
+    it("dedupes repeated opens of the same path and moves them to the front", async () => {
+      vi.useFakeTimers();
+      try {
+        const alphaDir = join(tmpdir(), "workspace-history-alpha");
+        const betaDir = join(tmpdir(), "workspace-history-beta");
+        await mkdir(alphaDir, { recursive: true });
+        await mkdir(betaDir, { recursive: true });
+
+        vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+        await dispatch(
+          {
+            kind: "command",
+            id: "workspace-history-open-alpha-first",
+            op: "workspace.open",
+            args: {
+              path: alphaDir,
+            },
+          },
+          ctx
+        );
+
+        vi.setSystemTime(new Date("2026-01-02T00:00:00.000Z"));
+        await dispatch(
+          {
+            kind: "command",
+            id: "workspace-history-open-beta",
+            op: "workspace.open",
+            args: {
+              path: betaDir,
+            },
+          },
+          ctx
+        );
+
+        vi.setSystemTime(new Date("2026-01-03T00:00:00.000Z"));
+        await dispatch(
+          {
+            kind: "command",
+            id: "workspace-history-open-alpha-second",
+            op: "workspace.open",
+            args: {
+              path: alphaDir,
+            },
+          },
+          ctx
+        );
+
+        const result = await dispatch(
+          {
+            kind: "command",
+            id: "workspace-history-list-deduped",
+            op: "workspace.history.list",
+            args: {},
+          },
+          ctx
+        );
+
+        expect(result.ok).toBe(true);
+        expect(result.data).toEqual([
+          {
+            path: alphaDir,
+            name: "workspace-history-alpha",
+            lastOpenedAt: new Date("2026-01-03T00:00:00.000Z").getTime(),
+          },
+          {
+            path: betaDir,
+            name: "workspace-history-beta",
+            lastOpenedAt: new Date("2026-01-02T00:00:00.000Z").getTime(),
+          },
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("filters malformed stored history entries before returning the list", async () => {
+      settingsRepo.set(WORKSPACE_HISTORY_KEY, [
+        {
+          path: "/repo/valid",
+          name: "valid",
+          lastOpenedAt: 2,
+        },
+        {
+          path: 123,
+          name: "broken",
+          lastOpenedAt: 1,
+        },
+        "bad-entry",
+      ]);
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-list-filters-malformed",
+          op: "workspace.history.list",
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([
+        {
+          path: "/repo/valid",
+          name: "valid",
+          lastOpenedAt: 2,
+        },
+      ]);
+    });
+  });
+
   describe("workspace.open", () => {
     it("should fail for non-existent path", async () => {
       const result = await dispatch(
@@ -149,6 +330,38 @@ describe("Workspace Commands", () => {
       const workspaceId = (result.data as { id: string }).id;
       expect(triggerOpenTimeFetch).toHaveBeenCalledWith(workspaceId);
     });
+
+    it("publishes agent instructions during workspace.open", async () => {
+      const dir = join(tmpdir(), `workspace-open-publish-${Date.now()}`);
+      await mkdir(dir);
+      const calls: string[] = [];
+
+      ctx = {
+        ...ctx,
+        agentInstructionPublisher: {
+          syncWorkspace: vi.fn(async () => {
+            calls.push("publish");
+          }),
+          scheduleWorkspaceSync: vi.fn(),
+          syncAllOpenWorkspaces: vi.fn(),
+        } as never,
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-open-publish",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(calls).toEqual(["publish"]);
+    });
   });
 
   describe("workspace.browse", () => {
@@ -188,6 +401,32 @@ describe("Workspace Commands", () => {
       expect((result.data as { rootPaths?: string[] }).rootPaths).toEqual(
         expect.arrayContaining(["/", homedir()])
       );
+    });
+
+    it("includes symlinked directories in browse results", async () => {
+      const dir = join(tmpdir(), `workspace-browse-symlink-${Date.now()}`);
+      const target = join(dir, "target");
+      await mkdir(target, { recursive: true });
+      await symlink(target, join(dir, "linked"), "dir");
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-browse-symlink",
+          op: "workspace.browse",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { directories: Array<{ name: string }> }).directories).toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: "linked" })])
+      );
+
+      rmSync(dir, { recursive: true, force: true });
     });
   });
 
@@ -591,6 +830,53 @@ describe("Workspace Commands", () => {
       expect(
         (result.data as { uiState: { activeEditorPath?: string | null } }).uiState.activeEditorPath
       ).toBe("src/app.tsx");
+    });
+
+    it("drops auto attach state while persisting other agent instruction ui state", async () => {
+      const dir = join(tmpdir(), `workspace-agent-instructions-ui-state-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-agent-instructions-ui-state",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-agent-instructions",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              agentInstructionsExpanded: false,
+              agentInstructionsAutoAttach: true,
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { agentInstructionsExpanded?: boolean } }).uiState
+      ).toMatchObject({
+        agentInstructionsExpanded: false,
+      });
+      expect((result.data as { uiState: Record<string, unknown> }).uiState).not.toHaveProperty(
+        "agentInstructionsAutoAttach"
+      );
     });
   });
 

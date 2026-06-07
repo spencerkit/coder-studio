@@ -2,11 +2,13 @@ import clsx from "clsx";
 import {
   Children,
   cloneElement,
+  createContext,
   isValidElement,
   type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -51,6 +53,9 @@ export interface PopoverProps {
 
 const VIEWPORT_PADDING = 8;
 const CONTENT_OFFSET = 8;
+const POPOVER_CONTENT_SELECTOR = '[data-ui-popover-content="true"]';
+const POPOVER_CONTENT_LAYER_ATTRIBUTE = "data-ui-popover-layer";
+const PopoverLayerContext = createContext(0);
 
 function isTriggerElement(child: unknown): child is ReactElement<TriggerProps> {
   return isValidElement(child);
@@ -68,6 +73,8 @@ export function Popover({
   sheetBodyClassName,
 }: PopoverProps) {
   const viewport = useViewport();
+  const parentLayer = useContext(PopoverLayerContext);
+  const layer = parentLayer + 1;
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const restoreFocusRef = useRef<Element | null>(null);
@@ -172,6 +179,21 @@ export function Popover({
         return;
       }
 
+      const targetElement =
+        event.target instanceof Element
+          ? event.target
+          : event.target.parentElement instanceof Element
+            ? event.target.parentElement
+            : null;
+      const closestPopoverContent = targetElement?.closest(POPOVER_CONTENT_SELECTOR);
+      const closestLayer =
+        closestPopoverContent instanceof HTMLElement
+          ? Number(closestPopoverContent.dataset.uiPopoverLayer)
+          : 0;
+      if (closestLayer > layer) {
+        return;
+      }
+
       onOpenChange(false);
     };
 
@@ -190,7 +212,7 @@ export function Popover({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [desktopOpen, onOpenChange]);
+  }, [desktopOpen, layer, onOpenChange]);
 
   if (!isTriggerElement(child)) {
     throw new Error("Popover requires a single trigger React element.");
@@ -237,6 +259,8 @@ export function Popover({
             aria-label={title}
             aria-modal="false"
             className={clsx(styles.content, contentClassName)}
+            data-ui-popover-content="true"
+            {...{ [POPOVER_CONTENT_LAYER_ATTRIBUTE]: layer }}
             id={contentId}
             onKeyDown={(event) => {
               if (isEscapeKey(event)) {
@@ -254,14 +278,18 @@ export function Popover({
             }}
             tabIndex={-1}
           >
-            {content}
+            <PopoverLayerContext.Provider value={layer}>{content}</PopoverLayerContext.Provider>
           </div>
         </Portal>
       ) : null}
 
       {mobileOpen ? (
         <Sheet
-          body={<div>{content}</div>}
+          body={
+            <PopoverLayerContext.Provider value={layer}>
+              <div>{content}</div>
+            </PopoverLayerContext.Provider>
+          }
           bodyClassName={sheetBodyClassName}
           onClose={() => onOpenChange(false)}
           title={title}

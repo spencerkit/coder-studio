@@ -102,6 +102,18 @@ function FileTreeInlineState({
   );
 }
 
+function FileSymlinkBadge({ isSymlink }: { isSymlink?: boolean }) {
+  if (!isSymlink) {
+    return null;
+  }
+
+  return (
+    <span className="tree-symlink-badge" aria-hidden="true" title="symlink">
+      ↗
+    </span>
+  );
+}
+
 interface FileTreePanelProps {
   workspaceId: string;
   refreshToken?: number;
@@ -593,7 +605,10 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
       </span>
 
       <span className="tree-search-labels">
-        <span className="tree-label">{node.name}</span>
+        <span className="tree-label">
+          {node.name}
+          <FileSymlinkBadge isSymlink={node.isSymlink} />
+        </span>
         {dirName ? <span className="tree-search-path">{dirName}</span> : null}
       </span>
     </div>
@@ -754,6 +769,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
 
         <span className={`tree-label ${node.isGitIgnored ? "tree-label--gitignored" : ""}`}>
           {node.name}
+          <FileSymlinkBadge isSymlink={node.isSymlink} />
         </span>
 
         {variant === "desktop" && selectedPath === node.path ? (

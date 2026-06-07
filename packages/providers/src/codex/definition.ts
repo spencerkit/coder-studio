@@ -1,8 +1,9 @@
 import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
 
+import { sharedFirstSkillMountDirectories } from "../skills/directories.js";
 import { type CodexConfig, codexConfigSchema } from "./config-schema.js";
+import { codexHeadlessDefinition } from "./headless.js";
 import { idleDebounceMs, idlePromptPatterns, sessionIdPatterns } from "./stdout-heuristics.js";
-import { buildCodexSupervisorEvalCommand } from "./supervisor-eval.js";
 
 export const codexInstallMetadata = {
   prerequisites: ["npm"],
@@ -81,6 +82,8 @@ export const codexDefinition: ProviderDefinition = {
     { key: "review", supported: false, label: "Review" },
   ],
   install: codexInstallMetadata,
+  supportsSkillsMount: true,
+  skillMountDirectories: sharedFirstSkillMountDirectories(".codex"),
 
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx) {
@@ -96,9 +99,6 @@ export const codexDefinition: ProviderDefinition = {
     };
   },
 
-  // Full mode: no resume support yet (Codex CLI may support it later)
-  buildSupervisorEvalCommand: buildCodexSupervisorEvalCommand,
-
   // ===== Configuration =====
   configSchema: codexConfigSchema,
   defaultConfig: {
@@ -108,6 +108,12 @@ export const codexDefinition: ProviderDefinition = {
 
   // ===== Runtime requirements =====
   requiredCommands: ["codex"],
+  agentInstructions: {
+    publishTarget: {
+      path: "AGENTS.md",
+    },
+  },
+  headless: codexHeadlessDefinition,
   idleHeuristics: {
     sessionIdPatterns,
     idlePromptPatterns,
