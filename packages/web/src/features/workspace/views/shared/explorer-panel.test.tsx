@@ -51,7 +51,7 @@ vi.mock("../shared/file-tree-panel", () => ({
 }));
 
 describe("ExplorerPanel", () => {
-  it("renders without a runtime Explorer panel header and keeps file actions in the Workspace section", () => {
+  it("renders only file-related sections without a runtime Explorer panel header", () => {
     const onOpenFileCreate = vi.fn();
     const onOpenFolderCreate = vi.fn();
     const store = createStore();
@@ -79,10 +79,14 @@ describe("ExplorerPanel", () => {
     );
 
     const stackedBody = container.querySelector(".workspace-sidebar-panel__body--stacked");
+    const sections = Array.from(stackedBody?.children ?? []);
 
     expect(screen.queryByText("Explorer")).toBeNull();
     expect(stackedBody).not.toBeNull();
-    expect(stackedBody?.querySelectorAll(".workspace-sidebar-section")).toHaveLength(2);
+    expect(sections[0]).toHaveTextContent(/Open Files/);
+    expect(sections[1]).toHaveTextContent(/Workspace/);
+    expect(screen.queryByTestId("agent-instructions-section")).toBeNull();
+    expect(sections).toHaveLength(2);
     expect(stackedBody?.querySelector(".panel-header")).toBeNull();
 
     const workspaceSection = screen

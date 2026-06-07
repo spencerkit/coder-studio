@@ -1,4 +1,33 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+const { originalMatchMedia } = vi.hoisted(() => {
+  const viewportQuery = "(max-width: 899px), (pointer: coarse)";
+  const originalMatchMedia = window.matchMedia;
+
+  const applyMatchMedia = (device: "desktop" | "mobile") => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (query: string) => ({
+        matches: query === viewportQuery ? device === "mobile" : false,
+        media: query,
+        onchange: null,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+        dispatchEvent: () => true,
+      }),
+    });
+  };
+
+  applyMatchMedia("desktop");
+  return { originalMatchMedia };
+});
+
+import * as monaco from "monaco-editor";
+
+import { ensureVueLanguageRegistered } from "./vue-language";
 
 const samples = [
   { languageId: "python", source: "def main():\n    return 1\n" },
@@ -10,10 +39,11 @@ const samples = [
   },
 ] as const;
 
-let monaco: typeof import("monaco-editor");
-let ensureVueLanguageRegistered: typeof import("./vue-language").ensureVueLanguageRegistered;
-
 describe("Monaco language tokenization", () => {
+  beforeAll(() => {
+    ensureVueLanguageRegistered();
+  });
+
   it.each(samples)("tokenizes $languageId code with non-plaintext tokens", async ({
     languageId,
     source,
@@ -26,20 +56,10 @@ describe("Monaco language tokenization", () => {
   });
 });
 
-beforeAll(async () => {
-  window.matchMedia ??= () =>
-    ({
-      matches: false,
-      media: "",
-      onchange: null,
-      addEventListener() {},
-      removeEventListener() {},
-      addListener() {},
-      removeListener() {},
-      dispatchEvent: () => false,
-    }) as MediaQueryList;
-
-  monaco = await import("monaco-editor");
-  ({ ensureVueLanguageRegistered } = await import("./vue-language"));
-  ensureVueLanguageRegistered();
-}, 30_000);
+afterAll(() => {
+  if (originalMatchMedia) {
+    window.matchMedia = originalMatchMedia;
+  } else {
+    delete (window as typeof window & { matchMedia?: typeof window.matchMedia }).matchMedia;
+  }
+});

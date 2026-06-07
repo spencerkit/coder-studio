@@ -7,6 +7,7 @@ import {
   hasAnyPendingEditorLoads,
 } from "../../code-editor/actions/pending-editor-loads";
 import { monacoModelRegistry } from "../../code-editor/monaco/model-registry";
+import { isSystemAgentInstructionsEditorPath } from "../../code-editor/system-agent-instructions-path";
 import {
   activeFilePathAtomFamily,
   editorModeAtomFamily,
@@ -87,7 +88,11 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
         }
 
         const removedFile = openFiles[path];
-        if (workspaceRootPath && removedFile?.kind === "text") {
+        if (
+          workspaceRootPath &&
+          removedFile?.kind === "text" &&
+          !isSystemAgentInstructionsEditorPath(path)
+        ) {
           monacoModelRegistry.disposeFile(workspaceRootPath, path);
         }
       }
@@ -167,7 +172,11 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
     for (const path of resolution.removedPaths) {
       const removedFile = openFiles[path];
-      if (workspaceRootPath && removedFile?.kind === "text") {
+      if (
+        workspaceRootPath &&
+        removedFile?.kind === "text" &&
+        !isSystemAgentInstructionsEditorPath(path)
+      ) {
         monacoModelRegistry.disposeFile(workspaceRootPath, path);
       }
     }
