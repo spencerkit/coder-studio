@@ -478,14 +478,14 @@ describe("AgentInstructionsSection", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders project and system agent instruction groups", async () => {
+  it("renders project and system agent instruction sections", async () => {
     renderSection({});
 
     expect(
       await screen.findByRole("heading", { level: 2, name: "Project Agent.md" })
     ).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 3, name: "Project Agent.md" })).toBeNull();
-    expect(screen.getByRole("heading", { level: 3, name: "System Agent.md" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "System Agent.md" })).toBeInTheDocument();
     expect(screen.getByText("Codex")).toBeInTheDocument();
     expect(screen.getByText("~/.codex/AGENTS.md")).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
@@ -494,13 +494,13 @@ describe("AgentInstructionsSection", () => {
     expect(screen.queryByText("Cursor Settings > Rules")).toBeNull();
   });
 
-  it("renders the system group with shared section chrome and supports collapsing it", async () => {
+  it("renders the system section with shared section chrome and supports collapsing it", async () => {
     renderSection({});
 
     const systemToggle = await screen.findByRole("button", {
       name: "Collapse System Agent.md",
     });
-    const systemHeading = screen.getByRole("heading", { level: 3, name: "System Agent.md" });
+    const systemHeading = screen.getByRole("heading", { level: 2, name: "System Agent.md" });
 
     expect(systemToggle).toHaveClass("workspace-sidebar-section__chevron");
     expect(systemToggle).toHaveAttribute("aria-expanded", "true");
@@ -515,6 +515,24 @@ describe("AgentInstructionsSection", () => {
       "aria-expanded",
       "false"
     );
+  });
+
+  it("keeps the system section visible when the project section is collapsed", async () => {
+    renderSection({});
+
+    await screen.findByText("agent.md: Missing");
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Project Agent.md" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("agent.md: Missing")).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "Toggle Project Agent.md" })).toHaveAttribute(
+      "aria-expanded",
+      "false"
+    );
+    expect(screen.getByRole("heading", { level: 2, name: "System Agent.md" })).toBeInTheDocument();
+    expect(screen.getByText("Codex")).toBeInTheDocument();
   });
 
   it("renders a system agent explanation as a title info icon", async () => {
