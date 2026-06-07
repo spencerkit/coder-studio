@@ -1,26 +1,17 @@
-import type {
-  ProviderListItem,
-  ProviderRuntimeStatusEntry,
-  ProviderRuntimeStatusResponse,
-} from "@coder-studio/core";
+import type { ProviderRuntimeStatusEntry, ProviderRuntimeStatusResponse } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { connectionStatusAtom } from "../../../atoms/connection";
-import { Button, Notice, SegmentedControl, Tag, Textarea } from "../../../components/ui";
+import { Button, Notice, SegmentedControl, Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { buildDiagnosticsPath } from "../../diagnostics";
 import { ConfigEditor, type ConfigType } from "./config-editor";
 import { useSessionGateDispatch } from "./use-session-gate-dispatch";
 
 export interface ProviderInfo {
-  id: string;
+  id: "claude" | "codex";
   displayName: string;
-  badge?: string;
-  kind?: ProviderListItem["kind"];
-  stability?: ProviderListItem["stability"];
-  capability?: ProviderListItem["capability"];
-  capabilities?: ProviderListItem["capabilities"];
 }
 
 interface ProviderSettingsProps {
@@ -46,12 +37,6 @@ function createProviderRecord<T>(
   createValue: () => T
 ): Record<string, T> {
   return Object.fromEntries(providers.map((provider) => [provider.id, createValue()]));
-}
-
-function supportsConfigEditor(provider: ProviderInfo | undefined): provider is ProviderInfo & {
-  id: ConfigType;
-} {
-  return provider?.id === "claude" || provider?.id === "codex";
 }
 
 export function ProviderSettings({
@@ -172,36 +157,10 @@ export function ProviderSettings({
   const showConfig = isMobile ? mobileView === "config" : desktopView === "config";
   const currentPreview = provider ? (previewByProvider[provider.id] ?? "") : "";
   const useFillHeightLayout = showConfig;
-  const providerSupportsConfigEditor = supportsConfigEditor(provider);
-  const providerBadge = provider?.badge ?? provider?.displayName ?? "";
-  const providerCapabilitySummary = provider?.capability
-    ? t(`settings.provider.capability_${provider.capability}`)
-    : null;
-  const providerStabilitySummary = provider?.stability
-    ? t(`agent_panes.provider_stability_${provider.stability}`)
-    : null;
-  const providerCapabilitiesSummary =
-    provider?.capabilities
-      ?.filter((capability) => capability.supported)
-      .map((capability) => capability.label) ?? [];
 
   useEffect(() => {
     onLayoutModeChange?.(useFillHeightLayout ? "fill-height" : "default");
   }, [onLayoutModeChange, useFillHeightLayout]);
-
-  useEffect(() => {
-    if (providerSupportsConfigEditor) {
-      return;
-    }
-
-    if (desktopView === "config") {
-      setDesktopView("base");
-    }
-
-    if (mobileView === "config") {
-      setMobileView("base");
-    }
-  }, [desktopView, mobileView, providerSupportsConfigEditor]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -343,7 +302,7 @@ export function ProviderSettings({
         value={selectedProvider}
       />
 
-      {!isMobile && providerSupportsConfigEditor ? (
+      {!isMobile ? (
         <SegmentedControl
           className="settings-provider-subnav"
           aria-label={t("settings.provider.config")}
@@ -367,106 +326,86 @@ export function ProviderSettings({
         <div
           className={`settings-provider-content ${useFillHeightLayout ? "settings-provider-content--fill-height" : ""}`}
         >
-          <div className="settings-provider-base-layout">
+          {runtime ? (
             <div className="settings-group">
-              <h3 className="settings-group-title">{provider.displayName}</h3>
-              <div className="settings-provider-badges">
-                <Tag color="neutral">{providerBadge}</Tag>
-                {providerCapabilitySummary ? (
-                  <Tag color="neutral">{providerCapabilitySummary}</Tag>
-                ) : null}
-                {providerStabilitySummary ? (
-                  <Tag color="neutral">{providerStabilitySummary}</Tag>
-                ) : null}
-              </div>
-              {providerCapabilitiesSummary.length > 0 ? (
-                <p className="settings-group-desc">
-                  {t("agent_panes.provider_capabilities")}: {providerCapabilitiesSummary.join(", ")}
-                </p>
-              ) : null}
-            </div>
-
-            {runtime ? (
-              <div className="settings-group">
-                <h3 className="settings-group-title">{t("settings.provider.status")}</h3>
-                <Notice
-                  tone={runtime.available ? "success" : "warning"}
-                  title={providerStatusTitle}
-                  message={
-                    providerGuideMessage
-                      ? `${providerStatusDescription} ${providerGuideMessage}`
-                      : providerStatusDescription
-                  }
-                  action={
-                    <div className="settings-provider-actions">
-                      {runtime.docUrls.provider ? (
-                        <Button
-                          as="a"
-                          href={runtime.docUrls.provider}
-                          rel="noreferrer"
-                          size="sm"
-                          target="_blank"
-                          variant="ghost"
-                        >
-                          {t("provider.install.open_docs")}
-                        </Button>
-                      ) : null}
+              <h3 className="settings-group-title">{t("settings.provider.status")}</h3>
+              <Notice
+                tone={runtime.available ? "success" : "warning"}
+                title={providerStatusTitle}
+                message={
+                  providerGuideMessage
+                    ? `${providerStatusDescription} ${providerGuideMessage}`
+                    : providerStatusDescription
+                }
+                action={
+                  <div style={{ display: "flex", gap: "var(--sp-2)", flexWrap: "wrap" }}>
+                    {runtime.docUrls.provider ? (
                       <Button
-                        onClick={() =>
-                          navigate(
-                            buildDiagnosticsPath({
-                              context: "manual_check",
-                              workspaceId: activeWorkspaceId ?? undefined,
-                              providerId: provider.id,
-                            })
-                          )
-                        }
+                        as="a"
+                        href={runtime.docUrls.provider}
+                        rel="noreferrer"
                         size="sm"
+                        target="_blank"
                         variant="ghost"
                       >
-                        {t("diagnostics.actions.open_diagnostics")}
+                        {t("provider.install.open_docs")}
                       </Button>
-                    </div>
-                  }
-                />
-              </div>
-            ) : null}
-
-            <div className="settings-group">
-              <h3 className="settings-group-title">{t("settings.provider.config")}</h3>
-              <p className="settings-group-desc">{t("settings.provider.startup_args_hint")}</p>
-              <div className="settings-config-field">
-                <label className="settings-config-label" htmlFor="provider-startup-args">
-                  {t("settings.provider.startup_args")}
-                </label>
-                <Textarea
-                  id="provider-startup-args"
-                  className="settings-provider-args-input"
-                  rows={4}
-                  placeholder={t("settings.provider.startup_args_placeholder")}
-                  value={additionalArgsText}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setAdditionalArgsById((previous) => ({
-                      ...previous,
-                      [provider.id]: nextValue,
-                    }));
-                    void saveSettings(provider.id, nextValue);
-                  }}
-                />
-              </div>
+                    ) : null}
+                    <Button
+                      onClick={() =>
+                        navigate(
+                          buildDiagnosticsPath({
+                            context: "manual_check",
+                            workspaceId: activeWorkspaceId ?? undefined,
+                            providerId: provider.id,
+                          })
+                        )
+                      }
+                      size="sm"
+                      variant="ghost"
+                    >
+                      {t("diagnostics.actions.open_diagnostics")}
+                    </Button>
+                  </div>
+                }
+              />
             </div>
+          ) : null}
 
-            <div className="settings-group">
-              <h3 className="settings-group-title">{commandPreviewTitle}</h3>
-              <p className="settings-group-desc">{commandPreviewHint}</p>
-              <div className="settings-config-field">
-                <code className="settings-command-preview">{currentPreview}</code>
-              </div>
+          <div className="settings-group">
+            <h3 className="settings-group-title">{t("settings.provider.config")}</h3>
+            <p className="settings-group-desc">{t("settings.provider.startup_args_hint")}</p>
+            <div className="settings-config-field">
+              <label className="settings-config-label" htmlFor="provider-startup-args">
+                {t("settings.provider.startup_args")}
+              </label>
+              <Textarea
+                id="provider-startup-args"
+                className="settings-provider-args-input"
+                rows={4}
+                placeholder={t("settings.provider.startup_args_placeholder")}
+                value={additionalArgsText}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setAdditionalArgsById((previous) => ({
+                    ...previous,
+                    [provider.id]: nextValue,
+                  }));
+                  void saveSettings(provider.id, nextValue);
+                }}
+              />
             </div>
           </div>
 
-          {isMobile && providerSupportsConfigEditor ? (
+          <div className="settings-group">
+            <h3 className="settings-group-title">{commandPreviewTitle}</h3>
+            <p className="settings-group-desc">{commandPreviewHint}</p>
+            <div className="settings-config-field">
+              <code className="settings-command-preview">{currentPreview}</code>
+            </div>
+          </div>
+
+          {isMobile ? (
             <button
               type="button"
               className="settings-provider-mobile-entry"
@@ -490,7 +429,6 @@ export function ProviderSettings({
         className={`settings-provider-config-stack ${useFillHeightLayout ? "settings-provider-config-stack--fill-height" : ""}`}
       >
         {providers
-          .filter((entry) => supportsConfigEditor(entry))
           .filter(
             (entry) => visitedConfigProviders[entry.id] || (provider?.id === entry.id && showConfig)
           )

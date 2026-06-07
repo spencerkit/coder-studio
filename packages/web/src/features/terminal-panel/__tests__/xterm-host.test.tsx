@@ -11,11 +11,6 @@ import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
-import {
-  workspaceOrderAtom,
-  workspacesAtom,
-  workspacesLoadStateAtom,
-} from "../../../atoms/workspaces";
 import { JotaiProvider } from "../../../test-utils/jotai-provider";
 import { getThemeById } from "../../../theme";
 import {
@@ -23,9 +18,7 @@ import {
   type TerminalReplayPayload,
   type TerminalSnapshotPayload,
 } from "../../../ws/client";
-import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
 import { toastsAtom } from "../../notifications/atoms";
-import { openEditorPathsAtomFamily } from "../../workspace/atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../atoms";
 import type { HydrationRequestHandle, HydrationTier } from "../hydration-coordinator";
 import { DEFAULT_TERMINAL_FONT_SIZE, terminalPreferencesAtom } from "../preferences";
@@ -88,13 +81,8 @@ const hydrationCoordinatorMocks = vi.hoisted(() => {
 
 const uploadHookMocks = vi.hoisted(() => ({
   busy: false,
-  pendingImages: [] as Array<{ id: string; name: string; previewUrl: string }>,
-  uploadPendingImages: vi.fn().mockResolvedValue(undefined),
-  clearPendingImages: vi.fn(),
-  removePendingImage: vi.fn(),
   handleClipboardPaste: vi.fn().mockResolvedValue(undefined),
   handleFiles: vi.fn().mockResolvedValue(undefined),
-  collectPendingFiles: vi.fn(),
 }));
 
 const baseRequestAnimationFrame = global.requestAnimationFrame;
@@ -139,13 +127,8 @@ vi.mock("../hydration-coordinator", async () => {
 vi.mock("../uploads/use-paste-drop-upload", () => ({
   usePasteDropUpload: vi.fn(() => ({
     busy: uploadHookMocks.busy,
-    pendingImages: uploadHookMocks.pendingImages,
-    uploadPendingImages: uploadHookMocks.uploadPendingImages,
-    clearPendingImages: uploadHookMocks.clearPendingImages,
-    removePendingImage: uploadHookMocks.removePendingImage,
     handleClipboardPaste: uploadHookMocks.handleClipboardPaste,
     handleFiles: uploadHookMocks.handleFiles,
-    collectPendingFiles: uploadHookMocks.collectPendingFiles,
   })),
 }));
 
@@ -325,7 +308,6 @@ const mockTerminal = {
   dispose: vi.fn(),
   focus: vi.fn(),
   loadAddon: vi.fn(),
-  registerLinkProvider: vi.fn(() => ({ dispose: vi.fn() })),
   cols: 80,
   buffer: {
     active: {
@@ -379,16 +361,10 @@ describe("XtermHost", () => {
     hydrationCoordinatorMocks.listeners = new Set();
     hydrationCoordinatorMocks.resolveGranted = () => {};
     uploadHookMocks.busy = false;
-    uploadHookMocks.pendingImages = [];
-    uploadHookMocks.uploadPendingImages.mockReset();
-    uploadHookMocks.uploadPendingImages.mockResolvedValue(undefined);
-    uploadHookMocks.clearPendingImages.mockReset();
-    uploadHookMocks.removePendingImage.mockReset();
     uploadHookMocks.handleClipboardPaste.mockReset();
     uploadHookMocks.handleClipboardPaste.mockResolvedValue(undefined);
     uploadHookMocks.handleFiles.mockReset();
     uploadHookMocks.handleFiles.mockResolvedValue(undefined);
-    uploadHookMocks.collectPendingFiles.mockReset();
     clipboardHelperMocks.copyTextWithFallback.mockClear();
     mockTerminal.options = {};
     mockTerminal.cols = undefined;
@@ -403,7 +379,6 @@ describe("XtermHost", () => {
       callback?.();
     });
     mockTerminal.onRender.mockImplementation(() => vi.fn());
-    mockTerminal.registerLinkProvider.mockImplementation(() => ({ dispose: vi.fn() }));
     mockTerminal.input.mockImplementation(() => {});
     mockTerminal.writeln.mockImplementation(() => {});
     mockTerminal.reset.mockImplementation(() => {});
@@ -471,142 +446,6 @@ describe("XtermHost", () => {
     // Check that the xterm-host container is rendered
     const hostContainer = container.querySelector(".xterm-host");
     expect(hostContainer).toBeTruthy();
-  });
-
-  it("opens workspace file links from terminal output in the editor", async () => {
-    const store = createStore();
-    store.set(workspacesAtom, {
-      "test-workspace": {
-        id: "test-workspace",
-        path: "/repo",
-        targetRuntime: "native",
-        openedAt: 1,
-        lastActiveAt: 1,
-        uiState: {
-          leftPanelWidth: 280,
-          bottomPanelHeight: 240,
-          focusMode: false,
-        },
-      },
-    });
-    store.set(workspaceOrderAtom, ["test-workspace"]);
-    store.set(workspacesLoadStateAtom, "ready");
-    setMockBufferLines([[0, "error at /repo/src/app.tsx:12:3"]]);
-
-    render(
-      <Provider store={store}>
-        <XtermHost terminalId="linked-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    expect(mockTerminal.registerLinkProvider).toHaveBeenCalledTimes(1);
-    const provider = mockTerminal.registerLinkProvider.mock.calls[0]?.[0] as
-      | {
-          provideLinks(
-            bufferLineNumber: number,
-            callback: (
-              links:
-                | Array<{
-                    text: string;
-                    range: { start: { x: number; y: number }; end: { x: number; y: number } };
-                    activate(event: MouseEvent, text: string): void;
-                  }>
-                | undefined
-            ) => void
-          ): void;
-        }
-      | undefined;
-
-    let links:
-      | Array<{
-          text: string;
-          range: { start: { x: number; y: number }; end: { x: number; y: number } };
-          activate(event: MouseEvent, text: string): void;
-        }>
-      | undefined;
-    provider?.provideLinks(1, (nextLinks) => {
-      links = nextLinks;
-    });
-
-    expect(links).toHaveLength(1);
-    expect(links?.[0]).toMatchObject({
-      text: "/repo/src/app.tsx:12:3",
-      range: {
-        start: { x: 10, y: 1 },
-        end: { x: 31, y: 1 },
-      },
-    });
-
-    await act(async () => {
-      links?.[0]?.activate(new MouseEvent("click"), links[0].text);
-      await Promise.resolve();
-    });
-
-    expect(store.get(pendingEditorNavigationAtomFamily("test-workspace"))).toMatchObject({
-      workspaceId: "test-workspace",
-      path: "src/app.tsx",
-      line: 12,
-      column: 3,
-      source: "manual",
-    });
-    expect(store.get(openEditorPathsAtomFamily("test-workspace"))).toEqual(["src/app.tsx"]);
-  });
-
-  it("opens http links from terminal output in a new page", () => {
-    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
-    setMockBufferLines([[0, "Visit https://example.com/docs?x=1."]]);
-
-    render(
-      <JotaiProvider>
-        <XtermHost terminalId="url-linked-terminal" workspaceId="test-workspace" />
-      </JotaiProvider>
-    );
-
-    expect(mockTerminal.registerLinkProvider).toHaveBeenCalledTimes(1);
-    const provider = mockTerminal.registerLinkProvider.mock.calls[0]?.[0] as
-      | {
-          provideLinks(
-            bufferLineNumber: number,
-            callback: (
-              links:
-                | Array<{
-                    text: string;
-                    range: { start: { x: number; y: number }; end: { x: number; y: number } };
-                    activate(event: MouseEvent, text: string): void;
-                  }>
-                | undefined
-            ) => void
-          ): void;
-        }
-      | undefined;
-
-    let links:
-      | Array<{
-          text: string;
-          range: { start: { x: number; y: number }; end: { x: number; y: number } };
-          activate(event: MouseEvent, text: string): void;
-        }>
-      | undefined;
-    provider?.provideLinks(1, (nextLinks) => {
-      links = nextLinks;
-    });
-
-    expect(links).toHaveLength(1);
-    expect(links?.[0]).toMatchObject({
-      text: "https://example.com/docs?x=1",
-      range: {
-        start: { x: 7, y: 1 },
-        end: { x: 34, y: 1 },
-      },
-    });
-
-    links?.[0]?.activate(new MouseEvent("click"), links[0].text);
-
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://example.com/docs?x=1",
-      "_blank",
-      "noopener,noreferrer"
-    );
   });
 
   it("copies the terminal selection on desktop pointerup when copy-on-select is enabled", async () => {
@@ -3789,276 +3628,6 @@ describe("XtermHost", () => {
     );
   });
 
-  it("renders pending image previews and shows overflow count in the third slot", () => {
-    uploadHookMocks.pendingImages = [
-      { id: "img-1", name: "first.png", previewUrl: "blob:first" },
-      { id: "img-2", name: "second.png", previewUrl: "blob:second" },
-      { id: "img-3", name: "third.png", previewUrl: "blob:third" },
-      { id: "img-4", name: "fourth.png", previewUrl: "blob:fourth" },
-    ];
-
-    render(
-      <JotaiProvider>
-        <XtermHost terminalId="preview-terminal" workspaceId="test-workspace" />
-      </JotaiProvider>
-    );
-
-    const previewStrip = screen.getByLabelText("Pending image previews");
-    expect(previewStrip).toHaveClass("xterm-host-preview-strip");
-
-    const firstPreview = screen.getByAltText("first.png");
-    const secondPreview = screen.getByAltText("second.png");
-
-    expect(firstPreview).toHaveClass("xterm-host-preview-tile");
-    expect(secondPreview).toHaveClass("xterm-host-preview-tile");
-    expect(screen.getByAltText("first.png")).toHaveAttribute("src", "blob:first");
-    expect(screen.getByAltText("second.png")).toHaveAttribute("src", "blob:second");
-    expect(screen.queryByAltText("third.png")).not.toBeInTheDocument();
-    expect(screen.queryByAltText("fourth.png")).not.toBeInTheDocument();
-
-    const overflowPreview = screen.getByText("+2");
-    expect(overflowPreview).toBeInTheDocument();
-    expect(overflowPreview).toHaveClass("xterm-host-preview-overflow");
-  });
-
-  it("removes a pending image from the preview strip when delete is clicked", async () => {
-    uploadHookMocks.pendingImages = [
-      { id: "img-1", name: "first.png", previewUrl: "blob:first" },
-      { id: "img-2", name: "second.png", previewUrl: "blob:second" },
-    ];
-
-    render(
-      <JotaiProvider>
-        <XtermHost terminalId="preview-delete-terminal" workspaceId="test-workspace" />
-      </JotaiProvider>
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "Remove first.png" }));
-
-    expect(uploadHookMocks.removePendingImage).toHaveBeenCalledWith("img-1");
-  });
-
-  it("shows a large preview when hovering a pending image", async () => {
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "first.png", previewUrl: "blob:first" }];
-
-    render(
-      <JotaiProvider>
-        <XtermHost terminalId="preview-hover-terminal" workspaceId="test-workspace" />
-      </JotaiProvider>
-    );
-
-    const thumbnail = screen.getByAltText("first.png");
-    await userEvent.hover(thumbnail);
-
-    const largePreview = screen.getByRole("img", { name: "Preview first.png" });
-    expect(largePreview).toHaveAttribute("src", "blob:first");
-
-    await userEvent.unhover(thumbnail);
-
-    expect(screen.queryByRole("img", { name: "Preview first.png" })).not.toBeInTheDocument();
-  });
-
-  it("uploads pending images before submit and clears them after a successful submit", async () => {
-    const store = createStore();
-    const resolutionOrder: string[] = [];
-    const sendTerminalInput = vi.fn().mockImplementation(async () => {
-      resolutionOrder.push("send-start");
-      await Promise.resolve();
-      resolutionOrder.push("send-resolved");
-    });
-    uploadHookMocks.uploadPendingImages.mockImplementation(async () => {
-      resolutionOrder.push("upload");
-    });
-    uploadHookMocks.clearPendingImages.mockImplementation(() => {
-      resolutionOrder.push("clear");
-    });
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "build.png", previewUrl: "blob:build" }];
-
-    store.set(wsClientAtom, {
-      sendTerminalInput,
-      subscribe: vi.fn(() => () => {}),
-    } as never);
-
-    render(
-      <Provider store={store}>
-        <XtermHost terminalId="submit-upload-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await act(async () => {
-      await onDataCallback?.("ship it\r");
-    });
-
-    expect(uploadHookMocks.uploadPendingImages).toHaveBeenCalledTimes(1);
-    expect(uploadHookMocks.uploadPendingImages.mock.invocationCallOrder[0]).toBeLessThan(
-      sendTerminalInput.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
-    );
-    expect(sendTerminalInput).toHaveBeenCalledWith(
-      "submit-upload-terminal",
-      new TextEncoder().encode("ship it\r"),
-      "submit",
-      "ship it"
-    );
-    expect(uploadHookMocks.clearPendingImages).toHaveBeenCalledTimes(1);
-    expect(sendTerminalInput.mock.invocationCallOrder[0]).toBeLessThan(
-      uploadHookMocks.clearPendingImages.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
-    );
-    expect(resolutionOrder).toEqual(["upload", "send-start", "send-resolved", "clear"]);
-  });
-
-  it("appends uploaded pending image paths before submit input is dispatched", async () => {
-    const store = createStore();
-    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "build.png", previewUrl: "blob:build" }];
-    uploadHookMocks.uploadPendingImages.mockResolvedValueOnce([
-      { path: "/tmp/coder uploads/build.png", originalName: "build.png", size: 12 },
-    ]);
-
-    store.set(wsClientAtom, {
-      sendTerminalInput,
-      subscribe: vi.fn(() => () => {}),
-    } as never);
-
-    render(
-      <Provider store={store}>
-        <XtermHost terminalId="submit-upload-path-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await act(async () => {
-      await onDataCallback?.("ship it\r");
-    });
-
-    expect(sendTerminalInput).toHaveBeenCalledWith(
-      "submit-upload-path-terminal",
-      new TextEncoder().encode("ship it '/tmp/coder uploads/build.png' \r"),
-      "submit",
-      "ship it '/tmp/coder uploads/build.png'"
-    );
-  });
-
-  it("keeps pending images when submit upload fails", async () => {
-    const store = createStore();
-    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "build.png", previewUrl: "blob:build" }];
-    uploadHookMocks.uploadPendingImages.mockRejectedValueOnce(new Error("upload failed"));
-
-    store.set(wsClientAtom, {
-      sendTerminalInput,
-      subscribe: vi.fn(() => () => {}),
-    } as never);
-
-    render(
-      <Provider store={store}>
-        <XtermHost terminalId="submit-upload-fail-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await act(async () => {
-      await onDataCallback?.("ship it\r");
-    });
-
-    expect(sendTerminalInput).not.toHaveBeenCalled();
-    expect(uploadHookMocks.clearPendingImages).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Failed to send terminal input:",
-      expect.objectContaining({ message: "upload failed" })
-    );
-    expect(screen.getByAltText("build.png")).toHaveAttribute("src", "blob:build");
-  });
-
-  it("keeps pending images when terminal submit fails", async () => {
-    const store = createStore();
-    const sendTerminalInput = vi.fn().mockRejectedValue(new Error("submit failed"));
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "build.png", previewUrl: "blob:build" }];
-
-    store.set(wsClientAtom, {
-      sendTerminalInput,
-      subscribe: vi.fn(() => () => {}),
-    } as never);
-
-    render(
-      <Provider store={store}>
-        <XtermHost terminalId="submit-fail-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await act(async () => {
-      await onDataCallback?.("ship it\r");
-    });
-
-    expect(uploadHookMocks.uploadPendingImages).toHaveBeenCalledTimes(1);
-    expect(uploadHookMocks.clearPendingImages).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalledWith(
-      "Failed to send terminal input:",
-      expect.objectContaining({ message: "submit failed" })
-    );
-    expect(screen.getByAltText("build.png")).toHaveAttribute("src", "blob:build");
-  });
-
-  it("keeps pending images when submit input never dispatches", async () => {
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "build.png", previewUrl: "blob:build" }];
-
-    render(
-      <JotaiProvider>
-        <XtermHost terminalId="submit-no-dispatch-terminal" workspaceId="test-workspace" readOnly />
-      </JotaiProvider>
-    );
-
-    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await act(async () => {
-      await onDataCallback?.("ship it\r");
-    });
-
-    expect(uploadHookMocks.uploadPendingImages).toHaveBeenCalledTimes(1);
-    expect(uploadHookMocks.clearPendingImages).not.toHaveBeenCalled();
-    expect(screen.getByAltText("build.png")).toHaveAttribute("src", "blob:build");
-  });
-
-  it("marks kitty keyboard enter as submit activity before dispatching", async () => {
-    const store = createStore();
-    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
-
-    store.set(wsClientAtom, {
-      sendTerminalInput,
-      subscribe: vi.fn(() => () => {}),
-    } as never);
-
-    render(
-      <Provider store={store}>
-        <XtermHost terminalId="kitty-submit-terminal" workspaceId="test-workspace" />
-      </Provider>
-    );
-
-    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
-    expect(onDataCallback).toBeTypeOf("function");
-
-    await onDataCallback?.("fix the build\x1b[13;5u");
-
-    expect(sendTerminalInput).toHaveBeenCalledWith(
-      "kitty-submit-terminal",
-      new TextEncoder().encode("fix the build\x1b[13;5u"),
-      "submit",
-      "fix the build"
-    );
-  });
-
   it("shows the mobile soft-key bar above interactive terminals", () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
@@ -4151,7 +3720,7 @@ describe("XtermHost", () => {
     expect(document.querySelector(".paste-dialog-overlay")).toBeNull();
   });
 
-  it("opens the hidden file picker from the mobile upload button and collects selected images for preview", async () => {
+  it("opens the hidden file picker from the mobile upload button and forwards selected files", async () => {
     viewportMocks.viewport = "mobile";
     const store = createStore();
     const user = userEvent.setup();
@@ -4184,8 +3753,7 @@ describe("XtermHost", () => {
       fireEvent.change(input!, { target: { files: [file] } });
     });
 
-    expect(uploadHookMocks.collectPendingFiles).toHaveBeenCalledWith([file]);
-    expect(uploadHookMocks.handleFiles).not.toHaveBeenCalled();
+    expect(uploadHookMocks.handleFiles).toHaveBeenCalledWith([file]);
     expect(input?.value).toBe("");
   });
 
@@ -4542,54 +4110,6 @@ describe("XtermHost", () => {
       "submit",
       undefined
     );
-  });
-
-  it("clears pending images when terminal or workspace identity changes", () => {
-    uploadHookMocks.pendingImages = [{ id: "img-1", name: "build.png", previewUrl: "blob:build" }];
-
-    const { rerender } = render(
-      <JotaiProvider>
-        <XtermHost
-          terminalId="pending-images-terminal-a"
-          workspaceId="pending-images-workspace-a"
-        />
-      </JotaiProvider>
-    );
-
-    expect(uploadHookMocks.clearPendingImages).not.toHaveBeenCalled();
-
-    rerender(
-      <JotaiProvider>
-        <XtermHost
-          terminalId="pending-images-terminal-a"
-          workspaceId="pending-images-workspace-a"
-        />
-      </JotaiProvider>
-    );
-
-    expect(uploadHookMocks.clearPendingImages).not.toHaveBeenCalled();
-
-    rerender(
-      <JotaiProvider>
-        <XtermHost
-          terminalId="pending-images-terminal-b"
-          workspaceId="pending-images-workspace-a"
-        />
-      </JotaiProvider>
-    );
-
-    expect(uploadHookMocks.clearPendingImages).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <JotaiProvider>
-        <XtermHost
-          terminalId="pending-images-terminal-b"
-          workspaceId="pending-images-workspace-b"
-        />
-      </JotaiProvider>
-    );
-
-    expect(uploadHookMocks.clearPendingImages).toHaveBeenCalledTimes(2);
   });
 
   it("preserves buffered draft and one-shot ctrl state across viewport changes for the same terminal", async () => {

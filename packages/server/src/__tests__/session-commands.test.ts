@@ -10,7 +10,6 @@ import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
-import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -41,9 +40,6 @@ describe("Session Commands", () => {
     eventBus = new EventBus();
     stateDir = mkdtempSync(join(tmpdir(), "session-command-state-"));
     const providerConfigRepo = createProviderConfigRepo(join(stateDir, "provider-configs.json"));
-    const settingsRepo = new SettingsRepo({
-      filePath: join(stateDir, "settings.json"),
-    });
     workspaceRepo = new WorkspaceRepo({
       filePath: join(stateDir, "workspaces.json"),
     });
@@ -83,7 +79,6 @@ describe("Session Commands", () => {
       terminalMgr: {} as never,
       eventBus,
       broadcaster,
-      settingsRepo,
       providerRegistry: [],
       fencingMgr: {} as never,
       supervisorMgr: {} as never,
@@ -168,73 +163,6 @@ describe("Session Commands", () => {
       }
     });
 
-    it("publishes agent instructions before session.create starts the agent", async () => {
-      const testDir = join(tmpdir(), `coder-studio-session-publish-${Date.now()}`);
-      mkdirSync(join(testDir, ".git"), { recursive: true });
-      writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
-
-      const calls: string[] = [];
-      ctx.providerRegistry = providerRegistry as ProviderDefinition[];
-      ctx.providerRuntimeDeps = {
-        commandExists: async (command: string) => command === "claude",
-      };
-      ctx.agentInstructionPublisher = {
-        syncWorkspace: vi.fn(async () => {
-          calls.push("publish");
-        }),
-        scheduleWorkspaceSync: vi.fn(),
-        syncAllOpenWorkspaces: vi.fn(),
-      } as never;
-
-      const createSpy = vi.spyOn(sessionMgr, "create").mockImplementation(async () => {
-        calls.push("create");
-        return {
-          id: "sess-1",
-          workspaceId: "ws-1",
-          providerId: "claude",
-          terminalId: "term-1",
-          capability: "full",
-          state: "starting",
-          startedAt: Date.now(),
-          lastActiveAt: Date.now(),
-        };
-      });
-
-      try {
-        const openResult = await dispatch(
-          {
-            kind: "command",
-            id: "workspace-publish-order",
-            op: "workspace.open",
-            args: { path: testDir },
-          },
-          ctx
-        );
-
-        expect(openResult.ok).toBe(true);
-        calls.length = 0;
-
-        const result = await dispatch(
-          {
-            kind: "command",
-            id: "session-publish-order",
-            op: "session.create",
-            args: {
-              workspaceId: openResult.data!.id,
-              providerId: "claude",
-            },
-          },
-          ctx
-        );
-
-        expect(result.ok).toBe(true);
-        expect(calls).toEqual(["publish", "create"]);
-      } finally {
-        createSpy.mockRestore();
-        rmSync(testDir, { recursive: true, force: true });
-      }
-    });
-
     it("launches a custom provider through the existing session.create flow", async () => {
       const testDir = join(tmpdir(), `coder-studio-custom-provider-session-${Date.now()}`);
       mkdirSync(join(testDir, ".git"), { recursive: true });
@@ -301,61 +229,6 @@ describe("Session Commands", () => {
           objective: undefined,
           baselineGitHead: undefined,
           verificationRuns: [],
-        });
-      } finally {
-        rmSync(testDir, { recursive: true, force: true });
-      }
-    });
-
-    it.each([
-      { providerId: "gemini", command: "gemini", expectedCapability: "full" },
-      { providerId: "cursor", command: "agent", expectedCapability: "full" },
-      { providerId: "opencode", command: "opencode", expectedCapability: "limited" },
-    ])("launches $providerId through the shared session.create flow", async ({
-      providerId,
-      command,
-      expectedCapability,
-    }) => {
-      const testDir = join(tmpdir(), `coder-studio-${providerId}-session-${Date.now()}`);
-      mkdirSync(join(testDir, ".git"), { recursive: true });
-      writeFileSync(join(testDir, ".git", "HEAD"), "ref: refs/heads/main\n");
-
-      ctx.providerRegistry = providerRegistry as ProviderDefinition[];
-      ctx.providerRuntimeDeps = {
-        commandExists: async (candidate: string) => candidate === command,
-      };
-
-      try {
-        const openResult = await dispatch(
-          {
-            kind: "command",
-            id: `workspace-${providerId}`,
-            op: "workspace.open",
-            args: { path: testDir },
-          },
-          ctx
-        );
-
-        expect(openResult.ok).toBe(true);
-
-        const result = await dispatch(
-          {
-            kind: "command",
-            id: `session-${providerId}`,
-            op: "session.create",
-            args: {
-              workspaceId: openResult.data!.id,
-              providerId,
-            },
-          },
-          ctx
-        );
-
-        expect(result.ok).toBe(true);
-        expect(result.data).toMatchObject({
-          providerId,
-          capability: expectedCapability,
-          state: "starting",
         });
       } finally {
         rmSync(testDir, { recursive: true, force: true });

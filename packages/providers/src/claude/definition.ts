@@ -1,6 +1,5 @@
 import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
 
-import { providerSkillMountDirectories } from "../skills/directories.js";
 import { claudeConfigSchema } from "./config-schema.js";
 import { claudeIdleHeuristics } from "./idle-heuristics.js";
 import { buildClaudeSupervisorEvalCommand } from "./supervisor-eval.js";
@@ -82,8 +81,6 @@ export const claudeDefinition: ProviderDefinition = {
     { key: "review", supported: false, label: "Review" },
   ],
   install: claudeInstallMetadata,
-  supportsSkillsMount: true,
-  skillMountDirectories: providerSkillMountDirectories(".claude"),
 
   // ===== Command construction =====
   buildCommand(config: ProviderConfig, ctx) {
@@ -100,30 +97,13 @@ export const claudeDefinition: ProviderDefinition = {
     };
   },
 
+  buildSupervisorEvalCommand: buildClaudeSupervisorEvalCommand,
+
   // ===== Configuration =====
   configSchema: claudeConfigSchema,
   defaultConfig: {},
 
   // ===== Runtime requirements =====
   requiredCommands: ["claude"],
-  agentInstructions: {
-    publishTarget: {
-      path: ".claude/CLAUDE.md",
-    },
-  },
-  headless: {
-    supportedScenarios: ["supervisor_eval", "session_analysis", "agent_instructions_generate"],
-    buildCommand(config, scenario, req) {
-      if (
-        scenario !== "supervisor_eval" &&
-        scenario !== "session_analysis" &&
-        scenario !== "agent_instructions_generate"
-      ) {
-        return null;
-      }
-
-      return buildClaudeSupervisorEvalCommand(config, req);
-    },
-  },
   idleHeuristics: claudeIdleHeuristics,
 };

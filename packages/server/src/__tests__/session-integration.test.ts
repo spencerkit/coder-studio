@@ -20,7 +20,6 @@ import { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
-import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { TerminalManager } from "../terminal/manager.js";
 import type { Broadcaster, PtyHost, PtyProcess } from "../terminal/types.js";
@@ -195,9 +194,6 @@ describe("Session Integration", () => {
     providerConfigRepo = new ProviderConfigRepo({
       filePath: join(stateDir, "provider-configs.json"),
     });
-    const settingsRepo = new SettingsRepo({
-      filePath: join(stateDir, "settings.json"),
-    });
     sessionMgr = new SessionManager({
       terminalMgr,
       eventBus,
@@ -214,7 +210,6 @@ describe("Session Integration", () => {
       terminalMgr,
       eventBus,
       broadcaster: mockBroadcaster,
-      settingsRepo,
       providerRegistry,
       fencingMgr: {} as CommandContext["fencingMgr"],
       supervisorMgr: {} as CommandContext["supervisorMgr"],
@@ -852,7 +847,7 @@ describe("Session Integration", () => {
           op: "terminal.input",
           args: {
             terminalId,
-            bytes: btoa("next turn"),
+            bytes: btoa("next turn\n"),
             activity: "typing",
           },
         },

@@ -1,14 +1,14 @@
 import type { AgentInstructionsHealth, AgentInstructionsHealthIssue } from "@coder-studio/core";
 import { AGENT_INSTRUCTIONS_RELATIVE_PATH } from "../workspace/workspace-state.js";
 
-const REQUIRED_WORKFLOW_EXPECTATIONS = [
+const REQUIRED_WORKING_RULES = [
   "Keep changes focused on the requested task.",
   "Do not revert user changes unless explicitly asked.",
   "Prefer the project's existing patterns.",
   "Run the relevant verification command before reporting completion.",
 ] as const;
 
-const REQUIRED_REVIEW_CHECKLIST = [
+const REQUIRED_REVIEW_EXPECTATIONS = [
   "Summarize changed files.",
   "Report verification commands and results.",
   "Call out risks, skipped tests, and assumptions.",
@@ -42,15 +42,13 @@ export function evaluateAgentInstructionsMarkdown(content: string): AgentInstruc
   const sections = indexSections(content);
   const projectOverview = sections.has("Project Overview");
   const developmentCommands = hasAnyBullet(sections.get("Development Commands"));
-  const workingRulesSection =
-    sections.get("Workflow Expectations") ?? sections.get("Working Rules");
-  const reviewExpectationsSection =
-    sections.get("Review Checklist") ?? sections.get("Review Expectations");
+  const workingRulesSection = sections.get("Working Rules");
+  const reviewExpectationsSection = sections.get("Review Expectations");
   const providerNotesSection = sections.get("Provider Notes");
   const workingRules = hasAnyBullet(workingRulesSection);
   const reviewExpectations =
     hasAnyBullet(reviewExpectationsSection) &&
-    REQUIRED_REVIEW_CHECKLIST.every((rule) =>
+    REQUIRED_REVIEW_EXPECTATIONS.every((rule) =>
       reviewExpectationsSection?.some((line) => line.includes(rule))
     );
   const providerNotes =
@@ -58,7 +56,7 @@ export function evaluateAgentInstructionsMarkdown(content: string): AgentInstruc
     PROVIDER_NOTE_MARKERS.some((marker) =>
       providerNotesSection?.some((line) => line.includes(marker))
     );
-  const safetyRules = REQUIRED_WORKFLOW_EXPECTATIONS.every((rule) =>
+  const safetyRules = REQUIRED_WORKING_RULES.every((rule) =>
     workingRulesSection?.some((line) => line.includes(rule))
   );
 
@@ -78,19 +76,19 @@ export function evaluateAgentInstructionsMarkdown(content: string): AgentInstruc
   if (!workingRules) {
     issues.push({
       code: "missing_working_rules",
-      message: "Workflow Expectations section is missing",
+      message: "Working Rules section is missing",
     });
   }
   if (!reviewExpectations) {
     issues.push({
       code: "missing_review_expectations",
-      message: "Review Checklist section is missing",
+      message: "Review Expectations section is missing",
     });
   }
   if (!safetyRules) {
     issues.push({
       code: "missing_safety_rules",
-      message: "Workflow expectations do not include the required safety rules",
+      message: "Working rules do not include the required safety rules",
     });
   }
   if (!providerNotes) {

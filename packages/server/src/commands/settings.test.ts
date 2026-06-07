@@ -676,7 +676,7 @@ describe("settings commands", () => {
     });
   });
 
-  it("settings.get ignores legacy provider keys and sanitizes stored configs per provider schema", async () => {
+  it("settings.get ignores legacy provider keys and sanitizes stored configs", async () => {
     settingsRepo.set("providers.codex.additionalArgs", ["--legacy-user-setting"]);
     providerConfigRepo.set("claude", {
       additionalArgs: ["--verbose"],
@@ -698,7 +698,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data?.["providers.claude.additionalArgs"]).toEqual(["--verbose"]);
-    expect(result.data?.["providers.claude.model"]).toBe("claude-opus-4-6");
+    expect(result.data?.["providers.claude.model"]).toBeUndefined();
     expect(result.data?.["providers.codex.additionalArgs"]).toBeUndefined();
     expect(result.data?.["providers.openai.additionalArgs"]).toBeUndefined();
   });

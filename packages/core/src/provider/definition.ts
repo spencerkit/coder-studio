@@ -18,12 +18,7 @@ export interface ProviderInstallMetadata {
   strategies: Partial<Record<NodeJS.Platform, ProviderInstallStrategy[]>>;
 }
 
-export type ProviderHeadlessScenario =
-  | "supervisor_eval"
-  | "agent_instructions_generate"
-  | "session_analysis";
-
-export interface ProviderHeadlessCommandRequest {
+export interface SupervisorEvalCommandRequest {
   prompt: string;
   sessionId: string;
   workspacePath: string;
@@ -32,11 +27,7 @@ export interface ProviderHeadlessCommandRequest {
   outputFile?: string;
 }
 
-export type SupervisorEvalCommandRequest = ProviderHeadlessCommandRequest;
-
 export type ProviderKind = "built_in" | "preset" | "custom";
-
-export type ProviderStability = "stable" | "experimental";
 
 export type ProviderCapabilityKey =
   | "interactive_session"
@@ -51,31 +42,11 @@ export interface ProviderCapabilityDescriptor {
   label: string;
 }
 
-export interface ProviderHeadlessCommand {
-  argv: string[];
-  outputFile?: string;
-  cwd?: string;
-  env?: Record<string, string>;
-}
-
-export interface ProviderHeadlessDefinition {
-  supportedScenarios: ProviderHeadlessScenario[];
-  buildCommand: (
-    config: ProviderConfig,
-    scenario: ProviderHeadlessScenario,
-    req: ProviderHeadlessCommandRequest
-  ) => ProviderHeadlessCommand | null;
-}
-
 export interface ProviderListItem {
   id: string;
   displayName: string;
   badge: string;
   kind: ProviderKind;
-  stability?: ProviderStability;
-  supportsAgentInstructions?: boolean;
-  supportsAgentInstructionsGeneration?: boolean;
-  supportsSkillsMount?: boolean;
   capability: "full" | "limited" | "unsupported";
   capabilities: ProviderCapabilityDescriptor[];
   requiredCommands: string[];
@@ -87,10 +58,6 @@ export interface ProviderDefinition {
   displayName: string;
   badge: string;
   kind: ProviderKind;
-  stability?: ProviderStability;
-  supportsAgentInstructions?: boolean;
-  supportsAgentInstructionsGeneration?: boolean;
-  supportsSkillsMount?: boolean;
   /**
    * Declarative label for UI badges and docs only.
    * Runtime behavior must read hooks/events directly.
@@ -98,11 +65,6 @@ export interface ProviderDefinition {
   capability: "full" | "limited" | "unsupported";
   capabilities: ProviderCapabilityDescriptor[];
   install: ProviderInstallMetadata;
-  /**
-   * Directories the provider actually loads skills from. The first entry is the
-   * canonical write/display target; later entries are discovery aliases.
-   */
-  skillMountDirectories?: string[];
 
   // Command construction
   buildCommand(
@@ -114,22 +76,22 @@ export interface ProviderDefinition {
     cwd: string;
   };
 
+  buildSupervisorEvalCommand?(
+    config: ProviderConfig,
+    req: SupervisorEvalCommandRequest
+  ): {
+    argv: string[];
+    outputFile?: string;
+    cwd?: string;
+    env?: Record<string, string>;
+  } | null;
+
   // Configuration
   configSchema: ZodSchema<ProviderConfig>;
   defaultConfig: ProviderConfig;
 
   // Runtime requirements
   requiredCommands: string[];
-
-  // Optional agent instructions publishing target for providers that read
-  // workspace-local instruction files from a fixed path.
-  agentInstructions?: {
-    publishTarget?: {
-      path: string;
-    };
-  };
-
-  headless?: ProviderHeadlessDefinition;
 
   /** PTY-output-based idle detection used by the session manager. */
   idleHeuristics?: IdleHeuristics;
@@ -138,17 +100,4 @@ export interface ProviderDefinition {
 export interface LaunchContext {
   sessionId: string;
   workspacePath: string;
-}
-
-export function providerSupportsHeadlessScenario(
-  provider: Pick<ProviderDefinition, "headless">,
-  scenario: ProviderHeadlessScenario
-): boolean {
-  return provider.headless?.supportedScenarios.includes(scenario) ?? false;
-}
-
-export function providerSupportsAgentInstructionsGeneration(
-  provider: Pick<ProviderDefinition, "headless">
-): boolean {
-  return providerSupportsHeadlessScenario(provider, "agent_instructions_generate");
 }

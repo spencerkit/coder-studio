@@ -173,18 +173,6 @@ describe("SessionRepo", () => {
       expect(repo.findById("s-1")?.errorReason).toBe("API rate limit exceeded");
     });
 
-    it("persists the full first submitted input when updated", () => {
-      repo.update("s-1", {
-        title: "hello wor…",
-        firstSubmittedUserInput: "hello world this is a test",
-      });
-
-      expect(repo.findById("s-1")).toMatchObject({
-        title: "hello wor…",
-        firstSubmittedUserInput: "hello world this is a test",
-      });
-    });
-
     it("archives a session", () => {
       repo.archive("s-1");
       expect(repo.listHydratable()).toEqual([]);
@@ -207,7 +195,6 @@ describe("SessionRepo", () => {
         error_reason: null,
         archived: 0,
         title: "resume me",
-        first_submitted_user_input: "resume me with more context",
         draft: "draft text",
       });
 
@@ -220,7 +207,6 @@ describe("SessionRepo", () => {
         workspaceId: "ws-1",
         terminalId: "t-1",
         title: "resume me",
-        firstSubmittedUserInput: "resume me with more context",
         draft: "draft text",
       });
     });

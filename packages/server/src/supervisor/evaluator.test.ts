@@ -40,15 +40,9 @@ function createCommandProvider(
   providerId: string,
   command: ReturnType<typeof nodeEchoCommand>
 ): ProviderDefinition {
-  const buildCommand = vi.fn((_config, scenario) =>
-    scenario === "supervisor_eval" ? command : null
-  );
   return {
     id: providerId,
-    headless: {
-      supportedScenarios: ["supervisor_eval"],
-      buildCommand,
-    },
+    buildSupervisorEvalCommand: vi.fn(() => command),
   } as unknown as ProviderDefinition;
 }
 
@@ -57,15 +51,9 @@ function createProvider(
   stdout: string,
   options?: { defaultConfig?: Record<string, unknown> }
 ): ProviderDefinition {
-  const buildCommand = vi.fn((_config, scenario) =>
-    scenario === "supervisor_eval" ? nodeEchoCommand(stdout) : null
-  );
   return {
     id: providerId,
-    headless: {
-      supportedScenarios: ["supervisor_eval"],
-      buildCommand,
-    },
+    buildSupervisorEvalCommand: vi.fn(() => nodeEchoCommand(stdout)),
     defaultConfig: options?.defaultConfig,
   } as unknown as ProviderDefinition;
 }
@@ -275,9 +263,8 @@ describe("SupervisorEvaluator", () => {
         guidance: "next step: run tests",
       })
     );
-    expect(provider.headless?.buildCommand).toHaveBeenCalledWith(
+    expect(provider.buildSupervisorEvalCommand).toHaveBeenCalledWith(
       expect.anything(),
-      "supervisor_eval",
       expect.objectContaining({ model: "o3" })
     );
   });
@@ -490,14 +477,11 @@ describe("SupervisorEvaluator", () => {
       providerRegistry: [
         {
           id: "claude",
-          headless: {
-            supportedScenarios: ["supervisor_eval"],
-            buildCommand: vi.fn(() => ({
-              argv: ["definitely-missing-supervisor-evaluator-binary"],
-              cwd: process.cwd(),
-              env: {},
-            })),
-          },
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: ["definitely-missing-supervisor-evaluator-binary"],
+            cwd: process.cwd(),
+            env: {},
+          })),
         } as unknown as ProviderDefinition,
       ],
       providerConfigRepo: createProviderConfigRepo(),
@@ -687,14 +671,11 @@ describe("SupervisorEvaluator", () => {
       providerRegistry: [
         {
           id: "codex",
-          headless: {
-            supportedScenarios: ["supervisor_eval"],
-            buildCommand: vi.fn(() => ({
-              argv: [process.execPath, "-e", script],
-              cwd: process.cwd(),
-              env: {},
-            })),
-          },
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: [process.execPath, "-e", script],
+            cwd: process.cwd(),
+            env: {},
+          })),
         } as unknown as ProviderDefinition,
       ],
       providerConfigRepo: createProviderConfigRepo(),

@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
-import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
 import type { CommandContext } from "../ws/dispatch.js";
@@ -119,9 +118,6 @@ describe("LSP commands", () => {
   beforeEach(() => {
     stateDir = mkdtempSync(join(tmpdir(), "lsp-command-state-"));
     const eventBus = new EventBus();
-    const settingsRepo = new SettingsRepo({
-      filePath: join(stateDir, "settings.json"),
-    });
     const workspaceMgr = new WorkspaceManager({
       workspaceRepo: new WorkspaceRepo({
         filePath: join(stateDir, "workspaces.json"),
@@ -135,7 +131,6 @@ describe("LSP commands", () => {
       sessionMgr: {} as never,
       terminalMgr: {} as never,
       broadcaster: { broadcast: vi.fn(), sendToClient: vi.fn(), sendBinaryToClient: vi.fn() },
-      settingsRepo,
       providerRegistry: [],
       autoFetch: {} as never,
       fencingMgr: {} as never,

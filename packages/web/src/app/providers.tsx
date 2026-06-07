@@ -30,7 +30,6 @@ import {
   dispatchCommandAtom,
   isWriterAtom,
   lastReconnectAttemptAtom,
-  providerListAtom,
   reconnectAttemptCountAtom,
   serverInfoAtom,
   sessionsAtom,
@@ -89,7 +88,6 @@ import {
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
 import { getThemeById, resolveStoredThemeId } from "../theme";
-import { useSyncTerminalThemeBackground } from "../theme/use-sync-terminal-theme-background";
 import type { ConnectionStatus, EventListener } from "../ws";
 import { resolveWsUrl, WsClient } from "../ws";
 
@@ -223,34 +221,6 @@ function resetServerProjectedState(store: Store): void {
   }
 }
 
-function ProviderListBootstrapper() {
-  const connectionStatus = useAtomValue(connectionStatusAtom);
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const providerList = useAtomValue(providerListAtom);
-  const setProviderList = useSetAtom(providerListAtom);
-
-  useEffect(() => {
-    if (connectionStatus !== "connected" || providerList.length > 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void dispatch("provider.list", {}).then((result) => {
-      if (cancelled || !result.ok || !Array.isArray(result.data)) {
-        return;
-      }
-      setProviderList(result.data);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [connectionStatus, dispatch, providerList.length, setProviderList]);
-
-  return null;
-}
-
 function parseWorkspaceRefreshHint(
   topic: string,
   payload: unknown
@@ -332,7 +302,6 @@ export function AppProviders({ children }: AppProvidersProps) {
   const { claim } = useActivation();
 
   useSessionNotifications();
-  useSyncTerminalThemeBackground(dispatch, activeWorkspaceId, connectionStatus);
 
   // Use refs to avoid stale closures in event handlers
   const wsClientRef = useRef<WsClient | null>(null);
@@ -1217,12 +1186,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       .catch(() => {});
   }, [activeWorkspaceId, activationStatus, authEnabled, authenticated, connectionStatus]);
 
-  return (
-    <>
-      <ProviderListBootstrapper />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
 
 function storeServerMetadata(

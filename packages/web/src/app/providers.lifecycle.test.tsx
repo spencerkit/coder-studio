@@ -9,7 +9,6 @@ import {
 } from "../atoms/activation";
 import { appearancePersonalizationAtom, authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom } from "../atoms/connection";
-import { providerListAtom } from "../atoms/providers";
 import { sessionsAtom } from "../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
@@ -1137,17 +1136,6 @@ describe("AppProviders lifecycle recovery", () => {
       store.set(activationStatusAtom, "active");
       store.set(activationGenerationAtom, 1);
       store.set(activationReasonAtom, null);
-      store.set(providerListAtom, [
-        {
-          id: "codex",
-          displayName: "Codex",
-          badge: "Codex",
-          kind: "built_in",
-          capability: "full",
-          capabilities: [],
-          requiredCommands: ["codex"],
-        },
-      ]);
       store.set(gitStateAtomFamily("ws-1"), {
         branch: "feature/test",
         ahead: 1,
@@ -1217,7 +1205,6 @@ describe("AppProviders lifecycle recovery", () => {
       expect(store.get(worktreeListAtomFamily("ws-1")).items).toEqual([]);
       expect(store.get(fileTreeStaleAtomFamily("ws-1"))).toBe(false);
       expect(store.get(sessionsAtom)).toEqual({});
-      expect(store.get(providerListAtom).map((provider) => provider.id)).toEqual(["codex"]);
     });
   });
 

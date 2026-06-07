@@ -48,7 +48,6 @@ export interface LspToolInstallManagerDeps extends CommandCheckDeps {
 export class LspToolInstallManager {
   private readonly jobs = new Map<string, LspToolInstallJobSnapshot>();
   private readonly activeJobIdsByServerKind = new Map<LspServerKind, string>();
-  private readonly latestFailureByServerKind = new Map<LspServerKind, LspToolInstallJobSnapshot>();
 
   constructor(private readonly deps: LspToolInstallManagerDeps) {}
 
@@ -74,11 +73,6 @@ export class LspToolInstallManager {
 
   get(jobId: string): LspToolInstallJobSnapshot | undefined {
     const job = this.jobs.get(jobId);
-    return job ? cloneJobSnapshot(job) : undefined;
-  }
-
-  getLatestFailure(serverKind: LspServerKind): LspToolInstallJobSnapshot | undefined {
-    const job = this.latestFailureByServerKind.get(serverKind);
     return job ? cloneJobSnapshot(job) : undefined;
   }
 
@@ -264,7 +258,6 @@ export class LspToolInstallManager {
         step.stderrExcerpt = excerpt(details.stderr || details.message);
         job.status = "failed";
         job.failure = normalizeFailure(serverKind, step, error);
-        this.latestFailureByServerKind.set(serverKind, cloneJobSnapshot(job));
         this.clearActiveJob(serverKind, job.jobId);
         this.jobs.set(job.jobId, job);
         return;
@@ -282,7 +275,6 @@ export class LspToolInstallManager {
 
     job.status = "succeeded";
     job.currentStepId = undefined;
-    this.latestFailureByServerKind.delete(serverKind);
     this.clearActiveJob(serverKind, job.jobId);
     this.jobs.set(job.jobId, job);
   }

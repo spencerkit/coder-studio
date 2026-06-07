@@ -2,11 +2,6 @@ import type { ProviderDefinition, ProviderListItem } from "@coder-studio/core";
 
 import { claudeDefinition } from "./claude/definition.js";
 import { codexDefinition } from "./codex/definition.js";
-import { cursorDefinition } from "./cursor/definition.js";
-import { geminiDefinition } from "./gemini/definition.js";
-import { opencodeDefinition } from "./opencode/definition.js";
-
-export const builtInProviderIds = ["claude", "codex", "gemini", "cursor", "opencode"] as const;
 
 /**
  * Static registry of all available providers
@@ -18,13 +13,7 @@ export const builtInProviderIds = ["claude", "codex", "gemini", "cursor", "openc
  * 3. Import and add to this array
  * 4. Frontend automatically receives updated list via provider.list command
  */
-export const providerRegistry: ProviderDefinition[] = [
-  claudeDefinition,
-  codexDefinition,
-  geminiDefinition,
-  cursorDefinition,
-  opencodeDefinition,
-];
+export const providerRegistry: ProviderDefinition[] = [claudeDefinition, codexDefinition];
 
 /**
  * Convert an internal provider definition into a frontend-safe list item.
@@ -35,14 +24,6 @@ export function toProviderListItem(provider: ProviderDefinition): ProviderListIt
     displayName: provider.displayName,
     badge: provider.badge,
     kind: provider.kind,
-    stability: provider.stability,
-    supportsAgentInstructions:
-      provider.supportsAgentInstructions ??
-      Boolean(provider.agentInstructions?.publishTarget?.path),
-    supportsAgentInstructionsGeneration:
-      provider.supportsAgentInstructionsGeneration ??
-      Boolean(provider.headless?.supportedScenarios.includes("agent_instructions_generate")),
-    supportsSkillsMount: provider.supportsSkillsMount ?? false,
     capability: provider.capability,
     capabilities: provider.capabilities.map((capability) => ({ ...capability })),
     requiredCommands: [...provider.requiredCommands],

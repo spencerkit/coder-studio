@@ -97,18 +97,18 @@ function sortEntities(entities: MonitoringEntitySummary[], mode: SortMode) {
 
 function sortAttributionTree(
   workspaces: MonitoringEntitySummary[],
-  childEntities: MonitoringEntitySummary[],
+  sessions: MonitoringEntitySummary[],
   mode: SortMode
 ) {
-  const childrenByParent = new Map<string, MonitoringEntitySummary[]>();
-  for (const entity of childEntities) {
-    const parentId = entity.parentId ?? "";
-    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) ?? []), entity]);
+  const sessionsByParent = new Map<string, MonitoringEntitySummary[]>();
+  for (const session of sessions) {
+    const parentId = session.parentId ?? "";
+    sessionsByParent.set(parentId, [...(sessionsByParent.get(parentId) ?? []), session]);
   }
 
   return sortEntities(workspaces, mode).flatMap((workspace) => [
     workspace,
-    ...sortEntities(childrenByParent.get(workspace.id) ?? [], mode),
+    ...sortEntities(sessionsByParent.get(workspace.id) ?? [], mode),
   ]);
 }
 
@@ -209,7 +209,7 @@ function EntityList({
             aria-label={`${kindLabel} ${displayTitle} ${formatPercent(entity.cpuPercent)} / ${formatBytes(
               entity.memoryBytes
             )}`}
-            className={`monitoring-entity-row ${entity.parentId ? "monitoring-entity-row--child" : ""} ${
+            className={`monitoring-entity-row ${entity.kind === "session" || entity.kind === "subprocess_group" ? "monitoring-entity-row--child" : ""} ${
               selectedEntityId === entity.id ? "monitoring-entity-row--selected" : ""
             }`}
             onClick={() => onSelect(entity)}
@@ -376,16 +376,7 @@ export function MonitoringDashboard({
       return [];
     }
 
-    return sortAttributionTree(
-      response.snapshot.workspaces,
-      [
-        ...response.snapshot.sessions,
-        ...response.snapshot.backgroundGroups.filter((entity) =>
-          entity.parentId?.startsWith("workspace:")
-        ),
-      ],
-      sortMode
-    );
+    return sortAttributionTree(response.snapshot.workspaces, response.snapshot.sessions, sortMode);
   }, [response, sortMode]);
 
   const processEntities = useMemo(() => {
@@ -394,17 +385,6 @@ export function MonitoringDashboard({
     }
 
     return sortEntities(response.snapshot.subprocessGroups, sortMode);
-  }, [response, sortMode]);
-
-  const backgroundEntities = useMemo(() => {
-    if (!response) {
-      return [];
-    }
-
-    return sortEntities(
-      response.snapshot.backgroundGroups.filter((entity) => !entity.parentId),
-      sortMode
-    );
   }, [response, sortMode]);
 
   const selectableEntities = useMemo(() => {
@@ -416,7 +396,6 @@ export function MonitoringDashboard({
       ...sortEntities(response.snapshot.workspaces, sortMode),
       ...sortEntities(response.snapshot.sessions, sortMode),
       ...sortEntities(response.snapshot.subprocessGroups, sortMode),
-      ...sortEntities(response.snapshot.backgroundGroups, sortMode),
     ];
   }, [response, sortMode]);
 
@@ -430,7 +409,6 @@ export function MonitoringDashboard({
         ...response.snapshot.workspaces,
         ...response.snapshot.sessions,
         ...response.snapshot.subprocessGroups,
-        ...response.snapshot.backgroundGroups,
       ].find((entity) => entity.id === selectedEntityId) ?? null
     );
   }, [response, selectedEntityId]);
@@ -501,25 +479,6 @@ export function MonitoringDashboard({
     }
     return "empty";
   }, [processEntities.length, response, runtimeStatus]);
-
-  const backgroundStatus = useMemo<MonitoringViewStatus>(() => {
-    if (!response) {
-      return "loading";
-    }
-    if (!response.settings.runtimeSummaryEnabled) {
-      return "disabled";
-    }
-    if (backgroundEntities.length > 0) {
-      return "ready";
-    }
-    if (runtimeStatus === "degraded") {
-      return "degraded";
-    }
-    if (runtimeStatus === "waiting") {
-      return "waiting";
-    }
-    return "empty";
-  }, [backgroundEntities.length, response, runtimeStatus]);
 
   const primaryState =
     loading || (error && !response) ? (
@@ -817,49 +776,6 @@ export function MonitoringDashboard({
             <Notice
               title={t("monitoring.subprocess_empty")}
               message={t("monitoring.subprocess_empty_description")}
-              tone="info"
-            />
-          )}
-        </section>
-
-        <section className="monitoring-tree monitoring-process-section">
-          <div className="monitoring-card__header">
-            <div className="monitoring-panel-header__copy">
-              <h2>{t("monitoring.background_runtime")}</h2>
-              <p>{t("monitoring.background_runtime_description")}</p>
-            </div>
-          </div>
-          {backgroundStatus === "ready" ? (
-            <EntityList
-              entities={backgroundEntities}
-              selectedEntityId={selectedEntityId}
-              onSelect={(entity) => setSelectedEntityId(entity.id)}
-              history={response.history}
-              sampledAt={response.snapshot.sampledAt}
-              timeWindow={timeWindow}
-            />
-          ) : backgroundStatus === "degraded" ? (
-            <Notice
-              title={t("monitoring.process_collection_degraded")}
-              message={t("monitoring.process_collection_unavailable")}
-              tone="warning"
-            />
-          ) : backgroundStatus === "waiting" ? (
-            <Notice
-              title={t("monitoring.runtime_summary_pending")}
-              message={t("monitoring.runtime_summary_pending_description")}
-              tone="info"
-            />
-          ) : backgroundStatus === "disabled" ? (
-            <Notice
-              title={t("monitoring.runtime_summary_disabled")}
-              message={t("monitoring.enable_runtime_summary")}
-              tone="info"
-            />
-          ) : (
-            <Notice
-              title={t("monitoring.background_runtime_empty")}
-              message={t("monitoring.background_runtime_empty_description")}
               tone="info"
             />
           )}

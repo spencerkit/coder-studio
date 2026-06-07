@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { terminalOutputAtomFamily } from "../features/terminal-panel/atoms";
 import { getThemeById } from "../theme";
-import { getUiPreviewScene, UI_PREVIEW_SCENES } from "./catalog";
 import { buildUiPreviewStore } from "./preview-store";
 import type { UiPreviewSceneTheme } from "./scene-metadata";
 
@@ -52,6 +51,8 @@ const originalClipboard = navigator.clipboard;
 const originalClipboardItem = globalThis.ClipboardItem;
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
 
+let catalogModule: typeof import("./catalog");
+
 function installMatchMedia(device: "desktop" | "mobile") {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -69,12 +70,20 @@ function installMatchMedia(device: "desktop" | "mobile") {
   });
 }
 
+function getCatalogModule() {
+  if (!catalogModule) {
+    throw new Error("UI preview catalog not loaded");
+  }
+
+  return catalogModule;
+}
+
 function renderScene(
   sceneId: string,
   device: "desktop" | "mobile" = "desktop",
   theme: UiPreviewSceneTheme = "mint-dark"
 ) {
-  const scene = getUiPreviewScene(sceneId);
+  const scene = getCatalogModule().getUiPreviewScene(sceneId);
   if (!scene) {
     throw new Error(`Missing scene ${sceneId}`);
   }
@@ -102,7 +111,7 @@ function renderScene(
 describe("UI preview catalog", () => {
   const originalMatchMedia = window.matchMedia;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     installMatchMedia("desktop");
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
@@ -123,7 +132,8 @@ describe("UI preview catalog", () => {
         constructor(public readonly items: Record<string, Blob | Promise<Blob>>) {}
       },
     });
-  });
+    catalogModule = await import("./catalog");
+  }, 30_000);
 
   afterAll(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
@@ -158,7 +168,7 @@ describe("UI preview catalog", () => {
   });
 
   it("registers unique first-batch page scene ids", () => {
-    const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
+    const ids = getCatalogModule().UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(
       expect.arrayContaining([
@@ -182,7 +192,7 @@ describe("UI preview catalog", () => {
   });
 
   it("marks settings section scenes for capture-time navigation", () => {
-    const scene = getUiPreviewScene("settings-appearance");
+    const scene = getCatalogModule().getUiPreviewScene("settings-appearance");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/settings"]);
@@ -190,12 +200,12 @@ describe("UI preview catalog", () => {
   });
 
   it("marks the shortcuts settings scene for capture-time navigation", () => {
-    const scene = getUiPreviewScene("settings-shortcuts");
+    const scene = getCatalogModule().getUiPreviewScene("settings-shortcuts");
     expect(scene?.capture?.settingsSection).toBe("shortcuts");
   });
 
   it("deep-links the monitoring settings scene directly into the monitoring section", () => {
-    const scene = getUiPreviewScene("settings-monitoring");
+    const scene = getCatalogModule().getUiPreviewScene("settings-monitoring");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/settings?section=monitoring"]);
@@ -203,7 +213,7 @@ describe("UI preview catalog", () => {
   });
 
   it("seeds the monitoring review scene with attribution, detail, and subprocess content", () => {
-    const scene = getUiPreviewScene("settings-monitoring");
+    const scene = getCatalogModule().getUiPreviewScene("settings-monitoring");
     const seed = scene?.seed({ theme: "mint-light", locale: "en", device: "desktop" });
     const monitoringResponse = seed?.commands?.monitoringGet;
 
@@ -216,7 +226,7 @@ describe("UI preview catalog", () => {
   });
 
   it("limits the mobile settings root scene to mobile variants only", () => {
-    const scene = getUiPreviewScene("settings-mobile-root");
+    const scene = getCatalogModule().getUiPreviewScene("settings-mobile-root");
     expect(scene?.devices).toEqual(["mobile"]);
   });
 
@@ -228,7 +238,7 @@ describe("UI preview catalog", () => {
   });
 
   it("registers the first showcase scene ids", () => {
-    const ids = UI_PREVIEW_SCENES.map((scene) => scene.id);
+    const ids = getCatalogModule().UI_PREVIEW_SCENES.map((scene) => scene.id);
     expect(ids).toEqual(
       expect.arrayContaining([
         "readme-desktop-hero",
@@ -260,14 +270,10 @@ describe("UI preview catalog", () => {
     expect(document.querySelector(".command-palette, .command-palette-sheet")).toBeTruthy();
   });
 
-  it("renders the workspace launch modal with seeded history and directory data", async () => {
+  it("renders the workspace launch modal with the seeded directory list", async () => {
     renderScene("workspace-launch-modal");
 
-    expect(await screen.findByText("Recent Workspaces")).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", { name: "Open recent workspace coder-studio" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("/home/spencer/workspace/coder-studio")).toBeInTheDocument();
+    expect(await screen.findByText("coder-studio")).toBeInTheDocument();
     expect(document.querySelector(".launch-modal, .mobile-sheet--launch")).toBeTruthy();
   });
 
@@ -313,13 +319,13 @@ describe("UI preview catalog", () => {
   });
 
   it("captures the mobile terminal showcase from the fullscreen terminal sheet root", () => {
-    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    const scene = getCatalogModule().getUiPreviewScene("mobile-terminal-sheet");
     expect(scene?.capture?.selector).toBe(".mobile-sheet--terminal");
     expect(scene?.devices).toEqual(["mobile"]);
   });
 
   it("keeps mobile terminal showcase history in replay state instead of preloading live output", () => {
-    const scene = getUiPreviewScene("mobile-terminal-sheet");
+    const scene = getCatalogModule().getUiPreviewScene("mobile-terminal-sheet");
     if (!scene) {
       throw new Error("Missing mobile-terminal-sheet scene");
     }

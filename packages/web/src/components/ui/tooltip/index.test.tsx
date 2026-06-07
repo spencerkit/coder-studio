@@ -189,30 +189,6 @@ describe("Tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
-  it("renders structured ReactNode tooltip content", () => {
-    render(
-      <Tooltip
-        content={
-          <>
-            <div>OpenAI</div>
-            <div>Summary: Active</div>
-            <div>Reason: Provider matched requested model</div>
-          </>
-        }
-      >
-        <button type="button">Trigger</button>
-      </Tooltip>
-    );
-
-    const trigger = screen.getByRole("button", { name: "Trigger" });
-    fireEvent.mouseEnter(trigger);
-
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("OpenAI");
-    expect(tooltip).toHaveTextContent("Summary: Active");
-    expect(tooltip).toHaveTextContent("Reason: Provider matched requested model");
-  });
-
   it("keeps the tooltip within the viewport when the trigger is near the right edge", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement

@@ -92,7 +92,7 @@ export class SupervisorEvaluator {
     const provider = this.deps.providerRegistry.find(
       (item) => item.id === supervisor.evaluatorProviderId
     );
-    if (!provider?.headless?.supportedScenarios.includes("supervisor_eval")) {
+    if (!provider?.buildSupervisorEvalCommand) {
       throw {
         code: "supervisor_invalid_evaluator_provider",
         message: "Evaluator provider does not support headless eval",
@@ -106,7 +106,7 @@ export class SupervisorEvaluator {
 
     const mode = options.mode ?? "evaluate";
     const prompt = buildPrompt(context, mode);
-    const command = provider.headless.buildCommand(config, "supervisor_eval", {
+    const command = provider.buildSupervisorEvalCommand(config, {
       prompt,
       sessionId: supervisor.sessionId,
       workspacePath: context.workspacePath,

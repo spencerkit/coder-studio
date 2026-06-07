@@ -28,20 +28,14 @@ import {
 import { resolveAppearancePersonalizationForViewport } from "../../../../appearance/personalization";
 import { appearancePersonalizationAtom, themeAtom } from "../../../../atoms/app-ui";
 import { dispatchCommandAtom, wsClientAtom } from "../../../../atoms/connection";
-import { workspaceByIdAtomFamily } from "../../../../atoms/workspaces";
 import { Button, LocalOverlay, Notice } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { copyTextWithFallback } from "../../../../lib/clipboard";
 import { useTranslation } from "../../../../lib/i18n";
 import type { TerminalThemeDefinition } from "../../../../theme";
 import { getThemeById } from "../../../../theme";
-import type {
-  ConnectionStatus,
-  TerminalBinaryPayload,
-  TerminalSnapshotPayload,
-} from "../../../../ws/client";
+import type { ConnectionStatus, TerminalBinaryPayload } from "../../../../ws/client";
 import { pushToastAtom } from "../../../notifications/atoms";
-import { useOpenWorkspaceFile } from "../../../workspace/actions/use-open-workspace-file";
 import type { OutputBuffer } from "../../atoms";
 import { terminalMetaAtomFamily, terminalOutputAtomFamily } from "../../atoms";
 import {
@@ -49,7 +43,6 @@ import {
   type HydrationRequestHandle,
   type HydrationTier,
 } from "../../hydration-coordinator";
-import { createTerminalWorkspaceLinkProvider } from "../../links/terminal-link-provider";
 import { getLogicalLineTextFromTouchPoint } from "../../mobile/long-press-copy-line";
 import { MobileTerminalInputBar } from "../../mobile/mobile-terminal-input-bar";
 import {
@@ -70,7 +63,6 @@ import {
   TERMINAL_REPLAY_TIMEOUT_MS,
   type TerminalReplayUiState,
 } from "../../replay-state";
-import { quoteShellSingle } from "../../uploads/quote-shell";
 import { usePasteDropUpload } from "../../uploads/use-paste-drop-upload";
 import { XtermPlaceholder } from "./xterm-placeholder";
 
@@ -91,10 +83,6 @@ interface TerminalInputDraftState {
   submittedText?: string;
 }
 
-interface UploadedTerminalFile {
-  path: string;
-}
-
 type TouchPointLike = Pick<Touch, "identifier" | "clientX" | "clientY" | "target">;
 
 interface TouchScrollSample {
@@ -103,97 +91,9 @@ interface TouchScrollSample {
 }
 
 type TouchScrollDeltaResult = "idle" | "buffered" | "scrolled" | "blocked";
-type XtermDisposableLike = { dispose(): void } | (() => void) | undefined;
-
-function disposeXtermDisposable(disposable: XtermDisposableLike): void {
-  if (typeof disposable === "function") {
-    disposable();
-    return;
-  }
-
-  disposable?.dispose();
-}
 
 function isReplayGeneratedTerminalResponse(data: string): boolean {
   return /^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[(?:\?|>)(?:\d+;)*\d*c$/.test(data);
-}
-
-function isTerminalSubmitInput(data: string): boolean {
-  if (data.includes("\r") || data.includes("\n")) {
-    return true;
-  }
-
-  // Kitty keyboard Enter: ESC [ 13 ; modifiers u/~
-  if (/\x1b\[13(?:;[\d;]*)?(?:u|~)/.test(data)) {
-    return true;
-  }
-
-  // Application keypad Enter transmits ESC O M (same as CR).
-  if (data.includes("\x1bOM")) {
-    return true;
-  }
-
-  return false;
-}
-
-function findTerminalSubmitInsertionIndex(data: string): number {
-  const candidates = [data.indexOf("\r"), data.indexOf("\n"), data.indexOf("\x1bOM")];
-  const kittyEnter = data.match(/\x1b\[13(?:;[\d;]*)?(?:u|~)/);
-  if (kittyEnter?.index !== undefined) {
-    candidates.push(kittyEnter.index);
-  }
-
-  const submitIndex = candidates
-    .filter((index) => index >= 0)
-    .sort((left, right) => left - right)[0];
-
-  return submitIndex ?? data.length;
-}
-
-function buildUploadedFilePathText(uploadedFiles: UploadedTerminalFile[]): string {
-  if (uploadedFiles.length === 0) {
-    return "";
-  }
-
-  return `${uploadedFiles.map((file) => quoteShellSingle(file.path)).join(" ")} `;
-}
-
-function shouldSeparateUploadedPath(inputBeforeSubmit: string, submittedText?: string): boolean {
-  const lineText = inputBeforeSubmit.length > 0 ? inputBeforeSubmit : (submittedText ?? "");
-  return lineText.trim().length > 0 && !/\s$/u.test(lineText);
-}
-
-function insertUploadedPathsBeforeSubmit(
-  data: string,
-  pathText: string,
-  submittedText?: string
-): string {
-  if (!pathText) {
-    return data;
-  }
-
-  const insertionIndex = findTerminalSubmitInsertionIndex(data);
-  const inputBeforeSubmit = data.slice(0, insertionIndex);
-  const separator = shouldSeparateUploadedPath(inputBeforeSubmit, submittedText) ? " " : "";
-
-  return `${data.slice(0, insertionIndex)}${separator}${pathText}${data.slice(insertionIndex)}`;
-}
-
-function appendUploadedPathsToSubmittedText(
-  submittedText: string | undefined,
-  pathText: string
-): string | undefined {
-  const uploadedPaths = pathText.trim();
-  if (!uploadedPaths) {
-    return submittedText;
-  }
-
-  const trimmedSubmittedText = submittedText?.trim();
-  if (!trimmedSubmittedText) {
-    return uploadedPaths;
-  }
-
-  return `${trimmedSubmittedText} ${uploadedPaths}`;
 }
 
 function classifyTerminalInput(data: string): TerminalInputActivity {
@@ -201,7 +101,7 @@ function classifyTerminalInput(data: string): TerminalInputActivity {
     return "system";
   }
 
-  if (isTerminalSubmitInput(data)) {
+  if (data.includes("\r") || data.includes("\n")) {
     return "submit";
   }
 
@@ -286,15 +186,6 @@ function consumeTerminalInputDraft(
     if (char >= " ") {
       nextDraft += char;
     }
-  }
-
-  if (
-    (activity === "submit" || activity === "internal_submit") &&
-    nextDraft.length > 0 &&
-    submittedText === undefined
-  ) {
-    submittedText = nextDraft;
-    nextDraft = "";
   }
 
   return { nextDraft, submittedText };
@@ -696,11 +587,7 @@ export function XtermHost({
   const setTerminalMeta = useSetAtom(terminalMetaAtomFamily(terminalId));
   const [outputAtom, setOutputAtom] = useAtom(terminalOutputAtomFamily(terminalId));
   const meta = useAtomValue(terminalMetaAtomFamily(terminalId));
-  const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
-  const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
   const terminalMetaRef = useRef(meta);
-  const workspacePathRef = useRef(workspace?.path);
-  const openWorkspaceFileRef = useRef(openWorkspaceFile);
   const terminalKind = terminalKindProp ?? meta?.kind ?? "shell";
   const baseIsInteractive = !readOnly && meta?.alive !== false;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -813,15 +700,10 @@ export function XtermHost({
       ? 1
       : Math.min(Math.max(resolvedAppearancePersonalization.surfaceOpacity, 0), 100) / 100;
   const terminalMaterialBackgroundAlphaRef = useRef(terminalMaterialBackgroundAlpha);
-  const pendingImagesRef = useRef<Array<{ id: string; name: string; previewUrl: string }>>([]);
-  const uploadPendingImagesRef = useRef<(() => Promise<UploadedTerminalFile[]>) | null>(null);
-  const clearPendingImagesRef = useRef<(() => void) | null>(null);
 
   // Latest copies of callback identities used inside the mount effect, exposed
   // via refs so the effect's cleanup/re-creation is not tied to their churn.
-  const handleInputRef = useRef<
-    (data: string, activityOverride?: TerminalInputActivity) => void | Promise<void>
-  >(() => {});
+  const handleInputRef = useRef<(data: string) => void | Promise<void>>(() => {});
   const handleBinaryInputRef = useRef<(data: string) => void | Promise<void>>(() => {});
   const handleResizeRef = useRef<(size: { cols: number; rows: number }) => void | Promise<void>>(
     () => {}
@@ -832,14 +714,6 @@ export function XtermHost({
   useEffect(() => {
     terminalMetaRef.current = meta;
   }, [meta]);
-
-  useEffect(() => {
-    workspacePathRef.current = workspace?.path;
-  }, [workspace?.path]);
-
-  useEffect(() => {
-    openWorkspaceFileRef.current = openWorkspaceFile;
-  }, [openWorkspaceFile]);
 
   const markTerminalClosed = useCallback(
     (exitCode?: number) => {
@@ -1401,16 +1275,15 @@ export function XtermHost({
   const dispatchTerminalInput = useCallback(
     async (bytes: Uint8Array, activity: TerminalInputActivity, submittedText?: string) => {
       if (!interactiveRef.current) {
-        return false;
+        return;
       }
 
       if (!wsClient) {
         console.error("Cannot send terminal input: WebSocket not connected");
-        return false;
+        return;
       }
 
       await wsClient.sendTerminalInput(terminalId, bytes, activity, submittedText);
-      return true;
     },
     [terminalId, wsClient]
   );
@@ -1451,33 +1324,11 @@ export function XtermHost({
         });
         inputDraftRef.current = nextDraft;
 
-        const shouldUploadPendingImages =
-          activity === "submit" && pendingImagesRef.current.length > 0;
-        let dispatchData = normalized.data;
-        let dispatchSubmittedText = submittedText;
-        if (shouldUploadPendingImages) {
-          const uploadedFiles = (await uploadPendingImagesRef.current?.()) ?? [];
-          const uploadedPathText = buildUploadedFilePathText(uploadedFiles);
-          dispatchData = insertUploadedPathsBeforeSubmit(
-            normalized.data,
-            uploadedPathText,
-            submittedText
-          );
-          dispatchSubmittedText = appendUploadedPathsToSubmittedText(
-            submittedText,
-            uploadedPathText
-          );
-        }
-
-        const dispatched = await dispatchTerminalInput(
-          terminalInputEncoder.encode(dispatchData),
+        await dispatchTerminalInput(
+          terminalInputEncoder.encode(normalized.data),
           activity,
-          dispatchSubmittedText
+          submittedText
         );
-
-        if (shouldUploadPendingImages && dispatched) {
-          clearPendingImagesRef.current?.();
-        }
       } catch (error) {
         if (inputRevisionRef.current === inputRevision) {
           inputDraftRef.current = previousDraft;
@@ -1556,26 +1407,14 @@ export function XtermHost({
 
   const {
     busy: uploadBusy,
-    pendingImages,
-    uploadPendingImages,
-    clearPendingImages,
-    removePendingImage,
     handleClipboardPaste,
     handleFiles,
-    collectPendingFiles,
   } = usePasteDropUpload({
     containerRef,
     workspaceId,
-    terminalId,
     sendTextToTerminal,
     enabled: isInteractive,
   });
-
-  useEffect(() => {
-    pendingImagesRef.current = pendingImages;
-    uploadPendingImagesRef.current = uploadPendingImages;
-    clearPendingImagesRef.current = clearPendingImages;
-  }, [clearPendingImages, pendingImages, uploadPendingImages]);
 
   useEffect(() => {
     interactiveRef.current = isInteractive;
@@ -1702,8 +1541,7 @@ export function XtermHost({
     updateShiftArmed(false);
     inputDraftRef.current = "";
     inputRevisionRef.current += 1;
-    clearPendingImagesRef.current?.();
-  }, [terminalId, updateCtrlMode, updateShiftArmed, workspaceId]);
+  }, [terminalId, updateCtrlMode, updateShiftArmed]);
 
   // Keep callback refs in sync so the mount effect can call the latest version
   // without listing the callbacks as dependencies.
@@ -1829,14 +1667,6 @@ export function XtermHost({
           })
         : undefined;
     terminal.attachCustomKeyEventHandler((event) => !shouldBypassPtyForKeyboardPaste(event));
-    const workspaceLinkDisposable = terminal.registerLinkProvider(
-      createTerminalWorkspaceLinkProvider({
-        terminal,
-        workspaceId,
-        getWorkspacePath: () => workspacePathRef.current,
-        openWorkspaceFile: (input) => openWorkspaceFileRef.current(input),
-      })
-    );
 
     terminal.open(containerRef.current);
     traceTerminal(terminalId, "mount.open");
@@ -2662,9 +2492,16 @@ export function XtermHost({
         terminalRef.current = null;
         fitAddonRef.current = null;
       }
-      disposeXtermDisposable(selectionChangeDisposable);
-      disposeXtermDisposable(renderDisposable);
-      workspaceLinkDisposable.dispose();
+      if (typeof selectionChangeDisposable === "function") {
+        selectionChangeDisposable();
+      } else {
+        selectionChangeDisposable?.dispose?.();
+      }
+      if (typeof renderDisposable === "function") {
+        renderDisposable();
+      } else {
+        renderDisposable?.dispose?.();
+      }
       foregroundColorQueryDisposable.dispose();
       backgroundColorQueryDisposable.dispose();
     };
@@ -2911,7 +2748,6 @@ export function XtermHost({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [showPasteDialog, setShowPasteDialog] = useState(false);
-  const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
   const pasteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const handleMobilePaste = useCallback(async () => {
@@ -2978,23 +2814,10 @@ export function XtermHost({
         return;
       }
 
-      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-      const otherFiles = files.filter((file) => !file.type.startsWith("image/"));
-
-      if (imageFiles.length > 0) {
-        collectPendingFiles(imageFiles);
-      }
-      if (otherFiles.length > 0) {
-        await handleFiles(otherFiles);
-      }
+      await handleFiles(files);
     },
-    [collectPendingFiles, handleFiles]
+    [handleFiles]
   );
-
-  const hoveredPreview =
-    hoveredPreviewId === null
-      ? null
-      : (pendingImages.find((image) => image.id === hoveredPreviewId) ?? null);
 
   const shouldBlockTerminal =
     replayUiState.kind === "loading" && activeRecoveryUiModeRef.current === "blocking_rebuild";
@@ -3088,7 +2911,7 @@ export function XtermHost({
 
   return (
     <div
-      className={`xterm-host-shell${showMobileInputBar ? " xterm-host-shell--mobile-input" : ""}${pendingImages.length > 0 ? " xterm-host-shell--with-preview-strip" : ""}`}
+      className={`xterm-host-shell${showMobileInputBar ? " xterm-host-shell--mobile-input" : ""}`}
     >
       {showMobileInputBar ? (
         <MobileTerminalInputBar
@@ -3118,84 +2941,6 @@ export function XtermHost({
       />
       {showInlineRecoveryNotice ? (
         <Notice action={noticeAction} message={noticeBody} title={noticeTitle} tone={noticeTone} />
-      ) : null}
-      {pendingImages.length > 0 ? (
-        <div aria-label="Pending image previews" className="xterm-host-preview-strip">
-          {pendingImages.slice(0, 2).map((image) => (
-            <div
-              key={image.id}
-              className="xterm-host-preview-item"
-              onMouseEnter={() => {
-                setHoveredPreviewId(image.id);
-              }}
-              onMouseLeave={() => {
-                setHoveredPreviewId((current) => (current === image.id ? null : current));
-              }}
-            >
-              <img src={image.previewUrl} alt={image.name} className="xterm-host-preview-tile" />
-              <button
-                type="button"
-                className="xterm-host-preview-remove"
-                aria-label={`Remove ${image.name}`}
-                onClick={() => {
-                  setHoveredPreviewId((current) => (current === image.id ? null : current));
-                  removePendingImage(image.id);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-          {pendingImages.length > 3 ? (
-            <div
-              aria-label={`${pendingImages.length - 2} more pending images`}
-              className="xterm-host-preview-overflow"
-            >
-              +{pendingImages.length - 2}
-            </div>
-          ) : pendingImages.length === 3 ? (
-            <div
-              className="xterm-host-preview-item"
-              onMouseEnter={() => {
-                setHoveredPreviewId(pendingImages[2]!.id);
-              }}
-              onMouseLeave={() => {
-                setHoveredPreviewId((current) =>
-                  current === pendingImages[2]!.id ? null : current
-                );
-              }}
-            >
-              <img
-                key={pendingImages[2]!.id}
-                src={pendingImages[2]!.previewUrl}
-                alt={pendingImages[2]!.name}
-                className="xterm-host-preview-tile"
-              />
-              <button
-                type="button"
-                className="xterm-host-preview-remove"
-                aria-label={`Remove ${pendingImages[2]!.name}`}
-                onClick={() => {
-                  setHoveredPreviewId((current) =>
-                    current === pendingImages[2]!.id ? null : current
-                  );
-                  removePendingImage(pendingImages[2]!.id);
-                }}
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {hoveredPreview ? (
-        <div className="xterm-host-preview-popover">
-          <img
-            src={hoveredPreview.previewUrl}
-            alt={`Preview ${hoveredPreview.name}`}
-            className="xterm-host-preview-popover-image"
-          />
-        </div>
       ) : null}
       <div
         ref={containerRef}

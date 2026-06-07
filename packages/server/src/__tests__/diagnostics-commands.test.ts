@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LspToolRuntimeStatusEntry, ProviderDefinition } from "@coder-studio/core";
+import type { ProviderDefinition } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { describe, expect, it } from "vitest";
 import type { EventBus } from "../bus/event-bus.js";
@@ -57,36 +57,6 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       },
       ...providerRuntimeDeps,
     },
-    lspMgr: {
-      getRuntimeMode: () => "auto",
-    } as never,
-    lspToolMgr: {
-      runtimeStatus: async ({ serverKind }: { serverKind: string }) =>
-        ({
-          serverKind,
-          displayName: `${serverKind} language server`,
-          available: serverKind === "typescript",
-          autoInstallSupported: serverKind !== "typescript",
-          installReadiness:
-            serverKind === "python"
-              ? "missing_prerequisite"
-              : serverKind === "rust"
-                ? "unsupported_platform"
-                : "ready",
-          missingCommands:
-            serverKind === "python"
-              ? ["pylsp"]
-              : serverKind === "go"
-                ? ["gopls"]
-                : serverKind === "vue"
-                  ? ["vue-language-server"]
-                  : [],
-          missingPrerequisites: serverKind === "python" ? ["python3"] : [],
-        }) satisfies LspToolRuntimeStatusEntry,
-    } as never,
-    lspToolInstallMgr: {
-      getLatestFailure: () => undefined,
-    } as never,
     ...restOverrides,
   };
 }
@@ -133,37 +103,6 @@ describe("diagnostics commands", () => {
         }),
       ])
     );
-    expect(
-      (
-        result.data as {
-          lspServices: Array<{ serverKind: string; status: string }>;
-          metadata: {
-            lspRuntimeContext?: {
-              targetRuntime: "native" | "wsl";
-              managedInstallSupported: boolean;
-            };
-          };
-        }
-      ).lspServices
-    ).toEqual([
-      expect.objectContaining({ serverKind: "typescript", status: "installed" }),
-      expect.objectContaining({ serverKind: "python", status: "prerequisite_missing" }),
-      expect.objectContaining({ serverKind: "go", status: "not_installed" }),
-      expect.objectContaining({ serverKind: "rust", status: "not_installed" }),
-      expect.objectContaining({ serverKind: "vue", status: "not_installed" }),
-    ]);
-    expect(
-      (
-        result.data as {
-          metadata: {
-            lspRuntimeContext?: {
-              targetRuntime: "native" | "wsl";
-              managedInstallSupported: boolean;
-            };
-          };
-        }
-      ).metadata.lspRuntimeContext
-    ).toBeUndefined();
   });
 
   it("surfaces missing provider CLI checks for session start diagnostics", async () => {
@@ -203,119 +142,6 @@ describe("diagnostics commands", () => {
           code: "provider_cli_missing",
           missingCommands: ["claude"],
         }),
-      ])
-    );
-  });
-
-  it("surfaces latest failed LSP install state without affecting canContinue", async () => {
-    const workspaceDir = await mkdtemp(join(tmpdir(), "diagnostics-lsp-runtime-"));
-    const result = await dispatch(
-      {
-        kind: "command",
-        id: "diag-session-lsp-install-failed",
-        op: "diagnostics.get",
-        args: {
-          context: "session_start",
-          workspaceId: "ws-1",
-          providerId: "claude",
-        },
-      },
-      createContext({
-        workspaceMgr: {
-          get: (workspaceId: string) =>
-            workspaceId === "ws-1" ? { id: "ws-1", path: workspaceDir } : undefined,
-          list: () => [],
-        } as unknown as WorkspaceManager,
-        lspToolMgr: {
-          runtimeStatus: async ({ serverKind }: { serverKind: string }) =>
-            ({
-              serverKind,
-              displayName: `${serverKind} language server`,
-              available: false,
-              autoInstallSupported: true,
-              installReadiness: "ready",
-              missingCommands: [serverKind],
-              missingPrerequisites: [],
-            }) satisfies LspToolRuntimeStatusEntry,
-        } as never,
-        lspToolInstallMgr: {
-          getLatestFailure: (serverKind: string) =>
-            serverKind === "go"
-              ? {
-                  jobId: "job-go-failed",
-                  serverKind: "go",
-                  status: "failed",
-                  steps: [],
-                  failure: {
-                    code: "command_failed",
-                    serverKind: "go",
-                    message: "install failed",
-                    failedStepId: "install-go-lsp",
-                    command: "go",
-                    args: ["install"],
-                    missingCommands: [],
-                  },
-                }
-              : undefined,
-        } as never,
-      })
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.data).toMatchObject({
-      context: "session_start",
-      canContinue: true,
-      metadata: {
-        workspaceId: "ws-1",
-        workspacePath: workspaceDir,
-        providerId: "claude",
-        lspRuntimeContext: {
-          targetRuntime: "native",
-          managedInstallSupported: true,
-        },
-      },
-    });
-    expect(
-      (result.data as { lspServices: Array<{ serverKind: string; status: string }> }).lspServices
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ serverKind: "go", status: "install_failed" }),
-      ])
-    );
-    expect((result.data as { checks: Array<{ code: string }> }).checks).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ code: "lsp_install_failed" })])
-    );
-  });
-
-  it("reports runtime_off only when the global LSP runtime mode is off", async () => {
-    const result = await dispatch(
-      {
-        kind: "command",
-        id: "diag-session-lsp-runtime-off",
-        op: "diagnostics.get",
-        args: {
-          context: "session_start",
-          workspaceId: "ws-1",
-          providerId: "claude",
-        },
-      },
-      createContext({
-        lspMgr: {
-          getRuntimeMode: () => "off",
-        } as never,
-      })
-    );
-
-    expect(result.ok).toBe(true);
-    expect(
-      (result.data as { lspServices: Array<{ serverKind: string; status: string }> }).lspServices
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ serverKind: "typescript", status: "runtime_off" }),
-        expect.objectContaining({ serverKind: "python", status: "runtime_off" }),
-        expect.objectContaining({ serverKind: "go", status: "runtime_off" }),
-        expect.objectContaining({ serverKind: "rust", status: "runtime_off" }),
-        expect.objectContaining({ serverKind: "vue", status: "runtime_off" }),
       ])
     );
   });

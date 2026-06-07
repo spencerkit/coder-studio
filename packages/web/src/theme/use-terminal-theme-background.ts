@@ -3,10 +3,9 @@
  *
  * Used by session/terminal creation flows to forward the active terminal
  * background to the server, which derives COLORFGBG so child TUIs (Claude
- * Code, Codex, …) can match the page's light/dark intent. On Windows the
- * server also injects OSC 11 responses for Gemini CLI. OSC 11 queries from
- * the frontend xterm.js path are intercepted by ConPTY and never reach the
- * child on Windows.
+ * Code, Codex, …) can match the page's light/dark intent. This is the only
+ * signal that survives the Windows ConPTY layer — OSC 11 background-color
+ * queries get intercepted by ConPTY and never reach xterm.js.
  */
 
 import { useAtomValue } from "jotai";

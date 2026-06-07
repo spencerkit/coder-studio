@@ -33,12 +33,9 @@ async function openSettingsSection(
 ) {
   const sectionOrder = {
     general: 0,
-    monitoring: 1,
-    analysis: 2,
-    providers: 3,
-    appearance: 4,
-    shortcuts: 5,
-    about: 6,
+    providers: 1,
+    appearance: 2,
+    shortcuts: 3,
   } as const;
 
   const index = sectionOrder[section];

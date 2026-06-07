@@ -21,7 +21,6 @@ export function parseStatus(porcelainV2: string): GitStatus {
   const modified: GitFileChange[] = [];
   const untracked: GitFileChange[] = [];
   const deleted: GitFileChange[] = [];
-  const conflicted: GitFileChange[] = [];
   const records = porcelainV2.includes("\0")
     ? porcelainV2.split("\0").filter((record) => record.length > 0)
     : porcelainV2.split("\n").filter((record) => record.length > 0);
@@ -70,11 +69,6 @@ export function parseStatus(porcelainV2: string): GitStatus {
       continue;
     }
 
-    if (record.startsWith("u ")) {
-      parseUnmergedEntry(record, conflicted);
-      continue;
-    }
-
     if (record.startsWith("? ")) {
       untracked.push({ path: record.substring(2), status: "untracked" });
     }
@@ -90,7 +84,6 @@ export function parseStatus(porcelainV2: string): GitStatus {
     modified,
     untracked,
     deleted,
-    conflicted,
   };
 }
 
@@ -151,19 +144,6 @@ function parseRenamedEntry(
     inlinePathParts[1] ??
     (pathTokens.length > 1 ? pathTokens[pathTokens.length - 1] : undefined);
   pushChange({ path, oldPath }, xy, staged, modified, deleted);
-}
-
-/**
- * Parses an unmerged entry line (format u).
- */
-function parseUnmergedEntry(record: string, conflicted: GitFileChange[]): void {
-  const parts = record.split(" ");
-  const path = parts.slice(10).join(" ");
-  if (!path) {
-    return;
-  }
-
-  conflicted.push({ path, status: "conflicted" });
 }
 
 function pushChange(

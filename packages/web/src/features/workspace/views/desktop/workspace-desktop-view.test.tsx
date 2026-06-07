@@ -19,12 +19,9 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.sidebar.label": "Workspace Sidebar",
       "workspace.sidebar.workspace": "Workspace",
       "workspace.sidebar.open_editors": "Open Files",
-      "workspace.sidebar.agent_instructions": "Agent Instructions",
       "workspace.no_workspace": "No workspace",
       "workspace.search.empty": "Type to search across file contents",
       "workspace.search.placeholder": "Search",
-      "workspace.agent_instructions.project_title": "Project Agent.md",
-      "workspace.agent_instructions.token_trend.title": "Token Trend",
       "common.loading": "Loading",
       "topbar.current_project": "Current Project",
     };
@@ -83,27 +80,7 @@ vi.mock("../shared/git-panel", () => ({
   GitPanel: () => <div>Source Control body</div>,
 }));
 
-vi.mock("../shared/agent-instructions-section", () => ({
-  AgentInstructionsSection: ({ workspaceId }: { workspaceId: string }) => (
-    <section
-      className="workspace-sidebar-section workspace-agent-instructions"
-      data-testid="agent-instructions-section"
-      data-workspace-id={workspaceId}
-    >
-      <h2 className="workspace-sidebar-section__title">Project Agent.md</h2>
-    </section>
-  ),
-}));
-
-vi.mock("../shared/agent-instructions-token-trend", () => ({
-  AgentInstructionsTokenTrend: ({ workspacePath }: { workspacePath: string }) => (
-    <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
-  ),
-}));
-
-function renderDesktopView(
-  activeView: "explorer" | "search" | "source-control" | "agent-instructions"
-) {
+function renderDesktopView(activeView: "explorer" | "search" | "source-control") {
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, {
@@ -169,24 +146,5 @@ describe("WorkspaceDesktopView", () => {
 
     expect(screen.getByText("Source Control body")).toBeInTheDocument();
     expect(screen.queryByText("Source Control", { selector: ".panel-header" })).toBeNull();
-  });
-
-  it("renders token trend as a separate section above AGENT.MD", () => {
-    renderDesktopView("agent-instructions");
-
-    const trendHeading = screen.getByRole("heading", { level: 2, name: "Token Trend" });
-    const trendSection = trendHeading.closest(".workspace-sidebar-section");
-    const agentInstructionsSection = screen.getByTestId("agent-instructions-section");
-
-    expect(trendSection).toHaveClass("workspace-agent-token-trend-section");
-    expect(screen.getByTestId("agent-token-trend")).toHaveAttribute(
-      "data-workspace-path",
-      "/tmp/ws-test"
-    );
-    expect(
-      trendSection?.compareDocumentPosition(agentInstructionsSection) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(agentInstructionsSection).not.toContainElement(screen.getByTestId("agent-token-trend"));
   });
 });

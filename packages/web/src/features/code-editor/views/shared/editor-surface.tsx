@@ -16,7 +16,6 @@ import { ImageDiffPreview } from "../../components/image-diff-preview";
 import { ImagePreview } from "../../components/image-preview";
 import { MonacoDiffHost } from "../../components/monaco-diff-host";
 import { MonacoHost } from "../../components/monaco-host";
-import { isSystemAgentInstructionsEditorPath } from "../../system-agent-instructions-path";
 import type { CodeEditorChrome, CodeEditorState } from "./code-editor-host";
 import { CodeEditorDesktopHeaderActions } from "./code-editor-host";
 
@@ -101,9 +100,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
         : null;
   const canRenderTextDiff = textDiffPreview !== null;
   const canRenderImageDiff = imageDiffPreview !== null;
-  const isSystemTextFile = Boolean(
-    currentTextFile && isSystemAgentInstructionsEditorPath(currentTextFile.path)
-  );
   const shouldRenderDocumentPreview =
     mode === "preview" &&
     currentTextFile !== null &&
@@ -111,7 +107,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const titleText = commitPreview
     ? (commitPreview.title ?? commitPreview.path)
     : currentFile
-      ? (currentFile.displayPath ?? getFileName(currentFile.path))
+      ? getFileName(currentFile.path)
       : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
   const closeConfirmFileName =
     currentTextFile?.path !== undefined ? getFileName(currentTextFile.path) : t("file.title");
@@ -168,11 +164,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           <div className="code-editor-header editor-surface__header">
             <span
               className="code-file-path"
-              title={
-                commitPreview
-                  ? titleText
-                  : (currentFile?.displayPath ?? currentFile?.path ?? titleText)
-              }
+              title={commitPreview ? titleText : (currentFile?.path ?? titleText)}
             >
               {currentFile && !isCommitPreview ? (
                 <>
@@ -271,10 +263,9 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           ) : currentTextFile ? (
             <MonacoHost
               workspaceId={workspace.id}
-              workspaceRootPath={isSystemTextFile ? undefined : workspace.path}
-              filePath={currentTextFile.displayPath ?? currentTextFile.path}
+              workspaceRootPath={workspace.path}
+              filePath={currentTextFile.path}
               content={currentTextFile.content}
-              standalone={isSystemTextFile}
               onContentChange={handleContentChange}
               onSave={handleSave}
               readOnly={mode === "preview"}

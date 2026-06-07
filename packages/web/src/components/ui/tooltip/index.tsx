@@ -7,7 +7,6 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactElement,
-  type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useEffect,
   useId,
@@ -22,7 +21,7 @@ import styles from "./index.module.css";
 
 export interface TooltipProps {
   readonly children: ReactElement;
-  readonly content: ReactNode;
+  readonly content: string;
   readonly disabled?: boolean;
 }
 

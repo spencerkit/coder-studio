@@ -118,14 +118,11 @@ describe("SupervisorEvaluator windows child-process options", () => {
       providerRegistry: [
         {
           id: "codex",
-          headless: {
-            supportedScenarios: ["supervisor_eval"],
-            buildCommand: vi.fn(() => ({
-              argv: ["codex", "exec", "--json"],
-              cwd: process.cwd(),
-              env: {},
-            })),
-          },
+          buildSupervisorEvalCommand: vi.fn(() => ({
+            argv: ["codex", "exec", "--json"],
+            cwd: process.cwd(),
+            env: {},
+          })),
           defaultConfig: { additionalArgs: [], envVars: {} },
         } as unknown as ProviderDefinition,
       ],

@@ -1,4 +1,4 @@
-import type { ProviderRuntimeStatusResponse, Session } from "@coder-studio/core";
+import type { Session } from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -200,45 +200,6 @@ const mockEditorPaneCard = vi.fn(
     </div>
   )
 );
-
-const AVAILABLE_PROVIDER_RUNTIME_STATUS: ProviderRuntimeStatusResponse = {
-  providers: {
-    claude: {
-      providerId: "claude",
-      displayName: "Claude",
-      badge: "Claude",
-      kind: "built_in",
-      stability: "stable",
-      capability: "full",
-      capabilities: [],
-      requiredCommands: ["claude"],
-      available: true,
-      missingCommands: [],
-      missingPrerequisites: [],
-      autoInstallSupported: false,
-      installReadiness: "ready",
-      manualGuideKeys: [],
-      docUrls: { provider: "", prerequisites: {} },
-    },
-    codex: {
-      providerId: "codex",
-      displayName: "Codex",
-      badge: "Codex",
-      kind: "built_in",
-      stability: "stable",
-      capability: "full",
-      capabilities: [],
-      requiredCommands: ["codex"],
-      available: true,
-      missingCommands: [],
-      missingPrerequisites: [],
-      autoInstallSupported: false,
-      installReadiness: "ready",
-      manualGuideKeys: [],
-      docUrls: { provider: "", prerequisites: {} },
-    },
-  },
-};
 
 vi.mock("./views/shared/editor-pane-card", () => ({
   EditorPaneCard: (props: {
@@ -1475,9 +1436,6 @@ describe("AgentPanes", () => {
   it("disables provider buttons while session.create is in flight to prevent re-entry", async () => {
     let resolveCreate: ((value: unknown) => void) | undefined;
     const sendCommand = vi.fn().mockImplementation((op: string) => {
-      if (op === "provider.runtimeStatus") {
-        return AVAILABLE_PROVIDER_RUNTIME_STATUS;
-      }
       if (op === "session.create") {
         return new Promise((resolve) => {
           resolveCreate = resolve;

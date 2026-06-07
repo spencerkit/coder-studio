@@ -18,7 +18,6 @@ export {
 export { getProviderPresets, type ProviderPresetMetadata, providerPresets } from "./presets.js";
 // Provider registry
 export {
-  builtInProviderIds,
   getAllProviderIds,
   getProviderById,
   getProvidersByCapability,

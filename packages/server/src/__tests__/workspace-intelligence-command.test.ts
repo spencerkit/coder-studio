@@ -99,7 +99,6 @@ describe("workspace.intelligence command", () => {
         branch: "main",
       },
       packageManager: "npm",
-      workspaceKind: "node_app",
       frameworks: ["Vite", "Node"],
       scripts: {
         dev: "vite",
@@ -109,18 +108,6 @@ describe("workspace.intelligence command", () => {
       },
       recommendedCommands: [{ key: "dev", command: "npm run dev", source: "package_json" }],
       docs: [{ path: "README.md", kind: "readme" }],
-      documentationEntries: [{ path: "README.md", kind: "readme" }],
-      verificationCommands: [
-        {
-          priority: "dev",
-          command: "npm run dev",
-          reason: "Primary local development entrypoint.",
-        },
-      ],
-      topLevelDirectories: [],
-      keyDirectories: [],
-      packages: [],
-      fileConstraints: ["Use repository-level verification commands before claiming completion."],
       agentInstructions: {
         exists: false,
         path: AGENT_INSTRUCTIONS_RELATIVE_PATH,

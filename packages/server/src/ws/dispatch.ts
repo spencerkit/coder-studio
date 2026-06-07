@@ -6,7 +6,6 @@
 
 import type { Command, ProviderDefinition, Result } from "@coder-studio/core";
 import { z } from "zod";
-import type { AgentInstructionsPublisher } from "../agent-instructions/publisher.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { ServerConfig } from "../config.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
@@ -17,23 +16,14 @@ import type { MonitoringService } from "../monitoring/service.js";
 import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
-import type { SessionAnalysisService } from "../session-analysis/service.js";
-import type { SkillHealthManager } from "../skills/health-manager.js";
-import type { SkillInstallManager } from "../skills/install-manager.js";
-import type { SkillMountManager } from "../skills/mount-manager.js";
-import type { SkillsHubClient } from "../skills/skills-hub-client.js";
 import type { CustomProviderRepo } from "../storage/repositories/custom-provider-repo.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
-import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
-import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js";
-import type { SkillTargetRepo } from "../storage/repositories/skill-target-repo.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
 import type { SystemDependencyInstallManager } from "../system-deps/install-manager.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { UpdateService } from "../update/update-service.js";
-import type { WorkAnalysisService } from "../work-analysis/service.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 import type { ActivationManager } from "./activation.js";
 import type { FencingManager } from "./fencing.js";
@@ -57,7 +47,6 @@ export interface CommandContext {
   providerRuntimeDeps?: RuntimeStatusDeps;
   providerInstallMgr?: ProviderInstallManager;
   systemDependencyInstallMgr?: SystemDependencyInstallManager;
-  agentInstructionPublisher?: AgentInstructionsPublisher;
   activationMgr: ActivationManager;
   config?: Pick<ServerConfig, "auth" | "host">;
   lspMgr: LspManager;
@@ -66,17 +55,8 @@ export interface CommandContext {
   updateService?: UpdateService;
   customProviderRepo?: CustomProviderRepo;
   sessionMetadataRepo?: SessionMetadataRepo;
-  sessionAnalysisService?: SessionAnalysisService;
-  workAnalysisService?: WorkAnalysisService;
   setProviderRegistry?: (providers: ProviderDefinition[]) => void;
   monitoringService?: MonitoringService;
-  skillsHubClient?: SkillsHubClient;
-  skillInstallMgr?: SkillInstallManager;
-  skillMountMgr?: SkillMountManager;
-  skillHealthMgr?: SkillHealthManager;
-  skillLibraryRepo?: SkillLibraryRepo;
-  skillTargetRepo?: SkillTargetRepo;
-  skillMountRepo?: SkillMountRepo;
 }
 
 /**

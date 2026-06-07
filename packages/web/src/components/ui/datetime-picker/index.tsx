@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useEffect, useId, useState } from "react";
 import { localeAtom } from "../../../atoms/app-ui";
 import { formatDate, type LocaleCode, useTranslation } from "../../../lib/i18n";
 import { useViewport } from "../_internal/use-viewport";
-import { Popover, type PopoverForceMode } from "../popover";
+import { Popover } from "../popover";
 import { Sheet } from "../sheet";
 import { CalendarGrid } from "./calendar-grid";
 import styles from "./index.module.css";
@@ -17,8 +17,6 @@ export interface DateTimePickerProps {
   readonly value: string;
   readonly onValueChange: (value: string) => void;
   readonly label: string;
-  readonly open?: boolean;
-  readonly onOpenChange?: (open: boolean) => void;
   readonly placeholder?: string;
   readonly disabled?: boolean;
   readonly clearable?: boolean;
@@ -27,7 +25,6 @@ export interface DateTimePickerProps {
   readonly className?: string;
   readonly size?: DateTimePickerSize;
   readonly invalid?: boolean;
-  readonly forceMode?: PopoverForceMode;
   readonly "aria-describedby"?: string;
 }
 
@@ -134,8 +131,6 @@ export function DateTimePicker({
   value,
   onValueChange,
   label,
-  open: controlledOpen,
-  onOpenChange,
   placeholder,
   disabled = false,
   clearable = false,
@@ -144,27 +139,15 @@ export function DateTimePicker({
   className,
   size = "md",
   invalid = false,
-  forceMode = "auto",
   "aria-describedby": ariaDescribedBy,
 }: DateTimePickerProps) {
   const t = useTranslation();
   const locale = useAtomValue(localeAtom) as LocaleCode;
   const viewport = useViewport();
   const triggerId = useId();
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const open = controlledOpen ?? uncontrolledOpen;
+  const [open, setOpen] = useState(false);
   const effectiveMinTime = minDate ? truncateToMinute(minDate).getTime() : undefined;
   const effectiveMaxTime = maxDate ? truncateToMinute(maxDate).getTime() : undefined;
-
-  const setPickerOpen = useCallback(
-    (nextOpen: boolean) => {
-      onOpenChange?.(nextOpen);
-      if (controlledOpen === undefined) {
-        setUncontrolledOpen(nextOpen);
-      }
-    },
-    [controlledOpen, onOpenChange]
-  );
 
   const createInitialDraft = (currentValue: string) => {
     const parsed = parseLocalDateTime(currentValue);
@@ -217,22 +200,20 @@ export function DateTimePicker({
       return;
     }
     onValueChange(formatLocalDateTime(date));
-    setPickerOpen(false);
-  }, [draft, effectiveMaxTime, effectiveMinTime, onValueChange, setPickerOpen]);
+    setOpen(false);
+  }, [draft, effectiveMaxTime, effectiveMinTime, onValueChange]);
 
   const handleClear = useCallback(() => {
     onValueChange("");
-    setPickerOpen(false);
-  }, [onValueChange, setPickerOpen]);
+    setOpen(false);
+  }, [onValueChange]);
 
   const parsedValue = parseLocalDateTime(value);
   const displayValue = parsedValue
     ? formatDate(parsedValue.getTime(), locale)
     : (placeholder ?? t("datetime.select_date"));
 
-  const resolvedMode =
-    forceMode === "desktop" ? "desktop" : forceMode === "mobile" ? "mobile" : viewport;
-  const isMobile = resolvedMode === "mobile";
+  const isMobile = viewport === "mobile";
 
   const triggerClasses = clsx(
     "input",
@@ -252,7 +233,7 @@ export function DateTimePicker({
       aria-label={label}
       aria-describedby={ariaDescribedBy}
       className={triggerClasses}
-      onClick={() => setPickerOpen(true)}
+      onClick={() => setOpen(true)}
     >
       <span className={styles.value}>{displayValue}</span>
       <Calendar size={16} className={styles.icon} aria-hidden="true" />
@@ -312,7 +293,7 @@ export function DateTimePicker({
             title={label}
             body={content}
             bodyClassName={styles.sheetBody}
-            onClose={() => setPickerOpen(false)}
+            onClose={() => setOpen(false)}
             fullscreen
           />
         ) : null}
@@ -323,10 +304,9 @@ export function DateTimePicker({
   return (
     <Popover
       open={open}
-      onOpenChange={setPickerOpen}
+      onOpenChange={setOpen}
       title={label}
       content={content}
-      forceMode={forceMode}
       contentClassName={styles.popoverContent}
       sheetBodyClassName={styles.sheetBody}
     >

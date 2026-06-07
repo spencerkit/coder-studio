@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { ProviderConfig } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { claudeDefinition, claudeInstallMetadata } from "./definition.js";
@@ -18,17 +16,6 @@ describe("Claude Provider Definition", () => {
 
     it("should require claude command", () => {
       expect(claudeDefinition.requiredCommands).toEqual(["claude"]);
-    });
-
-    it("uses the Claude skill directory as the default mount target", () => {
-      expect(claudeDefinition.supportsSkillsMount).toBe(true);
-      expect(claudeDefinition.skillMountDirectories).toEqual([
-        join(homedir(), ".claude", "skills"),
-      ]);
-    });
-
-    it("publishes agent instructions to the project-scoped Claude memory file", () => {
-      expect(claudeDefinition.agentInstructions?.publishTarget?.path).toBe(".claude/CLAUDE.md");
     });
 
     it("should expose install metadata", () => {
@@ -136,16 +123,15 @@ describe("Claude Provider Definition", () => {
     });
   });
 
-  describe("headless", () => {
+  describe("buildSupervisorEvalCommand", () => {
     it("builds a supervisor eval command with claude -p --output-format json", () => {
-      const result = claudeDefinition.headless?.buildCommand(
+      const result = claudeDefinition.buildSupervisorEvalCommand?.(
         {
           model: "claude-sonnet-4-6",
           maxTurns: null,
           additionalArgs: [],
           envVars: { ANTHROPIC_API_KEY: "sk-test" },
         },
-        "supervisor_eval",
         {
           prompt: "Return strict JSON",
           sessionId: "sess-1",
@@ -163,29 +149,17 @@ describe("Claude Provider Definition", () => {
     });
 
     it("omits the model flag for supervisor eval when no model is configured", () => {
-      const result = claudeDefinition.headless?.buildCommand({}, "supervisor_eval", {
-        prompt: "Return strict JSON",
-        sessionId: "sess-1",
-        workspacePath: "/workspace",
-      });
-
-      expect(result?.argv[0]).toBe("claude");
-      expect(result?.argv).not.toContain("--model");
-    });
-
-    it("exposes supervisor_eval, session_analysis, and agent_instructions_generate as headless scenarios", () => {
-      expect(claudeDefinition.headless?.supportedScenarios).toEqual([
-        "supervisor_eval",
-        "session_analysis",
-        "agent_instructions_generate",
-      ]);
-      expect(
-        claudeDefinition.headless?.buildCommand({}, "agent_instructions_generate", {
+      const result = claudeDefinition.buildSupervisorEvalCommand?.(
+        {},
+        {
           prompt: "Return strict JSON",
           sessionId: "sess-1",
           workspacePath: "/workspace",
-        })
-      ).not.toBeNull();
+        }
+      );
+
+      expect(result?.argv[0]).toBe("claude");
+      expect(result?.argv).not.toContain("--model");
     });
   });
 

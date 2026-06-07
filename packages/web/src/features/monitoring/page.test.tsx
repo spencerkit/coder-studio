@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../atoms/app-ui";
@@ -535,7 +535,7 @@ describe("MonitoringContent", () => {
     expect(screen.queryByRole("tab", { name: "Overview" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Attribution" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Process" })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Enable runtime summary in settings").length).toBeGreaterThan(0);
+    expect(screen.getByText("Enable runtime summary in settings")).toBeInTheDocument();
   });
 
   it("renders hierarchical attribution and keeps subprocesses out of the attribution tree until drill-down is enabled", async () => {
@@ -779,7 +779,6 @@ describe("MonitoringContent", () => {
       "Attribution tree",
       "Detail panel",
       "Subprocess drill-down",
-      "Background runtime",
     ]);
   });
 
@@ -1514,210 +1513,5 @@ describe("MonitoringContent", () => {
       (await screen.findAllByText("Waiting for the first process sample.")).length
     ).toBeGreaterThan(0);
     expect(screen.queryByText("Enable runtime summary in settings")).not.toBeInTheDocument();
-  });
-
-  it("renders background runtime groups so LSP processes are visible in the dashboard", async () => {
-    const response = {
-      settings: {
-        enabled: true,
-        hostMetricsEnabled: true,
-        runtimeSummaryEnabled: true,
-        workspaceAttributionEnabled: true,
-        subprocessDrilldownEnabled: false,
-        sampleIntervalMs: 2000,
-      },
-      snapshot: {
-        sampledAt: 10,
-        mode: "standard",
-        host: {
-          cpuPercent: 72,
-          memoryUsedBytes: 800,
-          memoryTotalBytes: 1000,
-          memoryAvailableBytes: 200,
-          loadAverage: [1, 1, 1],
-          uptimeSec: 60,
-          pressure: "elevated",
-        },
-        runtime: {
-          serverCpuPercent: 10,
-          serverMemoryBytes: 100,
-          totalManagedCpuPercent: 17,
-          totalManagedMemoryBytes: 250,
-          managedProcessCount: 2,
-          cpuShareOfHostPercent: 23.61,
-          memoryShareOfHostPercent: 25,
-        },
-        workspaces: [],
-        sessions: [],
-        subprocessGroups: [],
-        backgroundGroups: [
-          {
-            id: "background:lsp:ws-1:typescript",
-            kind: "background_group",
-            label: "TypeScript language server",
-            cpuPercent: 7,
-            memoryBytes: 150,
-            processCount: 1,
-            uptimeSec: 45,
-            trend: "steady",
-          },
-        ],
-      },
-      history: {
-        host: { points: [{ sampledAt: 10, cpuPercent: 72, memoryBytes: 800 }] },
-        runtime: { points: [{ sampledAt: 10, cpuPercent: 17, memoryBytes: 250, processCount: 2 }] },
-        workspaces: {},
-        sessions: {},
-        subprocessGroups: {},
-      },
-      capabilities: {
-        loadAverageAvailable: true,
-        processMetricsAvailable: true,
-        subprocessHistoryLimited: false,
-      },
-      telemetry: null,
-    };
-
-    renderMonitoringPage(response);
-
-    expect(await screen.findByText("Background runtime")).toBeInTheDocument();
-    expect(screen.getAllByText("TypeScript language server").length).toBeGreaterThan(0);
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Background task TypeScript language server 7.0% / 150 B",
-      })
-    );
-
-    expect(screen.getByText("Detail panel")).toBeInTheDocument();
-    expect(screen.getAllByText("TypeScript language server")).toHaveLength(2);
-  });
-
-  it("renders workspace-scoped background groups inside the attribution tree instead of background runtime", async () => {
-    const response = {
-      settings: {
-        enabled: true,
-        hostMetricsEnabled: true,
-        runtimeSummaryEnabled: true,
-        workspaceAttributionEnabled: true,
-        subprocessDrilldownEnabled: false,
-        sampleIntervalMs: 2000,
-      },
-      snapshot: {
-        sampledAt: 10,
-        mode: "standard",
-        host: {
-          cpuPercent: 72,
-          memoryUsedBytes: 800,
-          memoryTotalBytes: 1000,
-          memoryAvailableBytes: 200,
-          loadAverage: [1, 1, 1],
-          uptimeSec: 60,
-          pressure: "elevated",
-        },
-        runtime: {
-          serverCpuPercent: 10,
-          serverMemoryBytes: 100,
-          totalManagedCpuPercent: 23,
-          totalManagedMemoryBytes: 430,
-          managedProcessCount: 3,
-          cpuShareOfHostPercent: 31.94,
-          memoryShareOfHostPercent: 43,
-        },
-        workspaces: [
-          {
-            id: "workspace:ws-1",
-            kind: "workspace",
-            label: "Workspace Alpha",
-            cpuPercent: 16,
-            memoryBytes: 310,
-            processCount: 2,
-            uptimeSec: 80,
-            trend: "steady",
-          },
-        ],
-        sessions: [
-          {
-            id: "session:sess-1",
-            parentId: "workspace:ws-1",
-            kind: "session",
-            label: "Claude session",
-            cpuPercent: 9,
-            memoryBytes: 160,
-            processCount: 1,
-            uptimeSec: 40,
-            trend: "steady",
-          },
-        ],
-        subprocessGroups: [],
-        backgroundGroups: [
-          {
-            id: "background:lsp:ws-1:typescript",
-            parentId: "workspace:ws-1",
-            workspaceId: "ws-1",
-            kind: "background_group",
-            label: "TypeScript language server",
-            cpuPercent: 7,
-            memoryBytes: 150,
-            processCount: 1,
-            uptimeSec: 45,
-            trend: "steady",
-          },
-          {
-            id: "background:installer:1",
-            kind: "background_group",
-            label: "Extension installer",
-            cpuPercent: 2,
-            memoryBytes: 120,
-            processCount: 1,
-            uptimeSec: 15,
-            trend: "steady",
-          },
-        ],
-      },
-      history: {
-        host: { points: [{ sampledAt: 10, cpuPercent: 72, memoryBytes: 800 }] },
-        runtime: { points: [{ sampledAt: 10, cpuPercent: 23, memoryBytes: 430, processCount: 3 }] },
-        workspaces: {},
-        sessions: {},
-        subprocessGroups: {},
-      },
-      capabilities: {
-        loadAverageAvailable: true,
-        processMetricsAvailable: true,
-        subprocessHistoryLimited: false,
-      },
-      telemetry: null,
-    };
-
-    renderMonitoringPage(response);
-
-    expect(await screen.findByText("Attribution tree")).toBeInTheDocument();
-
-    const attributionTree = screen
-      .getByRole("heading", { level: 2, name: "Attribution tree" })
-      .closest(".monitoring-tree");
-    const backgroundRuntime = screen
-      .getByRole("heading", { level: 2, name: "Background runtime" })
-      .closest("section");
-
-    expect(attributionTree).not.toBeNull();
-    expect(backgroundRuntime).not.toBeNull();
-
-    expect(
-      within(attributionTree as HTMLElement).getByRole("button", {
-        name: "Background task TypeScript language server 7.0% / 150 B",
-      })
-    ).toBeInTheDocument();
-    expect(
-      within(attributionTree as HTMLElement).getByText("Background task · 7.0% / 150 B")
-    ).toBeInTheDocument();
-
-    expect(
-      within(backgroundRuntime as HTMLElement).queryByText("TypeScript language server")
-    ).not.toBeInTheDocument();
-    expect(
-      within(backgroundRuntime as HTMLElement).getByText("Extension installer")
-    ).toBeInTheDocument();
   });
 });

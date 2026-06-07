@@ -769,31 +769,6 @@ describe("SessionCard", () => {
     expect(screen.queryByText(/^SESSION-/)).toBeNull();
   });
 
-  it("shows the full first submitted input in a tooltip when hovering the session title", () => {
-    const { store } = createSessionStore({
-      state: "running",
-      endedAt: undefined,
-      title: "hello wor…",
-      firstSubmittedUserInput: "hello world this is a test",
-    });
-
-    render(
-      <Provider store={store}>
-        <SessionCard sessionId="sess_123456" />
-      </Provider>
-    );
-
-    const title = screen.getByText("hello wor…");
-
-    expect(screen.queryByRole("tooltip")).toBeNull();
-
-    fireEvent.mouseEnter(title);
-
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toHaveTextContent("hello world this is a test");
-    expect(title).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
-  });
-
   it("falls back to SESSION-XX while the session has no title yet", () => {
     const { store } = createSessionStore({
       state: "running",

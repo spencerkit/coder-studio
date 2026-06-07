@@ -119,10 +119,7 @@ describe("theme icon resolver", () => {
         getIconPresentation(themeId, "nav.settings.providers").tone,
         getIconPresentation(themeId, "nav.settings.appearance").tone,
         getIconPresentation(themeId, "nav.settings.shortcuts").tone,
-        getIconPresentation(themeId, "nav.settings.monitoring").tone,
-        getIconPresentation(themeId, "nav.settings.diagnostics").tone,
         getIconPresentation(themeId, "nav.settings.about").tone,
-        getIconPresentation(themeId, "nav.settings.analysis").tone,
       ]);
 
       expect(tones.size).toBe(1);

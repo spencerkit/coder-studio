@@ -103,7 +103,6 @@ interface SessionDeps {
   workspacePath: string;
   spec: LspServerSpec;
   onDiagnostics: (event: LspDiagnosticsEvent) => void;
-  onPrimaryProcessPidChange?: (pid: number | null) => void;
   /**
    * Per-request timeout for semantic queries (hover, definition, references,
    * documentSymbols, …). Keep this short enough that the editor's hover
@@ -272,7 +271,6 @@ export class LspSession {
       windowsHide: true,
     });
     this.child = child;
-    this.deps.onPrimaryProcessPidChange?.(child.pid ?? null);
 
     if (!child.stdin || !child.stdout) {
       throw new Error("Failed to start LSP process stdio");
@@ -839,7 +837,6 @@ export class LspSession {
   }
 
   private resetConnectionState(): void {
-    const hadPrimaryChild = this.child !== null;
     this.bridgeHandle?.dispose();
     this.bridgeHandle = null;
     this.connection = null;
@@ -848,9 +845,6 @@ export class LspSession {
     const companion = this.companion;
     this.companion = null;
     companion?.child.kill("SIGTERM");
-    if (hadPrimaryChild) {
-      this.deps.onPrimaryProcessPidChange?.(null);
-    }
     this.summary = {
       ...this.summary,
       status: "stopped",

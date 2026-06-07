@@ -292,14 +292,6 @@ describe("LspToolInstallManager", () => {
     expect(manager.get(started.jobId)?.failure).toMatchObject({
       code: "command_not_found",
     });
-    expect(manager.getLatestFailure("python")).toMatchObject({
-      jobId: started.jobId,
-      serverKind: "python",
-      status: "failed",
-      failure: {
-        code: "command_not_found",
-      },
-    });
   });
 
   it("creates a Python virtualenv, installs pylsp into it, and writes a manifest", async () => {
@@ -436,63 +428,5 @@ describe("LspToolInstallManager", () => {
       executablePath,
       source: "managed",
     });
-  });
-
-  it("clears the latest failure for a server kind after a successful retry", async () => {
-    const root = mkdtempSync(join(tmpdir(), "lsp-tools-"));
-    let rustAttempt = 0;
-    let rustInstalled = false;
-    const rustExecutablePath = join(
-      root,
-      "rust",
-      "2026-05-18",
-      "bin",
-      process.platform === "win32" ? "rust-analyzer.exe" : "rust-analyzer"
-    );
-    const manager = new LspToolInstallManager({
-      manifestStore: new FileManifestStore(root),
-      commandExists: vi.fn(async (command: string) => {
-        if (command === rustExecutablePath) {
-          return rustInstalled;
-        }
-        return false;
-      }),
-      runCommand: vi.fn(async (file: string, args: string[]) => {
-        if (file === process.execPath && args[0] === "-e") {
-          rustAttempt += 1;
-          if (rustAttempt === 1) {
-            throw Object.assign(new Error("download failed"), {
-              code: "EFAIL",
-              stderr: "download failed",
-              stdout: "",
-            });
-          }
-          rustInstalled = true;
-          return { stdout: "downloaded rust-analyzer", stderr: "" };
-        }
-
-        throw new Error(`unexpected command: ${file}`);
-      }),
-    });
-
-    const failed = await manager.start({ workspace, serverKind: "rust" });
-    await vi.waitFor(() => {
-      expect(manager.get(failed.jobId)?.status).toBe("failed");
-    });
-
-    expect(manager.getLatestFailure("rust")).toMatchObject({
-      jobId: failed.jobId,
-      status: "failed",
-      failure: {
-        code: "command_failed",
-      },
-    });
-
-    const succeeded = await manager.start({ workspace, serverKind: "rust" });
-    await vi.waitFor(() => {
-      expect(manager.get(succeeded.jobId)?.status).toBe("succeeded");
-    });
-
-    expect(manager.getLatestFailure("rust")).toBeUndefined();
   });
 });

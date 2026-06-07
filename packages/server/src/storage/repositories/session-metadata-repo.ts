@@ -48,13 +48,6 @@ function normalizeMetadata(metadata: AgentSessionMetadata): AgentSessionMetadata
     baselineGitHead: metadata.baselineGitHead ?? undefined,
     baselineCapturedAt: metadata.baselineCapturedAt ?? undefined,
     verificationRuns: metadata.verificationRuns.map(normalizeRun),
-    attachedAgentInstructions: metadata.attachedAgentInstructions
-      ? {
-          effectiveHash: metadata.attachedAgentInstructions.effectiveHash,
-          mode: metadata.attachedAgentInstructions.mode,
-          attachedAt: metadata.attachedAgentInstructions.attachedAt,
-        }
-      : undefined,
   };
 }
 

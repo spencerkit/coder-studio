@@ -1,4 +1,3 @@
-import type { LspServerKind } from "./lsp";
 import type { SystemDependencyId } from "./system-dependency-install";
 
 export type DiagnosticsContext =
@@ -61,34 +60,14 @@ export interface DiagnosticsCheck {
 export interface DiagnosticsMetadata {
   authEnabled?: boolean;
   host?: string;
-  lspRuntimeContext?: {
-    targetRuntime: "native" | "wsl";
-    managedInstallSupported: boolean;
-  };
   providerId?: string;
   workspaceId?: string;
   workspacePath?: string;
-}
-
-export type DiagnosticsLspServiceStatus =
-  | "installed"
-  | "not_installed"
-  | "install_failed"
-  | "prerequisite_missing"
-  | "runtime_off";
-
-export interface DiagnosticsLspServiceEntry {
-  serverKind: LspServerKind;
-  displayName: string;
-  status: DiagnosticsLspServiceStatus;
-  missingCommands?: string[];
-  missingPrerequisites?: string[];
 }
 
 export interface DiagnosticsResponse {
   context: DiagnosticsContext;
   canContinue: boolean;
   checks: DiagnosticsCheck[];
-  lspServices: DiagnosticsLspServiceEntry[];
   metadata: DiagnosticsMetadata;
 }

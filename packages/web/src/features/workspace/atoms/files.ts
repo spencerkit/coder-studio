@@ -52,7 +52,6 @@ export const expandedDirsAtomFamily = atomFamily((workspaceId: string) =>
 export interface OpenTextFile {
   kind: "text";
   path: string;
-  displayPath?: string;
   content: string;
   savedContent: string;
   baseHash: string;
@@ -65,7 +64,6 @@ export interface OpenTextFile {
 export interface OpenImageFile {
   kind: "image";
   path: string;
-  displayPath?: string;
   mime: string;
   url: string;
   size: number;

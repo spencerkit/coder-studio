@@ -91,7 +91,7 @@ export function MobileAgentSheet({
   ];
 
   const canAutoInstall = (providerId: "claude" | "codex"): boolean => {
-    const runtime = states[providerId]?.runtime;
+    const runtime = states[providerId].runtime;
     return Boolean(runtime?.autoInstallSupported && runtime.installReadiness === "ready");
   };
 
@@ -158,49 +158,43 @@ export function MobileAgentSheet({
     {
       kind: "options" as const,
       id: "providers",
-      items: providerButtons.flatMap((provider) => {
+      items: providerButtons.map((provider) => {
         const state = states[provider.id];
-        if (!state) {
-          return [];
-        }
         const busy =
           state.loading ||
           state.installJob?.status === "queued" ||
           state.installJob?.status === "running";
-        const guideMessage = state.runtime?.available
-          ? state.inlineError || state.installJob?.failure?.message
-          : state.inlineError === "manual" || !canAutoInstall(provider.id)
+        const guideMessage =
+          state.inlineError === "manual" || !canAutoInstall(provider.id)
             ? (state.runtime?.manualGuideKeys ?? []).map((key) => t(key)).join(" ")
             : state.inlineError || state.installJob?.failure?.message;
 
-        return [
-          {
-            id: provider.id,
-            label: provider.title,
-            description:
-              guideMessage || t("mobile.agent.start_session", { provider: provider.title }),
-            meta: busy ? t("mobile.agent.starting") : t("mobile.agent.start_new_session"),
-            icon: provider.icon,
-            disabled: !canLaunchSession || busy,
-            trailingAction:
-              !busy && guideMessage && activeWorkspaceId
-                ? {
-                    id: `${provider.id}-diagnostics`,
-                    ariaLabel: t("diagnostics.actions.open_diagnostics"),
-                    icon: <LifeBuoy size={16} />,
-                    onAction: () => {
-                      window.location.assign(
-                        buildDiagnosticsPath({
-                          context: "session_start",
-                          workspaceId: activeWorkspaceId,
-                          providerId: provider.id,
-                        })
-                      );
-                    },
-                  }
-                : undefined,
-          },
-        ];
+        return {
+          id: provider.id,
+          label: provider.title,
+          description:
+            guideMessage || t("mobile.agent.start_session", { provider: provider.title }),
+          meta: busy ? t("mobile.agent.starting") : t("mobile.agent.start_new_session"),
+          icon: provider.icon,
+          disabled: !canLaunchSession || busy,
+          trailingAction:
+            !busy && guideMessage && activeWorkspaceId
+              ? {
+                  id: `${provider.id}-diagnostics`,
+                  ariaLabel: t("diagnostics.actions.open_diagnostics"),
+                  icon: <LifeBuoy size={16} />,
+                  onAction: () => {
+                    window.location.assign(
+                      buildDiagnosticsPath({
+                        context: "session_start",
+                        workspaceId: activeWorkspaceId,
+                        providerId: provider.id,
+                      })
+                    );
+                  },
+                }
+              : undefined,
+        };
       }),
     },
   ];

@@ -19,7 +19,6 @@ export interface SessionRow {
   error_reason: string | null;
   archived: number; // SQLite uses 0/1 for boolean
   title: string | null;
-  first_submitted_user_input?: string | null;
   draft?: string | null;
 }
 
@@ -37,7 +36,6 @@ export function rowToSession(row: SessionRow): Session {
     completionPercent: row.completion_percent ?? undefined,
     errorReason: row.error_reason ?? undefined,
     title: row.title ?? undefined,
-    firstSubmittedUserInput: row.first_submitted_user_input ?? undefined,
     ...(row.draft != null ? { draft: row.draft } : {}),
   };
 }
@@ -58,7 +56,6 @@ export function sessionToRow(session: Session & { draft?: string }): SessionRow 
     archived: 0,
     draft: session.draft ?? null,
     title: session.title ?? null,
-    first_submitted_user_input: session.firstSubmittedUserInput ?? null,
   };
 }
 
@@ -311,11 +308,6 @@ export class SessionRepo {
         ? patch.title === null
           ? { title: undefined }
           : { title: patch.title }
-        : {}),
-      ...(patch.firstSubmittedUserInput !== undefined
-        ? patch.firstSubmittedUserInput === null
-          ? { firstSubmittedUserInput: undefined }
-          : { firstSubmittedUserInput: patch.firstSubmittedUserInput }
         : {}),
     };
 

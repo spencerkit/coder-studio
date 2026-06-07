@@ -12,12 +12,7 @@ import { atomFamily } from "jotai-family";
 import type { SetStateAction } from "react";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 
-export type DesktopSidebarView =
-  | "explorer"
-  | "search"
-  | "source-control"
-  | "agent-instructions"
-  | "skills";
+export type DesktopSidebarView = "explorer" | "search" | "source-control";
 
 export interface WorkspaceLayoutState {
   focusMode: boolean;
@@ -34,8 +29,6 @@ const DESKTOP_SIDEBAR_VIEW_VALUES = new Set<DesktopSidebarView>([
   "explorer",
   "search",
   "source-control",
-  "agent-instructions",
-  "skills",
 ]);
 const DEFAULT_WORKSPACE_LAYOUT_STATE: WorkspaceLayoutState = {
   focusMode: false,

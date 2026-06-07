@@ -51,27 +51,11 @@ const PROVIDER_INSTALL = {
 function createProvider(
   overrides: Partial<ProviderDefinition> & Pick<ProviderDefinition, "id" | "capability">
 ): ProviderDefinition {
-  const supportsInteractive = overrides.capability !== "unsupported";
-  const declaredSupervisorEval = overrides.capabilities?.find(
-    (capability) => capability.key === "supervisor_eval"
-  );
-  const supportsSupervisorEval =
-    declaredSupervisorEval?.supported ??
-    Boolean(overrides.headless?.supportedScenarios.includes("supervisor_eval"));
-
   return {
     id: overrides.id,
     displayName: overrides.id,
     badge: overrides.id,
     capability: overrides.capability,
-    capabilities: overrides.capabilities ?? [
-      { key: "interactive_session", supported: supportsInteractive, label: "Interactive session" },
-      {
-        key: "supervisor_eval",
-        supported: supportsSupervisorEval,
-        label: "Supervisor evaluation",
-      },
-    ],
     install: PROVIDER_INSTALL,
     buildCommand: () => ({
       argv: ["node", "-e", 'process.stdout.write("noop")'],
@@ -136,6 +120,28 @@ function createManagerDeps() {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+  };
+
+  const defaultTargetMemory: SupervisorTargetMemory = {
+    targetId: "tgt-1",
+    decompositionGenerated: true,
+    decompositionMode: "stage",
+    items: [
+      {
+        id: "stage-1",
+        kind: "stage",
+        title: "Verify the fix",
+        objective: "Confirm the fix works",
+        deliverable: "A passing focused verification run",
+        acceptanceCriteria: ["Focused verification passes"],
+        status: "in_progress",
+      },
+    ],
+    activeItemId: "stage-1",
+    progressSummary: "Verification in progress",
+    lastGuidance: "Run the focused parser test.",
+    stalledCount: 0,
+    updatedAt: 1,
   };
 
   const codexBuildSupervisorEvalCommand = vi.fn(() => ({
@@ -391,10 +397,7 @@ function createManagerDeps() {
       createProvider({
         id: "codex",
         capability: "full",
-        headless: {
-          supportedScenarios: ["supervisor_eval"],
-          buildCommand: codexBuildSupervisorEvalCommand,
-        },
+        buildSupervisorEvalCommand: codexBuildSupervisorEvalCommand,
       }),
     ],
     providerConfigRepo,
@@ -869,7 +872,7 @@ describe("SupervisorManager cycle triggers", () => {
         })
     );
 
-    await manager.triggerEvaluation(supervisor.id);
+    const cycle = await manager.triggerEvaluation(supervisor.id);
 
     await waitFor(() => {
       expect(observedSignal).toBeDefined();
@@ -930,7 +933,7 @@ describe("SupervisorManager cycle triggers", () => {
         })
     );
 
-    await manager.triggerEvaluation(supervisor.id);
+    const cycle = await manager.triggerEvaluation(supervisor.id);
 
     await waitFor(() => {
       expect(observedSignal).toBeDefined();
@@ -998,7 +1001,7 @@ describe("SupervisorManager cycle triggers", () => {
         })
     );
 
-    await manager.triggerEvaluation(supervisor.id);
+    const cycle = await manager.triggerEvaluation(supervisor.id);
 
     await waitFor(() => {
       expect(rejectEvaluation).not.toBeNull();
@@ -1370,7 +1373,7 @@ describe("SupervisorManager cycle triggers", () => {
         })
     );
 
-    await manager.triggerEvaluation(supervisor.id);
+    const cycle = await manager.triggerEvaluation(supervisor.id);
     await waitFor(() => {
       expect(evaluate).toHaveBeenCalledTimes(1);
     });
@@ -1564,75 +1567,6 @@ describe("SupervisorManager cycle triggers", () => {
       code: "supervisor_unsupported_provider",
       message: "Provider claude does not support supervisor-driven sessions",
     });
-  });
-
-  it("rejects evaluator providers that do not declare supervisor_eval support", async () => {
-    deps.providerRegistry.push(
-      createProvider({
-        id: "hook-only",
-        capability: "full",
-        capabilities: [
-          { key: "interactive_session", supported: true, label: "Interactive session" },
-          { key: "supervisor_eval", supported: false, label: "Supervisor evaluation" },
-        ],
-        headless: {
-          supportedScenarios: ["supervisor_eval"],
-          buildCommand: vi.fn(() => ({
-            argv: ["node", "-e", 'process.stdout.write("{}")'],
-            cwd: process.cwd(),
-            env: {},
-          })),
-        },
-      })
-    );
-
-    await expect(
-      manager.create({
-        sessionId: "sess-hook-only",
-        workspaceId: "ws-1",
-        objective: "Ship the fix",
-        evaluatorProviderId: "hook-only",
-      })
-    ).rejects.toMatchObject({
-      code: "supervisor_invalid_evaluator_provider",
-      message: "Provider hook-only cannot evaluate supervisors",
-    });
-  });
-
-  it("selects evaluator providers from capability and hook support without config lookup", async () => {
-    const buildSupervisorEvalCommand = vi.fn(() => ({
-      argv: ["node", "-e", 'process.stdout.write("{}")'],
-      cwd: process.cwd(),
-      env: {},
-    }));
-    deps.providerRegistry.push(
-      createProvider({
-        id: "cursor-like",
-        capability: "full",
-        capabilities: [
-          { key: "interactive_session", supported: true, label: "Interactive session" },
-          { key: "supervisor_eval", supported: true, label: "Supervisor evaluation" },
-        ],
-        headless: {
-          supportedScenarios: ["supervisor_eval"],
-          buildCommand: buildSupervisorEvalCommand,
-        },
-      })
-    );
-
-    await expect(
-      manager.create({
-        sessionId: "sess-cursor-like",
-        workspaceId: "ws-1",
-        objective: "Ship the fix",
-        evaluatorProviderId: "cursor-like",
-      })
-    ).resolves.toMatchObject({
-      evaluatorProviderId: "cursor-like",
-    });
-
-    expect(deps.providerConfigRepo.get).not.toHaveBeenCalledWith("cursor-like");
-    expect(buildSupervisorEvalCommand).not.toHaveBeenCalled();
   });
 
   it("logs evaluation failures with the original error and keeps the persisted reason concise", async () => {

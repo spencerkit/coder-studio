@@ -1,10 +1,4 @@
-import type {
-  FileNode,
-  GitStatus,
-  Workspace,
-  WorkspaceHistoryEntry,
-  WorktreeInfo,
-} from "@coder-studio/core";
+import type { FileNode, GitStatus, Workspace, WorktreeInfo } from "@coder-studio/core";
 import { useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -66,8 +60,6 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [error, setError] = useState<string | null>(null);
   const [rootPaths, setRootPaths] = useState<string[]>(["/"]);
   const [homePath, setHomePath] = useState<string | null>(null);
-  const [recentWorkspaces, setRecentWorkspaces] = useState<WorkspaceHistoryEntry[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
@@ -103,26 +95,12 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
         setBrowsing(false);
       }
     },
-    [dispatch, t]
+    [dispatch]
   );
-
-  const loadWorkspaceHistory = useCallback(async () => {
-    setHistoryLoading(true);
-
-    try {
-      const result = await dispatch<WorkspaceHistoryEntry[]>("workspace.history.list", {});
-      setRecentWorkspaces(result.ok && Array.isArray(result.data) ? result.data : []);
-    } catch {
-      setRecentWorkspaces([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [dispatch]);
 
   useEffect(() => {
     void loadDirectory();
-    void loadWorkspaceHistory();
-  }, [loadDirectory, loadWorkspaceHistory]);
+  }, [loadDirectory]);
 
   const handleNavigate = useCallback(
     (path: string) => {
@@ -234,83 +212,75 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     }
   }, [currentPath, dispatch, newFolderName, t]);
 
-  const openWorkspaceByPath = useCallback(
-    async (path: string) => {
-      if (!path) {
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const result = await dispatch<Workspace>("workspace.open", { path });
-
-        if (result.ok && result.data?.id) {
-          void persistLastViewedTarget({ workspaceId: result.data.id });
-          setActiveWorkspaceId(result.data.id);
-          setWorkspaces((prev) => ({
-            ...prev,
-            [result.data.id]: result.data,
-          }));
-          hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
-          setWorkspaceOrder((prev) => {
-            if (prev.includes(result.data.id)) {
-              return prev;
-            }
-            return [result.data.id, ...prev];
-          });
-          setWorkspacesLoadState("ready");
-          setWorkspacesLoadError(null);
-
-          if (location.pathname !== "/workspace") {
-            navigate("/workspace");
-          }
-
-          onClose();
-          return;
-        }
-
-        navigate(
-          buildDiagnosticsPath({
-            context: "workspace_open",
-            workspacePath: path,
-          })
-        );
-      } catch (_err) {
-        navigate(
-          buildDiagnosticsPath({
-            context: "workspace_open",
-            workspacePath: path,
-          })
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [
-      dispatch,
-      location.pathname,
-      navigate,
-      onClose,
-      persistLastViewedTarget,
-      setActiveWorkspaceId,
-      setWorkspaceOrder,
-      setWorkspaces,
-      setWorkspacesLoadError,
-      setWorkspacesLoadState,
-      store,
-    ]
-  );
-
   const handleOpen = useCallback(async () => {
     if (!selectedPath) {
       setError(t("workspace.launch.select_required"));
       return;
     }
 
-    await openWorkspaceByPath(selectedPath);
-  }, [openWorkspaceByPath, selectedPath, t]);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await dispatch<Workspace>("workspace.open", {
+        path: selectedPath,
+      });
+
+      if (result.ok && result.data?.id) {
+        void persistLastViewedTarget({ workspaceId: result.data.id });
+        setActiveWorkspaceId(result.data.id);
+        setWorkspaces((prev) => ({
+          ...prev,
+          [result.data!.id]: result.data!,
+        }));
+        hydrateWorkspaceEditorState(store, result.data.id, result.data.uiState);
+        setWorkspaceOrder((prev) => {
+          if (prev.includes(result.data!.id)) {
+            return prev;
+          }
+          return [result.data!.id, ...prev];
+        });
+        setWorkspacesLoadState("ready");
+        setWorkspacesLoadError(null);
+
+        if (location.pathname !== "/workspace") {
+          navigate("/workspace");
+        }
+
+        onClose();
+      } else {
+        navigate(
+          buildDiagnosticsPath({
+            context: "workspace_open",
+            workspacePath: selectedPath,
+          })
+        );
+      }
+    } catch (_err) {
+      navigate(
+        buildDiagnosticsPath({
+          context: "workspace_open",
+          workspacePath: selectedPath,
+        })
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    dispatch,
+    location.pathname,
+    navigate,
+    onClose,
+    selectedPath,
+    setActiveWorkspaceId,
+    persistLastViewedTarget,
+    setWorkspaceOrder,
+    setWorkspaces,
+    setWorkspacesLoadError,
+    setWorkspacesLoadState,
+    store,
+    t,
+  ]);
 
   const getShortPath = useCallback(
     (path: string) => {
@@ -337,16 +307,13 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     handleNavigate,
     handleOpen,
     handleSelect,
-    historyLoading,
     isCreatingFolder,
     launchHint,
     launchTitle,
     loading,
     newFolderName,
     openCreateFolder,
-    openWorkspaceByPath,
     parentPath,
-    recentWorkspaces,
     rootPaths,
     closeCreateFolder,
     selectedPath,

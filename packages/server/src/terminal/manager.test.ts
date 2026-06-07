@@ -1,7 +1,7 @@
 // Unit tests for TerminalManager
 
 import type { DomainEvent, Terminal } from "@coder-studio/core";
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { EventBus } from "../bus/event-bus";
 import { computeColorFgBg, TerminalManager } from "./manager";
 import { RingBuffer } from "./ring-buffer";
@@ -407,90 +407,6 @@ describe("TerminalManager", () => {
         terminalId: terminal.id,
         chunk: Buffer.from(output),
         seq: output.length,
-      });
-    });
-
-    describe("OSC 11 background injection", () => {
-      const originalPlatform = process.platform;
-
-      afterEach(() => {
-        Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
-      });
-
-      it("injects OSC 11 background response on Windows when themeBackground is set", () => {
-        Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
-
-        const spec: TerminalSpec = {
-          workspaceId: "ws-123",
-          kind: "agent",
-          argv: ["gemini"],
-          cwd: "/home/user",
-          themeBackground: "#fcfffd",
-        };
-
-        manager.create(spec);
-
-        const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
-        onDataCallback("\x1b]11;?\x1b\\");
-
-        expect(mockPty.write).toHaveBeenCalledWith("\x1b]11;rgb:fcfc/ffff/fdfd\x1b\\");
-      });
-
-      it("does not inject OSC 11 background response on non-Windows platforms", () => {
-        Object.defineProperty(process, "platform", { configurable: true, value: "linux" });
-
-        const spec: TerminalSpec = {
-          workspaceId: "ws-123",
-          kind: "agent",
-          argv: ["gemini"],
-          cwd: "/home/user",
-          themeBackground: "#fcfffd",
-        };
-
-        manager.create(spec);
-
-        const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
-        onDataCallback("\x1b]11;?\x1b\\");
-
-        expect(mockPty.write).not.toHaveBeenCalled();
-      });
-
-      it("does not inject OSC 11 background response without themeBackground", () => {
-        Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
-
-        const spec: TerminalSpec = {
-          workspaceId: "ws-123",
-          kind: "agent",
-          argv: ["gemini"],
-          cwd: "/home/user",
-        };
-
-        manager.create(spec);
-
-        const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
-        onDataCallback("\x1b]11;?\x1b\\");
-
-        expect(mockPty.write).not.toHaveBeenCalled();
-      });
-
-      it("uses updated themeBackground after syncThemeBackgroundForWorkspace", () => {
-        Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
-
-        const spec: TerminalSpec = {
-          workspaceId: "ws-123",
-          kind: "agent",
-          argv: ["gemini"],
-          cwd: "/home/user",
-          themeBackground: "#fcfffd",
-        };
-
-        manager.create(spec);
-        manager.syncThemeBackgroundForWorkspace("ws-123", "#0b1218");
-
-        const onDataCallback = (mockPty.onData as Mock).mock.calls[0][0];
-        onDataCallback("\x1b]11;?\x1b\\");
-
-        expect(mockPty.write).toHaveBeenCalledWith("\x1b]11;rgb:0b0b/1212/1818\x1b\\");
       });
     });
 

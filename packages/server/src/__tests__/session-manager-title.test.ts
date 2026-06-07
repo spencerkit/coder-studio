@@ -108,27 +108,8 @@ describe("SessionManager title derivation", () => {
 
     sessionMgr.onTerminalInput("terminal-1", "submit", "fix the build\n");
 
-    expect(mockDb.update).toHaveBeenCalledWith(session.id, {
-      title: "fix the b…",
-      firstSubmittedUserInput: "fix the build",
-    });
+    expect(mockDb.update).toHaveBeenCalledWith(session.id, { title: "fix the b…" });
     expect(sessionMgr.get(session.id)?.title).toBe("fix the b…");
-    expect(sessionMgr.get(session.id)?.firstSubmittedUserInput).toBe("fix the build");
-  });
-
-  it("stores the full normalized first submitted input alongside the compact title", async () => {
-    const session = await createSession();
-
-    sessionMgr.onTerminalInput("terminal-1", "submit", "  hello   world this is a test\n");
-
-    expect(mockDb.update).toHaveBeenCalledWith(session.id, {
-      title: "hello wor…",
-      firstSubmittedUserInput: "hello world this is a test",
-    });
-    expect(sessionMgr.get(session.id)).toMatchObject({
-      title: "hello wor…",
-      firstSubmittedUserInput: "hello world this is a test",
-    });
   });
 
   it("uses the raw text when it already fits in 10 chars", async () => {
@@ -162,10 +143,8 @@ describe("SessionManager title derivation", () => {
     const updateCalls = mockDb.update.mock.calls;
     for (const [, patch] of updateCalls) {
       expect(patch).not.toHaveProperty("title");
-      expect(patch).not.toHaveProperty("firstSubmittedUserInput");
     }
     expect(sessionMgr.get(session.id)?.title).toBe(firstTitle);
-    expect(sessionMgr.get(session.id)?.firstSubmittedUserInput).toBe("first message");
   });
 
   it("ignores non-submit activity for title derivation", async () => {
@@ -200,10 +179,7 @@ describe("SessionManager title derivation", () => {
     sessionMgr.onTerminalInput("terminal-1", "submit", "new prompt\n");
 
     expect(sessionMgr.get(session.id)?.title).toBe("new prompt");
-    expect(mockDb.update).toHaveBeenCalledWith(session.id, {
-      title: "new prompt",
-      firstSubmittedUserInput: "new prompt",
-    });
+    expect(mockDb.update).toHaveBeenCalledWith(session.id, { title: "new prompt" });
   });
 
   it("broadcasts state.changed so clients pick up the new title", async () => {
@@ -224,10 +200,7 @@ describe("SessionManager title derivation", () => {
       sessionId: session.id,
       from: "running",
       to: "running",
-      session: expect.objectContaining({
-        title: "hello wor…",
-        firstSubmittedUserInput: "hello world hi",
-      }),
+      session: expect.objectContaining({ title: "hello wor…" }),
     });
   });
 

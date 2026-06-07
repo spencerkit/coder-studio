@@ -2,12 +2,10 @@ import type { IconSemantic } from "../../../theme";
 
 export type SettingsSection =
   | "general"
-  | "providers"
-  | "appearance"
-  | "shortcuts"
   | "monitoring"
-  | "analysis"
-  | "diagnostics"
+  | "appearance"
+  | "providers"
+  | "shortcuts"
   | "about";
 
 export interface SettingsSectionMeta {
@@ -18,16 +16,10 @@ export interface SettingsSectionMeta {
 
 export const SETTINGS_SECTIONS = [
   { id: "general", labelKey: "settings.general", iconSemantic: "nav.settings.general" },
+  { id: "monitoring", labelKey: "monitoring.title", iconSemantic: "nav.settings.diagnostics" },
   { id: "providers", labelKey: "settings.providers", iconSemantic: "nav.settings.providers" },
   { id: "appearance", labelKey: "settings.appearance", iconSemantic: "nav.settings.appearance" },
   { id: "shortcuts", labelKey: "settings.shortcuts.title", iconSemantic: "nav.settings.shortcuts" },
-  { id: "monitoring", labelKey: "monitoring.title", iconSemantic: "nav.settings.monitoring" },
-  { id: "analysis", labelKey: "settings.analysis.title", iconSemantic: "nav.settings.analysis" },
-  {
-    id: "diagnostics",
-    labelKey: "settings.diagnostics.title",
-    iconSemantic: "nav.settings.diagnostics",
-  },
   { id: "about", labelKey: "settings.about.title", iconSemantic: "nav.settings.about" },
 ] as const satisfies readonly SettingsSectionMeta[];
 

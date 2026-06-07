@@ -1,7 +1,5 @@
-import { useAtomValue } from "jotai";
 import { ArrowUp, X } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
-import { localeAtom } from "../../../../atoms/app-ui";
 import {
   EmptyState,
   IconButton,
@@ -12,7 +10,7 @@ import {
   WorkbenchLayer,
 } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
-import { formatDate, type LocaleCode, useTranslation } from "../../../../lib/i18n";
+import { useTranslation } from "../../../../lib/i18n";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
 
 interface WorkspaceLaunchModalProps {
@@ -50,7 +48,6 @@ const visuallyHiddenTitleStyle = {
 
 export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const isMobile = useViewport() === "mobile";
-  const locale = useAtomValue(localeAtom) as LocaleCode;
   const t = useTranslation();
   const createFolderInputRef = useRef<HTMLInputElement | null>(null);
   const {
@@ -65,16 +62,13 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     handleNavigate,
     handleOpen,
     handleSelect,
-    historyLoading,
     isCreatingFolder,
     launchHint,
     launchTitle,
     loading,
     newFolderName,
     openCreateFolder,
-    openWorkspaceByPath,
     parentPath,
-    recentWorkspaces,
     rootPaths,
     selectedPath,
     submitCreateFolder,
@@ -105,38 +99,8 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     return () => window.clearTimeout(timeoutId);
   }, [isCreatingFolder]);
 
-  const recentSection =
-    !historyLoading && recentWorkspaces.length > 0 ? (
-      <section className="launch-recent" aria-labelledby="launch-recent-title">
-        <div className="launch-section-title" id="launch-recent-title">
-          {t("workspace.launch.recent_title")}
-        </div>
-        <div className="launch-recent-list">
-          {recentWorkspaces.map((entry) => (
-            <button
-              key={entry.path}
-              className="launch-recent-row"
-              type="button"
-              aria-label={t("workspace.launch.open_recent", { name: entry.name })}
-              disabled={loading}
-              onClick={() => void openWorkspaceByPath(entry.path)}
-            >
-              <span className="launch-recent-row__header">
-                <span className="launch-recent-row__name">{entry.name}</span>
-                <span className="launch-recent-row__time">
-                  {formatDate(entry.lastOpenedAt, locale)}
-                </span>
-              </span>
-              <span className="launch-recent-row__path">{entry.path}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-    ) : null;
-
   const launchBody = (
     <div className="launch-body">
-      {recentSection}
       <div className="folder-picker">
         <div className="fp-toolbar">
           <button className="fp-btn" onClick={() => handleNavigate("~")}>

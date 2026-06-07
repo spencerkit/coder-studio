@@ -87,7 +87,7 @@ describe("FileTreePanel", () => {
     );
     store.set(fileTreeStaleAtomFamily("ws-test"), true);
 
-    const { container } = render(
+    render(
       <Provider store={store}>
         <FileTreePanel workspaceId="ws-test" />
       </Provider>
@@ -175,7 +175,7 @@ describe("FileTreePanel", () => {
     store.set(loadedDirsAtomFamily("ws-test"), new Set(["src"]));
     store.set(fileTreeStaleAtomFamily("ws-test"), true);
 
-    const { container } = render(
+    render(
       <Provider store={store}>
         <FileTreePanel workspaceId="ws-test" />
       </Provider>
@@ -1489,54 +1489,6 @@ describe("FileTreePanel", () => {
     expect(desktopSearch).toContainElement(searchInput);
     expect(activeRow).toHaveClass("selected");
     expect(activeRow?.querySelector(".tree-item-actions")).toBeTruthy();
-  });
-
-  it("shows a symlink badge for tree rows and search results", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "file.search") {
-        return {
-          files: [{ path: "src/linked.ts", name: "linked.ts", kind: "file", isSymlink: true }],
-        };
-      }
-
-      return {};
-    });
-    const store = createStore();
-    store.set(wsClientAtom, { sendCommand } as never);
-    store.set(
-      fileTreeAtomFamily("ws-test"),
-      new Map([
-        [
-          ".",
-          [
-            {
-              path: "src",
-              name: "src",
-              kind: "dir",
-              isSymlink: true,
-              children: [],
-            },
-          ],
-        ],
-      ])
-    );
-
-    const { container } = render(
-      <Provider store={store}>
-        <FileTreePanel workspaceId="ws-test" />
-      </Provider>
-    );
-
-    const treeRow = screen.getByText("src").closest(".tree-item");
-    expect(treeRow?.querySelector(".tree-symlink-badge")).toBeTruthy();
-
-    fireEvent.change(screen.getByPlaceholderText("action.search_files"), {
-      target: { value: "linked" },
-    });
-
-    await screen.findByText("linked.ts");
-    const searchRow = screen.getByText("linked.ts").closest(".tree-item");
-    expect(searchRow?.querySelector(".tree-symlink-badge")).toBeTruthy();
   });
 
   it("right-clicks a file row to open the custom menu and prevents the native menu", async () => {

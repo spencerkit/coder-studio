@@ -94,8 +94,6 @@ registerCommand(
       };
     }
 
-    await ctx.agentInstructionPublisher?.syncWorkspace(args.workspaceId);
-
     const session = await ctx.sessionMgr.create({
       workspaceId: args.workspaceId,
       workspacePath: workspace.path,
@@ -218,40 +216,5 @@ registerCommand(
     ctx.workspaceMgr.updateUiState(session.workspaceId, nextUiState);
     ctx.sessionMgr.delete(args.sessionId);
     ctx.sessionMetadataRepo?.delete(args.sessionId);
-  }
-);
-
-registerCommand(
-  "session.analysis.get",
-  z.object({
-    sessionId: z.string(),
-  }),
-  async (args, ctx) => {
-    if (!ctx.sessionAnalysisService) {
-      throw {
-        code: "session_analysis_unavailable",
-        message: "Session analysis service is unavailable",
-      };
-    }
-
-    return ctx.sessionAnalysisService.get(args.sessionId);
-  }
-);
-
-registerCommand(
-  "session.analysis.run",
-  z.object({
-    sessionId: z.string(),
-    force: z.boolean().optional(),
-  }),
-  async (args, ctx) => {
-    if (!ctx.sessionAnalysisService) {
-      throw {
-        code: "session_analysis_unavailable",
-        message: "Session analysis service is unavailable",
-      };
-    }
-
-    return await ctx.sessionAnalysisService.run(args);
   }
 );

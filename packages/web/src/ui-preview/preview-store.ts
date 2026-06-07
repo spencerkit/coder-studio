@@ -6,8 +6,6 @@ import type {
   GitFileDiffPayload,
   GitStatus,
   MonitoringResponse,
-  ProviderListItem,
-  ProviderRuntimeStatusResponse,
   SearchSessionApplyResult,
   SearchSessionFilePreview,
   SearchSessionStartResult,
@@ -15,7 +13,6 @@ import type {
   Supervisor,
   UpdateStateView,
   Workspace,
-  WorkspaceHistoryEntry,
   WorktreeInfo,
 } from "@coder-studio/core";
 import { createStore, type Store } from "jotai";
@@ -37,7 +34,6 @@ import {
   type DispatchCommand,
   wsClientAtom,
 } from "../atoms/connection";
-import { providerListAtom, providerRuntimeStatusAtom } from "../atoms/providers";
 import { sessionsAtom } from "../atoms/sessions";
 import {
   activeWorkspaceIdAtom,
@@ -76,14 +72,11 @@ export type UiPreviewLocale = "zh" | "en";
 export type UiPreviewDevice = "desktop" | "mobile";
 
 export interface UiPreviewCommands {
-  providerList?: ProviderListItem[];
-  providerRuntimeStatus?: ProviderRuntimeStatusResponse["providers"];
   settingsGet?: Record<string, unknown>;
   settingsUpdate?: Record<string, unknown>;
   settingsPreviewCommandByProviderId?: Record<string, string>;
   monitoringGet?: MonitoringResponse;
   monitoringRecheck?: MonitoringResponse;
-  workspaceHistoryList?: WorkspaceHistoryEntry[];
   workspaceBrowse?: {
     currentPath: string;
     parentPath: string | null;
@@ -139,8 +132,6 @@ export interface UiPreviewSeed {
   workspacesLoadState?: WorkspaceLoadState;
   workspacesLoadError?: string | null;
   sessions?: Session[];
-  providerList?: ProviderListItem[];
-  providerRuntimeStatus?: ProviderRuntimeStatusResponse["providers"];
   paneLayoutByWorkspaceId?: Record<string, PaneNode>;
   activeEditorPaneIdByWorkspaceId?: Record<string, string | null>;
   focusedEditorPaneIdByWorkspaceId?: Record<string, string | null>;
@@ -254,20 +245,6 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
 
     if (op === "workspace.list") {
       return ok((commands.workspaceList ?? seed.workspaces ?? []) as T);
-    }
-
-    if (op === "workspace.history.list") {
-      return ok((commands.workspaceHistoryList ?? []) as T);
-    }
-
-    if (op === "provider.list") {
-      return ok((commands.providerList ?? seed.providerList ?? []) as T);
-    }
-
-    if (op === "provider.runtimeStatus") {
-      return ok({
-        providers: commands.providerRuntimeStatus ?? seed.providerRuntimeStatus ?? {},
-      } as unknown as T);
     }
 
     if (op === "workspace.browse") {
@@ -518,6 +495,7 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
       op === "terminal.close" ||
       op === "terminal.resize" ||
       op === "terminal.input" ||
+      op === "provider.runtimeStatus" ||
       op === "provider.install.start" ||
       op === "provider.install.get" ||
       op === "session.create" ||
@@ -587,8 +565,6 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
     sessionsAtom,
     Object.fromEntries((seed.sessions ?? []).map((session) => [session.id, session]))
   );
-  store.set(providerListAtom, seed.providerList ?? []);
-  store.set(providerRuntimeStatusAtom, seed.providerRuntimeStatus);
   store.set(commandPaletteOpenAtom, seed.commandPaletteOpen ?? false);
   store.set(branchQuickPickAtom, seed.branchQuickPick ?? { visible: false, inputValue: "" });
   store.set(terminalPanelVisibleAtom, seed.terminalPanelVisible ?? true);

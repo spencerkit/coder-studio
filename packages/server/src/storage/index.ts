@@ -13,12 +13,6 @@ export {
 } from "./repositories/custom-provider-repo.js";
 export { ProviderConfigRepo } from "./repositories/provider-config-repo.js";
 export {
-  type SessionAnalysisRecord,
-  SessionAnalysisRepo,
-  type SessionAnalysisRepoOptions,
-  type SessionAnalysisResult,
-} from "./repositories/session-analysis-repo.js";
-export {
   SessionMetadataRepo,
   type SessionMetadataRepoOptions,
 } from "./repositories/session-metadata-repo.js";
@@ -42,10 +36,6 @@ export {
   type TerminalRepoOptions,
 } from "./repositories/terminal-repo.js";
 export { UpdateStateRepo } from "./repositories/update-state-repo.js";
-export {
-  WorkAnalysisRepo,
-  type WorkAnalysisRepoOptions,
-} from "./repositories/work-analysis-repo.js";
 export {
   type NewWorkspace,
   WorkspaceRepo,

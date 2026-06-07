@@ -1,6 +1,5 @@
 import type { WorkspaceLastViewedTarget } from "@coder-studio/core";
 import { z } from "zod";
-import { WorkspaceHistoryStore } from "../workspace/history-store.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 const WORKSPACE_LAST_VIEWED_TARGET_KEY = "workspace.lastViewedTarget";
@@ -51,10 +50,6 @@ registerCommand("workspace.lastViewedTarget.get", z.object({}), async (_args, ct
   }
 
   return parseWorkspaceLastViewedTarget(typeof value === "string" ? value : JSON.stringify(value));
-});
-
-registerCommand("workspace.history.list", z.object({}), async (_args, ctx) => {
-  return new WorkspaceHistoryStore(ctx.settingsRepo).list();
 });
 
 registerCommand(

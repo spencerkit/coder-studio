@@ -142,46 +142,6 @@ describe("MobileAgentSheet", () => {
     expect(screen.getByRole("button", { name: "Open Diagnostics" })).toBeInTheDocument();
   });
 
-  it("skips provider entries that are missing launcher state instead of crashing", () => {
-    const store = createStore();
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-
-    mockUseProviderLauncher.mockReturnValue({
-      states: {
-        claude: {
-          runtime: {
-            available: true,
-            autoInstallSupported: true,
-            installReadiness: "ready",
-            manualGuideKeys: [],
-          },
-          loading: false,
-          installJob: null,
-        },
-      },
-      launch: vi.fn(),
-    });
-
-    render(
-      <Provider store={store}>
-        <MobileAgentSheet
-          activeSessionId={null}
-          activeWorkspaceId="ws-1"
-          defaultMode="create"
-          sessions={[]}
-          onClose={vi.fn()}
-          onCloseSession={vi.fn().mockResolvedValue(undefined)}
-          onSelectSession={vi.fn()}
-          onSessionCreated={vi.fn()}
-        />
-      </Provider>
-    );
-
-    expect(screen.getByRole("button", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
-  });
-
   it("opens diagnostics with session-start intent from mobile provider guidance", () => {
     const assignSpy = vi.fn();
     const originalAssign = window.location.assign;
@@ -252,57 +212,6 @@ describe("MobileAgentSheet", () => {
         assign: originalAssign,
       },
     });
-  });
-
-  it("does not show launch help for providers that are already available", () => {
-    const store = createStore();
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-
-    mockUseProviderLauncher.mockReturnValue({
-      states: {
-        claude: {
-          runtime: {
-            available: true,
-            autoInstallSupported: true,
-            installReadiness: "ready",
-            manualGuideKeys: [],
-          },
-          loading: false,
-          installJob: null,
-        },
-        codex: {
-          runtime: {
-            available: true,
-            autoInstallSupported: false,
-            installReadiness: "ready",
-            manualGuideKeys: ["provider.install.codex.manual"],
-          },
-          loading: false,
-          installJob: null,
-        },
-      },
-      launch: vi.fn(),
-    });
-
-    render(
-      <Provider store={store}>
-        <MobileAgentSheet
-          activeSessionId={null}
-          activeWorkspaceId="ws-1"
-          defaultMode="create"
-          sessions={[]}
-          onClose={vi.fn()}
-          onCloseSession={vi.fn().mockResolvedValue(undefined)}
-          onSelectSession={vi.fn()}
-          onSessionCreated={vi.fn()}
-        />
-      </Provider>
-    );
-
-    expect(screen.queryByText("Then run npm install -g @openai/codex.")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Open Diagnostics" })).toBeNull();
-    expect(screen.getByText("Start Codex session")).toBeInTheDocument();
   });
 
   it("renders session state in the mobile agent list", () => {

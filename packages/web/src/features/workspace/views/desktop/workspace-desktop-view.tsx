@@ -12,12 +12,9 @@ import { useWorkspaceNavigationShortcuts } from "../../actions/use-workspace-nav
 import { useWorkspaceScreenModel } from "../../actions/use-workspace-screen-model";
 import { sidebarCollapsedAtom } from "../../atoms";
 import { sanitizeDesktopSidebarView } from "../../atoms/layout";
-import { AgentInstructionsSection } from "../shared/agent-instructions-section";
-import { AgentTokenTrendSection } from "../shared/agent-token-trend-section";
 import { ExplorerPanel } from "../shared/explorer-panel";
 import { GitPanel } from "../shared/git-panel";
 import { SearchPanel } from "../shared/search-panel";
-import { SkillsPanel } from "../shared/skills-panel";
 import { WorkspaceActivityBar } from "../shared/workspace-activity-bar";
 import { WorkspaceStatusBar } from "../shared/workspace-status-bar";
 
@@ -42,9 +39,9 @@ const WorkspaceDesktopScene: FC = () => {
     desktopSidebarView,
     focusMode,
     gitState,
-    handleBottomPointerDown,
+    handleBottomMouseDown,
     handleConsumeCreateRequest,
-    handleLeftPointerDown,
+    handleLeftMouseDown,
     handleOpenBranchSwitcher,
     handleOpenFileCreate,
     handleOpenFolderCreate,
@@ -95,18 +92,6 @@ const WorkspaceDesktopScene: FC = () => {
       if (event.key === "3") {
         event.preventDefault();
         setDesktopSidebarView("source-control");
-        return;
-      }
-
-      if (event.key === "4") {
-        event.preventDefault();
-        setDesktopSidebarView("agent-instructions");
-        return;
-      }
-
-      if (event.key === "5") {
-        event.preventDefault();
-        setDesktopSidebarView("skills");
       }
     };
 
@@ -159,26 +144,13 @@ const WorkspaceDesktopScene: FC = () => {
                       </div>
                     </div>
                   ) : null}
-
-                  {activeSidebarView === "agent-instructions" ? (
-                    <div className="workspace-sidebar-view">
-                      <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
-                        <AgentTokenTrendSection workspacePath={workspace.path} />
-                        <AgentInstructionsSection workspaceId={workspace.id} />
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {activeSidebarView === "skills" ? (
-                    <SkillsPanel workspaceId={workspace.id} refreshToken={panelRefreshToken} />
-                  ) : null}
                 </div>
               </div>
             </aside>
 
             <div
               className="split-divider-v"
-              onPointerDown={handleLeftPointerDown}
+              onMouseDown={handleLeftMouseDown}
               role="separator"
               aria-orientation="vertical"
               aria-label={t("workspace.resize_left_panel")}
@@ -200,7 +172,7 @@ const WorkspaceDesktopScene: FC = () => {
           {!focusMode && terminalPanelVisible && (
             <div
               className="split-divider-h"
-              onPointerDown={handleBottomPointerDown}
+              onMouseDown={handleBottomMouseDown}
               role="separator"
               aria-orientation="horizontal"
               aria-label={t("workspace.resize_bottom_panel")}

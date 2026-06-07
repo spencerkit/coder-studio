@@ -4,7 +4,6 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
-import { formatDate } from "../../../../lib/i18n";
 import { CommandResultError } from "../../../../ws/client";
 import { useWorkspaceLaunchActions } from "../../actions/use-workspace-launch-actions";
 import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../../atoms";
@@ -44,10 +43,6 @@ function WorkspaceLaunchActionsHarness() {
   return (
     <div>
       <div data-testid="current-path">{actions.currentPath}</div>
-      <div data-testid="recent-workspaces">
-        {actions.recentWorkspaces?.map((entry) => entry.path).join("|") ?? ""}
-      </div>
-      <div data-testid="history-loading">{String(actions.historyLoading)}</div>
       <div data-testid="selected-path">{actions.selectedPath ?? ""}</div>
       <div data-testid="create-folder-error">{actions.createFolderError ?? ""}</div>
       <div data-testid="is-creating-folder">{String(actions.isCreatingFolder)}</div>
@@ -456,123 +451,6 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
-  it("renders recent workspace rows and opens them directly on desktop", async () => {
-    const onClose = vi.fn();
-    const lastOpenedAt = new Date(2026, 5, 5, 13, 24).getTime();
-    const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
-      if (op === "workspace.browse") {
-        return {
-          currentPath: "/home/spencer",
-          parentPath: "/home",
-          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
-        };
-      }
-
-      if (op === "workspace.history.list") {
-        return [
-          {
-            path: "/repo/coder-studio",
-            name: "coder-studio",
-            lastOpenedAt,
-          },
-        ];
-      }
-
-      if (op === "workspace.open") {
-        return {
-          id: "ws-history-row",
-          path: args.path,
-          targetRuntime: "native",
-          openedAt: 1,
-          lastActiveAt: 1,
-          uiState: {
-            leftPanelWidth: 280,
-            bottomPanelHeight: 200,
-            focusMode: false,
-          },
-        };
-      }
-
-      if (op === "workspace.lastViewedTarget.set") {
-        return {
-          workspaceId: "ws-history-row",
-          updatedAt: 10,
-        };
-      }
-
-      return {};
-    });
-
-    const store = createStore();
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand } as never);
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter>
-          <WorkspaceLaunchModal onClose={onClose} />
-        </MemoryRouter>
-      </Provider>
-    );
-
-    expect(await screen.findByText("Recent Workspaces")).toBeInTheDocument();
-    expect(screen.getByText("/repo/coder-studio")).toBeInTheDocument();
-    expect(screen.getByText(formatDate(lastOpenedAt, "en"))).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Open recent workspace coder-studio" }));
-
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "workspace.open",
-        { path: "/repo/coder-studio" },
-        undefined
-      );
-    });
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders recent workspace rows inside the mobile launch sheet", async () => {
-    viewportMocks.viewport = "mobile";
-
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "workspace.browse") {
-        return {
-          currentPath: "/home/spencer",
-          parentPath: "/home",
-          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
-        };
-      }
-
-      if (op === "workspace.history.list") {
-        return [
-          {
-            path: "/repo/mobile-history",
-            name: "mobile-history",
-            lastOpenedAt: 100,
-          },
-        ];
-      }
-
-      return {};
-    });
-
-    const store = createStore();
-    store.set(localeAtom, "en");
-    store.set(wsClientAtom, { sendCommand } as never);
-
-    render(
-      <Provider store={store}>
-        <MemoryRouter>
-          <WorkspaceLaunchModal onClose={vi.fn()} />
-        </MemoryRouter>
-      </Provider>
-    );
-
-    expect(await screen.findByText("Recent Workspaces")).toBeInTheDocument();
-    expect(screen.getByText("mobile-history")).toBeInTheDocument();
-    expect(document.querySelector(".mobile-sheet--launch")).toBeTruthy();
-  });
-
   it("renders inside shared Sheet on mobile while preserving browse and open behavior", async () => {
     viewportMocks.viewport = "mobile";
     const onClose = vi.fn();
@@ -930,8 +808,7 @@ describe("WorkspaceLaunchModal", () => {
       );
     });
 
-    expect(sendCommand).toHaveBeenCalledTimes(2);
-    expect(sendCommand.mock.calls.some(([op]) => op === "workspace.mkdir")).toBe(false);
+    expect(sendCommand).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
   });
 
@@ -967,8 +844,7 @@ describe("WorkspaceLaunchModal", () => {
       );
     });
 
-    expect(sendCommand).toHaveBeenCalledTimes(2);
-    expect(sendCommand.mock.calls.some(([op]) => op === "workspace.mkdir")).toBe(false);
+    expect(sendCommand).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("is-creating-folder")).toHaveTextContent("true");
   });
 
@@ -1003,8 +879,7 @@ describe("WorkspaceLaunchModal", () => {
       );
     });
 
-    expect(sendCommand).toHaveBeenCalledTimes(2);
-    expect(sendCommand.mock.calls.some(([op]) => op === "workspace.mkdir")).toBe(false);
+    expect(sendCommand).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("creating-folder")).toHaveTextContent("false");
   });
 

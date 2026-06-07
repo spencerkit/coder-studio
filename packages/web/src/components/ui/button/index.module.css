@@ -110,14 +110,9 @@
 }
 
 .spinner {
-  display: inline-flex;
   width: var(--sp-3);
   height: var(--sp-3);
-  flex-shrink: 0;
   border: calc(var(--sp-1) / 2) solid var(--control-spinner-track);
   border-top-color: currentColor;
-  border-right-color: transparent;
-  border-bottom-color: transparent;
   border-radius: var(--radius-full);
-  box-sizing: border-box;
 }

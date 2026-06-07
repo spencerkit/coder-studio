@@ -1,20 +1,15 @@
 import type {
   DiagnosticsCheck,
   DiagnosticsContext,
-  DiagnosticsLspServiceEntry,
   DiagnosticsRequest,
   DiagnosticsResponse,
-  LspServerKind,
   ProviderRuntimeStatusEntry,
 } from "@coder-studio/core";
 import { z } from "zod";
-import { getLspToolDefinition } from "../lsp-tools/definitions.js";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
 import { buildSystemDependencyRuntimeStatus } from "../system-deps/runtime-status.js";
 import { validatePath } from "../workspace/validator.js";
 import { type CommandContext, registerCommand } from "../ws/dispatch.js";
-
-const LSP_SERVER_KINDS: LspServerKind[] = ["typescript", "python", "go", "rust", "vue"];
 
 const DiagnosticsRequestSchema = z.object({
   context: z.enum(["workspace_open", "session_start", "mobile_continue", "manual_check"]),
@@ -253,94 +248,6 @@ async function buildAllProviderChecks(
   return { checks, canContinueForPreferredProvider };
 }
 
-async function buildLspServices(
-  ctx: CommandContext,
-  workspacePath?: string
-): Promise<{
-  lspServices: DiagnosticsLspServiceEntry[];
-  lspRuntimeContext?: {
-    targetRuntime: "native" | "wsl";
-    managedInstallSupported: boolean;
-  };
-}> {
-  const runtimeMode = ctx.lspMgr.getRuntimeMode();
-  if (runtimeMode === "off") {
-    return {
-      lspServices: LSP_SERVER_KINDS.map((serverKind) => {
-        const definition = getLspToolDefinition(serverKind);
-        return {
-          serverKind,
-          displayName: definition.displayName,
-          status: "runtime_off",
-          missingCommands: [],
-          missingPrerequisites: [],
-        } satisfies DiagnosticsLspServiceEntry;
-      }),
-      lspRuntimeContext: workspacePath
-        ? {
-            targetRuntime: "native",
-            managedInstallSupported: true,
-          }
-        : undefined,
-    };
-  }
-
-  const lspServices = await Promise.all(
-    LSP_SERVER_KINDS.map(async (serverKind) => {
-      const fallbackDefinition = getLspToolDefinition(serverKind);
-      const runtimeStatus = ctx.lspToolMgr
-        ? await ctx.lspToolMgr.runtimeStatus({
-            workspace: {
-              id: "__diagnostics__",
-              path: workspacePath ?? "",
-              name: "Diagnostics",
-              targetRuntime: "native",
-              openedAt: 0,
-              lastActiveAt: 0,
-              uiState: { leftPanelWidth: 0, bottomPanelHeight: 0, focusMode: false },
-            },
-            serverKind,
-          })
-        : {
-            serverKind,
-            displayName: fallbackDefinition.displayName,
-            available: false,
-            autoInstallSupported: false,
-            installReadiness: "unsupported_platform" as const,
-            missingCommands: [fallbackDefinition.defaultCommand],
-            missingPrerequisites: [],
-          };
-
-      const latestFailure = ctx.lspToolInstallMgr?.getLatestFailure(serverKind);
-      const status = runtimeStatus.available
-        ? "installed"
-        : latestFailure?.failure
-          ? "install_failed"
-          : runtimeStatus.installReadiness === "missing_prerequisite"
-            ? "prerequisite_missing"
-            : "not_installed";
-
-      return {
-        serverKind,
-        displayName: runtimeStatus.displayName,
-        status,
-        missingCommands: runtimeStatus.missingCommands,
-        missingPrerequisites: runtimeStatus.missingPrerequisites,
-      } satisfies DiagnosticsLspServiceEntry;
-    })
-  );
-
-  return {
-    lspServices,
-    lspRuntimeContext: workspacePath
-      ? {
-          targetRuntime: "native",
-          managedInstallSupported: true,
-        }
-      : undefined,
-  };
-}
-
 function buildServerAuthCheck(ctx: CommandContext): DiagnosticsCheck {
   return {
     id: "server-auth",
@@ -416,7 +323,6 @@ async function buildSessionStartDiagnostics(
   const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
   const baseRuntime = await buildBaseRuntimeChecks(ctx);
   const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-  const lspServices = await buildLspServices(ctx, workspaceSelection.workspacePath);
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...workspaceSelection.checks,
@@ -434,12 +340,10 @@ async function buildSessionStartDiagnostics(
     context: "session_start",
     canContinue,
     checks,
-    lspServices: lspServices.lspServices,
     metadata: {
       providerId: args.providerId,
       workspaceId: args.workspaceId,
       workspacePath: workspaceSelection.workspacePath,
-      lspRuntimeContext: lspServices.lspRuntimeContext,
       authEnabled: ctx.config?.auth.enabled ?? false,
       host: ctx.config?.host,
     },
@@ -452,7 +356,6 @@ async function buildManualDiagnostics(
 ): Promise<DiagnosticsResponse> {
   const baseRuntime = await buildBaseRuntimeChecks(ctx);
   const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-  const lspServices = await buildLspServices(ctx, args.workspacePath);
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...baseRuntime.checks,
@@ -465,11 +368,9 @@ async function buildManualDiagnostics(
     context: "manual_check",
     canContinue: checks.every((check) => check.status !== "needs_attention"),
     checks,
-    lspServices: lspServices.lspServices,
     metadata: {
       authEnabled: ctx.config?.auth.enabled ?? false,
       host: ctx.config?.host,
-      lspRuntimeContext: lspServices.lspRuntimeContext,
       providerId: args.providerId,
       workspaceId: args.workspaceId,
       workspacePath: args.workspacePath,
@@ -485,7 +386,6 @@ async function buildMobileDiagnostics(
   const authEnabled = ctx.config?.auth.enabled ?? false;
   const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
   const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-  const lspServices = await buildLspServices(ctx, workspaceSelection.workspacePath);
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...workspaceSelection.checks,
@@ -514,11 +414,9 @@ async function buildMobileDiagnostics(
     context: "mobile_continue",
     canContinue,
     checks,
-    lspServices: lspServices.lspServices,
     metadata: {
       authEnabled,
       host,
-      lspRuntimeContext: lspServices.lspRuntimeContext,
       workspaceId: args.workspaceId,
       workspacePath: workspaceSelection.workspacePath,
       providerId: args.providerId,
@@ -535,10 +433,6 @@ async function buildDiagnostics(
       const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
       const baseRuntime = await buildBaseRuntimeChecks(ctx);
       const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-      const lspServices = await buildLspServices(
-        ctx,
-        workspaceSelection.workspacePath ?? args.workspacePath
-      );
       const mobileHost = buildMobileHostCheck(ctx);
       return {
         context: "workspace_open",
@@ -550,12 +444,10 @@ async function buildDiagnostics(
           buildServerAuthCheck(ctx),
           mobileHost.check,
         ],
-        lspServices: lspServices.lspServices,
         metadata: {
           workspacePath: workspaceSelection.workspacePath ?? args.workspacePath,
           authEnabled: ctx.config?.auth.enabled ?? false,
           host: ctx.config?.host,
-          lspRuntimeContext: lspServices.lspRuntimeContext,
           providerId: args.providerId,
           workspaceId: args.workspaceId,
         },

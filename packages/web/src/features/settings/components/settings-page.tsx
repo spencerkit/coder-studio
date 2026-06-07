@@ -1,7 +1,7 @@
 /**
  * Settings Page Component
  *
- * Configuration page for general runtime, providers, appearance, diagnostics, and about flows.
+ * Configuration page for provider, appearance, and notifications.
  */
 
 import {
@@ -20,7 +20,6 @@ import {
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
   type MonitoringMode,
   type MonitoringSettings,
-  type ProviderListItem,
   resolveMonitoringSettings,
   resolveSupervisorEvaluationTimeoutSec,
   resolveSupervisorRetryDelaySec,
@@ -52,7 +51,7 @@ import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { lspRuntimeModeAtom } from "../../code-editor/lsp/runtime-mode";
-import { DiagnosticsPage } from "../../diagnostics";
+import { buildDiagnosticsPath } from "../../diagnostics";
 import { useMonitoringData } from "../../monitoring";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
@@ -67,7 +66,6 @@ import {
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
-import { WorkAnalyticsSettingsSection } from "../../work-analysis";
 import { AboutSettings } from "./about-settings";
 import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
@@ -93,7 +91,6 @@ type SettingsNavigationState =
     };
 
 type SettingsContentLayoutMode = "default" | "fill-height";
-type SettingsWorkspaceMode = "readable" | "wide";
 type AppearanceAssetScope = "common" | "desktop" | "mobile";
 type AppearanceOverrideTarget = Exclude<AppearanceAssetScope, "common">;
 
@@ -190,39 +187,18 @@ function loadProviderAdditionalArgs(
   );
 }
 
-const DEFAULT_PROVIDERS: ProviderInfo[] = [
-  { id: "claude", displayName: "Claude" },
-  { id: "codex", displayName: "Codex" },
-];
-
-function toProviderInfo(provider: ProviderListItem): ProviderInfo {
-  return {
-    id: provider.id,
-    displayName: provider.displayName,
-    badge: provider.badge,
-    kind: provider.kind,
-    stability: provider.stability,
-    capability: provider.capability,
-    capabilities: provider.capabilities.map((capability) => ({ ...capability })),
-  };
-}
-
 function getMobileSectionHintKey(section: SettingsSection) {
   switch (section) {
     case "general":
       return "settings.notifications_channel_hint";
+    case "monitoring":
+      return "monitoring.command_description";
     case "providers":
       return "settings.provider.command_preview_hint";
-    case "analysis":
-      return "settings.analysis.hint";
     case "appearance":
       return "settings.theme.hint";
     case "shortcuts":
       return "settings.shortcuts.hint";
-    case "monitoring":
-      return "monitoring.command_description";
-    case "diagnostics":
-      return "diagnostics.settings_hint";
     case "about":
       return "settings.about.description";
   }
@@ -231,7 +207,7 @@ function getMobileSectionHintKey(section: SettingsSection) {
 const MOBILE_SETTINGS_GROUPS = [
   {
     titleKey: "settings.mobile_groups.workspace_runtime",
-    sections: ["general", "providers", "monitoring", "analysis", "diagnostics"],
+    sections: ["general", "monitoring", "providers"],
   },
   {
     titleKey: "settings.mobile_groups.interface_interaction",
@@ -284,17 +260,6 @@ function resolveMobileSettingsGroups(
   }));
 }
 
-function resolveDesktopWorkspaceMode(section: SettingsSection): SettingsWorkspaceMode {
-  switch (section) {
-    case "analysis":
-    case "monitoring":
-    case "providers":
-      return "wide";
-    default:
-      return "readable";
-  }
-}
-
 interface MonitoringSettingsSectionProps {
   readonly mode: MonitoringMode;
   readonly monitoringSettingsReady: boolean;
@@ -335,11 +300,10 @@ function MonitoringSettingsSection({
  *
  * PRD §13:
  *   - Two-column layout: sidebar (200px) + content area
- *   - Navigation sections: General, Provider (per provider), Appearance, Monitoring, Diagnostics
- *   - General: notifications, terminal behavior, language
- *   - Diagnostics: runtime environment checks and repair entrypoint
+ *   - Navigation sections: General, Provider (per provider), Appearance
+ *   - General: notifications, terminal behavior
  *   - Provider: config fields and command preview
- *   - Appearance: theme
+ *   - Appearance: theme, language
  */
 export function SettingsPage() {
   const t = useTranslation();
@@ -370,7 +334,10 @@ export function SettingsPage() {
   });
 
   // Provider settings state (would come from server in real implementation)
-  const [providers, setProviders] = useState<ProviderInfo[]>(DEFAULT_PROVIDERS);
+  const [providers] = useState<ProviderInfo[]>([
+    { id: "claude", displayName: "Claude" },
+    { id: "codex", displayName: "Codex" },
+  ]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [supervisorEvaluationTimeoutSec, setSupervisorEvaluationTimeoutSec] = useState(
@@ -511,33 +478,19 @@ export function SettingsPage() {
         ...updateSelectionVersionRef.current,
       };
       const monitoringSelectionVersionAtRequestStart = monitoringSelectionVersionRef.current;
-      const [settingsResult, providersResult] = await Promise.all([
-        dispatch<Record<string, unknown>>("settings.get", {}),
-        dispatch<ProviderListItem[]>("provider.list", {}),
-      ]);
-      if (settingsResult === null || providersResult === null) {
+      const result = await dispatch<Record<string, unknown>>("settings.get", {});
+      if (result === null) {
         return;
       }
 
-      const nextProviders =
-        providersResult.ok && Array.isArray(providersResult.data) && providersResult.data.length > 0
-          ? providersResult.data.map(toProviderInfo)
-          : DEFAULT_PROVIDERS;
-
-      if (!cancelled) {
-        setProviders(nextProviders);
-      }
-
-      if (!settingsResult.ok || !settingsResult.data) {
+      if (!result.ok || !result.data) {
         if (!cancelled) {
-          setSettingsLoadError(
-            settingsResult.error?.message ?? settingsLoadFailedUnknownRef.current
-          );
+          setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
         }
         return;
       }
 
-      const settings = settingsResult.data;
+      const settings = result.data;
       if (cancelled) return;
       setSettingsLoadError(null);
       if (typeof settings["notifications.enabled"] === "boolean") {
@@ -683,7 +636,7 @@ export function SettingsPage() {
           getThemeById(resolvedThemeId).documentThemeAttr
         );
       }
-      setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, nextProviders));
+      setProviderAdditionalArgsById(loadProviderAdditionalArgs(settings, providers));
     };
 
     void loadSettings();
@@ -918,8 +871,7 @@ export function SettingsPage() {
             setTerminalRenderer={handleTerminalRendererSelection}
             terminalCopyOnSelect={terminalPreferences.copyOnSelect}
             setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
-            locale={locale}
-            setLocale={handleLocaleSelection}
+            activeWorkspaceId={activeWorkspaceId}
           />
         );
       case "monitoring":
@@ -937,27 +889,15 @@ export function SettingsPage() {
           <AppearanceSettings
             desktopTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "desktop")}
             mobileTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "mobile")}
+            locale={locale}
             personalization={personalization}
             setDesktopTerminalFontSize={handleDesktopTerminalFontSizeSelection}
+            setLocale={handleLocaleSelection}
             setMobileTerminalFontSize={handleMobileTerminalFontSizeSelection}
             savePersonalization={saveAppearancePersonalization}
             theme={theme}
             setTheme={handleThemeSelection}
           />
-        );
-      case "analysis":
-        return <WorkAnalyticsSettingsSection />;
-      case "diagnostics":
-        return (
-          <div className="settings-section">
-            <DiagnosticsPage
-              embedded
-              intent={{
-                context: "manual_check",
-                workspaceId: activeWorkspaceId ?? undefined,
-              }}
-            />
-          </div>
         );
       case "providers":
         return (
@@ -1025,7 +965,6 @@ export function SettingsPage() {
 
   const shouldShowMobileRoot = isMobile && navigationState.kind === "root";
   const isMobileDetailView = isMobile && navigationState.kind === "detail";
-  const desktopWorkspaceMode = resolveDesktopWorkspaceMode(detailSection);
   const headerTitle = isMobile
     ? t(shouldShowMobileRoot ? "settings.title" : activeSectionMeta.labelKey)
     : t("settings.title");
@@ -1098,15 +1037,7 @@ export function SettingsPage() {
                   }
                 />
               )}
-              <div
-                className={`settings-workspace ${
-                  isMobile
-                    ? "settings-workspace--wide"
-                    : `settings-workspace--${desktopWorkspaceMode}`
-                }`}
-              >
-                {renderContent()}
-              </div>
+              {renderContent()}
             </div>
           </main>
         </div>
@@ -1165,8 +1096,7 @@ interface GeneralSettingsProps {
   setTerminalRenderer: (value: "standard" | "compatibility") => void;
   terminalCopyOnSelect: boolean;
   setTerminalCopyOnSelect: (value: boolean) => void;
-  locale: string;
-  setLocale: (value: "zh" | "en") => void;
+  activeWorkspaceId: string | null;
 }
 
 function parseSupervisorTimeoutInput(value: string): number | null {
@@ -1287,10 +1217,10 @@ function GeneralSettings({
   setTerminalRenderer,
   terminalCopyOnSelect,
   setTerminalCopyOnSelect,
-  locale,
-  setLocale,
+  activeWorkspaceId,
 }: GeneralSettingsProps) {
   const t = useTranslation();
+  const navigate = useNavigate();
   const notificationsLabelId = useId();
   const notificationsDescId = useId();
   const soundLabelId = useId();
@@ -1301,8 +1231,6 @@ function GeneralSettings({
   const lspRuntimeModeDescId = useId();
   const copyOnSelectLabelId = useId();
   const copyOnSelectDescId = useId();
-  const languageTitleId = useId();
-  const languageDescId = useId();
   const dispatch = useSessionGateDispatch();
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const [notificationPermission, setNotificationPermission] =
@@ -1886,41 +1814,27 @@ function GeneralSettings({
         </div>
       </div>
 
-      <div className="settings-group">
-        <h3 className="settings-group-title" id={languageTitleId}>
-          {t("settings.language.title")}
-        </h3>
-        <p className="settings-group-desc" id={languageDescId}>
-          {t("settings.language.hint")}
-        </p>
-
-        <div
-          aria-describedby={languageDescId}
-          aria-labelledby={languageTitleId}
-          className="settings-pills"
-          role="group"
-        >
-          <Pill
-            leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
-            onClick={() => {
-              setLocale("zh");
-              void saveSettings({ appearance: { locale: "zh" } });
-            }}
-            active={locale === "zh"}
-          >
-            {t("settings.language.zh")}
-          </Pill>
-          <Pill
-            leadingIcon={locale === "en" ? <Check size={12} /> : undefined}
-            onClick={() => {
-              setLocale("en");
-              void saveSettings({ appearance: { locale: "en" } });
-            }}
-            active={locale === "en"}
-          >
-            {t("settings.language.en")}
-          </Pill>
+      <div className="settings-toggle-row settings-toggle-row--action">
+        <div className="settings-toggle-info">
+          <span className="settings-toggle-label">{t("diagnostics.title")}</span>
+          <span className="settings-toggle-desc">{t("diagnostics.settings_hint")}</span>
         </div>
+        <Button
+          className="settings-diagnostics-button"
+          leadingIcon={<ThemedIcon semantic="state.warning" size={16} />}
+          onClick={() =>
+            navigate(
+              buildDiagnosticsPath({
+                context: "manual_check",
+                workspaceId: activeWorkspaceId ?? undefined,
+              })
+            )
+          }
+          size="sm"
+          variant="ghost"
+        >
+          {t("action.open")}
+        </Button>
       </div>
     </div>
   );
@@ -1928,9 +1842,11 @@ function GeneralSettings({
 
 interface AppearanceSettingsProps {
   desktopTerminalFontSize: number;
+  locale: string;
   mobileTerminalFontSize: number;
   personalization: AppearancePersonalization;
   setDesktopTerminalFontSize: (value: number) => void;
+  setLocale: (value: "zh" | "en") => void;
   setMobileTerminalFontSize: (value: number) => void;
   savePersonalization: (value: AppearancePersonalization) => Promise<boolean>;
   theme: string;
@@ -1939,9 +1855,11 @@ interface AppearanceSettingsProps {
 
 function AppearanceSettings({
   desktopTerminalFontSize,
+  locale,
   mobileTerminalFontSize,
   personalization,
   setDesktopTerminalFontSize,
+  setLocale,
   setMobileTerminalFontSize,
   savePersonalization,
   theme,
@@ -1951,6 +1869,8 @@ function AppearanceSettings({
   const themeTitleId = useId();
   const themeDescId = useId();
   const themeSelectId = useId();
+  const languageTitleId = useId();
+  const languageDescId = useId();
   const desktopTerminalFontSizeLabelId = useId();
   const desktopTerminalFontSizeDescId = useId();
   const mobileTerminalFontSizeLabelId = useId();
@@ -2427,26 +2347,6 @@ function AppearanceSettings({
           void handleBackgroundFileSelection(event, scope);
         }}
       />
-
-      <div className="settings-group">
-        <h3 className="settings-group-title" id={themeTitleId}>
-          {t("settings.theme.title")}
-        </h3>
-        <p className="settings-group-desc" id={themeDescId}>
-          {t("settings.theme.hint")}
-        </p>
-        <Select
-          desktopMode="listbox"
-          id={themeSelectId}
-          aria-describedby={themeDescId}
-          aria-label={t("settings.theme.title")}
-          className="settings-input-compact"
-          mobileSheetTitle={t("settings.theme.title")}
-          options={themeOptions}
-          value={currentThemeId}
-          onValueChange={handleThemeChange}
-        />
-      </div>
 
       <div className="settings-group">
         <h3 className="settings-group-title">{t("settings.appearance_background_material")}</h3>
@@ -3054,6 +2954,63 @@ function AppearanceSettings({
               {mobileTerminalFontSizeError}
             </span>
           ) : null}
+        </div>
+      </div>
+
+      <div className="settings-group">
+        <h3 className="settings-group-title" id={themeTitleId}>
+          {t("settings.theme.title")}
+        </h3>
+        <p className="settings-group-desc" id={themeDescId}>
+          {t("settings.theme.hint")}
+        </p>
+        <Select
+          desktopMode="listbox"
+          id={themeSelectId}
+          aria-describedby={themeDescId}
+          aria-label={t("settings.theme.title")}
+          className="settings-input-compact"
+          mobileSheetTitle={t("settings.theme.title")}
+          options={themeOptions}
+          value={currentThemeId}
+          onValueChange={handleThemeChange}
+        />
+      </div>
+
+      <div className="settings-group">
+        <h3 className="settings-group-title" id={languageTitleId}>
+          {t("settings.language.title")}
+        </h3>
+        <p className="settings-group-desc" id={languageDescId}>
+          {t("settings.language.hint")}
+        </p>
+
+        <div
+          aria-describedby={languageDescId}
+          aria-labelledby={languageTitleId}
+          className="settings-pills"
+          role="group"
+        >
+          <Pill
+            leadingIcon={locale === "zh" ? <Check size={12} /> : undefined}
+            onClick={() => {
+              setLocale("zh");
+              void saveSettings({ appearance: { locale: "zh" } });
+            }}
+            active={locale === "zh"}
+          >
+            {t("settings.language.zh")}
+          </Pill>
+          <Pill
+            leadingIcon={locale === "en" ? <Check size={12} /> : undefined}
+            onClick={() => {
+              setLocale("en");
+              void saveSettings({ appearance: { locale: "en" } });
+            }}
+            active={locale === "en"}
+          >
+            {t("settings.language.en")}
+          </Pill>
         </div>
       </div>
     </div>
