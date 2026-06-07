@@ -690,6 +690,11 @@ describe("components.css theme-sensitive surfaces", () => {
       "border: 2px solid var(--control-spinner-track)"
     );
 
+    expect(getLastRuleBlockFrom(buttonStyles, ".spinner")).toContain("display: inline-flex");
+    expect(getLastRuleBlockFrom(buttonStyles, ".spinner")).toContain(
+      "border-right-color: transparent"
+    );
+
     const actionMenuStyles = readFileSync(
       `${process.cwd()}/src/components/ui/action-menu/index.module.css`,
       "utf8"
@@ -1441,7 +1446,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("routes settings and workspace shared surfaces through appearance-aware background tokens", () => {
     const settingsContent = getLastRuleBlock(".settings-content");
     const settingsSurface = getRuleBlocksFrom(stylesheet, ".settings-content-surface").find(
-      (block) => block.includes("var(--material-overlay)")
+      (block) => block.includes("min-height: 100%")
     );
     const monitoringSettingsSurface = getLastRuleBlock(
       ".settings-content-surface--monitoring-dense"
@@ -1486,13 +1491,15 @@ describe("components.css theme-sensitive surfaces", () => {
     const mobileTopbar = getLastRuleBlock(".mobile-topbar");
     const mobileBottomStack = getLastRuleBlock(".mobile-shell__bottom-stack");
 
-    expect(settingsContent).toContain("background: var(--material-shell-page)");
+    expect(settingsContent).toContain("background:");
     expect(settingsSurface).toBeTruthy();
     expect(hasRuleBlock(".settings-content-surface--monitoring")).toBe(false);
     expect(hasRuleBlock(".settings-content-surface--monitoring-dense")).toBe(true);
-    expect(settingsSurface).toContain("background: var(--material-overlay)");
-    expect(settingsSurface).toContain("backdrop-filter: var(--material-backdrop-filter)");
-    expect(monitoringSettingsSurface).toContain("padding: var(--sp-4)");
+    expect(settingsContent).toContain("background: transparent");
+    expect(settingsContent).not.toContain("#0b0f14");
+    expect(settingsSurface).toContain("background: transparent");
+    expect(settingsSurface).toContain("box-shadow: none");
+    expect(monitoringSettingsSurface).toContain("padding: 0");
     expect(appTopbar).toContain("background: var(--material-shell-topbar)");
     expect(appTopbar).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(workspacePage).toContain("background: transparent");
@@ -1590,6 +1597,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const imageCanvasRules = getRuleBlocksFrom(stylesheet, ".image-preview-canvas").join("\n");
     const imagePreview = getLastRuleBlock(".image-preview-img");
     const imageMeta = getLastRuleBlock(".image-preview-meta");
+    const imageFooter = getRuleBlocksFrom(stylesheet, ".image-preview-footer").join("\n");
     const addedLine = getLastRuleBlock(".git-diff-line-added");
     const removedLine = getLastRuleBlock(".git-diff-line-removed");
 
@@ -1628,8 +1636,9 @@ describe("components.css theme-sensitive surfaces", () => {
       "background-color: var(--component-mix-surface-input-90pct-surface-page-10pct)"
     );
     expect(imagePreview).toContain("box-shadow: var(--shadow-md)");
-    expect(imageMeta).toContain("var(--component-mix-surface-panel-90pct-surface-input-10pct)");
-    expect(imageMeta).not.toContain("rgba(17, 24, 31, 0.92)");
+    expect(imageFooter).toContain("var(--component-mix-surface-panel-90pct-surface-input-10pct)");
+    expect(imageFooter).not.toContain("rgba(17, 24, 31, 0.92)");
+    expect(imageMeta).toContain("display: flex");
     expect(addedLine).toContain("background: var(--diff-added-bg)");
     expect(addedLine).toContain("color: var(--diff-added-fg)");
     expect(addedLine).not.toContain("#9ce7c8");
@@ -1827,48 +1836,83 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stylesheet).not.toContain("\n.agent-provider-card[disabled] {\n");
   });
 
-  it("keeps draft launcher provider cards and carousel adaptive inside narrow panes", () => {
+  it("keeps the draft launcher as one shared workarea with flatter internal regions", () => {
     const launcher = getLastRuleBlock(".agent-draft-launcher");
     const content = getLastRuleBlock(".agent-draft-content");
-    const component = getLastRuleBlock(".agent-draft-component");
-    const carouselRow = getLastRuleBlock(".agent-draft-component-row");
-    const carouselDots = getLastRuleBlock(".agent-draft-carousel-dots");
-    const activeCarouselDot = getLastRuleBlock(".agent-draft-carousel-dot--active");
-    const providerCard = getLastRuleBlock(".agent-provider-card");
+    const workarea = getLastRuleBlock(".agent-draft-workarea");
+    const workareaCopy = getLastRuleBlock(".agent-draft-workarea-copy");
+    const workareaBody = getLastRuleBlock(".agent-draft-workarea-body");
+    const workareaSideBlocks = getRuleBlocksFrom(stylesheet, ".agent-draft-workarea-side");
+    const baseWorkareaSide = workareaSideBlocks.find((block) =>
+      block.includes("border-left: 1px solid var(--border-subtle)")
+    );
+    const workareaSideDropZone = getLastRuleBlock(
+      ".agent-draft-workarea-side .agent-draft-drop-zone"
+    );
+    const compactDraftLauncher = getLastGroupedRuleBlock(
+      /@container\s*\(max-width:\s*28rem\)\s*\{([\s\S]*?\.agent-draft-workarea-side\s*\{[\s\S]*?\})[\s\S]*?\}/g
+    );
+    const providerCardBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".agent-draft-launcher .agent-provider-card"
+    );
     const providerBody = getLastRuleBlock(".agent-provider-card-body");
-    const providerArrow = getLastRuleBlock(".agent-provider-card-arrow");
-    const claudeCard = getLastRuleBlock(".agent-provider-card-claude");
-    const codexCard = getLastRuleBlock(".agent-provider-card-codex");
+    const providerCopy = getLastRuleBlock(".agent-provider-card-copy");
     const providerIcon = getLastRuleBlock(".agent-provider-card-icon");
+    const dropZone = getLastRuleBlock(".agent-draft-drop-zone");
+    const dropZoneIcon = getLastRuleBlock(".agent-draft-drop-zone-icon");
 
     expect(launcher).toContain("container-type: inline-size");
-    expect(content).toContain("width: 100%");
-    expect(content).toContain("max-width: 100%");
-    expect(component).toContain("max-width: 100%");
-    expect(carouselRow).toContain("width: 200%");
-    expect(carouselRow).toContain("flex-direction: row");
-    expect(carouselRow).toContain("gap: 0");
-    expect(getLastRuleBlock(".agent-draft-component-row--file")).toContain(
-      "transform: translateX(-50%)"
+    expect(content).toContain("padding-inline: clamp(var(--sp-2), 4vw, var(--sp-5))");
+    expect(workarea).toContain("width: min(100%, 41rem)");
+    expect(workarea).toContain("box-sizing: border-box");
+    expect(workarea).toContain("border: 1px solid var(--border-subtle)");
+    expect(workarea).toContain("border-radius: var(--radius-md)");
+    expect(workareaCopy).toContain("border-bottom: 1px solid var(--border-subtle)");
+    expect(workareaCopy).toContain("color: var(--text-tertiary)");
+    expect(workareaBody).toContain("grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr)");
+    expect(baseWorkareaSide).toContain("border-left: 1px solid var(--border-subtle)");
+    expect(workareaSideDropZone).toContain("border-style: solid");
+    expect(workareaSideDropZone).toContain(
+      "background: color-mix(in srgb, var(--surface-panel) 88%, transparent)"
     );
+    expect(compactDraftLauncher).toContain(".agent-draft-launcher .agent-draft-workarea");
+    expect(compactDraftLauncher).toContain("width: min(100%, 24rem)");
+    expect(compactDraftLauncher).toContain(".agent-draft-component-row");
+    expect(compactDraftLauncher).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(compactDraftLauncher).toContain(".agent-draft-workarea-side");
+    expect(compactDraftLauncher).toContain("border-top: 1px solid var(--border-subtle)");
     expect(
-      getRuleBlocksFrom(stylesheet, ".agent-draft-carousel-dots").some((block) =>
-        block.includes("display: none")
+      providerCardBlocks.some((block) =>
+        block.includes("background: color-mix(in srgb, var(--surface-panel) 88%, transparent)")
       )
     ).toBe(true);
-    expect(carouselDots).toContain("display: flex");
-    expect(activeCarouselDot).toContain("width: 18px");
-    expect(providerCard).toContain("background: var(--agent-provider-card-surface)");
-    expect(providerCard).toContain("min-width: 0");
-    expect(providerBody).toContain("width: 100%");
-    expect(providerBody).toContain("gap: var(--gap-tight)");
-    expect(providerArrow).toContain("flex-shrink: 0");
-    expect(claudeCard).toContain("background: var(--state-warning-bg)");
-    expect(claudeCard).toContain("border-color: var(--state-warning-border)");
-    expect(codexCard).toContain("background: var(--state-info-bg)");
-    expect(codexCard).toContain("border-color: var(--state-info-border)");
-    expect(providerIcon).toContain("background: var(--icon-surface-subtle)");
-    expect(carouselRow).not.toContain("flex-direction: column");
+    expect(
+      providerCardBlocks.some((block) => block.includes("border-color: var(--border-subtle)"))
+    ).toBe(true);
+    expect(
+      providerCardBlocks.some((block) => block.includes("padding: var(--sp-1) var(--sp-2)"))
+    ).toBe(true);
+    expect(
+      providerCardBlocks.some((block) => block.includes("border-radius: var(--radius-sm)"))
+    ).toBe(true);
+    expect(providerCardBlocks.some((block) => block.includes("box-sizing: border-box"))).toBe(true);
+    expect(providerBody).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(providerCopy).toContain("gap: var(--gap-compact)");
+    expect(providerIcon).toContain("width: 22px");
+    expect(providerIcon).toContain("height: 22px");
+    expect(dropZone).toContain("border: 1px dashed var(--border-subtle)");
+    expect(dropZone).toContain("min-height: 72px");
+    expect(dropZone).toContain("width: 100%");
+    expect(dropZone).toContain("box-sizing: border-box");
+    expect(dropZoneIcon).toContain("width: 24px");
+    expect(hasRuleBlock(".agent-draft-footer")).toBe(false);
+    expect(hasRuleBlock(".agent-provider-card-claude")).toBe(false);
+    expect(hasRuleBlock(".agent-provider-card-codex")).toBe(false);
+    expect(hasRuleBlock(".agent-provider-card-gemini")).toBe(false);
+    expect(hasRuleBlock(".agent-provider-card-cursor")).toBe(false);
+    expect(hasRuleBlock(".agent-provider-card-opencode")).toBe(false);
+    expect(hasRuleBlock(".agent-provider-card--experimental")).toBe(false);
   });
 
   it("keeps legacy agent pane chrome aligned to shared density and state tokens", () => {
@@ -2328,6 +2372,14 @@ describe("components.css theme-sensitive surfaces", () => {
     const settingsContentFillHeightSurface = getLastRuleBlock(
       ".settings-content--fill-height > .settings-content-surface"
     );
+    const settingsWorkspace = getLastRuleBlock(".settings-workspace");
+    const settingsWorkspaceReadable = getLastRuleBlock(
+      ".settings-workspace--readable > .settings-section"
+    );
+    const settingsWorkspaceWide = getLastRuleBlock(".settings-workspace--wide > .settings-section");
+    const settingsContentSurface = getRuleBlocksFrom(stylesheet, ".settings-content-surface").find(
+      (block) => block.includes("min-height: 100%")
+    ) as string;
     const settingsNavItem = getLastRuleBlock(".settings-nav-item");
     const settingsNavItemHover = getLastRuleBlock(".settings-nav-item:hover");
     const settingsNavItemActive = getLastRuleBlock(".settings-nav-item-active");
@@ -2347,22 +2399,48 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(settingsPage).toContain("display: flex");
     expect(settingsPage).toContain("min-height: 100vh");
-    expect(settingsPage).toContain("background: transparent");
+    expect(settingsPage).toContain("background:");
+    expect(settingsPage).toContain("var(--workspace-page-surface)");
+    expect(settingsPage).not.toContain("#0b0f14");
     expect(baseSettingsHeader).toContain("background: var(--settings-header-surface)");
     expect(baseSettingsHeader).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(baseSettingsHeader).toContain("padding: var(--sp-1) var(--sp-4)");
     expect(desktopSettingsHeader).toContain("min-height: 48px");
     expect(settingsBody).toContain("align-items: stretch");
+    expect(settingsBody).toContain("margin: 0");
+    expect(settingsBody).toContain("overflow: hidden");
+    expect(settingsBody).toContain("border-radius: 0");
     expect(settingsBody).toContain("background: transparent");
-    expect(settingsSidebar).toContain("background: var(--settings-sidebar-surface)");
+    expect(settingsBody).toContain("box-shadow: none");
+    expect(settingsBody).not.toContain("rgba(255, 255, 255, 0.02)");
+    expect(settingsSidebar).toContain("background: linear-gradient");
+    expect(settingsSidebar).toContain("var(--settings-sidebar-surface)");
+    expect(settingsSidebar).not.toContain("rgba(24, 32, 42, 0.96)");
     expect(settingsSidebar).toContain("backdrop-filter: var(--material-backdrop-filter)");
-    expect(settingsSidebar).toContain("padding: var(--sp-4)");
-    expect(settingsSidebar).toContain("width: 240px");
+    expect(settingsSidebar).toContain(
+      "padding: calc(var(--sp-4) + var(--gap-compact)) var(--sp-4) var(--sp-5)"
+    );
+    expect(settingsSidebar).toContain("width: 264px");
     expect(settingsContent).toContain("display: flex");
     expect(settingsContent).toContain("align-items: flex-start");
-    expect(settingsContent).toContain("justify-content: center");
-    expect(settingsContent).toContain("padding: var(--sp-6)");
-    expect(settingsContent).toContain("background: var(--material-shell-page)");
+    expect(settingsContent).toContain("justify-content: flex-start");
+    expect(settingsContent).toContain(
+      "padding: var(--sp-6) calc(var(--sp-6) + var(--sp-1)) calc(var(--sp-6) + var(--sp-1))"
+    );
+    expect(settingsContent).toContain("background: transparent");
+    expect(settingsContent).not.toContain("#0b0f14");
+    expect(settingsWorkspace).toContain("display: flex");
+    expect(settingsWorkspace).toContain("flex-direction: column");
+    expect(settingsWorkspace).toContain("width: 100%");
+    expect(settingsWorkspaceReadable).toContain("max-width: 920px");
+    expect(settingsWorkspaceWide).toContain("max-width: none");
+    expect(settingsContentSurface).toContain("width: 100%");
+    expect(settingsContentSurface).toContain("padding: 0");
+    expect(settingsContentSurface).toContain("background: transparent");
+    expect(settingsContentSurface).toContain("border: none");
+    expect(settingsContentSurface).toContain("border-radius: 0");
+    expect(settingsContentSurface).toContain("box-shadow: none");
+    expect(settingsContentFillHeight).toContain("align-items: stretch");
     expect(settingsContentFillHeight).toContain("justify-content: flex-start");
     expect(settingsContentFillHeightSurface).toContain("display: flex");
     expect(settingsContentFillHeightSurface).toContain("flex-direction: column");
@@ -2788,7 +2866,7 @@ describe("components.css theme-sensitive surfaces", () => {
     );
     expect(mobileFilesSegmentIndicator).toContain("display: none");
     expect(workspaceSectionHeader).toContain("justify-content: space-between");
-    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--gap-compact)");
     expect(workspaceSectionActions).toContain("margin-left: auto");
     expect(workspaceSectionActions).toContain("gap: var(--gap-compact)");
     expect(workspaceSectionActionButton).toContain("width: 24px");
@@ -3178,6 +3256,7 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps provider config editing closer to embedded editor panes than modal-like cards", () => {
     const providerConfigStack = getLastRuleBlock(".settings-provider-config-stack--fill-height");
     const providerContentFill = getLastRuleBlock(".settings-provider-content--fill-height");
+    const providerBaseLayout = getLastRuleBlock(".settings-provider-base-layout");
     const configCardBase = getRuleBlocksFrom(stylesheet, ".config-card")[0];
     const configCardHeaderBase = getRuleBlocksFrom(stylesheet, ".config-card-header")[0];
     const configCardBody = getLastRuleBlock(".config-card-body");
@@ -3204,6 +3283,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(providerConfigStack).toContain("display: flex");
     expect(providerConfigStack).toContain("min-height: 0");
     expect(providerContentFill).toContain("flex-direction: column");
+    expect(providerBaseLayout).toContain("display: flex");
+    expect(providerBaseLayout).toContain("flex-direction: column");
+    expect(providerBaseLayout).toContain("gap: var(--sp-4)");
+    expect(hasRuleBlock(".settings-provider-base-main")).toBe(false);
+    expect(hasRuleBlock(".settings-provider-base-side")).toBe(false);
     expect(configCardBase).toContain("margin-top: var(--space-default)");
     expect(configCardBase).toContain("border-radius: var(--radius-md)");
     expect(configCardBase).toContain("box-shadow: none");
@@ -3378,6 +3462,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const openEditorsItemContent = getLastRuleBlock(".workspace-open-editors__item-content");
     const openEditorsItemLabel = getLastRuleBlock(".workspace-open-editors__item-label");
     const openEditorsDirtyIndicator = getLastRuleBlock(".workspace-open-editors__dirty-indicator");
+    const workspaceSidebarBodyStacked = getLastRuleBlock(".workspace-sidebar-panel__body--stacked");
     const searchGroup = getLastRuleBlock(".workspace-search-panel__group");
     const searchGroupAdjacent = getLastRuleBlock(
       ".workspace-search-panel__group + .workspace-search-panel__group"
@@ -3402,6 +3487,44 @@ describe("components.css theme-sensitive surfaces", () => {
     const quickOpenSelectedSecondary = getLastRuleBlock(
       '.quick-open__item[aria-selected="true"] .quick-open__secondary'
     );
+    const agentInstructionsTitle = getLastRuleBlock(".workspace-agent-instructions__title");
+    const agentInstructionsInlineActions = getLastRuleBlock(
+      ".workspace-agent-instructions__inline-actions"
+    );
+    const agentInstructionsStatus = getLastRuleBlock(".workspace-agent-instructions__status");
+    const agentInstructionsStatusMain = getLastRuleBlock(
+      ".workspace-agent-instructions__status-main"
+    );
+    const agentInstructionsBody = getLastRuleBlock(".workspace-agent-instructions__body");
+    const agentInstructionsTitleRow = getLastRuleBlock(".workspace-agent-instructions__title-row");
+    const agentInstructionsTitleHelp = getLastRuleBlock(
+      ".workspace-agent-instructions__title-help"
+    );
+    const agentInstructionsActionsRow = getLastRuleBlock(
+      ".workspace-agent-instructions__actions-row"
+    );
+    const agentInstructionsCompactAction = getLastRuleBlock(
+      ".workspace-agent-instructions__compact-action"
+    );
+    const agentInstructionsStatusAction = getLastRuleBlock(
+      ".workspace-agent-instructions__status-action"
+    );
+    const agentInstructionsStatusPill = getLastRuleBlock(
+      ".workspace-agent-instructions__status-pill"
+    );
+    const agentInstructionsTokenTrend = getLastRuleBlock(
+      ".workspace-agent-instructions__token-trend"
+    );
+    const agentInstructionsTokenTrendHeader = getLastRuleBlock(
+      ".workspace-agent-instructions__token-trend-header"
+    );
+    const agentInstructionsTokenTrendChart = getLastRuleBlock(
+      ".workspace-agent-instructions__token-trend-chart"
+    );
+    const agentInstructionsTokenTrendState = getLastRuleBlock(
+      ".workspace-agent-instructions__token-trend-state"
+    );
+    const skillsTargetName = getLastRuleBlock(".skills-panel__target-name");
 
     expect(sidebarRowSelected).toContain("--workspace-sidebar-selected-border");
     expect(sidebarRowSelected).toContain("--workspace-sidebar-selected-bg");
@@ -3409,6 +3532,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsHeader).toContain("display: flex");
     expect(openEditorsHeaderMain).toContain("flex: 1 1 auto");
     expect(openEditorsHeaderMain).toContain("min-width: 0");
+    expect(openEditorsHeader).toContain("margin-bottom: var(--gap-compact)");
     expect(openEditorsTitle).toContain("justify-content: flex-start");
     expect(openEditorsTitle).toContain("min-width: 0");
     expect(openEditorsTitleText).toContain("text-overflow: ellipsis");
@@ -3420,7 +3544,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsCloseAllDisabled).not.toContain("border-color");
     expect(workspaceSection).not.toContain("border:");
     expect(workspaceSection).not.toContain("border-radius:");
-    expect(workspaceSectionHeader).toContain("margin-bottom: var(--sp-2)");
+    expect(workspaceSectionHeader).toContain("margin-bottom: var(--gap-compact)");
     expect(workspaceSectionTitle).toContain("font-size: var(--type-body-6-size)");
     expect(workspaceSectionTitle).toContain("line-height: var(--type-body-6-line-height)");
     expect(workspaceSectionTitle).toContain("font-weight: var(--type-body-6-weight)");
@@ -3476,6 +3600,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(openEditorsDirtyIndicator).toContain("width: 7px");
     expect(openEditorsDirtyIndicator).toContain("height: 7px");
     expect(openEditorsDirtyIndicator).toContain("background: var(--editor-dirty-indicator-fg)");
+    expect(workspaceSidebarBodyStacked).toContain("gap: var(--gap-tight)");
     expect(searchGroup).toContain(
       "border-top: 1px solid var(--component-mix-border-default-92pct-transparent)"
     );
@@ -3531,6 +3656,50 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(quickOpenSelectedSecondary).toContain(
       "color: var(--component-mix-status-info-fg-52pct-text-secondary)"
     );
+    expect(agentInstructionsTitle).toContain("text-transform: none");
+    expect(agentInstructionsTitle).toContain("letter-spacing: 0");
+    expect(agentInstructionsInlineActions).toContain("display: inline-flex");
+    expect(agentInstructionsInlineActions).toContain("flex-wrap: wrap");
+    expect(agentInstructionsInlineActions).toContain("margin-left: auto");
+    expect(agentInstructionsInlineActions).toContain("justify-content: flex-end");
+    expect(agentInstructionsStatus).toContain("display: flex");
+    expect(agentInstructionsStatus).toContain("flex-direction: column");
+    expect(agentInstructionsStatus).toContain("align-items: flex-start");
+    expect(agentInstructionsStatusMain).toContain("display: flex");
+    expect(agentInstructionsStatusMain).toContain("justify-content: flex-start");
+    expect(agentInstructionsStatusMain).toContain("flex-wrap: wrap");
+    expect(agentInstructionsStatusMain).toContain("width: 100%");
+    expect(agentInstructionsBody).toContain("gap: var(--gap-tight)");
+    expect(agentInstructionsTitleRow).toContain("display: inline-flex");
+    expect(agentInstructionsTitleRow).toContain("align-items: center");
+    expect(agentInstructionsTitleHelp).toContain("width: 18px");
+    expect(agentInstructionsTitleHelp).toContain("color: var(--text-tertiary)");
+    expect(agentInstructionsActionsRow).toContain("display: flex");
+    expect(agentInstructionsActionsRow).toContain("justify-content: flex-start");
+    expect(agentInstructionsCompactAction).toContain("width: 76px");
+    expect(agentInstructionsStatusAction).toContain(
+      "border: 1px solid var(--component-mix-border-default-84pct-transparent)"
+    );
+    expect(agentInstructionsStatusAction).toContain("background: transparent");
+    expect(agentInstructionsStatusAction).toContain("height: 24px");
+    expect(agentInstructionsStatusPill).toContain("display: inline-flex");
+    expect(agentInstructionsStatusPill).toContain("align-items: center");
+    expect(agentInstructionsStatusPill).toContain("color: var(--text-primary)");
+    expect(agentInstructionsTokenTrend).toContain("border: 1px solid");
+    expect(agentInstructionsTokenTrend).toContain(
+      "var(--component-mix-border-default-84pct-transparent)"
+    );
+    expect(agentInstructionsTokenTrend).toContain("border-radius: var(--radius-md)");
+    expect(agentInstructionsTokenTrend).toContain("background:");
+    expect(agentInstructionsTokenTrend).toContain("var(--surface-panel)");
+    expect(agentInstructionsTokenTrendHeader).toContain("display: flex");
+    expect(agentInstructionsTokenTrendHeader).toContain("justify-content: space-between");
+    expect(agentInstructionsTokenTrendChart).toContain("height: 96px");
+    expect(agentInstructionsTokenTrendChart).toContain("min-width: 0");
+    expect(agentInstructionsTokenTrendState).toContain("color: var(--text-secondary)");
+    expect(skillsTargetName).toContain("font-size: var(--type-body-5-size)");
+    expect(skillsTargetName).toContain("line-height: var(--type-body-5-line-height)");
+    expect(skillsTargetName).toContain("font-weight: var(--type-body-5-weight)");
   });
 
   it("keeps the desktop git panel and command palette on tighter tool-surface chrome", () => {
@@ -3557,7 +3726,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(gitScroll).toContain("display: flex");
     expect(gitScroll).toContain("flex-direction: column");
     expect(gitScroll).toContain("overflow: visible");
-    expect(gitScroll).toContain("gap: 12px");
+    expect(gitScroll).toContain("gap: var(--gap-tight)");
     expect(gitScroll).toContain("padding: var(--sp-4) calc(var(--sp-3) + var(--gap-compact))");
     expect(gitCommitBlock).toContain("gap: var(--sp-2)");
     expect(gitCommitBlock).toContain("padding-bottom: 0");
@@ -3566,7 +3735,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(gitSection).toContain("gap: 8px");
     expect(gitSection).not.toContain("border:");
     expect(gitSection).not.toContain("border-radius:");
-    expect(gitSectionAdjacent).toContain("padding-top: calc(var(--sp-2) + var(--gap-compact))");
+    expect(gitSectionAdjacent).toContain("padding-top: var(--gap-compact)");
     expect(gitSectionAdjacent).toContain(
       "border-top: 1px solid var(--component-mix-border-default-92pct-transparent)"
     );
@@ -3889,7 +4058,10 @@ describe("components.css theme-sensitive surfaces", () => {
 
   it("keeps the unified monitoring shell and compact typography on shared theme tokens", () => {
     const shellBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-shell");
-    const shellDesktop = getLastRuleBlock(".settings-monitoring-shell--desktop");
+    const shellDesktop = getRuleBlocksFrom(stylesheet, ".settings-monitoring-shell--desktop").find(
+      (block) => block.includes("max-width: none")
+    ) as string;
+    const kpiGrid = getLastRuleBlock(".settings-monitoring-kpi-grid");
     const controlBarBlocks = getRuleBlocksFrom(stylesheet, ".settings-monitoring-control-bar");
     const controlCopy = getLastRuleBlock(".settings-monitoring-control-bar__copy");
     const controlSummaryBlocks = getRuleBlocksFrom(
@@ -3985,6 +4157,10 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(shellBlocks.some((block) => block.includes("flex-direction: column"))).toBe(true);
     expect(shellBlocks.some((block) => block.includes("width: 100%"))).toBe(true);
     expect(shellDesktop).toContain("max-width: none");
+    expect(shellDesktop).toContain("display: grid");
+    expect(shellDesktop).toContain(
+      "grid-template-columns: minmax(0, 1.75fr) minmax(320px, 0.95fr)"
+    );
     expect(shellDesktop).toContain("margin-inline: auto");
     expect(
       getRuleBlocksFrom(stylesheet, ".settings-monitoring-control-bar").some((block) =>
@@ -4002,6 +4178,7 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(
       controlBarBlocks.some((block) => block.includes("padding: var(--monitoring-hero-padding)"))
     ).toBe(true);
+    expect(kpiGrid).toContain("grid-template-columns: 1fr");
     expect(controlCopy).toContain("gap: var(--monitoring-hero-copy-gap)");
     expect(
       controlSummaryBlocks.some((block) => block.includes("font-size: var(--type-body-4-size)"))
