@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+### Patch Changes
+
+- [#75](https://github.com/spencerkit/coder-studio/pull/75) [`a5e71c7`](https://github.com/spencerkit/coder-studio/commit/a5e71c71ce072cd61dfde534ecbeb6ef5c3d631d) Thanks [@pallyoung](https://github.com/pallyoung)! - Hide the unfinished extension status entry from the workspace activity bar.
+
 ## 0.5.0
 
 ### Minor Changes
