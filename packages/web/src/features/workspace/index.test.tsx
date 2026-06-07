@@ -362,7 +362,7 @@ describe("WorkspacePage", () => {
     expect(document.querySelector('[data-icon-semantic="nav.sourceControl"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.agent"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.skills"]')).toBeTruthy();
-    expect(document.querySelector('[data-icon-semantic="nav.extensions"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.extensions"]')).toBeNull();
     expect(
       screen.getByRole("button", { name: /agent\.md|Agent Instructions|Agent 指令/i })
     ).toBeInTheDocument();

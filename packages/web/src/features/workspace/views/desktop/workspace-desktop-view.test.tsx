@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
-import { desktopSidebarViewAtomFamily } from "../../atoms/layout";
+import { type DesktopSidebarView, desktopSidebarViewAtomFamily } from "../../atoms/layout";
 import { WorkspaceDesktopView } from "./workspace-desktop-view";
 
 vi.mock("../../../../lib/i18n", () => ({
@@ -123,9 +123,7 @@ vi.mock("../shared/workspace-extension-state-panel", () => ({
   ),
 }));
 
-function renderDesktopView(
-  activeView: "explorer" | "search" | "source-control" | "agent-instructions" | "extensions"
-) {
+function renderDesktopView(activeView: DesktopSidebarView) {
   const store = createStore();
   store.set(connectionStatusAtom, "connected");
   store.set(wsClientAtom, {
@@ -226,12 +224,20 @@ describe("WorkspaceDesktopView", () => {
     expect(screen.getByTestId("workspace-bottom-panel")).toHaveTextContent("Terminal Tasks");
   });
 
-  it("opens the extension-state sidebar panel from the activity bar", () => {
+  it("hides the extension-state activity bar entry", () => {
     renderDesktopView("explorer");
 
-    fireEvent.click(screen.getByRole("button", { name: "Extensions" }));
+    expect(screen.queryByRole("button", { name: "Extensions" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Extensions" })).toBeNull();
+    expect(screen.queryByText("No extension state")).toBeNull();
+  });
 
-    expect(screen.getByRole("heading", { level: 2, name: "Extensions" })).toBeInTheDocument();
-    expect(screen.getByText("No extension state")).toBeInTheDocument();
+  it("does not open the extension-state panel from the desktop numeric shortcuts", () => {
+    renderDesktopView("explorer");
+
+    fireEvent.keyDown(window, { key: "6", ctrlKey: true });
+
+    expect(screen.queryByRole("heading", { level: 2, name: "Extensions" })).toBeNull();
+    expect(screen.queryByText("No extension state")).toBeNull();
   });
 });

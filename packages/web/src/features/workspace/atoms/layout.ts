@@ -6,9 +6,9 @@
  * workspace" while the underlying storage is keyed by workspace id.
  */
 
-import { atom, type Getter } from "jotai";
+import { atom, type Getter, type WritableAtom } from "jotai";
 import { atomWithStorage, createJSONStorage } from "jotai/utils";
-import { atomFamily } from "jotai-family";
+import { type AtomFamily, atomFamily } from "jotai-family";
 import type { SetStateAction } from "react";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 
@@ -17,8 +17,7 @@ export type DesktopSidebarView =
   | "search"
   | "source-control"
   | "agent-instructions"
-  | "skills"
-  | "extensions";
+  | "skills";
 
 export interface WorkspaceLayoutState {
   focusMode: boolean;
@@ -37,7 +36,6 @@ const DESKTOP_SIDEBAR_VIEW_VALUES = new Set<DesktopSidebarView>([
   "source-control",
   "agent-instructions",
   "skills",
-  "extensions",
 ]);
 const DEFAULT_WORKSPACE_LAYOUT_STATE: WorkspaceLayoutState = {
   focusMode: false,
@@ -144,7 +142,14 @@ function resolveNextValue<T>(current: T, update: SetStateAction<T>): T {
   return typeof update === "function" ? (update as (prevState: T) => T)(current) : update;
 }
 
-function createWorkspaceLayoutFieldAtomFamily<Key extends keyof WorkspaceLayoutState>(field: Key) {
+type WorkspaceLayoutFieldAtomFamily<Key extends keyof WorkspaceLayoutState> = AtomFamily<
+  string,
+  WritableAtom<WorkspaceLayoutState[Key], [update: SetStateAction<WorkspaceLayoutState[Key]>], void>
+>;
+
+function createWorkspaceLayoutFieldAtomFamily<Key extends keyof WorkspaceLayoutState>(
+  field: Key
+): WorkspaceLayoutFieldAtomFamily<Key> {
   return atomFamily((workspaceId: string) =>
     atom(
       (get) => get(workspaceLayoutStateAtomFamily(workspaceId))[field],
@@ -165,8 +170,12 @@ function createWorkspaceLayoutFieldAtomFamily<Key extends keyof WorkspaceLayoutS
 }
 
 function createActiveWorkspaceLayoutFieldAtom<Key extends keyof WorkspaceLayoutState>(
-  family: ReturnType<typeof createWorkspaceLayoutFieldAtomFamily<Key>>
-) {
+  family: WorkspaceLayoutFieldAtomFamily<Key>
+): WritableAtom<
+  WorkspaceLayoutState[Key],
+  [update: SetStateAction<WorkspaceLayoutState[Key]>],
+  void
+> {
   return atom(
     (get) => get(family(resolveWorkspaceLayoutId(get))),
     (get, set, update: SetStateAction<WorkspaceLayoutState[Key]>) => {
@@ -196,17 +205,17 @@ export const desktopSidebarViewAtomFamily =
 export const terminalPanelVisibleAtomFamily =
   createWorkspaceLayoutFieldAtomFamily("terminalPanelVisible");
 
-export const focusModeAtom = createActiveWorkspaceLayoutFieldAtom(focusModeAtomFamily);
-export const leftPanelWidthAtom = createActiveWorkspaceLayoutFieldAtom(leftPanelWidthAtomFamily);
-export const bottomPanelHeightAtom = createActiveWorkspaceLayoutFieldAtom(
+export const focusModeAtom = createActiveWorkspaceLayoutFieldAtom<"focusMode">(focusModeAtomFamily);
+export const leftPanelWidthAtom =
+  createActiveWorkspaceLayoutFieldAtom<"leftPanelWidth">(leftPanelWidthAtomFamily);
+export const bottomPanelHeightAtom = createActiveWorkspaceLayoutFieldAtom<"bottomPanelHeight">(
   bottomPanelHeightAtomFamily
 );
-export const sidebarCollapsedAtom = createActiveWorkspaceLayoutFieldAtom(
+export const sidebarCollapsedAtom = createActiveWorkspaceLayoutFieldAtom<"sidebarCollapsed">(
   sidebarCollapsedAtomFamily
 );
-export const desktopSidebarViewAtom = createActiveWorkspaceLayoutFieldAtom(
+export const desktopSidebarViewAtom = createActiveWorkspaceLayoutFieldAtom<"desktopSidebarView">(
   desktopSidebarViewAtomFamily
 );
-export const terminalPanelVisibleAtom = createActiveWorkspaceLayoutFieldAtom(
-  terminalPanelVisibleAtomFamily
-);
+export const terminalPanelVisibleAtom =
+  createActiveWorkspaceLayoutFieldAtom<"terminalPanelVisible">(terminalPanelVisibleAtomFamily);
