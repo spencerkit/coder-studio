@@ -1,7 +1,7 @@
 import { type Page } from "@playwright/test";
 import { type E2ELocaleCode, translateForE2E } from "./i18n.js";
 
-type SettingsSection = "general" | "appearance" | "providers" | "shortcuts";
+type SettingsSection = "general" | "appearance" | "providers" | "shortcuts" | "analysis";
 type ProviderSettingLabel =
   | "base"
   | "config_file"
@@ -15,6 +15,7 @@ const SETTINGS_SECTION_KEYS: Record<SettingsSection, Parameters<typeof translate
   general: "settings.general",
   appearance: "settings.appearance",
   providers: "settings.providers",
+  analysis: "settings.analysis.title",
   shortcuts: "settings.shortcuts.title",
 };
 
