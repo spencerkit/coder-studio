@@ -113,6 +113,20 @@ describe("TaskManager", () => {
     });
   });
 
+  it("finds the latest verify run from the discovered verify task id", async () => {
+    manager.setDiscoveredTasks("ws-1", [
+      createTask({ id: "ci:verify", label: "ci:verify", args: ["ci:verify"] }),
+    ]);
+
+    const run = await manager.run({
+      workspaceId: "ws-1",
+      workspacePath: "/repo",
+      taskId: "ci:verify",
+    });
+
+    expect(manager.latestVerify("ws-1")).toBe(run);
+  });
+
   it("marks a run passed when its task terminal exits with zero", async () => {
     manager.setDiscoveredTasks("ws-1", [createTask()]);
     const run = await manager.run({

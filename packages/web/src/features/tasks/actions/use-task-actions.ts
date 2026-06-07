@@ -15,6 +15,9 @@ import {
 import { taskStateAtomFamily } from "../atoms";
 
 function commandPreview(task: TaskDefinition): string {
+  if (task.displayCommand) {
+    return task.displayCommand;
+  }
   return [task.command, ...task.args].join(" ");
 }
 

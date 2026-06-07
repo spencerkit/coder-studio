@@ -406,6 +406,7 @@ export interface TaskDefinition {
   label: string;
   command: string;
   args: string[];
+  displayCommand?: string;
   cwdPath?: string;
   source: TaskSource;
   priority: number;

@@ -46,20 +46,14 @@ const ROOT_FILE_CANDIDATES = [
   "bun.lock",
 ] as const;
 
-const PACKAGE_SCRIPT_PRIORITIES: Array<[scriptName: string, kind: TaskKind, priority: number]> = [
-  ["verify", "verify", 800],
-  ["test", "test", 700],
-  ["lint", "lint", 600],
-  ["build", "build", 500],
-  ["dev", "dev", 100],
-];
-
 const MAKEFILE_TARGETS: Array<[target: string, kind: TaskKind, priority: number]> = [
   ["verify", "verify", 400],
   ["test", "test", 390],
   ["lint", "lint", 380],
   ["build", "build", 370],
 ];
+
+const PACKAGE_SCRIPT_BASE_PRIORITY = 900;
 
 function uniqueTasks(tasks: TaskDefinition[]): TaskDefinition[] {
   const seen = new Set<string>();
@@ -88,20 +82,32 @@ function packageScriptArgs(packageManager: PackageManager, scriptName: string): 
   return ["run", scriptName];
 }
 
+function kindForPackageScript(scriptName: string): TaskKind {
+  const [category] = scriptName.split(":");
+  if (scriptName === "ci:verify" || category === "verify") return "verify";
+  if (scriptName === "ci:test" || category === "test") return "test";
+  if (scriptName === "ci:lint" || category === "lint") return "lint";
+  if (scriptName === "ci:build" || category === "build") return "build";
+  if (category === "dev") return "dev";
+  return "custom";
+}
+
 function scriptTask(
   workspaceId: string,
   scriptName: string,
-  kind: TaskKind,
+  scriptBody: string,
   packageManager: PackageManager,
   priority: number
 ): TaskDefinition {
+  const kind = kindForPackageScript(scriptName);
   return {
-    id: kind === "verify" ? "verify" : kind,
+    id: scriptName,
     workspaceId,
     kind,
-    label: kind[0]!.toUpperCase() + kind.slice(1),
+    label: scriptName,
     command: packageManager,
     args: packageScriptArgs(packageManager, scriptName),
+    displayCommand: scriptBody,
     cwdPath: ".",
     source: "package-json",
     priority,
@@ -176,15 +182,17 @@ async function discoverPackageJsonTasks(
     const packageManager = packageManagerFor(rootFiles);
     const tasks: TaskDefinition[] = [];
 
-    if (scripts["ci:verify"]) {
-      tasks.push(scriptTask(input.workspaceId, "ci:verify", "verify", packageManager, 900));
-    }
-
-    for (const [scriptName, kind, priority] of PACKAGE_SCRIPT_PRIORITIES) {
-      if (scripts[scriptName]) {
-        tasks.push(scriptTask(input.workspaceId, scriptName, kind, packageManager, priority));
-      }
-    }
+    Object.entries(scripts).forEach(([scriptName, scriptBody], index) => {
+      tasks.push(
+        scriptTask(
+          input.workspaceId,
+          scriptName,
+          scriptBody,
+          packageManager,
+          PACKAGE_SCRIPT_BASE_PRIORITY - index
+        )
+      );
+    });
 
     return tasks;
   } catch (error) {

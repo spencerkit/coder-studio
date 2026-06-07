@@ -18,5 +18,11 @@ export const taskStateAtomFamily = atomFamily((_workspaceId: string) =>
 );
 
 export const latestVerifyRunAtomFamily = atomFamily((workspaceId: string) =>
-  atom((get) => get(taskStateAtomFamily(workspaceId)).runs.find((run) => run.taskId === "verify"))
+  atom((get) => {
+    const state = get(taskStateAtomFamily(workspaceId));
+    const verifyTaskIds = new Set(
+      state.tasks.filter((task) => task.kind === "verify").map((task) => task.id)
+    );
+    return state.runs.find((run) => verifyTaskIds.has(run.taskId));
+  })
 );

@@ -20,6 +20,7 @@ const verifyTask: TaskDefinition = {
   label: "Verify",
   command: "pnpm",
   args: ["ci:verify"],
+  displayCommand: "pnpm changeset:validate && pnpm ci:lint && pnpm ci:test && pnpm ci:build",
   cwdPath: ".",
   source: "package-json",
   priority: 900,
@@ -71,7 +72,9 @@ describe("TasksPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("Verify")).toBeInTheDocument();
-    expect(screen.getByText("pnpm ci:verify")).toBeInTheDocument();
+    expect(
+      screen.getByText("pnpm changeset:validate && pnpm ci:lint && pnpm ci:test && pnpm ci:build")
+    ).toBeInTheDocument();
     expect(screen.getByText("Not run")).toBeInTheDocument();
   });
 

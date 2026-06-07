@@ -10,6 +10,7 @@ import { workspacesAtom } from "../../../../atoms/workspaces";
 import { CommandResultError } from "../../../../ws/client";
 import { toastsAtom } from "../../../notifications/atoms";
 import { taskStateAtomFamily } from "../../../tasks/atoms";
+import { terminalCommandSidePanelOpenAtomFamily } from "../../../terminal-panel/atoms";
 import {
   gitBranchListAtomFamily,
   gitDiffPreviewAtomFamily,
@@ -1281,7 +1282,8 @@ describe("GitPanel", () => {
     );
 
     expect(screen.getByText("Verification: Failed")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View Tasks" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View Tasks" }));
+    expect(store.get(terminalCommandSidePanelOpenAtomFamily("ws-test"))).toBe(true);
     expect(screen.getByRole("button", { name: "Rerun Verify" })).toBeInTheDocument();
   });
 

@@ -52,6 +52,10 @@ export const terminalActiveIdAtomFamily = atomFamily((_workspaceId: string) =>
   atom<string | null>(null)
 );
 
+export const terminalCommandSidePanelOpenAtomFamily = atomFamily((_workspaceId: string) =>
+  atom<boolean>(false)
+);
+
 /**
  * Active terminal IDs in workspace (derived)
  */

@@ -1,5 +1,5 @@
-import { useStore } from "jotai";
-import { ChevronDown, X } from "lucide-react";
+import { useAtom, useStore } from "jotai";
+import { ChevronDown, Command, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
   Button,
@@ -12,8 +12,9 @@ import {
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { MobileSelectSheet } from "../../../mobile-select";
+import { TaskCommandSidePanel } from "../../../tasks";
 import { useTerminalActions } from "../../actions/use-terminal-actions";
-import { terminalMetaAtomFamily } from "../../atoms";
+import { terminalCommandSidePanelOpenAtomFamily, terminalMetaAtomFamily } from "../../atoms";
 import { formatTerminalTitle } from "../../components/title-format";
 import { TerminalSelectorItem } from "./terminal-selector-item";
 import { XtermHost } from "./xterm-host";
@@ -59,6 +60,12 @@ export function TerminalPanel({
   );
   const selectedTerminalId = activeTerminalId ?? terminalIds[0] ?? "";
   const isMobileFullscreen = chrome === "mobile-fullscreen";
+  const commandSidePanelWorkspaceId = activeWorkspaceId ?? "__terminal_command_panel_empty__";
+  const [commandSidePanelOpen, setCommandSidePanelOpen] = useAtom(
+    terminalCommandSidePanelOpenAtomFamily(commandSidePanelWorkspaceId)
+  );
+  const showCommandSidePanel =
+    !isMobileFullscreen && commandSidePanelOpen && Boolean(activeWorkspaceId);
   const showSelector = hasTerminals && (!isMobileFullscreen || terminalIds.length > 1);
   const terminalSelectorOptions = terminalIds.map((id, index) => {
     const terminalMeta = store.get(terminalMetaAtomFamily(id));
@@ -291,6 +298,29 @@ export function TerminalPanel({
                     size="sm"
                   />
                 </Tooltip>
+                {!isMobileFullscreen ? (
+                  <Tooltip
+                    content={
+                      commandSidePanelOpen
+                        ? t("terminal.close_commands")
+                        : t("terminal.open_commands")
+                    }
+                  >
+                    <IconButton
+                      className={`panel-toolbar-btn${commandSidePanelOpen ? " panel-toolbar-btn--active" : ""}`}
+                      aria-label={
+                        commandSidePanelOpen
+                          ? t("terminal.close_commands")
+                          : t("terminal.open_commands")
+                      }
+                      aria-pressed={commandSidePanelOpen}
+                      disabled={!activeWorkspaceId}
+                      icon={<Command size={14} />}
+                      onClick={() => setCommandSidePanelOpen((open) => !open)}
+                      size="sm"
+                    />
+                  </Tooltip>
+                ) : null}
               </div>
             </div>
           </>
@@ -298,42 +328,50 @@ export function TerminalPanel({
       </div>
 
       <div className="bottom-terminal-content">
-        {!hasTerminals ? (
-          <EmptyState
-            action={
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCreateTerminal}
-                leadingIcon={<ThemedIcon semantic="terminal.action.new" size={14} />}
-              >
-                {t("terminal.new_terminal")}
-              </Button>
-            }
-            className="bottom-terminal-empty"
-            description={<p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>}
-            icon={
-              <ThemedIcon
-                className="bottom-terminal-empty-icon"
-                semantic="state.emptyTerminal"
-                size={32}
-              />
-            }
-            title={<p className="bottom-terminal-empty-text">{t("terminal.no_terminal")}</p>}
-          />
-        ) : (
-          <>
-            {activeTerminalMeta && activeWorkspaceId && (
-              <div className="bottom-terminal-xterm">
-                <XtermHost
-                  terminalId={activeTerminalMeta.id}
-                  workspaceId={activeWorkspaceId}
-                  terminalKind={activeTerminalMeta.kind ?? "shell"}
+        <div className="bottom-terminal-main">
+          {!hasTerminals ? (
+            <EmptyState
+              action={
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleCreateTerminal}
+                  leadingIcon={<ThemedIcon semantic="terminal.action.new" size={14} />}
+                >
+                  {t("terminal.new_terminal")}
+                </Button>
+              }
+              className="bottom-terminal-empty"
+              description={<p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>}
+              icon={
+                <ThemedIcon
+                  className="bottom-terminal-empty-icon"
+                  semantic="state.emptyTerminal"
+                  size={32}
                 />
-              </div>
-            )}
-          </>
-        )}
+              }
+              title={<p className="bottom-terminal-empty-text">{t("terminal.no_terminal")}</p>}
+            />
+          ) : (
+            <>
+              {activeTerminalMeta && activeWorkspaceId && (
+                <div className="bottom-terminal-xterm">
+                  <XtermHost
+                    terminalId={activeTerminalMeta.id}
+                    workspaceId={activeWorkspaceId}
+                    terminalKind={activeTerminalMeta.kind ?? "shell"}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        {showCommandSidePanel && activeWorkspaceId ? (
+          <TaskCommandSidePanel
+            workspaceId={activeWorkspaceId}
+            onClose={() => setCommandSidePanelOpen(false)}
+          />
+        ) : null}
       </div>
     </div>
   );

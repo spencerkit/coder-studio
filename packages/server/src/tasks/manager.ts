@@ -72,7 +72,12 @@ export class TaskManager {
   }
 
   latestVerify(workspaceId: string): TaskRun | undefined {
-    return this.history(workspaceId).find((run) => run.taskId === "verify");
+    const verifyTaskIds = new Set(
+      (this.tasksByWorkspace.get(workspaceId) ?? [])
+        .filter((task) => task.kind === "verify")
+        .map((task) => task.id)
+    );
+    return this.history(workspaceId).find((run) => verifyTaskIds.has(run.taskId));
   }
 
   async run(input: RunTaskInput): Promise<TaskRun> {

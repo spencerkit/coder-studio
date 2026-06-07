@@ -1,4 +1,4 @@
-import { Topics } from "@coder-studio/core";
+import { type TaskDefinition, Topics } from "@coder-studio/core";
 import {
   act,
   fireEvent,
@@ -66,6 +66,22 @@ describe("TerminalPanel", () => {
   function setEnglishLocale(store: ReturnType<typeof createStore>) {
     store.set(localeAtom, "en");
   }
+
+  const buildTask = (
+    overrides: Partial<TaskDefinition> & Pick<TaskDefinition, "id" | "label" | "displayCommand">
+  ): TaskDefinition => ({
+    id: overrides.id,
+    workspaceId: "ws-test",
+    kind: "custom",
+    label: overrides.label,
+    command: "pnpm",
+    args: [overrides.id],
+    displayCommand: overrides.displayCommand,
+    cwdPath: ".",
+    source: "package-json",
+    priority: 100,
+    ...overrides,
+  });
 
   it("keeps rendering when the first terminal is created after mount", async () => {
     const store = createStore();
@@ -225,6 +241,127 @@ describe("TerminalPanel", () => {
     expect(store.get(terminalIdsAtomFamily("ws-test"))).toEqual(["term_2"]);
     expect(store.get(terminalActiveIdAtomFamily("ws-test"))).toBe("term_2");
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("opens package commands from the toolbar button next to new terminal", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const fullBuildCommand =
+      "vite build --mode production && tsc -p tsconfig.json --noEmit --pretty false";
+    const tasks = [
+      buildTask({
+        id: "dev",
+        label: "dev",
+        displayCommand: "vite --host 0.0.0.0",
+      }),
+      buildTask({
+        id: "build",
+        label: "build",
+        displayCommand: fullBuildCommand,
+      }),
+    ];
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+    const sendCommand = vi.fn().mockImplementation((op: string) => {
+      if (op === "terminal.list") {
+        return Promise.resolve([
+          {
+            id: "term_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: "/tmp/ws-test",
+            argv: ["/bin/bash"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          },
+        ]);
+      }
+
+      if (op === "task.list") {
+        return Promise.resolve(tasks);
+      }
+
+      if (op === "task.history") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/tmp/ws-test",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand, sendTerminalInput } as never);
+
+    render(
+      <Provider store={store}>
+        <TerminalPanel />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
+    });
+
+    const toolbarRight = document.querySelector(".terminal-toolbar-right");
+    const toolbarButtons = within(toolbarRight as HTMLElement).getAllByRole("button");
+    const newTerminalIndex = toolbarButtons.findIndex(
+      (button) => button.getAttribute("aria-label") === "New Terminal"
+    );
+    const commandButtonIndex = toolbarButtons.findIndex(
+      (button) => button.getAttribute("aria-label") === "Open Commands"
+    );
+    expect(commandButtonIndex).toBe(newTerminalIndex + 1);
+    const commandButton = toolbarButtons[commandButtonIndex]!;
+
+    await user.click(commandButton);
+
+    const sidePanel = await screen.findByRole("complementary", { name: "Commands" });
+    expect(sidePanel).toHaveClass("terminal-command-side-panel");
+    expect(sidePanel.querySelector(".terminal-command-side-panel__list")).toHaveClass(
+      "terminal-command-side-panel__list--scroll"
+    );
+    expect(within(sidePanel).getByText("vite --host 0.0.0.0")).toBeInTheDocument();
+    const buildCommand = within(sidePanel).getByText(fullBuildCommand);
+    expect(buildCommand).toBeInTheDocument();
+    expect(buildCommand.closest(".terminal-command-side-panel__row")).toHaveAttribute(
+      "title",
+      fullBuildCommand
+    );
+
+    await user.click(within(sidePanel).getByRole("button", { name: "Insert build" }));
+
+    await waitFor(() => {
+      expect(sendTerminalInput).toHaveBeenCalledTimes(1);
+    });
+    const [terminalId, bytes, activity, submittedText] = sendTerminalInput.mock.calls[0]!;
+    expect(terminalId).toBe("term_1");
+    expect(new TextDecoder().decode(bytes)).toBe(fullBuildCommand);
+    expect(activity).toBe("typing");
+    expect(submittedText).toBeUndefined();
+    expect(sendCommand).not.toHaveBeenCalledWith("task.run", expect.anything(), expect.anything());
+    expect(store.get(terminalActiveIdAtomFamily("ws-test"))).toBe("term_1");
   });
 
   it("does not render the desktop terminal tab bar and keeps selector switching", async () => {

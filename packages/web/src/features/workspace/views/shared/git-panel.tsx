@@ -16,9 +16,9 @@ import {
 } from "../../../../components/ui";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import { useTerminalThemeBackground } from "../../../../theme";
-import { bottomPanelActiveTabAtomFamily } from "../../../bottom-panel";
 import { pushToastAtom } from "../../../notifications/atoms";
 import { latestVerifyRunAtomFamily, taskStateAtomFamily } from "../../../tasks/atoms";
+import { terminalCommandSidePanelOpenAtomFamily } from "../../../terminal-panel/atoms";
 import {
   type GitChangeType,
   type GitPanelChangeItem,
@@ -116,7 +116,7 @@ export const GitPanel: FC<GitPanelProps> = ({
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const pushToast = useSetAtom(pushToastAtom);
-  const setBottomPanelTab = useSetAtom(bottomPanelActiveTabAtomFamily(workspaceId));
+  const setCommandSidePanelOpen = useSetAtom(terminalCommandSidePanelOpenAtomFamily(workspaceId));
   const taskState = useAtomValue(taskStateAtomFamily(workspaceId));
   const latestVerifyRun = useAtomValue(latestVerifyRunAtomFamily(workspaceId));
   const setTaskState = useSetAtom(taskStateAtomFamily(workspaceId));
@@ -311,7 +311,7 @@ export const GitPanel: FC<GitPanelProps> = ({
                   status: t(`tasks.status_${latestVerifyRun.status}`),
                 })}
               </span>
-              <button type="button" onClick={() => setBottomPanelTab("tasks")}>
+              <button type="button" onClick={() => setCommandSidePanelOpen(true)}>
                 {t("tasks.view_tasks")}
               </button>
               <button type="button" onClick={() => void rerunVerify()}>

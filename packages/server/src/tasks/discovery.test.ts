@@ -55,7 +55,7 @@ describe("discoverTasks", () => {
     expect(result.tasks.map((task) => task.source)).toContain("package-json");
   });
 
-  it("prefers pnpm ci:verify as the default verify task", async () => {
+  it("keeps ci:verify as a verify task and displays the original script body", async () => {
     await writeFile(
       join(root, "package.json"),
       JSON.stringify({
@@ -72,14 +72,87 @@ describe("discoverTasks", () => {
     const result = await discoverTasks({ workspaceId: "ws-1", rootPath: root });
 
     expect(result.tasks[0]).toMatchObject({
-      id: "verify",
+      id: "ci:verify",
       kind: "verify",
-      label: "Verify",
+      label: "ci:verify",
       command: "pnpm",
       args: ["ci:verify"],
+      displayCommand: "pnpm changeset:validate && pnpm ci:lint && pnpm ci:test && pnpm ci:build",
       source: "package-json",
     });
-    expect(result.tasks.map((task) => task.id)).toEqual(["verify", "test", "lint", "build"]);
+    expect(result.tasks.map((task) => task.id)).toEqual(["ci:verify", "test", "lint", "build"]);
+  });
+
+  it("discovers every root package.json script without requiring a script-name allowlist", async () => {
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        scripts: {
+          dev: "tsx scripts/dev.ts",
+          "dev:web": "tsx scripts/dev-web.ts",
+          "ci:test": "pnpm ci:test:scripts && pnpm ci:test:workspace",
+          "lint:fix": "biome lint --write .",
+          "publish:cli": "tsx scripts/publish-cli.ts",
+        },
+      })
+    );
+    await writeFile(join(root, "pnpm-lock.yaml"), "");
+
+    const result = await discoverTasks({ workspaceId: "ws-1", rootPath: root });
+
+    expect(
+      result.tasks
+        .filter((task) => task.source === "package-json")
+        .map(({ id, label, kind, command, args, displayCommand }) => ({
+          id,
+          label,
+          kind,
+          command,
+          args,
+          displayCommand,
+        }))
+    ).toEqual([
+      {
+        id: "dev",
+        label: "dev",
+        kind: "dev",
+        command: "pnpm",
+        args: ["dev"],
+        displayCommand: "tsx scripts/dev.ts",
+      },
+      {
+        id: "dev:web",
+        label: "dev:web",
+        kind: "dev",
+        command: "pnpm",
+        args: ["dev:web"],
+        displayCommand: "tsx scripts/dev-web.ts",
+      },
+      {
+        id: "ci:test",
+        label: "ci:test",
+        kind: "test",
+        command: "pnpm",
+        args: ["ci:test"],
+        displayCommand: "pnpm ci:test:scripts && pnpm ci:test:workspace",
+      },
+      {
+        id: "lint:fix",
+        label: "lint:fix",
+        kind: "lint",
+        command: "pnpm",
+        args: ["lint:fix"],
+        displayCommand: "biome lint --write .",
+      },
+      {
+        id: "publish:cli",
+        label: "publish:cli",
+        kind: "custom",
+        command: "pnpm",
+        args: ["publish:cli"],
+        displayCommand: "tsx scripts/publish-cli.ts",
+      },
+    ]);
   });
 
   it("uses package-manager-safe script arguments for npm and bun projects", async () => {
@@ -97,7 +170,7 @@ describe("discoverTasks", () => {
 
     expect(npmResult.tasks).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "verify", command: "npm", args: ["run", "ci:verify"] }),
+        expect.objectContaining({ id: "ci:verify", command: "npm", args: ["run", "ci:verify"] }),
         expect.objectContaining({ id: "lint", command: "npm", args: ["run", "lint"] }),
       ])
     );
@@ -107,7 +180,7 @@ describe("discoverTasks", () => {
 
     expect(bunResult.tasks).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "verify", command: "bun", args: ["run", "ci:verify"] }),
+        expect.objectContaining({ id: "ci:verify", command: "bun", args: ["run", "ci:verify"] }),
         expect.objectContaining({ id: "lint", command: "bun", args: ["run", "lint"] }),
       ])
     );

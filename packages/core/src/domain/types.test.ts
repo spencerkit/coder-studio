@@ -117,6 +117,7 @@ describe("Task contracts", () => {
       label: string;
       command: string;
       args: string[];
+      displayCommand?: string;
       cwdPath?: string;
       source:
         | "coder-studio"
