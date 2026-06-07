@@ -5,6 +5,7 @@ import type {
   Supervisor,
   UpdateStateView,
   Workspace,
+  WorkspaceHistoryEntry,
   WorktreeInfo,
 } from "@coder-studio/core";
 import { type CSSProperties, type ReactNode, useState } from "react";
@@ -48,6 +49,24 @@ const workspace: Workspace = {
     paneLayout: { id: "root", type: "leaf" },
   },
 };
+
+const recentWorkspaces: WorkspaceHistoryEntry[] = [
+  {
+    path: "/home/spencer/workspace/coder-studio",
+    name: "coder-studio",
+    lastOpenedAt: 1715731200000,
+  },
+  {
+    path: "/home/spencer/workspace/platform-tools",
+    name: "platform-tools",
+    lastOpenedAt: 1715644800000,
+  },
+  {
+    path: "/home/spencer/workspace/mobile-shell",
+    name: "mobile-shell",
+    lastOpenedAt: 1715558400000,
+  },
+];
 
 const supervisor: Supervisor = {
   id: "sup-preview-1",
@@ -995,6 +1014,7 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
       seed: (context) => ({
         ...context,
         commands: {
+          workspaceHistoryList: recentWorkspaces,
           workspaceBrowse: {
             currentPath: "/home/spencer/workspace",
             parentPath: "/home/spencer",

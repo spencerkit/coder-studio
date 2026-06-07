@@ -42,6 +42,18 @@ vi.mock("./views/shared/file-tree-panel", () => ({
   },
 }));
 
+vi.mock("./views/shared/agent-instructions-section", () => ({
+  AgentInstructionsSection: ({ workspaceId }: { workspaceId: string }) => (
+    <div data-testid="agent-instructions-section" data-workspace-id={workspaceId} />
+  ),
+}));
+
+vi.mock("./views/shared/skills-panel", () => ({
+  SkillsPanel: ({ workspaceId }: { workspaceId: string }) => (
+    <div data-testid="skills-panel" data-workspace-id={workspaceId} />
+  ),
+}));
+
 vi.mock("./views/shared/git-panel", () => ({
   GitPanel: () => <div data-testid="git-panel" />,
 }));
@@ -344,6 +356,12 @@ describe("WorkspacePage", () => {
     expect(document.querySelector('[data-icon-semantic="nav.explorer"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.sourceControl"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.agent"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.skills"]')).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /agent\.md|Agent Instructions|Agent 指令/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Skills|技能/i })).toBeInTheDocument();
     expect(document.querySelector(".workspace-sidebar-panel__tabs")).toBeNull();
     expect(document.querySelector(".workspace-sidebar-panel__tab")).toBeNull();
   });
@@ -423,7 +441,7 @@ describe("WorkspacePage", () => {
   });
 
   it("switches desktop sidebar views from the activity bar", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, payload: unknown) => {
       if (op === "git.status") {
         return {
           branch: "main",
@@ -434,6 +452,56 @@ describe("WorkspacePage", () => {
           deleted: [],
           untracked: [],
         };
+      }
+
+      if (op === "skills.library.list") {
+        return [];
+      }
+
+      if (op === "skills.targets.list") {
+        return [
+          {
+            providerId: "codex",
+            displayName: "Codex",
+            kind: "built_in",
+            skillDir: "/skills/codex",
+            mountPreference: "auto",
+            lastHealthState: "healthy",
+            mountedSkillCount: 0,
+          },
+        ];
+      }
+
+      if (op === "skills.health.scan") {
+        return {
+          targets: [
+            {
+              providerId: "codex",
+              displayName: "Codex",
+              kind: "built_in",
+              skillDir: "/skills/codex",
+              mountPreference: "auto",
+              lastHealthState: "healthy",
+              mountedSkillCount: 0,
+            },
+          ],
+          mounts: [],
+        };
+      }
+
+      if (op === "skills.search") {
+        const { query } = payload as { query: string };
+        return query
+          ? [
+              {
+                slug: "code-review",
+                displayName: "Code Review",
+                description: "Review code changes before merge",
+                installed: false,
+                mountedProviderIds: [],
+              },
+            ]
+          : [];
       }
 
       return [];
@@ -475,6 +543,12 @@ describe("WorkspacePage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Source Control|源代码管理/i }));
     expect(screen.getByTestId("git-panel")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /agent\.md|Agent Instructions|Agent 指令/i })
+    );
+    expect(screen.getByTestId("agent-instructions-section")).toBeInTheDocument();
+    expect(screen.queryByTestId("file-tree-panel")).toBeNull();
   });
 
   it("mounts desktop workspace navigation shortcuts and switches workspaces on Ctrl+Shift+ArrowRight", async () => {
@@ -2058,13 +2132,13 @@ describe("WorkspacePage", () => {
     expect(leftPanel).not.toBeNull();
     expect(store.get(leftPanelWidthAtom)).toBe(280);
 
-    fireEvent.mouseDown(leftSeparator, { clientX: 280 });
-    fireEvent.mouseMove(document, { clientX: 264 });
+    fireEvent.pointerDown(leftSeparator, { clientX: 280, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 264, pointerId: 1 });
 
     expect(leftPanel).toHaveStyle({ width: "264px" });
     expect(store.get(leftPanelWidthAtom)).toBe(280);
 
-    fireEvent.mouseUp(document);
+    fireEvent.pointerUp(window, { pointerId: 1 });
 
     await waitFor(() => {
       expect(store.get(leftPanelWidthAtom)).toBe(264);
@@ -2125,13 +2199,103 @@ describe("WorkspacePage", () => {
 
     expect(document.body).not.toHaveClass("is-resizing-panels");
 
-    fireEvent.mouseDown(leftSeparator, { clientX: 280 });
+    fireEvent.pointerDown(leftSeparator, { clientX: 280, pointerId: 1, button: 0 });
     expect(document.body).toHaveClass("is-resizing-panels");
 
-    fireEvent.mouseUp(document);
+    fireEvent.pointerUp(window, { pointerId: 1 });
     await waitFor(() => {
       expect(document.body).not.toHaveClass("is-resizing-panels");
     });
+  });
+
+  it("cleans up desktop file panel resizing when the pointer drag is interrupted", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "git.status") {
+        return {
+          branch: "main",
+          ahead: 0,
+          behind: 0,
+          staged: [],
+          modified: [],
+          deleted: [],
+          untracked: [],
+        };
+      }
+
+      return [];
+    });
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/workspace"]}>
+          <Routes>
+            <Route path="/workspace" element={<WorkspaceDesktopView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await screen.findByTestId("file-tree-panel");
+
+    const leftSeparator = screen.getByRole("separator", {
+      name: /Resize left panel|调整左侧面板大小/,
+    });
+    const leftPanel = container.querySelector(".left-panel");
+    const hasPointerCapture = vi.fn(() => true);
+    const releasePointerCapture = vi.fn();
+    const setPointerCapture = vi.fn();
+
+    Object.defineProperties(leftSeparator, {
+      hasPointerCapture: {
+        configurable: true,
+        value: hasPointerCapture,
+      },
+      releasePointerCapture: {
+        configurable: true,
+        value: releasePointerCapture,
+      },
+      setPointerCapture: {
+        configurable: true,
+        value: setPointerCapture,
+      },
+    });
+
+    expect(leftPanel).not.toBeNull();
+    expect(document.body).not.toHaveClass("is-resizing-panels");
+    expect(store.get(leftPanelWidthAtom)).toBe(280);
+
+    fireEvent.pointerDown(leftSeparator, { clientX: 280, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 264, pointerId: 1 });
+
+    expect(document.body).toHaveClass("is-resizing-panels");
+    expect(leftPanel).toHaveStyle({ width: "264px" });
+
+    fireEvent.pointerCancel(window, { pointerId: 1 });
+
+    await waitFor(() => {
+      expect(document.body).not.toHaveClass("is-resizing-panels");
+    });
+    expect(store.get(leftPanelWidthAtom)).toBe(264);
+    expect(setPointerCapture).toHaveBeenCalledWith(1);
+    expect(releasePointerCapture).toHaveBeenCalledWith(1);
   });
 
   it("allows the desktop file panel to grow past the previous max width limit", async () => {
@@ -2188,11 +2352,11 @@ describe("WorkspacePage", () => {
 
     expect(leftPanel).not.toBeNull();
 
-    fireEvent.mouseDown(leftSeparator, { clientX: 280 });
-    fireEvent.mouseMove(document, { clientX: 620 });
+    fireEvent.pointerDown(leftSeparator, { clientX: 280, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 620, pointerId: 1 });
     expect(leftPanel).toHaveStyle({ width: "620px" });
 
-    fireEvent.mouseUp(document);
+    fireEvent.pointerUp(window, { pointerId: 1 });
 
     await waitFor(() => {
       expect(store.get(leftPanelWidthAtom)).toBe(620);
@@ -2254,11 +2418,11 @@ describe("WorkspacePage", () => {
 
     expect(bottomPanel).not.toBeNull();
 
-    fireEvent.mouseDown(bottomSeparator, { clientY: 400 });
-    fireEvent.mouseMove(document, { clientY: 100 });
+    fireEvent.pointerDown(bottomSeparator, { clientY: 400, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(window, { clientY: 100, pointerId: 1 });
     expect(bottomPanel).toHaveStyle({ height: "500px" });
 
-    fireEvent.mouseUp(document);
+    fireEvent.pointerUp(window, { pointerId: 1 });
 
     await waitFor(() => {
       expect(store.get(bottomPanelHeightAtom)).toBe(500);

@@ -18,6 +18,7 @@ import { ToastContainer } from "../features/notifications";
 import { QuickOpen } from "../features/quick-open";
 import { SettingsPage } from "../features/settings";
 import { WelcomePage } from "../features/welcome";
+import { WorkAnalyticsPage } from "../features/work-analysis";
 import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
 import { WorkspaceRouteGate } from "../features/workspace/views/shared/workspace-route-gate";
 import { useBootstrap } from "../hooks/use-bootstrap";
@@ -41,6 +42,7 @@ export function DesktopShell() {
   const authUnknown = authEnabled === null;
   const shouldBypassAuthLoading =
     location.pathname.startsWith("/settings") ||
+    location.pathname.startsWith("/analytics") ||
     location.pathname.startsWith("/diagnostics") ||
     location.pathname === "/session-gate";
 
@@ -70,6 +72,7 @@ export function DesktopShell() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/session-gate" element={<SessionGatePage />} />
             <Route path="/diagnostics" element={<DiagnosticsPage />} />
+            <Route path="/analytics" element={<WorkAnalyticsPage />} />
             <Route
               path="/workspace"
               element={

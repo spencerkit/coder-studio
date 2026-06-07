@@ -1,4 +1,8 @@
-import type { GitCommitFileEntry, GitFileDiffPayload } from "@coder-studio/core";
+import type {
+  AgentInstructionsSystemDocument,
+  GitCommitFileEntry,
+  GitFileDiffPayload,
+} from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
@@ -20,6 +24,7 @@ import {
   type WorkspaceEditorMode,
 } from "../../workspace/atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
+import { parseSystemAgentInstructionsEditorPath } from "../system-agent-instructions-path";
 import {
   beginPendingEditorLoad,
   cancelPendingEditorLoad,
@@ -46,6 +51,22 @@ type FileReadImagePayload = {
 };
 
 type FileReadPayload = FileReadTextPayload | FileReadImagePayload;
+type EditorReadTextPayload = FileReadTextPayload & {
+  displayPath?: string;
+  exists?: boolean;
+};
+type EditorReadPayload = EditorReadTextPayload | FileReadImagePayload;
+
+function toSystemFileReadPayload(document: AgentInstructionsSystemDocument): EditorReadTextPayload {
+  return {
+    kind: "text",
+    content: document.content,
+    baseHash: document.baseHash ?? "",
+    encoding: "utf-8",
+    displayPath: document.displayPath,
+    exists: document.exists,
+  };
+}
 
 export function useCodeEditorActions() {
   const t = useTranslation();
@@ -179,10 +200,16 @@ export function useCodeEditorActions() {
 
       const requestId = beginPendingEditorLoad(workspaceId, path);
       setFileLoadError((current) => (current?.path === path ? null : current));
-      const result = await dispatch<FileReadPayload>("file.read", {
-        workspaceId,
-        path,
-      });
+      const systemProviderId = parseSystemAgentInstructionsEditorPath(path);
+      const result = systemProviderId
+        ? await dispatch<AgentInstructionsSystemDocument>("agentInstructions.system.read", {
+            workspaceId,
+            providerId: systemProviderId,
+          })
+        : await dispatch<FileReadPayload>("file.read", {
+            workspaceId,
+            path,
+          });
 
       if (shouldIgnorePendingEditorLoadResult(workspaceId, path, requestId)) {
         return;
@@ -196,7 +223,9 @@ export function useCodeEditorActions() {
         return;
       }
 
-      const data = result.data;
+      const data: EditorReadPayload = systemProviderId
+        ? toSystemFileReadPayload(result.data as AgentInstructionsSystemDocument)
+        : (result.data as FileReadPayload);
 
       if (options?.forceText && data.kind === "image" && data.isTextBacked) {
         try {
@@ -230,7 +259,7 @@ export function useCodeEditorActions() {
 
           finishPendingEditorLoad(workspaceId, path, requestId);
           setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
-          if (workspaceRootPath) {
+          if (workspaceRootPath && !systemProviderId) {
             monacoModelRegistry.updateFromDisk({
               workspaceRootPath,
               path,
@@ -254,6 +283,7 @@ export function useCodeEditorActions() {
           ? {
               kind: "text",
               path,
+              displayPath: data.displayPath,
               content: data.content,
               savedContent: data.content,
               baseHash: data.baseHash,
@@ -273,7 +303,7 @@ export function useCodeEditorActions() {
 
       finishPendingEditorLoad(workspaceId, path, requestId);
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
-      if (workspaceRootPath && data.kind === "text") {
+      if (workspaceRootPath && data.kind === "text" && !systemProviderId) {
         monacoModelRegistry.updateFromDisk({
           workspaceRootPath,
           path,
@@ -316,12 +346,20 @@ export function useCodeEditorActions() {
     setSavingPaths(nextSavingPaths);
     setSaveError((current) => (current?.path === path ? null : current));
 
-    const result = await dispatch<{ newHash: string }>("file.write", {
-      workspaceId,
-      path,
-      content,
-      baseHash: baseHash || undefined,
-    });
+    const systemProviderId = parseSystemAgentInstructionsEditorPath(path);
+    const result = systemProviderId
+      ? await dispatch<AgentInstructionsSystemDocument>("agentInstructions.system.write", {
+          workspaceId,
+          providerId: systemProviderId,
+          content,
+          baseHash: baseHash || undefined,
+        })
+      : await dispatch<{ newHash: string }>("file.write", {
+          workspaceId,
+          path,
+          content,
+          baseHash: baseHash || undefined,
+        });
 
     if (activeSaveRequestIdByPathRef.current.get(path) !== requestId) {
       return;
@@ -334,12 +372,20 @@ export function useCodeEditorActions() {
           return prev;
         }
 
+        const nextBaseHash = systemProviderId
+          ? ((result.data as AgentInstructionsSystemDocument).baseHash ?? "")
+          : (result.data as { newHash: string }).newHash;
+        const nextDisplayPath = systemProviderId
+          ? (result.data as AgentInstructionsSystemDocument).displayPath
+          : prevFile.displayPath;
+
         return {
           ...prev,
           [path]: {
             ...prevFile,
             savedContent: content,
-            baseHash: result.data!.newHash,
+            baseHash: nextBaseHash,
+            displayPath: nextDisplayPath,
             isDirty: false,
             externalState: undefined,
           },
@@ -412,17 +458,26 @@ export function useCodeEditorActions() {
 
     const reconcileOpenFiles = async () => {
       for (const [path, file] of entries) {
-        const result = await dispatch<FileReadPayload>("file.read", {
-          workspaceId,
-          path,
-        });
+        const systemProviderId = parseSystemAgentInstructionsEditorPath(path);
+        const result = systemProviderId
+          ? await dispatch<AgentInstructionsSystemDocument>("agentInstructions.system.read", {
+              workspaceId,
+              providerId: systemProviderId,
+            })
+          : await dispatch<FileReadPayload>("file.read", {
+              workspaceId,
+              path,
+            });
 
         if (cancelled) {
           return;
         }
 
-        if (!result.ok || !result.data) {
-          const isMissing = result.error?.code === "not_found";
+        const systemDocument = systemProviderId
+          ? (result.data as AgentInstructionsSystemDocument | undefined)
+          : undefined;
+        if (!result.ok || !result.data || (systemDocument && !systemDocument.exists)) {
+          const isMissing = systemDocument ? true : result.error?.code === "not_found";
           setOpenFiles((prev) => {
             const existing = prev[path];
             if (!existing) {
@@ -442,7 +497,9 @@ export function useCodeEditorActions() {
           continue;
         }
 
-        const nextData = result.data;
+        const nextData: EditorReadPayload = systemProviderId
+          ? toSystemFileReadPayload(result.data as AgentInstructionsSystemDocument)
+          : (result.data as FileReadPayload);
 
         if (file.kind === "text" && nextData.kind === "text") {
           const hasChangedOnDisk = nextData.baseHash !== file.baseHash;
@@ -475,6 +532,7 @@ export function useCodeEditorActions() {
             [path]: {
               kind: "text",
               path,
+              displayPath: nextData.displayPath ?? file.displayPath,
               content: nextData.content,
               savedContent: nextData.content,
               baseHash: nextData.baseHash,
@@ -483,7 +541,7 @@ export function useCodeEditorActions() {
               viewingTextBackedImageAsText: file.viewingTextBackedImageAsText,
             },
           }));
-          if (workspaceRootPath) {
+          if (workspaceRootPath && !systemProviderId) {
             monacoModelRegistry.updateFromDisk({
               workspaceRootPath,
               path,
