@@ -12,13 +12,20 @@ import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
 import { useOpenEditorsActions } from "../workspace/actions/use-open-editors-actions";
 import { useOpenWorkspaceFile } from "../workspace/actions/use-open-workspace-file";
+import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../workspace/atoms";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { usePaneDragController } from "./actions/use-pane-drag-controller";
 import { usePaneDragEnabled } from "./actions/use-pane-drag-enabled";
 import { useSessionActions } from "./actions/use-session-actions";
 import { useWorkspaceSessions } from "./actions/use-workspace-sessions";
-import { activeEditorPaneIdAtomFamily, focusedEditorPaneIdAtomFamily } from "./atoms/editor-panes";
+import {
+  activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
+  editorPaneModeAtomFamily,
+  editorPanePendingNavigationAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "./atoms/editor-panes";
 import { type PaneNode, readPaneRatio, writePaneRatio } from "./atoms/pane-layout";
 import { collectSessionIds, paneLayoutHasEditorPaneId } from "./pane-layout-tree";
 import { DraftLauncher } from "./views/shared/draft-launcher";
@@ -63,10 +70,18 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
   const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
-  const { closeAll } = useOpenEditorsActions(workspaceId, {
+  const { closePath } = useOpenEditorsActions(workspaceId, {
     workspaceRootPath: workspace?.path,
   });
+  const globalActiveFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
+  const editorPaneActiveFilePath = useAtomValue(editorPaneActiveFilePathAtomFamily(workspaceId));
+  const setEditorPaneActiveFilePath = useSetAtom(editorPaneActiveFilePathAtomFamily(workspaceId));
+  const setEditorPaneMode = useSetAtom(editorPaneModeAtomFamily(workspaceId));
+  const setEditorPanePendingNavigation = useSetAtom(
+    editorPanePendingNavigationAtomFamily(workspaceId)
+  );
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
   const { insertPaneAtEdge, swapPaneLeaves } = paneActions;
   const hasLayoutSessions = collectSessionIds(paneLayout).length > 0;
@@ -105,12 +120,32 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
 
   const handleCloseEditorPane = useCallback(
     (paneId: string) => {
-      closeAll();
+      const isOpenInGlobalEditor =
+        editorPaneActiveFilePath === globalActiveFilePath ||
+        Boolean(editorPaneActiveFilePath && openEditorPaths.includes(editorPaneActiveFilePath));
+
+      if (editorPaneActiveFilePath && !isOpenInGlobalEditor) {
+        closePath(editorPaneActiveFilePath);
+      }
       paneActions.closeEditorPane(paneId);
       setActiveEditorPaneId((current) => (current === paneId ? null : current));
+      setEditorPaneActiveFilePath(null);
+      setEditorPaneMode("edit");
+      setEditorPanePendingNavigation(null);
       setFocusedEditorPaneId((current) => (current === paneId ? null : current));
     },
-    [closeAll, paneActions, setActiveEditorPaneId, setFocusedEditorPaneId]
+    [
+      closePath,
+      editorPaneActiveFilePath,
+      globalActiveFilePath,
+      openEditorPaths,
+      paneActions,
+      setActiveEditorPaneId,
+      setEditorPaneActiveFilePath,
+      setEditorPaneMode,
+      setEditorPanePendingNavigation,
+      setFocusedEditorPaneId,
+    ]
   );
 
   useEffect(() => {
@@ -376,6 +411,7 @@ const PaneLeaf: FC<PaneLeafProps> = ({
           workspaceId={workspaceId}
           onPaneDragStart={dragController.startDrag}
           onClosePane={onCloseEditorPane}
+          onOpenFile={onOpenFile}
           onSplitPane={onSplitDraftPane}
         />
       </div>

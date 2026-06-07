@@ -1,8 +1,10 @@
 import { useAtomValue } from "jotai";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
+import type { DragEvent as ReactDragEvent } from "react";
 import { useEffect, useState } from "react";
 import { ConfirmDialog, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { setWorkspacePathDragData } from "../../../../lib/workspace-path-drag";
 import {
   hasPendingEditorLoad,
   subscribeToPendingEditorLoads,
@@ -115,6 +117,17 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
 
     closeAll();
   };
+  const handleDragStart = (path: string, event: ReactDragEvent<HTMLButtonElement>) => {
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    setWorkspacePathDragData(event.dataTransfer, {
+      workspaceId,
+      path,
+      kind: "file",
+    });
+  };
 
   return (
     <section className="workspace-sidebar-section">
@@ -170,6 +183,8 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
                   aria-current={activeFilePath === path ? "true" : undefined}
                   aria-label={path}
                   title={path}
+                  draggable
+                  onDragStart={(event) => handleDragStart(path, event)}
                   onClick={() => {
                     void openWorkspaceFile({
                       workspaceId,

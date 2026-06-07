@@ -204,13 +204,17 @@ const WorkspaceDesktopScene: FC = () => {
 
         <div className="workspace-main-area">
           <div className="workspace-main-stage">
+            <div
+              className="agent-panes"
+              aria-hidden={mainAreaMode === "editor" ? true : undefined}
+            >
+              <AgentPanes hydrateSessions={false} />
+            </div>
             {mainAreaMode === "editor" ? (
-              <CodeEditorHost />
-            ) : (
-              <div className="agent-panes">
-                <AgentPanes hydrateSessions={false} />
+              <div className="workspace-main-stage__editor-overlay">
+                <CodeEditorHost />
               </div>
-            )}
+            ) : null}
           </div>
 
           {!focusMode && terminalPanelVisible && (

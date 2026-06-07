@@ -8,6 +8,8 @@ import { wsClientAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
 import {
   activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
+  editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
@@ -39,7 +41,7 @@ function seedWorkspace(store: ReturnType<typeof createStore>) {
 }
 
 describe("useOpenWorkspaceFile", () => {
-  it("routes regular file opens into the focused editor pane", async () => {
+  it("opens regular files in the standalone editor without clearing the focused editor pane", async () => {
     const store = createStore();
     seedWorkspace(store);
     store.set(paneLayoutAtomFamily("ws-test"), {
@@ -52,6 +54,8 @@ describe("useOpenWorkspaceFile", () => {
       ],
     });
     store.set(focusedEditorPaneIdAtomFamily("ws-test"), "pane-editor-1");
+    store.set(activeEditorPaneIdAtomFamily("ws-test"), "pane-editor-1");
+    store.set(editorPaneActiveFilePathAtomFamily("ws-test"), "src/panel.tsx");
 
     const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
       wrapper: wrapperFor(store),
@@ -66,6 +70,8 @@ describe("useOpenWorkspaceFile", () => {
     });
 
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("pane-editor-1");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-test"))).toBe("src/panel.tsx");
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
     expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
       workspaceId: "ws-test",
@@ -74,7 +80,7 @@ describe("useOpenWorkspaceFile", () => {
     });
   });
 
-  it("reuses the active editor pane when focus is cleared", async () => {
+  it("keeps the active editor pane identity for regular file opens", async () => {
     const store = createStore();
     seedWorkspace(store);
     store.set(paneLayoutAtomFamily("ws-test"), {
@@ -97,6 +103,7 @@ describe("useOpenWorkspaceFile", () => {
     });
 
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/standalone.ts");
   });
 
@@ -159,6 +166,13 @@ describe("useOpenWorkspaceFile", () => {
     });
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-test"))).toBe("src/from-drop.ts");
+    expect(store.get(editorPanePendingNavigationAtomFamily("ws-test"))).toMatchObject({
+      workspaceId: "ws-test",
+      path: "src/from-drop.ts",
+      source: "file-tree",
+    });
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 
   it("reuses the existing editor pane when another draft receives a dropped file", async () => {
@@ -202,7 +216,8 @@ describe("useOpenWorkspaceFile", () => {
     });
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("left");
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBe("left");
-    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/reused.ts");
+    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-test"))).toBe("src/reused.ts");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 
   it("persists the opened path and active editor path", async () => {

@@ -6,7 +6,10 @@ import { lastViewedTargetAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
-import { activeEditorPaneIdAtomFamily } from "../agent-panes/atoms/editor-panes";
+import {
+  activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
+} from "../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../agent-panes/atoms/pane-layout";
 import { updateStateAtom } from "../updates/atoms";
 import {
@@ -1596,7 +1599,7 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
   });
 
   it("keeps the desktop main area on agent panes when an active file is targeted at an editor pane", async () => {
@@ -1633,7 +1636,7 @@ describe("WorkspacePage", () => {
         },
       },
     });
-    store.set(activeFilePathAtomFamily("ws-test"), "src/app.tsx");
+    store.set(editorPaneActiveFilePathAtomFamily("ws-test"), "src/app.tsx");
     store.set(activeEditorPaneIdAtomFamily("ws-test"), "root");
     store.set(paneLayoutAtomFamily("ws-test"), {
       id: "root",
@@ -1777,7 +1780,7 @@ describe("WorkspacePage", () => {
     );
 
     await screen.findByTestId("code-editor-host");
-    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
 
     const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
     const section = heading.closest("section") as HTMLElement;
@@ -1857,7 +1860,7 @@ describe("WorkspacePage", () => {
     );
 
     await screen.findByTestId("code-editor-host");
-    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
   });
 
   it("keeps commit-history diff previews reachable after close all clears open editors", async () => {
@@ -1943,7 +1946,7 @@ describe("WorkspacePage", () => {
     fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
 
     await screen.findByTestId("code-editor-host");
-    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
@@ -2044,7 +2047,7 @@ describe("WorkspacePage", () => {
     );
 
     await screen.findByTestId("code-editor-host");
-    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
 
     const activeRow = screen
       .getByRole("button", { name: "src/app.tsx" })
@@ -2054,7 +2057,7 @@ describe("WorkspacePage", () => {
     );
 
     await screen.findByTestId("code-editor-host");
-    expect(screen.queryByTestId("agent-panes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
     expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({

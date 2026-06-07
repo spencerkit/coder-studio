@@ -5,7 +5,7 @@
  * in the Git Diff feature and is deliberately not surfaced here.
  */
 
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom, type PrimitiveAtom } from "jotai";
 import * as monaco from "monaco-editor";
 import { ICodeEditorService } from "monaco-editor/esm/vs/editor/browser/services/codeEditorService.js";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
@@ -91,6 +91,7 @@ interface MonacoHostProps {
   workspaceRootPath?: string;
   filePath: string;
   content: string;
+  pendingNavigationAtom?: PrimitiveAtom<PendingEditorNavigation | null>;
   visible?: boolean;
   standalone?: boolean;
   readOnly?: boolean;
@@ -111,6 +112,7 @@ export const MonacoHost: FC<MonacoHostProps> = ({
   workspaceRootPath,
   filePath,
   content,
+  pendingNavigationAtom,
   visible = true,
   standalone = false,
   readOnly = false,
@@ -119,8 +121,10 @@ export const MonacoHost: FC<MonacoHostProps> = ({
 }) => {
   const uiTheme = useAtomValue(themeAtom);
   const lspRuntimeMode = useAtomValue(lspRuntimeModeAtom);
-  const pendingNavigation = useAtomValue(pendingEditorNavigationAtomFamily(workspaceId ?? ""));
-  const setPendingNavigation = useSetAtom(pendingEditorNavigationAtomFamily(workspaceId ?? ""));
+  const resolvedPendingNavigationAtom =
+    pendingNavigationAtom ?? pendingEditorNavigationAtomFamily(workspaceId ?? "");
+  const pendingNavigation = useAtomValue(resolvedPendingNavigationAtom);
+  const setPendingNavigation = useSetAtom(resolvedPendingNavigationAtom);
   const dispatchCommand = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
   const { openLocation } = useOpenLocation(workspaceId ?? "");

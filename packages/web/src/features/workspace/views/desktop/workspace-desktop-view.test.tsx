@@ -205,13 +205,16 @@ describe("WorkspaceDesktopView", () => {
     const trendSection = trendHeading.closest(".workspace-sidebar-section");
     const agentInstructionsSection = screen.getByTestId("agent-instructions-section");
 
+    if (!trendSection) {
+      throw new Error("Expected token trend section to render");
+    }
     expect(trendSection).toHaveClass("workspace-agent-token-trend-section");
     expect(screen.getByTestId("agent-token-trend")).toHaveAttribute(
       "data-workspace-path",
       "/tmp/ws-test"
     );
     expect(
-      trendSection?.compareDocumentPosition(agentInstructionsSection) &
+      trendSection.compareDocumentPosition(agentInstructionsSection) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(agentInstructionsSection).not.toContainElement(screen.getByTestId("agent-token-trend"));

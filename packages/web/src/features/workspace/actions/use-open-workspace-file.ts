@@ -1,8 +1,11 @@
 import { useAtomValue, useSetAtom, useStore } from "jotai";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { usePaneActions } from "../../agent-panes/actions/use-pane-actions";
 import {
   activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
+  editorPaneModeAtomFamily,
+  editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
@@ -24,8 +27,12 @@ interface OpenWorkspaceFileOptions {
 export function useOpenWorkspaceFile(workspaceId: string) {
   const paneLayout = useAtomValue(paneLayoutAtomFamily(workspaceId));
   const activeEditorPaneId = useAtomValue(activeEditorPaneIdAtomFamily(workspaceId));
-  const focusedEditorPaneId = useAtomValue(focusedEditorPaneIdAtomFamily(workspaceId));
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
+  const setEditorPaneActiveFilePath = useSetAtom(editorPaneActiveFilePathAtomFamily(workspaceId));
+  const setEditorPaneMode = useSetAtom(editorPaneModeAtomFamily(workspaceId));
+  const setEditorPanePendingNavigation = useSetAtom(
+    editorPanePendingNavigationAtomFamily(workspaceId)
+  );
   const setFocusedEditorPaneId = useSetAtom(focusedEditorPaneIdAtomFamily(workspaceId));
   const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const setOpenEditorPaths = useSetAtom(openEditorPathsAtomFamily(workspaceId));
@@ -33,6 +40,7 @@ export function useOpenWorkspaceFile(workspaceId: string) {
   const { openLocation } = useOpenLocation(workspaceId);
   const { convertDraftPane } = usePaneActions(workspaceId);
   const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
+  const nextEditorPaneRequestIdRef = useRef(0);
 
   const openWorkspaceFile = useCallback(
     async (input: PendingEditorNavigation, options: OpenWorkspaceFileOptions = {}) => {
@@ -47,17 +55,24 @@ export function useOpenWorkspaceFile(workspaceId: string) {
           targetEditorPaneId = options.targetDraftPaneId;
         }
 
-        setFocusedEditorPaneId(targetEditorPaneId);
-      } else if (
-        focusedEditorPaneId &&
-        paneLayoutHasEditorPaneId(paneLayout, focusedEditorPaneId)
-      ) {
-        targetEditorPaneId = focusedEditorPaneId;
-      } else if (activeEditorPaneId && paneLayoutHasEditorPaneId(paneLayout, activeEditorPaneId)) {
-        targetEditorPaneId = activeEditorPaneId;
+        if (targetEditorPaneId) {
+          setFocusedEditorPaneId(targetEditorPaneId);
+          setActiveEditorPaneId(targetEditorPaneId);
+          setEditorPaneMode(deriveEditorModeForPath(input.path));
+          setEditorPaneActiveFilePath(input.path);
+          setEditorPanePendingNavigation({
+            ...input,
+            requestId: ++nextEditorPaneRequestIdRef.current,
+          });
+          return;
+        }
       }
 
-      setActiveEditorPaneId(targetEditorPaneId);
+      setFocusedEditorPaneId(null);
+      if (activeEditorPaneId && !paneLayoutHasEditorPaneId(paneLayout, activeEditorPaneId)) {
+        setActiveEditorPaneId(null);
+      }
+
       setEditorMode(deriveEditorModeForPath(input.path));
       await openLocation(input);
       const nextOpenEditorPaths = appendOpenEditorPath(
@@ -73,11 +88,13 @@ export function useOpenWorkspaceFile(workspaceId: string) {
     [
       activeEditorPaneId,
       convertDraftPane,
-      focusedEditorPaneId,
       openLocation,
       paneLayout,
       persistUiState,
       setActiveEditorPaneId,
+      setEditorPaneActiveFilePath,
+      setEditorPaneMode,
+      setEditorPanePendingNavigation,
       setEditorMode,
       setFocusedEditorPaneId,
       setOpenEditorPaths,

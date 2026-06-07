@@ -10,7 +10,11 @@ import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { activeFilePathAtomFamily, openFilesAtomFamily } from "../workspace/atoms";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import type { PaneDragSourceSnapshot } from "./actions/use-pane-drag-controller";
-import { activeEditorPaneIdAtomFamily, focusedEditorPaneIdAtomFamily } from "./atoms/editor-panes";
+import {
+  activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
+  focusedEditorPaneIdAtomFamily,
+} from "./atoms/editor-panes";
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
 import { AgentPanes } from "./index";
 
@@ -1625,7 +1629,7 @@ describe("AgentPanes", () => {
   });
 
   it("starts an inline install flow for standalone launches instead of redirecting to diagnostics", async () => {
-    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+    const sendCommand = vi.fn(async (op: string) => {
       if (op === "session.list") return [];
       if (op === "provider.runtimeStatus") {
         return {
@@ -1891,7 +1895,8 @@ describe("AgentPanes", () => {
     });
     expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("left");
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBe("left");
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
+    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
   });
 
   it("closes an editor pane back to draft and clears the active editor target", async () => {
@@ -1902,8 +1907,17 @@ describe("AgentPanes", () => {
     });
     store.set(activeEditorPaneIdAtomFamily("ws-1"), "root");
     store.set(focusedEditorPaneIdAtomFamily("ws-1"), "root");
-    store.set(activeFilePathAtomFamily("ws-1"), "src/app.tsx");
+    store.set(activeFilePathAtomFamily("ws-1"), "src/global.tsx");
+    store.set(editorPaneActiveFilePathAtomFamily("ws-1"), "src/app.tsx");
     store.set(openFilesAtomFamily("ws-1"), {
+      "src/global.tsx": {
+        kind: "text",
+        path: "src/global.tsx",
+        content: "export const global = 1;",
+        savedContent: "export const global = 1;",
+        baseHash: "hash-global",
+        isDirty: false,
+      },
       "src/app.tsx": {
         kind: "text",
         path: "src/app.tsx",
@@ -1929,8 +1943,51 @@ describe("AgentPanes", () => {
     });
     expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBeNull();
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBeNull();
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
-    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/global.tsx");
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({
+      "src/global.tsx": expect.objectContaining({
+        path: "src/global.tsx",
+      }),
+    });
     expect(await screen.findByTestId("draft-launcher-root")).toBeInTheDocument();
+  });
+
+  it("keeps the global editor open when closing a panel editor that targets the same file", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    store.set(activeEditorPaneIdAtomFamily("ws-1"), "root");
+    store.set(focusedEditorPaneIdAtomFamily("ws-1"), "root");
+    store.set(activeFilePathAtomFamily("ws-1"), "src/app.tsx");
+    store.set(editorPaneActiveFilePathAtomFamily("ws-1"), "src/app.tsx");
+    store.set(openFilesAtomFamily("ws-1"), {
+      "src/app.tsx": {
+        kind: "text",
+        path: "src/app.tsx",
+        content: "export const app = 1;",
+        savedContent: "export const app = 1;",
+        baseHash: "hash-app",
+        isDirty: false,
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "close-editor-root" }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/app.tsx");
+    expect(store.get(editorPaneActiveFilePathAtomFamily("ws-1"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({
+      "src/app.tsx": expect.objectContaining({
+        path: "src/app.tsx",
+      }),
+    });
   });
 });

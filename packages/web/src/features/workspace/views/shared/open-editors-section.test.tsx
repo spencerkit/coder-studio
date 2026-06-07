@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacesAtom } from "../../../../atoms/workspaces";
+import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import {
   activeEditorPaneIdAtomFamily,
   focusedEditorPaneIdAtomFamily,
@@ -16,6 +17,7 @@ import {
 import {
   activeFilePathAtomFamily,
   type OpenFile,
+  type OpenTextFile,
   openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../../atoms";
@@ -48,7 +50,7 @@ vi.mock("../../../../lib/i18n", () => ({
   },
 }));
 
-function createFile(path: string): OpenFile {
+function createFile(path: string): OpenTextFile {
   return {
     kind: "text",
     path,
@@ -59,13 +61,25 @@ function createFile(path: string): OpenFile {
   };
 }
 
-function createDirtyFile(path: string): OpenFile {
+function createDirtyFile(path: string): OpenTextFile {
   return {
     ...createFile(path),
     content: "changed",
     savedContent: "saved",
     isDirty: true,
   };
+}
+
+function createDragDataTransfer() {
+  const values = new Map<string, string>();
+  const dataTransfer = {
+    effectAllowed: "none",
+    setData: vi.fn((type: string, value: string) => {
+      values.set(type, value);
+    }),
+  } as unknown as DataTransfer;
+
+  return { dataTransfer, values };
 }
 
 function renderSection(
@@ -242,7 +256,7 @@ describe("OpenEditorsSection", () => {
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
   });
 
-  it("routes open-editor clicks into the focused editor pane", () => {
+  it("opens open-editor clicks in the standalone editor when an editor pane is focused", () => {
     const { store } = renderSection(undefined, undefined, (draftStore) => {
       draftStore.set(paneLayoutAtomFamily("ws-test"), {
         id: "root",
@@ -254,8 +268,28 @@ describe("OpenEditorsSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "README.md" }));
 
-    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
+  });
+
+  it("writes workspace drag data for open editor rows", () => {
+    renderSection();
+
+    const readmeButton = screen.getByRole("button", { name: "README.md" });
+    expect(readmeButton).toHaveAttribute("draggable", "true");
+
+    const { dataTransfer, values } = createDragDataTransfer();
+    fireEvent.dragStart(readmeButton, { dataTransfer });
+
+    expect(values.get(WORKSPACE_PATH_DRAG_MIME)).toBe(
+      JSON.stringify({
+        workspaceId: "ws-test",
+        path: "README.md",
+        kind: "file",
+      })
+    );
+    expect(values.get("text/plain")).toBe("README.md");
   });
 
   it("marks dirty open files and confirms before closing a dirty row", () => {

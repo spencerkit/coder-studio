@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { atom } from "jotai";
 import { describe, expect, it, vi } from "vitest";
+import type { PendingEditorNavigation } from "../../atoms";
 import {
   CodeEditorDesktopHeaderActions,
   CodeEditorHeaderActions,
@@ -77,6 +79,7 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     mode: "edit",
     openCommitFileDiff: vi.fn(),
     openInDiffMode: vi.fn(),
+    pendingNavigationAtom: atom<PendingEditorNavigation | null>(null),
     saveError: null,
     setMode: vi.fn(),
     toggleSvgTextMode: vi.fn(),
