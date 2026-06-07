@@ -268,6 +268,22 @@ export function buildMonitoringSnapshot(input: {
           });
         }
       }
+    } else {
+      backgroundGroups.push({
+        id: `background:${root.ownerId}`,
+        kind: "background_group",
+        parentId: workspaceId,
+        workspaceId: root.workspaceId,
+        label: root.label,
+        cpuPercent: summary.cpuPercent,
+        memoryBytes: summary.memoryBytes,
+        processCount: summary.processCount,
+        uptimeSec: summary.uptimeSec,
+        trend: createTrend(
+          summary.cpuPercent,
+          previousEntities.get(`background:${root.ownerId}`) ?? null
+        ),
+      });
     }
   }
 

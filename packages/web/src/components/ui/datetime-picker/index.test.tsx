@@ -179,6 +179,22 @@ describe("DateTimePicker", () => {
     expect(region).toBeInTheDocument();
   });
 
+  it("can force the desktop popover on mobile viewports", () => {
+    setMatchMediaMock(
+      (query) => query.includes("max-width: 899px") || query.includes("pointer: coarse")
+    );
+
+    renderWithLocale(
+      <DateTimePicker value="" onValueChange={vi.fn()} label="Scheduled At" forceMode="desktop" />,
+      "en"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Scheduled At" }));
+
+    expect(screen.getByRole("dialog", { name: "Scheduled At" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: /Scheduled At/ })).toBeNull();
+  });
+
   it("links aria-describedby when provided", () => {
     setMatchMediaMock(() => false);
 

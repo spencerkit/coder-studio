@@ -16,5 +16,6 @@
   line-height: var(--type-body-5-line-height);
   font-weight: var(--type-body-5-weight);
   pointer-events: none;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

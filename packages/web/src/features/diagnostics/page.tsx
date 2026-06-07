@@ -1,5 +1,6 @@
 import type {
   DiagnosticsCheck,
+  DiagnosticsLspServiceEntry,
   DiagnosticsRequest,
   DiagnosticsResponse,
   Session,
@@ -36,7 +37,12 @@ import { usePersistWorkspaceLastViewedTarget } from "../workspace/actions/use-pe
 import { useWorkspaceUiStatePersistence } from "../workspace/actions/use-workspace-ui-state-persistence";
 import { useSystemDependencyInstaller } from "./actions/use-system-dependency-installer";
 import { SystemDependencyInstallPanel } from "./components/system-dependency-install-panel";
-import { parseDiagnosticsSearch } from "./navigation";
+import { type DiagnosticsRouteIntent, parseDiagnosticsSearch } from "./navigation";
+
+interface DiagnosticsPageProps {
+  embedded?: boolean;
+  intent?: DiagnosticsRouteIntent;
+}
 
 function getProviderLabel(providerId?: string): string {
   if (providerId === "claude") {
@@ -52,6 +58,62 @@ function getProviderLabel(providerId?: string): string {
 
 function formatList(values: string[] | undefined): string {
   return Array.isArray(values) && values.length > 0 ? values.join(", ") : "—";
+}
+
+function buildLspServiceCopy(
+  t: ReturnType<typeof useTranslation>,
+  service: DiagnosticsLspServiceEntry
+): { title: string; description: string } {
+  switch (service.status) {
+    case "installed":
+      return {
+        title: t("diagnostics.lsp_services.status.installed"),
+        description: t("diagnostics.lsp_services.description.installed"),
+      };
+    case "not_installed":
+      return {
+        title: t("diagnostics.lsp_services.status.not_installed"),
+        description: t("diagnostics.lsp_services.description.not_installed"),
+      };
+    case "install_failed":
+      return {
+        title: t("diagnostics.lsp_services.status.install_failed"),
+        description: t("diagnostics.lsp_services.description.install_failed"),
+      };
+    case "prerequisite_missing":
+      return {
+        title: t("diagnostics.lsp_services.status.prerequisite_missing"),
+        description: t("diagnostics.lsp_services.description.prerequisite_missing"),
+      };
+    case "runtime_off":
+      return {
+        title: t("diagnostics.lsp_services.status.runtime_off"),
+        description: t("diagnostics.lsp_services.description.runtime_off"),
+      };
+  }
+}
+
+function buildLspRuntimeContextCopy(
+  t: ReturnType<typeof useTranslation>,
+  runtimeContext:
+    | {
+        targetRuntime: "native" | "wsl";
+        managedInstallSupported: boolean;
+      }
+    | undefined
+): string[] {
+  if (!runtimeContext) {
+    return [];
+  }
+
+  const lines = [t("diagnostics.lsp_services.runtime_context.workspace_scope")];
+  if (!runtimeContext.managedInstallSupported || runtimeContext.targetRuntime !== "native") {
+    lines.push(t("diagnostics.lsp_services.runtime_context.managed_install_unavailable"));
+    return lines;
+  }
+
+  lines.push(t("diagnostics.lsp_services.runtime_context.install_scope"));
+  return lines;
 }
 
 function resolveMobileWorkspaceUrl(host: string | undefined): string | null {
@@ -198,13 +260,16 @@ function buildCheckCopy(
   }
 }
 
-export function DiagnosticsPage() {
+export function DiagnosticsPage({
+  embedded = false,
+  intent: intentOverride,
+}: DiagnosticsPageProps) {
   const t = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const viewport = useViewport();
   const isMobile = viewport === "mobile";
-  const intent = parseDiagnosticsSearch(location.search);
+  const intent = intentOverride ?? parseDiagnosticsSearch(location.search);
   const store = useStore();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const themeBackground = useTerminalThemeBackground();
@@ -484,6 +549,10 @@ export function DiagnosticsPage() {
 
   const canPrimaryContinue =
     intent.context === "workspace_open" ? Boolean(response?.canContinue) : true;
+  const lspRuntimeContextLines = buildLspRuntimeContextCopy(
+    t,
+    response?.metadata.lspRuntimeContext
+  );
 
   const contextTitle = t(`diagnostics.context.${intent.context}.title`);
   const contextDescription = t(`diagnostics.context.${intent.context}.description`);
@@ -494,25 +563,29 @@ export function DiagnosticsPage() {
   };
 
   return (
-    <div className={`diagnostics-page ${isMobile ? "diagnostics-page--mobile" : ""}`}>
-      <header className="diagnostics-header">
-        {isMobile ? (
-          <MobilePageHeader
-            title={t("diagnostics.title")}
-            titleAs="div"
-            onBack={handleBack}
-            backLabel={t("action.back")}
-          />
-        ) : (
-          <PageHeader
-            title={t("diagnostics.title")}
-            titleAs="h1"
-            level="secondary"
-            onBack={handleBack}
-            backLabel={t("action.back")}
-          />
-        )}
-      </header>
+    <div
+      className={`diagnostics-page ${isMobile ? "diagnostics-page--mobile" : ""} ${embedded ? "diagnostics-page--embedded" : ""}`}
+    >
+      {embedded ? null : (
+        <header className="diagnostics-header">
+          {isMobile ? (
+            <MobilePageHeader
+              title={t("diagnostics.title")}
+              titleAs="div"
+              onBack={handleBack}
+              backLabel={t("action.back")}
+            />
+          ) : (
+            <PageHeader
+              title={t("diagnostics.title")}
+              titleAs="h1"
+              level="secondary"
+              onBack={handleBack}
+              backLabel={t("action.back")}
+            />
+          )}
+        </header>
+      )}
 
       <div className={`diagnostics-body ${isMobile ? "diagnostics-body--mobile" : ""}`}>
         <main className={`diagnostics-content ${isMobile ? "diagnostics-content--mobile" : ""}`}>
@@ -690,6 +763,67 @@ export function DiagnosticsPage() {
                       </div>
                     );
                   })}
+                </div>
+
+                <div className="diagnostics-section">
+                  <div className="diagnostics-section__header">
+                    <h3 className="diagnostics-section__title">
+                      {t("diagnostics.lsp_services.title")}
+                    </h3>
+                    <p className="diagnostics-section__description">
+                      {t("diagnostics.lsp_services.description.summary")}
+                    </p>
+                  </div>
+                  <div className="diagnostics-lsp-services">
+                    {response.lspServices.map((service) => {
+                      const copy = buildLspServiceCopy(t, service);
+
+                      return (
+                        <div className="diagnostics-lsp-service" key={service.serverKind}>
+                          <div className="diagnostics-lsp-service__header">
+                            <div className="diagnostics-lsp-service__name">
+                              {service.displayName}
+                            </div>
+                            <Tag
+                              caps={false}
+                              color={
+                                service.status === "installed"
+                                  ? "green"
+                                  : service.status === "install_failed"
+                                    ? "amber"
+                                    : "blue"
+                              }
+                              size="sm"
+                            >
+                              {copy.title}
+                            </Tag>
+                          </div>
+                          <p className="diagnostics-lsp-service__description">{copy.description}</p>
+                          <div className="diagnostics-lsp-service__meta">
+                            {service.missingCommands?.length ? (
+                              <span>
+                                {t("diagnostics.details.missing_commands")}:{" "}
+                                {formatList(service.missingCommands)}
+                              </span>
+                            ) : null}
+                            {service.missingPrerequisites?.length ? (
+                              <span>
+                                {t("diagnostics.details.missing_prerequisites")}:{" "}
+                                {formatList(service.missingPrerequisites)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {lspRuntimeContextLines.length > 0 ? (
+                    <div className="diagnostics-section__note">
+                      {lspRuntimeContextLines.map((line) => (
+                        <p key={line}>{line}</p>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </section>
             ) : null}
