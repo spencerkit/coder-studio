@@ -904,8 +904,10 @@ function buildEditorPaneReviewSeed(context: UiPreviewSceneContext) {
     openFilesByWorkspaceId: {
       [reviewWorkspace.id]: editorPanePreviewFiles,
     },
-    activeFilePathByWorkspaceId: {
-      [reviewWorkspace.id]: "packages/web/src/app.tsx",
+    activeFilePathByEditorPaneId: {
+      [reviewWorkspace.id]: {
+        left: "packages/web/src/app.tsx",
+      },
     },
     gitStateByWorkspaceId: {
       [reviewWorkspace.id]: gitStatus,

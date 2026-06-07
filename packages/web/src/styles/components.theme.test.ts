@@ -3375,7 +3375,8 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(sectionCount).toContain("font-size: var(--type-body-6-size)");
     expect(sectionCount).toContain("line-height: var(--type-body-6-line-height)");
     expect(sectionCount).toContain("font-weight: var(--type-body-6-weight)");
-    expect(desktopPanel).toContain("height: auto");
+    expect(desktopPanel).toContain("min-height: 0");
+    expect(desktopPanel).toContain("height: 100%");
   });
 
   it("keeps the desktop file tree search and selected row aligned with the polished panel chrome", () => {
@@ -3727,7 +3728,7 @@ describe("components.css theme-sensitive surfaces", () => {
 
     expect(gitScroll).toContain("display: flex");
     expect(gitScroll).toContain("flex-direction: column");
-    expect(gitScroll).toContain("overflow: visible");
+    expect(gitScroll).toContain("overflow-y: auto");
     expect(gitScroll).toContain("gap: var(--gap-tight)");
     expect(gitScroll).toContain("padding: var(--sp-4) calc(var(--sp-3) + var(--gap-compact))");
     expect(gitCommitBlock).toContain("gap: var(--sp-2)");

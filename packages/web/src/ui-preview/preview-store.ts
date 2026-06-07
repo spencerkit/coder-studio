@@ -49,12 +49,18 @@ import {
 } from "../atoms/workspaces";
 import {
   activeEditorPaneIdAtomFamily,
+  editorPaneActiveFilePathAtomFamily,
   focusedEditorPaneIdAtomFamily,
+  getEditorPaneStateKey,
 } from "../features/agent-panes/atoms/editor-panes";
 import { type PaneNode, paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { type Toast, toastsAtom } from "../features/notifications";
 import { supervisorDialogAtom, supervisorsAtom } from "../features/supervisor/atoms";
-import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
+import {
+  terminalActiveIdAtomFamily,
+  terminalIdsAtomFamily,
+  terminalMetaAtomFamily,
+} from "../features/terminal-panel/atoms";
 import { updateStateAtom } from "../features/updates/atoms";
 import {
   activeFilePathAtomFamily,
@@ -144,6 +150,7 @@ export interface UiPreviewSeed {
   paneLayoutByWorkspaceId?: Record<string, PaneNode>;
   activeEditorPaneIdByWorkspaceId?: Record<string, string | null>;
   focusedEditorPaneIdByWorkspaceId?: Record<string, string | null>;
+  activeFilePathByEditorPaneId?: Record<string, Record<string, string | null>>;
   fileTreeByWorkspaceId?: Record<string, Map<string, FileNode[]>>;
   openFilesByWorkspaceId?: Record<string, Record<string, OpenFile>>;
   activeFilePathByWorkspaceId?: Record<string, string | null>;
@@ -158,6 +165,8 @@ export interface UiPreviewSeed {
     string,
     { id: string; workspaceId: string; kind: "agent" | "shell"; alive: boolean; title?: string }
   >;
+  terminalIdsByWorkspaceId?: Record<string, string[]>;
+  terminalActiveIdByWorkspaceId?: Record<string, string | null>;
   terminalOutputById?: Record<string, Uint8Array[]>;
   toasts?: Toast[];
   commandPaletteOpen?: boolean;
@@ -649,6 +658,15 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
     store.set(focusedEditorPaneIdAtomFamily(workspaceId), paneId);
   }
 
+  for (const [workspaceId, paneFiles] of Object.entries(seed.activeFilePathByEditorPaneId ?? {})) {
+    for (const [paneId, path] of Object.entries(paneFiles)) {
+      store.set(
+        editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey(workspaceId, paneId)),
+        path
+      );
+    }
+  }
+
   for (const [workspaceId, treeMap] of Object.entries(seed.fileTreeByWorkspaceId ?? {})) {
     store.set(fileTreeAtomFamily(workspaceId), treeMap);
   }
@@ -686,6 +704,16 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
 
   for (const [terminalId, meta] of Object.entries(seed.terminalMetaById ?? {})) {
     store.set(terminalMetaAtomFamily(terminalId), meta);
+  }
+
+  for (const [workspaceId, terminalIds] of Object.entries(seed.terminalIdsByWorkspaceId ?? {})) {
+    store.set(terminalIdsAtomFamily(workspaceId), terminalIds);
+  }
+
+  for (const [workspaceId, terminalId] of Object.entries(
+    seed.terminalActiveIdByWorkspaceId ?? {}
+  )) {
+    store.set(terminalActiveIdAtomFamily(workspaceId), terminalId);
   }
 
   return store;

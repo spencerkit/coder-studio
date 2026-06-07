@@ -551,6 +551,19 @@ function buildReadmeDesktopHeroSeed(context: {
         alive: true,
         title: "Workspace Shell",
       },
+      "term-shell-readme-verify": {
+        id: "term-shell-readme-verify",
+        workspaceId: workspace.id,
+        kind: "shell",
+        alive: true,
+        title: "Preview Runner",
+      },
+    },
+    terminalIdsByWorkspaceId: {
+      [workspace.id]: ["term-shell-readme-verify", "term-shell-readme-hero"],
+    },
+    terminalActiveIdByWorkspaceId: {
+      [workspace.id]: "term-shell-readme-verify",
     },
     terminalOutputById: {
       "term-agent-readme-hero": [
@@ -574,6 +587,17 @@ function buildReadmeDesktopHeroSeed(context: {
             "",
             '$ pnpm --dir e2e-ui exec playwright test --grep "README /"',
             "capturing desktop hero and mobile progress scenes...",
+          ].join("\n")
+        ),
+      ],
+      "term-shell-readme-verify": [
+        new TextEncoder().encode(
+          [
+            "$ pnpm --filter @coder-studio/web exec vitest run src/ui-preview/catalog.test.tsx",
+            "✓ src/ui-preview/catalog.test.tsx (42)",
+            "",
+            '$ pnpm --dir e2e-ui exec playwright test --grep "README /"',
+            "desktop hero capture ready",
           ].join("\n")
         ),
       ],
@@ -605,18 +629,6 @@ function buildReadmeDesktopHeroSeed(context: {
       terminalListByWorkspaceId: {
         [workspace.id]: [
           {
-            id: "term-shell-readme-hero",
-            workspaceId: workspace.id,
-            kind: "shell",
-            title: "Workspace Shell",
-            cwd: workspace.path,
-            argv: ["zsh"],
-            cols: 120,
-            rows: 28,
-            alive: true,
-            createdAt: 2,
-          },
-          {
             id: "term-shell-readme-verify",
             workspaceId: workspace.id,
             kind: "shell",
@@ -627,6 +639,18 @@ function buildReadmeDesktopHeroSeed(context: {
             rows: 28,
             alive: true,
             createdAt: 3,
+          },
+          {
+            id: "term-shell-readme-hero",
+            workspaceId: workspace.id,
+            kind: "shell",
+            title: "Workspace Shell",
+            cwd: workspace.path,
+            argv: ["zsh"],
+            cols: 120,
+            rows: 28,
+            alive: true,
+            createdAt: 2,
           },
         ],
       },
