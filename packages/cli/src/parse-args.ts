@@ -13,12 +13,23 @@ type CliCommand =
   | "workspace"
   | "session"
   | "terminal"
-  | "git";
+  | "git"
+  | "ui"
+  | "memory";
 type AuthCommand = "ban-list" | "unblock";
 type WorkspaceCommand = "list";
 type SessionCommand = "list";
 type TerminalCommand = "read";
 type GitCommand = "status" | "diff";
+type UiCommand =
+  | "open-file"
+  | "close-file"
+  | "open-url"
+  | "close-url"
+  | "show-panel"
+  | "focus-workspace"
+  | "run-command";
+type MemoryCommand = "list" | "get" | "search" | "add" | "update" | "delete";
 
 export const RUNTIME_CONFIG_ERROR =
   "Host, port, state-dir, password, and auth settings must be configured via the config command";
@@ -34,6 +45,8 @@ export interface CliArgs {
   sessionCommand?: SessionCommand;
   terminalCommand?: TerminalCommand;
   gitCommand?: GitCommand;
+  uiCommand?: UiCommand;
+  memoryCommand?: MemoryCommand;
   configHelp?: boolean;
   port?: number;
   host?: string;
@@ -46,8 +59,19 @@ export interface CliArgs {
   terminalId?: string;
   bytes?: number;
   path?: string;
+  url?: string;
+  panel?: string;
+  uiCommandId?: string;
+  line?: number;
+  column?: number;
   staged?: boolean;
   apiUrl?: string;
+  memoryId?: string;
+  memoryType?: string;
+  query?: string;
+  content?: string;
+  tags?: string[];
+  skillSlug?: string;
 }
 
 function getActiveCommand(args: CliArgs): CliCommand {
@@ -73,12 +97,25 @@ function clearAutomationArgs(args: CliArgs): void {
   delete args.sessionCommand;
   delete args.terminalCommand;
   delete args.gitCommand;
+  delete args.uiCommand;
+  delete args.memoryCommand;
   delete args.workspaceId;
   delete args.terminalId;
   delete args.bytes;
   delete args.path;
+  delete args.url;
+  delete args.panel;
+  delete args.uiCommandId;
+  delete args.line;
+  delete args.column;
   delete args.staged;
   delete args.apiUrl;
+  delete args.memoryId;
+  delete args.memoryType;
+  delete args.query;
+  delete args.content;
+  delete args.tags;
+  delete args.skillSlug;
 }
 
 function clearLogsArgs(args: CliArgs): void {
@@ -99,14 +136,14 @@ function setCommand(args: CliArgs, command: CliCommand): void {
     clearLogsArgs(args);
   }
 
-  if (!["workspace", "session", "terminal", "git"].includes(command)) {
+  if (!["workspace", "session", "terminal", "git", "ui", "memory"].includes(command)) {
     clearAutomationArgs(args);
   }
 
   if (
     command !== "identify" &&
     command !== "capabilities" &&
-    !["workspace", "session", "terminal", "git"].includes(command)
+    !["workspace", "session", "terminal", "git", "ui", "memory"].includes(command)
   ) {
     delete args.json;
   }
@@ -154,6 +191,20 @@ function readOptionValue(argv: string[], index: number, label: string): string {
   return value;
 }
 
+function readPositiveIntegerOption(argv: string[], index: number, label: string): number {
+  const value = readOptionValue(argv, index, label);
+  if (!/^[1-9]\d*$/u.test(value)) {
+    throw new Error(`Invalid ${label} number`);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`Invalid ${label} number`);
+  }
+
+  return parsed;
+}
+
 export function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {};
 
@@ -177,6 +228,8 @@ export function parseArgs(argv: string[]): CliArgs {
       case "session":
       case "terminal":
       case "git":
+      case "ui":
+      case "memory":
         setCommand(args, arg);
         break;
 
@@ -262,7 +315,7 @@ export function parseArgs(argv: string[]): CliArgs {
         if (
           command !== "identify" &&
           command !== "capabilities" &&
-          !["workspace", "session", "terminal", "git"].includes(command)
+          !["workspace", "session", "terminal", "git", "ui", "memory"].includes(command)
         ) {
           throwUnknownOption(arg);
         }
@@ -274,7 +327,12 @@ export function parseArgs(argv: string[]): CliArgs {
       case "--workspace":
       case "--workspace-id": {
         const command = getActiveCommand(args);
-        if (command !== "session" && command !== "git") {
+        if (
+          command !== "session" &&
+          command !== "git" &&
+          command !== "ui" &&
+          command !== "memory"
+        ) {
           throwUnknownOption(arg);
         }
 
@@ -299,27 +357,74 @@ export function parseArgs(argv: string[]): CliArgs {
           throwUnknownOption(arg);
         }
 
-        const bytesValue = readOptionValue(argv, i + 1, "bytes");
-        if (!/^[1-9]\d*$/u.test(bytesValue)) {
-          throw new Error("Invalid bytes number");
-        }
-
-        const bytes = Number(bytesValue);
-        if (!Number.isSafeInteger(bytes)) {
-          throw new Error("Invalid bytes number");
-        }
-
-        args.bytes = bytes;
+        args.bytes = readPositiveIntegerOption(argv, i + 1, "bytes");
         i += 1;
         break;
       }
 
       case "--path": {
-        if (getActiveCommand(args) !== "git" || args.gitCommand !== "diff") {
+        const command = getActiveCommand(args);
+        if (
+          (command !== "git" || args.gitCommand !== "diff") &&
+          (command !== "ui" || (args.uiCommand !== "open-file" && args.uiCommand !== "close-file"))
+        ) {
           throwUnknownOption(arg);
         }
 
         args.path = readOptionValue(argv, i + 1, "path");
+        i += 1;
+        break;
+      }
+
+      case "--url": {
+        if (
+          getActiveCommand(args) !== "ui" ||
+          (args.uiCommand !== "open-url" && args.uiCommand !== "close-url")
+        ) {
+          throwUnknownOption(arg);
+        }
+
+        args.url = readOptionValue(argv, i + 1, "url");
+        i += 1;
+        break;
+      }
+
+      case "--panel": {
+        if (getActiveCommand(args) !== "ui" || args.uiCommand !== "show-panel") {
+          throwUnknownOption(arg);
+        }
+
+        args.panel = readOptionValue(argv, i + 1, "panel");
+        i += 1;
+        break;
+      }
+
+      case "--command": {
+        if (getActiveCommand(args) !== "ui" || args.uiCommand !== "run-command") {
+          throwUnknownOption(arg);
+        }
+
+        args.uiCommandId = readOptionValue(argv, i + 1, "command");
+        i += 1;
+        break;
+      }
+
+      case "--line": {
+        if (getActiveCommand(args) !== "ui" || args.uiCommand !== "open-file") {
+          throwUnknownOption(arg);
+        }
+
+        args.line = readPositiveIntegerOption(argv, i + 1, "line");
+        i += 1;
+        break;
+      }
+
+      case "--column": {
+        if (getActiveCommand(args) !== "ui" || args.uiCommand !== "open-file") {
+          throwUnknownOption(arg);
+        }
+
+        args.column = readPositiveIntegerOption(argv, i + 1, "column");
         i += 1;
         break;
       }
@@ -335,7 +440,7 @@ export function parseArgs(argv: string[]): CliArgs {
 
       case "--api-url": {
         const command = getActiveCommand(args);
-        if (!["workspace", "session", "terminal", "git"].includes(command)) {
+        if (!["workspace", "session", "terminal", "git", "ui", "memory"].includes(command)) {
           throwUnknownOption(arg);
         }
 
@@ -343,6 +448,42 @@ export function parseArgs(argv: string[]): CliArgs {
         i += 1;
         break;
       }
+
+      case "--type":
+        if (getActiveCommand(args) !== "memory") {
+          throwUnknownOption(arg);
+        }
+
+        args.memoryType = readOptionValue(argv, i + 1, "type");
+        i += 1;
+        break;
+
+      case "--content":
+        if (getActiveCommand(args) !== "memory") {
+          throwUnknownOption(arg);
+        }
+
+        args.content = readOptionValue(argv, i + 1, "content");
+        i += 1;
+        break;
+
+      case "--tag":
+        if (getActiveCommand(args) !== "memory") {
+          throwUnknownOption(arg);
+        }
+
+        args.tags = [...(args.tags ?? []), readOptionValue(argv, i + 1, "tag")];
+        i += 1;
+        break;
+
+      case "--skill":
+        if (getActiveCommand(args) !== "memory") {
+          throwUnknownOption(arg);
+        }
+
+        args.skillSlug = readOptionValue(argv, i + 1, "skill");
+        i += 1;
+        break;
 
       case "--port":
       case "-p": {
@@ -405,9 +546,25 @@ export function parseArgs(argv: string[]): CliArgs {
           args.sessionCommand = arg;
           break;
         }
+        if (command === "memory") {
+          args.memoryCommand = arg;
+          break;
+        }
 
         throwUnknownArgument(arg);
       }
+
+      case "get":
+      case "search":
+      case "add":
+      case "update":
+      case "delete":
+        if (getActiveCommand(args) !== "memory") {
+          throwUnknownArgument(arg);
+        }
+
+        args.memoryCommand = arg;
+        break;
 
       case "read":
         if (getActiveCommand(args) !== "terminal") {
@@ -426,6 +583,20 @@ export function parseArgs(argv: string[]): CliArgs {
         args.gitCommand = arg;
         break;
 
+      case "open-file":
+      case "close-file":
+      case "open-url":
+      case "close-url":
+      case "show-panel":
+      case "focus-workspace":
+      case "run-command":
+        if (getActiveCommand(args) !== "ui") {
+          throwUnknownArgument(arg);
+        }
+
+        args.uiCommand = arg;
+        break;
+
       case "--ip":
         if (getActiveCommand(args) !== "auth" || args.authCommand !== "unblock") {
           throwUnknownOption(arg);
@@ -438,6 +609,23 @@ export function parseArgs(argv: string[]): CliArgs {
       default:
         if (arg.startsWith("-")) {
           throwUnknownOption(arg);
+        }
+
+        if (getActiveCommand(args) === "memory") {
+          if (args.memoryCommand === "search" && args.query === undefined) {
+            args.query = arg;
+            break;
+          }
+
+          if (
+            (args.memoryCommand === "get" ||
+              args.memoryCommand === "update" ||
+              args.memoryCommand === "delete") &&
+            args.memoryId === undefined
+          ) {
+            args.memoryId = arg;
+            break;
+          }
         }
 
         throwUnknownArgument(arg);
@@ -495,6 +683,67 @@ export function parseArgs(argv: string[]): CliArgs {
 
     if (args.gitCommand === "diff" && args.path === undefined) {
       throw new Error("Missing path value");
+    }
+  }
+
+  if (args.command === "ui") {
+    if (args.uiCommand === undefined) {
+      throw new Error("Missing ui subcommand");
+    }
+
+    if (
+      (args.uiCommand === "open-file" || args.uiCommand === "close-file") &&
+      args.path === undefined
+    ) {
+      throw new Error("Missing path value");
+    }
+
+    if (
+      (args.uiCommand === "open-url" || args.uiCommand === "close-url") &&
+      args.url === undefined
+    ) {
+      throw new Error("Missing url value");
+    }
+
+    if (args.uiCommand === "show-panel" && args.panel === undefined) {
+      throw new Error("Missing panel value");
+    }
+
+    if (args.uiCommand === "focus-workspace" && args.workspaceId === undefined) {
+      throw new Error("Missing workspace value");
+    }
+
+    if (args.uiCommand === "run-command" && args.uiCommandId === undefined) {
+      throw new Error("Missing command value");
+    }
+  }
+
+  if (args.command === "memory") {
+    if (args.memoryCommand === undefined) {
+      throw new Error("Missing memory subcommand");
+    }
+
+    if (
+      (args.memoryCommand === "get" ||
+        args.memoryCommand === "update" ||
+        args.memoryCommand === "delete") &&
+      args.memoryId === undefined
+    ) {
+      throw new Error("Missing memory id value");
+    }
+
+    if (args.memoryCommand === "search" && args.query === undefined) {
+      throw new Error("Missing query value");
+    }
+
+    if (args.memoryCommand === "add") {
+      if (args.memoryType === undefined) {
+        throw new Error("Missing type value");
+      }
+
+      if (args.content === undefined) {
+        throw new Error("Missing content value");
+      }
     }
   }
 

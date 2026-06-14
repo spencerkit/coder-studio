@@ -99,6 +99,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -568,6 +569,7 @@ describe("main", () => {
   });
 
   it("prints identify output", async () => {
+    vi.stubEnv("CODER_STUDIO", "");
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await main(["identify", "--json"]);
@@ -669,6 +671,269 @@ describe("main", () => {
     });
     expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
       diff: "diff --git a/a b/a\n",
+    });
+  });
+
+  it("prints UI open-file dispatch output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      accepted: true,
+      requestId: "req-1",
+      topic: "workspace.ws-1.ui.action",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "ui",
+      "open-file",
+      "--workspace",
+      "ws-1",
+      "--path",
+      "src/index.ts",
+      "--line",
+      "12",
+      "--column",
+      "3",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "uiAction.dispatch",
+      args: {
+        workspaceId: "ws-1",
+        intent: {
+          type: "editor.openFile",
+          workspaceId: "ws-1",
+          path: "src/index.ts",
+          line: 12,
+          column: 3,
+        },
+        source: { kind: "agent" },
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      accepted: true,
+      requestId: "req-1",
+      topic: "workspace.ws-1.ui.action",
+    });
+  });
+
+  it("prints UI open-url dispatch output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      accepted: true,
+      requestId: "req-2",
+      topic: "workspace.ws-1.ui.action",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "ui",
+      "open-url",
+      "--workspace",
+      "ws-1",
+      "--url",
+      "http://127.0.0.1:5173",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "uiAction.dispatch",
+      args: {
+        workspaceId: "ws-1",
+        intent: {
+          type: "browser.openUrl",
+          workspaceId: "ws-1",
+          url: "http://127.0.0.1:5173",
+        },
+        source: { kind: "agent" },
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      accepted: true,
+      requestId: "req-2",
+      topic: "workspace.ws-1.ui.action",
+    });
+  });
+
+  it("prints UI close-file dispatch output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      accepted: true,
+      requestId: "req-close-file",
+      topic: "workspace.ws-1.ui.action",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["ui", "close-file", "--workspace", "ws-1", "--path", "src/index.ts", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "uiAction.dispatch",
+      args: {
+        workspaceId: "ws-1",
+        intent: {
+          type: "editor.closeFile",
+          workspaceId: "ws-1",
+          path: "src/index.ts",
+        },
+        source: { kind: "agent" },
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      accepted: true,
+      requestId: "req-close-file",
+      topic: "workspace.ws-1.ui.action",
+    });
+  });
+
+  it("prints UI close-url dispatch output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      accepted: true,
+      requestId: "req-close-url",
+      topic: "workspace.ws-1.ui.action",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "ui",
+      "close-url",
+      "--workspace",
+      "ws-1",
+      "--url",
+      "http://127.0.0.1:5173",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "uiAction.dispatch",
+      args: {
+        workspaceId: "ws-1",
+        intent: {
+          type: "browser.closeUrl",
+          workspaceId: "ws-1",
+          url: "http://127.0.0.1:5173",
+        },
+        source: { kind: "agent" },
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      accepted: true,
+      requestId: "req-close-url",
+      topic: "workspace.ws-1.ui.action",
+    });
+  });
+
+  it("prints memory list output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce([{ id: "mem-1", workspaceId: "ws-1" }]);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["memory", "list", "--workspace", "ws-1", "--type", "decision", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "memory.list",
+      args: { workspaceId: "ws-1", type: "decision" },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual([
+      { id: "mem-1", workspaceId: "ws-1" },
+    ]);
+  });
+
+  it("uses CODER_STUDIO_WORKSPACE_ID for memory commands when workspace is omitted", async () => {
+    vi.stubEnv("CODER_STUDIO_WORKSPACE_ID", "ws-env");
+    callCoderStudioCommand.mockResolvedValueOnce([{ id: "mem-1", workspaceId: "ws-env" }]);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["memory", "search", "testing", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "memory.search",
+      args: { workspaceId: "ws-env", query: "testing" },
+    });
+  });
+
+  it("prints memory get output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ id: "mem-1", workspaceId: "ws-1" });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["memory", "get", "mem-1", "--workspace", "ws-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "memory.get",
+      args: { workspaceId: "ws-1", id: "mem-1" },
+    });
+  });
+
+  it("maps memory add options to memory.create", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ id: "mem-1" });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "memory",
+      "add",
+      "--workspace",
+      "ws-1",
+      "--type",
+      "decision",
+      "--content",
+      "Persist decisions outside the repo.",
+      "--tag",
+      "Architecture",
+      "--tag",
+      "Testing",
+      "--skill",
+      "coder-studio-memory",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "memory.create",
+      args: {
+        workspaceId: "ws-1",
+        type: "decision",
+        content: "Persist decisions outside the repo.",
+        tags: ["Architecture", "Testing"],
+        sourceHint: { skillSlug: "coder-studio-memory" },
+      },
+    });
+  });
+
+  it("maps memory update and delete commands", async () => {
+    callCoderStudioCommand.mockResolvedValue({ id: "mem-1", workspaceId: "ws-1" });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "memory",
+      "update",
+      "mem-1",
+      "--workspace",
+      "ws-1",
+      "--content",
+      "Updated content",
+      "--tag",
+      "storage",
+      "--json",
+    ]);
+    await main(["memory", "delete", "mem-1", "--workspace", "ws-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenNthCalledWith(1, {
+      apiUrl: undefined,
+      op: "memory.update",
+      args: {
+        workspaceId: "ws-1",
+        id: "mem-1",
+        content: "Updated content",
+        tags: ["storage"],
+      },
+    });
+    expect(callCoderStudioCommand).toHaveBeenNthCalledWith(2, {
+      apiUrl: undefined,
+      op: "memory.delete",
+      args: { workspaceId: "ws-1", id: "mem-1" },
     });
   });
 });
@@ -822,6 +1087,179 @@ describe("parseArgs", () => {
       path: "src/a.ts",
       staged: true,
       json: true,
+    });
+  });
+
+  it("parses UI open-file command", () => {
+    expect(
+      parseArgs([
+        "ui",
+        "open-file",
+        "--workspace",
+        "ws-1",
+        "--path",
+        "src/index.ts",
+        "--line",
+        "12",
+        "--column",
+        "3",
+        "--json",
+      ])
+    ).toEqual({
+      command: "ui",
+      uiCommand: "open-file",
+      workspaceId: "ws-1",
+      path: "src/index.ts",
+      line: 12,
+      column: 3,
+      json: true,
+    });
+  });
+
+  it("parses memory list command with workspace, type, tag, and json output", () => {
+    expect(
+      parseArgs([
+        "memory",
+        "list",
+        "--workspace",
+        "ws-1",
+        "--type",
+        "decision",
+        "--tag",
+        "Architecture",
+        "--json",
+      ])
+    ).toEqual({
+      command: "memory",
+      memoryCommand: "list",
+      workspaceId: "ws-1",
+      memoryType: "decision",
+      tags: ["Architecture"],
+      json: true,
+    });
+  });
+
+  it("parses UI close-file command", () => {
+    expect(
+      parseArgs(["ui", "close-file", "--workspace", "ws-1", "--path", "src/index.ts", "--json"])
+    ).toEqual({
+      command: "ui",
+      uiCommand: "close-file",
+      workspaceId: "ws-1",
+      path: "src/index.ts",
+      json: true,
+    });
+  });
+
+  it("parses UI close-url command", () => {
+    expect(
+      parseArgs([
+        "ui",
+        "close-url",
+        "--workspace",
+        "ws-1",
+        "--url",
+        "http://127.0.0.1:5173",
+        "--json",
+      ])
+    ).toEqual({
+      command: "ui",
+      uiCommand: "close-url",
+      workspaceId: "ws-1",
+      url: "http://127.0.0.1:5173",
+      json: true,
+    });
+  });
+
+  it("parses memory search command with query text", () => {
+    expect(parseArgs(["memory", "search", "testing", "--workspace", "ws-1"])).toEqual({
+      command: "memory",
+      memoryCommand: "search",
+      workspaceId: "ws-1",
+      query: "testing",
+    });
+  });
+
+  it("parses memory get command with id", () => {
+    expect(parseArgs(["memory", "get", "mem-1", "--workspace", "ws-1"])).toEqual({
+      command: "memory",
+      memoryCommand: "get",
+      memoryId: "mem-1",
+      workspaceId: "ws-1",
+    });
+  });
+
+  it("parses memory add command with content fields, tags, and skill source", () => {
+    expect(
+      parseArgs([
+        "memory",
+        "add",
+        "--workspace",
+        "ws-1",
+        "--type",
+        "decision",
+        "--content",
+        "Persist decisions.",
+        "--tag",
+        "Architecture",
+        "--tag",
+        "Testing",
+        "--skill",
+        "coder-studio-memory",
+        "--json",
+      ])
+    ).toEqual({
+      command: "memory",
+      memoryCommand: "add",
+      workspaceId: "ws-1",
+      memoryType: "decision",
+      content: "Persist decisions.",
+      tags: ["Architecture", "Testing"],
+      skillSlug: "coder-studio-memory",
+      json: true,
+    });
+  });
+
+  it("parses UI show-panel and run-command commands", () => {
+    expect(parseArgs(["ui", "show-panel", "--panel", "terminal"])).toEqual({
+      command: "ui",
+      uiCommand: "show-panel",
+      panel: "terminal",
+    });
+
+    expect(parseArgs(["ui", "run-command", "--command", "quickOpen.open"])).toEqual({
+      command: "ui",
+      uiCommand: "run-command",
+      uiCommandId: "quickOpen.open",
+    });
+  });
+
+  it("parses memory update and delete commands", () => {
+    expect(
+      parseArgs([
+        "memory",
+        "update",
+        "mem-1",
+        "--workspace",
+        "ws-1",
+        "--content",
+        "Updated content",
+        "--tag",
+        "storage",
+      ])
+    ).toEqual({
+      command: "memory",
+      memoryCommand: "update",
+      memoryId: "mem-1",
+      workspaceId: "ws-1",
+      content: "Updated content",
+      tags: ["storage"],
+    });
+    expect(parseArgs(["memory", "delete", "mem-1", "--workspace", "ws-1"])).toEqual({
+      command: "memory",
+      memoryCommand: "delete",
+      memoryId: "mem-1",
+      workspaceId: "ws-1",
     });
   });
 
@@ -1029,6 +1467,29 @@ describe("parseArgs", () => {
 
   it("requires path for git diff", () => {
     expect(() => parseArgs(["git", "diff", "--workspace", "ws-1"])).toThrow("Missing path value");
+  });
+
+  it("requires memory command arguments", () => {
+    expect(() => parseArgs(["memory"])).toThrow("Missing memory subcommand");
+    expect(() => parseArgs(["memory", "get", "--workspace", "ws-1"])).toThrow(
+      "Missing memory id value"
+    );
+    expect(() => parseArgs(["memory", "add", "--workspace", "ws-1"])).toThrow("Missing type value");
+    expect(() => parseArgs(["memory", "add", "--type", "decision"])).toThrow(
+      "Missing content value"
+    );
+    expect(() => parseArgs(["memory", "search", "--workspace", "ws-1"])).toThrow(
+      "Missing query value"
+    );
+  });
+
+  it("rejects legacy title flags on memory commands", () => {
+    expect(() =>
+      parseArgs(["memory", "add", "--workspace", "ws-1", "--type", "decision", "--title", "t"])
+    ).toThrow("Unknown option: --title");
+    expect(() =>
+      parseArgs(["memory", "update", "mem-1", "--workspace", "ws-1", "--title", "t"])
+    ).toThrow("Unknown option: --title");
   });
 
   it("allows config-time host-only updates", () => {
