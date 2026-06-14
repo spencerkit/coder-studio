@@ -46,7 +46,7 @@ Review the current work after each turn. Summarize risks, missing tests, and whe
 
 ## How To Use It
 
-1. Start a Claude or Codex session.
+1. Start a provider session that supports Supervisor workflows.
 2. Open the Supervisor control for that session.
 3. Write a concrete objective.
 4. Choose an evaluator provider if the UI asks for one.

@@ -2,6 +2,18 @@
 
 Coder Studio runs on your machine and is accessed through a browser. Desktop, tablet, and phone use the same service URL, with layouts adapting to screen size.
 
+## What Mobile Is Best For
+
+Mobile is a continuation surface for work that usually starts on desktop:
+
+- check whether an agent is still running
+- read terminal output and status changes
+- browse files and Git diffs
+- inspect Supervisor progress
+- decide whether you need to return to desktop and intervene
+
+Mobile should not be positioned as a full replacement for desktop coding. Use desktop for first installation, Provider setup, large edits, and complex Git operations.
+
 ## Choose An Access Method
 
 | Scenario | Recommended method |

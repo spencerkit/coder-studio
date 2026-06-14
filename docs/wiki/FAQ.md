@@ -6,15 +6,15 @@ No. Coder Studio runs on your own machine and serves a browser UI from that loca
 
 ## Does My Code Leave My Machine?
 
-Coder Studio itself is local-first. However, provider CLIs such as Claude Code or Codex may send task context according to their own behavior and settings. Review the provider's documentation if this matters for your project.
+Coder Studio itself is local-first. However, provider CLIs may send task context according to their own behavior and settings. Review the provider's documentation if this matters for your project.
 
 ## Is Coder Studio A Replacement For VS Code Or Cursor?
 
 Not directly. Coder Studio is strongest as a browser workspace around vibe coding sessions, terminals, files, Git, and cross-device visibility. Use a desktop editor when you need deep manual editing.
 
-## Do I Need Claude Code Or Codex Installed?
+## Do I Need A Provider CLI Installed?
 
-Only for AI sessions. You can still use Coder Studio for file browsing and terminals without provider CLIs installed.
+Only for AI sessions. You can still use Coder Studio for file browsing and terminals without provider CLIs installed. Install the CLI for each provider you want to run.
 
 ## Can I Use It From My Phone?
 

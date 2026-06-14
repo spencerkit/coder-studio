@@ -7,12 +7,12 @@ Coder Studio is local-first: the server runs on your machine and opens your loca
 - Coder Studio server runs on your machine.
 - The web UI is served from that local server.
 - Project files are read from local directories that you open as workspaces.
-- Claude Code and Codex run through their local CLIs when you start those sessions.
+- Agent sessions run through the matching local Provider CLI when you start them.
 - SQLite stores Coder Studio local state.
 
 ## What Leaves Your Machine
 
-Coder Studio itself is not a hosted cloud service. However, provider CLIs such as Claude Code or Codex may send prompts, code context, terminal output, or other task data according to their own behavior and configuration.
+Coder Studio does not operate a hosted code service for your workspace, but any Provider CLI you run may send prompts, code context, terminal output, file snippets, or other task data according to that provider's own behavior and configuration.
 
 Review the provider CLI's documentation and account settings if you need strict data-handling guarantees.
 
@@ -36,6 +36,8 @@ Authentication is especially important when using:
 ## Network Exposure
 
 By default, local access is the safest mode. Remote access increases risk because anyone who reaches the service may be able to interact with files, terminals, sessions, and AI tools.
+
+Treat remote Coder Studio access like remote shell access: anyone who can authenticate may be able to read files, run terminal commands, and trigger provider tools with the permissions of your local user.
 
 Recommended order:
 

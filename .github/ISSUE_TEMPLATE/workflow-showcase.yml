@@ -1,0 +1,31 @@
+name: Show your workflow
+description: Share how you use Coder Studio and what should improve.
+title: "Workflow: "
+labels: ["workflow"]
+body:
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Which agent, OS, device mix, and repository type are you using?
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow
+      description: Describe the task from start to finish.
+    validations:
+      required: true
+  - type: textarea
+    id: useful
+    attributes:
+      label: What worked well?
+    validations:
+      required: false
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was confusing or slow?
+    validations:
+      required: false

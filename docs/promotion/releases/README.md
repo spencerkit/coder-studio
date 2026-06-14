@@ -16,6 +16,13 @@ Add a release narrative when a version is published to GitHub and npm, especiall
 4. Install or upgrade command
 5. Full changelog comparison link
 
+## Growth Launch Content Pack
+
+- [Chinese growth launch post](../growth-launch-2026-06.zh-CN.md)
+- [English growth launch post](../growth-launch-2026-06.en.md)
+- [Social posts](../social-posts-2026-06.md)
+- [Launch FAQ](../launch-faq-2026-06.md)
+
 ## Current releases
 
 - [v0.4.4](v0.4.4.md)

@@ -4,11 +4,11 @@
 
 # Coder Studio
 
-**The all-in-one vibe coding workspace for AI agents.**
+**Self-hosted browser workspace for AI coding agents.**
 
-Coder Studio brings your code editor, Git, terminals, AI coding agents, session review, notifications, work analysis, and Skills into one browser workspace.
+Coder Studio brings Claude Code, Codex, terminals, files, Git diff review, Supervisor loops, Work Analysis, and Skills into one browser workspace you run on your own machine.
 
-It helps keep agent context, progress, and follow-up work visible across desktop, tablet, and phone, so vibe coding feels less scattered and more controllable.
+Use it when raw terminal-only AI coding starts to feel scattered: start an agent task on desktop, review the changed files and diff beside the session, monitor long-running work, and reopen the same workspace from a tablet or phone.
 
 Works with popular coding agents including Claude Code, Codex, Gemini CLI, Cursor Agent, OpenCode, and Aider-style CLI agents.
 
@@ -17,15 +17,26 @@ Works with popular coding agents including Claude Code, Codex, Gemini CLI, Curso
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
 [![GitHub Stars](https://img.shields.io/github/stars/spencerkit/coder-studio?style=social)](https://github.com/spencerkit/coder-studio/stargazers)
 
-[View Workspace](docs/help/assets/screenshot-desktop-workspace-full.png) · [Quick Start](#quick-start) · [Star on GitHub](https://github.com/spencerkit/coder-studio)
+[Watch Demo](docs/assets/demo.mp4) · [Quick Start](#quick-start) · [English Docs](docs/wiki/Quick-Start.md) · [Star on GitHub](https://github.com/spencerkit/coder-studio)
 
-[中文说明](README.zh-CN.md) | [Documentation](docs/help/quick-start.md)
+[中文说明](README.zh-CN.md) | [Security & Privacy](docs/wiki/Security-and-Privacy.md) | [Known Limitations](docs/wiki/Known-Limitations.md)
 
 </div>
 
 [![Workspace Preview](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
 <div align="center">Preview the full workspace layout built for agent runs, review, supervision, and device switching.</div>
+
+## What You Can Try In 5 Minutes
+
+1. Install with `npm install -g @spencer-kit/coder-studio`.
+2. Launch with `coder-studio open`.
+3. Open one local repository.
+4. Start an agent session. For a first trial, Claude or Codex is the recommended path.
+5. Ask the agent for a small change, then review the Git diff beside the session.
+6. Reopen the same workspace from a tablet or phone to check progress.
+
+Coder Studio is not a cloud IDE, not a VS Code replacement, and not an AI model provider. It is a self-hosted workbench around the AI coding agents and local tools you already use.
 
 ## Why Coder Studio?
 
@@ -136,17 +147,14 @@ The same workspace URL works across all devices — interface adapts automatical
 
 | Resource | Description |
 |----------|-------------|
-| [Quick Start Guide](docs/help/quick-start.md) | Installation to first workspace |
-| [App Overview](docs/help/app-overview.md) | Core concepts and features |
-| [Agent CLI Setup](docs/help/providers.md) | Install and connect coding agent CLIs |
-| [Desktop Guide](docs/help/desktop-guide.md) | PC interface and shortcuts |
-| [Mobile & Remote Access Guide](docs/help/mobile-guide.md) | Phone / tablet usage, LAN access, Tailscale/ngrok/Cloudflare Tunnel |
-| [Work Analysis](docs/help/work-analysis.md) | Review workspace activity, agent sessions, and improvement opportunities |
-| [Common Workflows](docs/help/workflows.md) | Task-based tutorials |
-| [Troubleshooting](docs/help/troubleshooting.md) | FAQ and known issues |
-| [CLI Reference](docs/help/cli.md) | Command-line options |
-| [GitHub Wiki Source](docs/wiki/README.md) | Wiki source pages and publish flow |
-| [AI Coding Terms](docs/wiki/AI-Coding-Terms.md) | Vibe coding, agentic harnesses, eval harnesses, and where Coder Studio fits |
+| [Quick Start](docs/wiki/Quick-Start.md) | Install, launch, and open your first workspace |
+| [First Agent Run](docs/wiki/First-Agent-Run.md) | Run a recommended first provider, inspect output, and review Git diff |
+| [Agent Providers](docs/wiki/Agent-Providers.md) | Install and verify coding agent CLIs |
+| [Mobile and Remote Access](docs/wiki/Mobile-and-Remote-Access.md) | LAN, Tailscale, ngrok, Cloudflare Tunnel, and phone/tablet usage |
+| [Security and Privacy](docs/wiki/Security-and-Privacy.md) | Local-first model, provider boundaries, and remote access risks |
+| [Known Limitations](docs/wiki/Known-Limitations.md) | Current requirements and product boundaries |
+| [Troubleshooting](docs/wiki/Troubleshooting.md) | First-run problems, Provider CLI issues, and service recovery |
+| [Chinese Help Center](docs/help/README.md) | 中文帮助中心 |
 
 ---
 
@@ -164,7 +172,6 @@ The same workspace URL works across all devices — interface adapts automatical
 - [ ] Web-based terminal streaming optimization
 - [ ] Session replay and history navigation
 - [ ] Multi-workspace management
-- [ ] Plugin system for custom integrations
 - [ ] Workspace preference sync
 
 ---

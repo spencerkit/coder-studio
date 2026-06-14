@@ -9,7 +9,7 @@
 ## 前置条件
 
 - Coder Studio 已安装并启动
-- 已配置至少一个 Provider（Claude 或 Codex）
+- 已配置至少一个 Provider
 
 ## 打开一个本地项目并开始工作
 

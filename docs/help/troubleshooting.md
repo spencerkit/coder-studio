@@ -11,6 +11,21 @@
 - 已安装 Coder Studio 和 Node.js >= 24.0.0
 - 能够执行 `coder-studio status`、`coder-studio logs` 等 CLI 命令
 
+## 首次运行快速排查
+
+如果第一次试用没有顺利跑起来，按这个顺序排查：
+
+1. `node --version` 确认 Node.js >= 24.0.0。
+2. `coder-studio version` 确认 CLI 已安装。
+3. `coder-studio status` 确认服务正在运行。
+4. `coder-studio logs` 查看最近错误。
+5. `which <provider-command>` 确认 Provider CLI 在 PATH 中。
+6. `<provider-command> --version` 确认 Provider CLI 可执行。
+7. 如果浏览器打不开，手动访问 `coder-studio status` 输出的 URL。
+8. 如果移动端打不开，确认服务监听 `0.0.0.0` 且防火墙允许该端口。
+
+首次试用建议先在桌面端完成，不要一开始就通过公网隧道或手机端排查所有问题。
+
 ## 服务启动失败
 
 如果 `coder-studio serve` 或 `coder-studio open` 启动后没有正常响应：
@@ -46,9 +61,25 @@
    ```bash
    which claude
    which codex
+   which gemini
+   which agent
+   which opencode
+   claude --version
+   codex --version
+   gemini --version
+   agent --version
+   opencode --version
    ```
-2. 如果未找到，按 [Provider 配置指南](providers.md) 进行安装
-3. 安装后刷新浏览器页面或重新打开工作区
+2. 如果未找到命令，按 [Provider 配置指南](providers.md) 安装或修复 PATH。
+3. 如果普通终端能找到命令，但 Coder Studio 找不到，重启服务：
+   ```bash
+   coder-studio serve --restart
+   ```
+4. 如果仍不可用，查看日志：
+   ```bash
+   coder-studio logs
+   ```
+5. 提交问题时附上 Node 版本、Provider 版本、`which` 输出和日志片段。
 
 ## 无法创建会话
 

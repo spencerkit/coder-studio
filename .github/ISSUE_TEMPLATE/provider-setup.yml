@@ -1,0 +1,54 @@
+name: Provider setup issue
+description: Report Claude, Codex, or other Provider CLI detection problems.
+title: "Provider setup: "
+labels: ["provider"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when Coder Studio cannot find or start a Provider CLI. Remove secrets and private project details.
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - Claude Code
+        - Codex
+        - Gemini CLI
+        - Cursor Agent
+        - OpenCode
+        - Aider-style CLI
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Verification commands
+      description: Paste relevant output from `which`, `--version`, and Coder Studio logs.
+      placeholder: |
+        which claude
+        claude --version
+        coder-studio logs
+    validations:
+      required: true
+  - type: textarea
+    id: app
+    attributes:
+      label: What does Coder Studio show?
+      description: Describe the UI state or error message.
+    validations:
+      required: true
+  - type: input
+    id: shell
+    attributes:
+      label: Shell and terminal
+      placeholder: "zsh, bash, PowerShell, Windows Terminal"
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15, Ubuntu 24.04, Windows 11"
+    validations:
+      required: true

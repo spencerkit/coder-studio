@@ -2,6 +2,21 @@
 
 Use this page when Coder Studio does not start, cannot reach a provider, or cannot be opened from another device.
 
+## First-Run Checklist
+
+If the first trial does not work, check in this order:
+
+1. `node --version` confirms Node.js >= 24.0.0.
+2. `coder-studio version` confirms the CLI is installed.
+3. `coder-studio status` confirms the service is running.
+4. `coder-studio logs` shows recent errors.
+5. `which <provider-command>` confirms the Provider CLI is in PATH.
+6. `<provider-command> --version` confirms the Provider CLI can run.
+7. If the browser does not open, manually visit the URL from `coder-studio status`.
+8. If mobile cannot connect, confirm the service listens on `0.0.0.0` and your firewall allows the port.
+
+Use desktop for the first full trial. Do not start by debugging public tunnels and phone access at the same time.
+
 ## Coder Studio Does Not Start
 
 Check status and logs:
@@ -38,7 +53,7 @@ coder-studio serve --restart
 
 ## Provider Is Missing
 
-Coder Studio can open files and terminals without an AI CLI, but Claude and Codex sessions require their matching provider CLIs.
+Coder Studio can open files and terminals without an AI CLI, but agent sessions require their matching provider CLIs.
 
 Install the provider CLI, confirm it works in a normal terminal, then start a new session in Coder Studio.
 

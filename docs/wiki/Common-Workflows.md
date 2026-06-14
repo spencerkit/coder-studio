@@ -6,7 +6,7 @@ This page describes practical ways to use Coder Studio after the first launch.
 
 1. Start Coder Studio on your computer.
 2. Open a workspace.
-3. Start a Claude or Codex session.
+3. Start an agent session. For a first trial, Claude or Codex is the recommended path.
 4. Give the agent a task.
 5. Open the same Coder Studio URL from your phone.
 6. Check session output, files, Git changes, and terminal state.
@@ -15,7 +15,7 @@ For remote access setup, see [Mobile and Remote Access](Mobile-and-Remote-Access
 
 ## Vibe Code With A Visible Verification Loop
 
-1. Start a Claude or Codex session.
+1. Start an agent session.
 2. Describe the desired change in natural language.
 3. Watch the agent's terminal output.
 4. Inspect changed files and Git diffs.
@@ -24,11 +24,11 @@ For remote access setup, see [Mobile and Remote Access](Mobile-and-Remote-Access
 
 This keeps vibe-coding speed inside a reviewable engineering harness.
 
-## Use Claude And Codex Side By Side
+## Use Multiple Providers Side By Side
 
 1. Open one workspace.
-2. Start a Claude session for one task.
-3. Start a Codex session for another task.
+2. Start one provider session for a task.
+3. Start another provider session for a separate task.
 4. Switch between sessions in the Agent panel.
 5. Use Git diff and shell terminals to verify output.
 

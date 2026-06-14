@@ -25,6 +25,7 @@ GitHub only creates `<repo>.wiki.git` after the repository Wiki is initialized o
 
 - [Home](Home.md)
 - [Quick Start](Quick-Start.md)
+- [First Agent Run](First-Agent-Run.md)
 - [Why Coder Studio](Why-Coder-Studio.md)
 - [What Is an Agentic Workspace](What-is-an-Agentic-Workspace.md)
 - [Agent Providers](Agent-Providers.md)
@@ -32,6 +33,7 @@ GitHub only creates `<repo>.wiki.git` after the repository Wiki is initialized o
 - [AI Coding Terms](AI-Coding-Terms.md)
 - [Mobile and Remote Access](Mobile-and-Remote-Access.md)
 - [Security and Privacy](Security-and-Privacy.md)
+- [Known Limitations](Known-Limitations.md)
 - [Supervisor](Supervisor.md)
 - [Common Workflows](Common-Workflows.md)
 - [Troubleshooting](Troubleshooting.md)

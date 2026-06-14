@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a product improvement or missing workflow.
+title: "Feature: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow problem
+      description: What were you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What makes the workflow hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired behavior
+      description: Describe the smallest useful version of the improvement.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - First run / onboarding
+        - Agent sessions
+        - Git review
+        - Terminal
+        - Mobile / remote access
+        - Supervisor
+        - Work Analysis
+        - Skills
+        - Provider integrations
+        - Other
+    validations:
+      required: true
