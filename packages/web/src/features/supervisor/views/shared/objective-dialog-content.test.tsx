@@ -180,6 +180,50 @@ describe("ObjectiveDialogContent", () => {
     );
   });
 
+  it("groups the desktop form into the stitched dialog sections and field grids", () => {
+    renderObjectiveDialogContent({
+      mode: "edit",
+      draftEvaluatorModel: "sonnet",
+      draftMaxSupervisionCount: "3",
+      draftScheduledAt: "2026-05-11T03:00",
+    });
+
+    const sections = document.querySelectorAll(".supervisor-dialog-section");
+    expect(sections).toHaveLength(3);
+    expect(sections[0]).toHaveClass("form-group", "supervisor-dialog-section--objective");
+    expect(sections[1]).toHaveClass("supervisor-dialog-section--evaluator");
+    expect(sections[2]).toHaveClass("supervisor-dialog-section--guardrails");
+
+    expect(sections[0]?.querySelector(".supervisor-dialog-section__label")).toHaveTextContent(
+      "supervisor.field.objective"
+    );
+    expect(sections[1]?.querySelector(".supervisor-dialog-section__label")).toHaveTextContent(
+      "supervisor.field.evaluator"
+    );
+    expect(sections[2]?.querySelector(".supervisor-dialog-section__label")).toHaveTextContent(
+      "supervisor.dialog.guardrails_schedule"
+    );
+
+    const evaluatorGrid = sections[1]?.querySelector(".supervisor-dialog-field-grid");
+    const guardrailsGrid = sections[2]?.querySelector(".supervisor-dialog-field-grid");
+    expect(evaluatorGrid).not.toBeNull();
+    expect(guardrailsGrid).not.toBeNull();
+    expect(evaluatorGrid?.children).toHaveLength(2);
+    expect(guardrailsGrid?.children).toHaveLength(2);
+    expect(evaluatorGrid).toContainElement(
+      screen.getByRole("button", { name: "supervisor.field.evaluator Claude" })
+    );
+    expect(evaluatorGrid).toContainElement(
+      screen.getByLabelText("supervisor.field.evaluator_model")
+    );
+    expect(guardrailsGrid).toContainElement(
+      screen.getByLabelText("supervisor.field.max_supervision_count")
+    );
+    expect(guardrailsGrid).toContainElement(
+      screen.getByRole("button", { name: "supervisor.field.scheduled_at" })
+    );
+  });
+
   it("keeps objective editing behavior unchanged", () => {
     const onDraftObjectiveChange = vi.fn();
 

@@ -68,9 +68,21 @@ const baseSupervisor: Supervisor = {
 };
 
 const baseTargetMemory = {
+  schemaVersion: 2,
   targetId: "tgt-1",
-  decompositionGenerated: false,
-  items: [],
+  planTree: {
+    id: "plan-root",
+    title: "Supervisor target",
+    objective: "Complete the supervised target",
+    deliverable: "Completed target",
+    acceptanceCriteria: ["Target objective is complete"],
+    status: "pending",
+    taskType: "generic",
+    children: [],
+  },
+  activeNodeId: undefined,
+  maxDepth: 6,
+  planRevision: 0,
   stalledCount: 0,
   updatedAt: 1,
 } as const;

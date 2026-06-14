@@ -15,10 +15,14 @@ import {
 import { taskStateAtomFamily } from "../atoms";
 
 function commandPreview(task: TaskDefinition): string {
+  const runnableCommand = [task.command, ...task.args].join(" ");
+  if (task.source === "package-json") {
+    return runnableCommand;
+  }
   if (task.displayCommand) {
     return task.displayCommand;
   }
-  return [task.command, ...task.args].join(" ");
+  return runnableCommand;
 }
 
 function taskTerminalTitle(task: TaskDefinition): string {

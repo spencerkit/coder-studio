@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { SupervisorPlanNode, SupervisorTargetMemory } from "@coder-studio/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appendTargetCycleRecord,
@@ -15,6 +16,61 @@ import {
   saveTargetMemory,
 } from "./target-store.js";
 
+function planRoot(children: SupervisorPlanNode[] = []): SupervisorPlanNode {
+  return {
+    id: "root",
+    title: "Supervisor target",
+    objective: "Complete the supervised target",
+    deliverable: "Completed target",
+    acceptanceCriteria: ["Target objective is complete"],
+    status:
+      children.length > 0 && children.every((child) => child.status === "done")
+        ? "done"
+        : children.length > 0
+          ? "in_progress"
+          : "pending",
+    taskType: "generic",
+    children,
+  };
+}
+
+function targetMemory(
+  targetId: string,
+  overrides: Partial<SupervisorTargetMemory> = {}
+): SupervisorTargetMemory {
+  return {
+    schemaVersion: 2,
+    targetId,
+    planTree: planRoot(),
+    activeNodeId: undefined,
+    maxDepth: 6,
+    planRevision: 0,
+    progressSummary: undefined,
+    lastGuidance: undefined,
+    stalledCount: 0,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function expectEmptyV2Memory(
+  memory: SupervisorTargetMemory,
+  expected: { targetId: string; updatedAt: number }
+): void {
+  expect(memory).toMatchObject({
+    schemaVersion: 2,
+    targetId: expected.targetId,
+    activeNodeId: undefined,
+    maxDepth: 6,
+    planRevision: 0,
+    stalledCount: 0,
+    updatedAt: expected.updatedAt,
+  });
+  expect(memory.planTree.id).toMatch(/^plan_/);
+  expect(memory.planTree.children).toEqual([]);
+  expect(memory.planTree.status).toBe("pending");
+}
+
 describe("target store", () => {
   let workspacePath: string;
 
@@ -26,7 +82,7 @@ describe("target store", () => {
     rmSync(workspacePath, { recursive: true, force: true });
   });
 
-  it("creates target metadata with decompositionGenerated=false before first trigger", async () => {
+  it("creates target metadata with an empty v2 plan tree before first trigger", async () => {
     await createTargetFiles(workspacePath, {
       targetId: "tgt-1",
       sessionId: "sess-1",
@@ -76,17 +132,7 @@ describe("target store", () => {
       createdAt: 1,
       updatedAt: 2,
     });
-    expect(memory).toEqual({
-      targetId: "tgt-1",
-      decompositionGenerated: false,
-      decompositionMode: undefined,
-      items: [],
-      activeItemId: undefined,
-      progressSummary: undefined,
-      lastGuidance: undefined,
-      stalledCount: 0,
-      updatedAt: 1,
-    });
+    expectEmptyV2Memory(memory, { targetId: "tgt-1", updatedAt: 1 });
   });
 
   it("appends cycle records as newline-delimited json", async () => {
@@ -125,25 +171,26 @@ describe("target store", () => {
     });
 
     await saveTargetMemory(workspacePath, "tgt-1", {
-      targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Old step",
-          objective: "Keep the old scope",
-          deliverable: "The legacy stage remains intact",
-          acceptanceCriteria: ["Legacy stage is preserved"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "stage-1",
+      ...targetMemory("tgt-1", {
+        planTree: planRoot([
+          {
+            id: "stage-1",
+            title: "Old step",
+            objective: "Keep the old scope",
+            deliverable: "The legacy stage remains intact",
+            acceptanceCriteria: ["Legacy stage is preserved"],
+            status: "in_progress",
+            taskType: "generic",
+            children: [],
+          },
+        ]),
+        activeNodeId: "stage-1",
+        planRevision: 1,
+        updatedAt: 2,
+      }),
       progressSummary: "In progress",
       lastGuidance: "Do old thing",
       stalledCount: 1,
-      updatedAt: 2,
     });
 
     await appendTargetCycleRecord(workspacePath, "tgt-1", {
@@ -181,17 +228,7 @@ describe("target store", () => {
       supersededBy: null,
       completedAt: null,
     });
-    expect(memory).toEqual({
-      targetId: "tgt-1",
-      decompositionGenerated: false,
-      decompositionMode: undefined,
-      items: [],
-      activeItemId: undefined,
-      progressSummary: undefined,
-      lastGuidance: undefined,
-      stalledCount: 0,
-      updatedAt: 3,
-    });
+    expectEmptyV2Memory(memory, { targetId: "tgt-1", updatedAt: 3 });
     expect(cycles).toEqual([]);
   });
 
@@ -205,25 +242,25 @@ describe("target store", () => {
     });
 
     await saveTargetMemory(workspacePath, "tgt-1", {
-      targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Keep this",
-          objective: "Preserve the existing decomposition",
-          deliverable: "The existing decomposition item remains unchanged",
-          acceptanceCriteria: ["Existing decomposition item remains"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "stage-1",
+      ...targetMemory("tgt-1", {
+        planTree: planRoot([
+          {
+            id: "stage-1",
+            title: "Keep this",
+            objective: "Preserve the existing decomposition",
+            deliverable: "The existing decomposition item remains unchanged",
+            acceptanceCriteria: ["Existing decomposition item remains"],
+            status: "in_progress",
+            taskType: "generic",
+            children: [],
+          },
+        ]),
+        activeNodeId: "stage-1",
+        updatedAt: 2,
+      }),
       progressSummary: "Existing progress",
       lastGuidance: "Do not reset",
       stalledCount: 2,
-      updatedAt: 2,
     });
 
     await createTargetFiles(workspacePath, {
@@ -235,30 +272,19 @@ describe("target store", () => {
     });
 
     const memory = await loadTargetMemory(workspacePath, "tgt-1");
-    expect(memory).toEqual({
+    expect(memory).toMatchObject({
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Keep this",
-          objective: "Preserve the existing decomposition",
-          deliverable: "The existing decomposition item remains unchanged",
-          acceptanceCriteria: ["Existing decomposition item remains"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "stage-1",
+      activeNodeId: "stage-1",
       progressSummary: "Existing progress",
       lastGuidance: "Do not reset",
       stalledCount: 2,
       updatedAt: 2,
     });
+    expect(memory.planTree.children[0]?.id).toBe("stage-1");
   });
 
-  it("normalizes legacy plan memory into stage decomposition items", async () => {
+  it("does not convert legacy flat plan memory into the v2 tree", async () => {
     await createTargetFiles(workspacePath, {
       targetId: "tgt-legacy",
       sessionId: "sess-1",
@@ -298,37 +324,21 @@ describe("target store", () => {
     );
 
     const memory = await loadTargetMemory(workspacePath, "tgt-legacy");
+    const rootId = memory.planTree?.id ?? "";
+    expect(rootId).toMatch(/^plan_/);
 
-    expect(memory).toEqual({
+    expect(memory).toMatchObject({
+      schemaVersion: 2,
       targetId: "tgt-legacy",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "step-1",
-          kind: "stage",
-          title: "Inspect current behavior",
-          objective: "Inspect current behavior",
-          deliverable: "Inspect current behavior completed",
-          acceptanceCriteria: ["Inspect current behavior is complete"],
-          status: "done",
-        },
-        {
-          id: "step-2",
-          kind: "stage",
-          title: "Implement decomposition flow",
-          objective: "Implement decomposition flow",
-          deliverable: "Implement decomposition flow completed",
-          acceptanceCriteria: ["Implement decomposition flow is complete"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "step-2",
+      activeNodeId: undefined,
+      planRevision: 0,
       progressSummary: "Legacy plan is mid-flight",
       lastGuidance: "Follow the existing implementation path",
       stalledCount: 3,
       updatedAt: 42,
     });
+    expect(memory.planTree.id).toBe(rootId);
+    expect(memory.planTree.children).toEqual([]);
   });
 
   it("falls back to default metadata and memory when persisted JSON is corrupted", async () => {
@@ -362,17 +372,8 @@ describe("target store", () => {
       supervisor: undefined,
     });
 
-    await expect(loadTargetMemory(workspacePath, "tgt-corrupt")).resolves.toEqual({
-      targetId: "tgt-corrupt",
-      decompositionGenerated: false,
-      decompositionMode: undefined,
-      items: [],
-      activeItemId: undefined,
-      progressSummary: undefined,
-      lastGuidance: undefined,
-      stalledCount: 0,
-      updatedAt: 0,
-    });
+    const memory = await loadTargetMemory(workspacePath, "tgt-corrupt");
+    expectEmptyV2Memory(memory, { targetId: "tgt-corrupt", updatedAt: 0 });
 
     await expect(readTargetCycleRecords(workspacePath, "tgt-corrupt")).resolves.toEqual([
       expect.objectContaining({
@@ -391,15 +392,11 @@ describe("target store", () => {
     });
 
     await saveTargetMemory(workspacePath, "tgt-1", {
-      targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [],
-      activeItemId: undefined,
+      ...targetMemory("tgt-1", {
+        updatedAt: 5,
+      }),
       progressSummary: "Halfway there",
       lastGuidance: "Keep going",
-      stalledCount: 0,
-      updatedAt: 5,
     });
 
     await appendTargetCycleRecord(workspacePath, "tgt-1", {
@@ -523,23 +520,34 @@ describe("target store", () => {
     });
 
     await saveTargetMemory(workspacePath, "tgt-old", {
+      schemaVersion: 2,
       targetId: "tgt-old",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Keep state",
-          objective: "Preserve old progress",
-          deliverable: "Old state copied",
-          acceptanceCriteria: ["State remains"],
-          status: "done",
-        },
-      ],
-      activeItemId: "stage-1",
+      planTree: {
+        id: "tgt-old-root",
+        title: "Supervisor target",
+        objective: "Complete the supervised target",
+        deliverable: "Completed target",
+        acceptanceCriteria: ["Target objective is complete"],
+        status: "done",
+        taskType: "generic",
+        children: [
+          {
+            id: "stage-1",
+            title: "Keep state",
+            objective: "Preserve old progress",
+            deliverable: "Old state copied",
+            acceptanceCriteria: ["State remains"],
+            status: "done",
+            taskType: "generic",
+            children: [],
+          },
+        ],
+      },
+      activeNodeId: "stage-1",
       progressSummary: "Preserve me",
       lastGuidance: "Do not lose state",
+      maxDepth: 6,
+      planRevision: 0,
       stalledCount: 2,
       updatedAt: 12,
     });
@@ -619,6 +627,10 @@ describe("target store", () => {
       },
     });
     expect(memory.targetId).toBe("tgt-new");
+    expect(memory.planTree.id).not.toBe("tgt-old-root");
+    expect(memory.planTree.id).toMatch(/^plan_/);
+    expect(memory.planTree.children[0]?.id).toBe("stage-1");
+    expect(memory.activeNodeId).toBe("stage-1");
     expect(memory.progressSummary).toBe("Preserve me");
     expect(cycles).toEqual([
       expect.objectContaining({

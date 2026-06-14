@@ -156,9 +156,7 @@ describe("ObjectiveDialog", () => {
 
     const trigger = screen.getByRole("button", { name: "Evaluator Claude" });
     expect(trigger).toHaveClass("input", "mobile-select-trigger");
-    expect(trigger).toHaveAccessibleDescription(
-      "The provider that evaluates progress and suggests the next step. It can differ from the execution provider."
-    );
+    expect(trigger).toHaveAccessibleDescription("Evaluates progress and suggests the next step.");
     expect(trigger.querySelector(".mobile-select-trigger__value")).not.toBeNull();
     expect(trigger.querySelector(".mobile-select-trigger__icon")).not.toBeNull();
   });

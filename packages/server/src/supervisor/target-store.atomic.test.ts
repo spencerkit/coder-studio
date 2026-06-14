@@ -79,21 +79,32 @@ describe("target store atomic reset", () => {
     });
 
     await saveTargetMemory(workspacePath, "tgt-1", {
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Old step",
-          objective: "Keep the old scope",
-          deliverable: "The original stage remains intact",
-          acceptanceCriteria: ["Original stage is preserved"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "stage-1",
+      planTree: {
+        id: "root",
+        title: "Supervisor target",
+        objective: "Complete the supervised target",
+        deliverable: "Completed target",
+        acceptanceCriteria: ["Target objective is complete"],
+        status: "in_progress",
+        taskType: "generic",
+        children: [
+          {
+            id: "stage-1",
+            title: "Old step",
+            objective: "Keep the old scope",
+            deliverable: "The original stage remains intact",
+            acceptanceCriteria: ["Original stage is preserved"],
+            status: "in_progress",
+            taskType: "generic",
+            children: [],
+          },
+        ],
+      },
+      activeNodeId: "stage-1",
+      maxDepth: 6,
+      planRevision: 1,
       progressSummary: "In progress",
       lastGuidance: "Do old thing",
       stalledCount: 1,
@@ -130,15 +141,15 @@ describe("target store atomic reset", () => {
 
     expect(meta.objective).toBe("Old objective");
     expect(memory).toMatchObject({
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      activeItemId: "stage-1",
+      activeNodeId: "stage-1",
       progressSummary: "In progress",
       lastGuidance: "Do old thing",
       stalledCount: 1,
       updatedAt: 2,
     });
+    expect(memory.planTree.children[0]?.id).toBe("stage-1");
     expect(cycles).toMatchObject([
       {
         cycleId: "cycle-1",
@@ -187,11 +198,13 @@ describe("target store atomic reset", () => {
 
     expect(meta.objective).toBe("New objective");
     expect(memory).toMatchObject({
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: false,
+      activeNodeId: undefined,
       stalledCount: 0,
       updatedAt: 3,
     });
+    expect(memory.planTree.children).toEqual([]);
     expect(cycles).toEqual([]);
   });
 

@@ -50,6 +50,37 @@ const createSessionRecord = (): Session => ({
   lastActiveAt: 1,
 });
 
+const buildTargetMemory = () => ({
+  schemaVersion: 2 as const,
+  targetId: "tgt-1",
+  planTree: {
+    id: "plan-root",
+    title: "Supervisor target",
+    objective: "Complete the supervised target",
+    deliverable: "Completed target",
+    acceptanceCriteria: ["Target objective is complete"],
+    status: "in_progress" as const,
+    taskType: "generic" as const,
+    children: [
+      {
+        id: "stage-1",
+        title: "Verify end-to-end persistence",
+        objective: "Confirm the end-to-end persistence flow works",
+        deliverable: "A validated persistence verification pass",
+        acceptanceCriteria: ["Persistence flow is verified"],
+        status: "in_progress" as const,
+        taskType: "generic" as const,
+        children: [],
+      },
+    ],
+  },
+  activeNodeId: "stage-1",
+  maxDepth: 6,
+  planRevision: 0,
+  stalledCount: 0,
+  updatedAt: 1,
+});
+
 describe("Supervisor integration", () => {
   let server: Server;
 
@@ -87,25 +118,7 @@ describe("Supervisor integration", () => {
         terminalExcerpt: "assistant: built the persistent supervisor repos",
         evidenceSource: "headless_snapshot",
         latestUserInput: "run the tests",
-        targetMemory: {
-          targetId: "tgt-1",
-          decompositionGenerated: true,
-          decompositionMode: "stage",
-          items: [
-            {
-              id: "stage-1",
-              kind: "stage",
-              title: "Verify end-to-end persistence",
-              objective: "Confirm the end-to-end persistence flow works",
-              deliverable: "A validated persistence verification pass",
-              acceptanceCriteria: ["Persistence flow is verified"],
-              status: "in_progress",
-            },
-          ],
-          activeItemId: "stage-1",
-          stalledCount: 0,
-          updatedAt: 1,
-        },
+        targetMemory: buildTargetMemory(),
       }),
     };
     supervisorManager.evaluator = {
@@ -113,27 +126,35 @@ describe("Supervisor integration", () => {
         options?.mode === "decompose"
           ? {
               mode: "decompose",
-              decompositionMode: "stage",
-              items: [
+              children: [
                 {
                   id: "stage-1",
-                  kind: "stage",
                   title: "Verify end-to-end persistence",
                   objective: "Confirm the end-to-end persistence flow works",
                   deliverable: "A validated persistence verification pass",
                   acceptanceCriteria: ["Persistence flow is verified"],
                   status: "in_progress",
+                  taskType: "generic",
+                  children: [],
                 },
               ],
-              activeItemId: "stage-1",
+              activeNodeId: "stage-1",
               progressSummary: "Decomposition complete",
             }
-          : {
-              mode: "evaluate",
-              status: "continue",
-              reason: "Keep going",
-              guidance: "",
-            },
+          : options?.mode === "ready_check"
+            ? {
+                mode: "ready_check",
+                nodeId: "stage-1",
+                taskType: "generic",
+                granularity: "too_small",
+                reason: "Current stage is already narrow enough",
+              }
+            : {
+                mode: "evaluate",
+                status: "continue",
+                reason: "Keep going",
+                guidance: "",
+              },
     };
   });
 

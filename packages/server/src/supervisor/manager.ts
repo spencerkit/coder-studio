@@ -25,12 +25,26 @@ import type { WorkspaceManager } from "../workspace/manager.js";
 import type { Broadcaster } from "../ws/hub.js";
 import type { SupervisorEvaluationContext } from "./context-builder.js";
 import { SupervisorContextBuilder } from "./context-builder.js";
-import { type SupervisorEvaluationResult, SupervisorEvaluator } from "./evaluator.js";
+import {
+  type SupervisorDecomposeChildResult,
+  type SupervisorEvaluationResult,
+  SupervisorEvaluator,
+  type SupervisorExecutableTaskResult,
+  type SupervisorReadyCheckResult,
+} from "./evaluator.js";
 import {
   describeNonInjectableState,
   INJECTABLE_SESSION_STATES,
   SupervisorInjector,
 } from "./injector.js";
+import {
+  applyNodeUpdates,
+  attachChildNodes,
+  getActiveNodePath,
+  resolveActiveNode,
+  saveExecutionOnNode,
+  saveReadyCheckOnNode,
+} from "./plan-tree.js";
 import { SupervisorScheduler } from "./scheduler.js";
 import { getSupervisorRetrySettings } from "./settings.js";
 import type {
@@ -52,6 +66,10 @@ const NOOP_LOGGER: FastifyBaseLogger = {
 };
 
 type SessionLifecycleEvent = Extract<DomainEvent, { type: "session.lifecycle" }>;
+type SupervisorDecomposeEvaluationResult = Extract<
+  SupervisorEvaluationResult,
+  { mode: "decompose" }
+>;
 type SupervisorEvaluateResult = Extract<SupervisorEvaluationResult, { mode: "evaluate" }>;
 
 /**
@@ -184,14 +202,38 @@ function logFailure(
 
 function isDecomposeResult(
   result: SupervisorEvaluationResult | { mode?: string }
-): result is Extract<SupervisorEvaluationResult, { mode: "decompose" }> {
+): result is SupervisorDecomposeEvaluationResult {
   return result.mode === "decompose";
+}
+
+function isEvaluateResult(
+  result: SupervisorEvaluationResult | { mode?: string }
+): result is SupervisorEvaluateResult {
+  return result.mode === "evaluate";
 }
 
 function isEvaluateStopResult(
   result: SupervisorEvaluateResult | { status?: string }
 ): result is Extract<SupervisorEvaluateResult, { status: "stop" }> {
   return "status" in result && result.status === "stop";
+}
+
+function isReadyCheckResult(
+  result: SupervisorEvaluationResult | { mode?: string }
+): result is SupervisorReadyCheckResult {
+  return result.mode === "ready_check";
+}
+
+function isDecomposeChildResult(
+  result: SupervisorEvaluationResult | { mode?: string }
+): result is SupervisorDecomposeChildResult {
+  return result.mode === "decompose_child";
+}
+
+function isExecutableTaskResult(
+  result: SupervisorEvaluationResult | { mode?: string }
+): result is SupervisorExecutableTaskResult {
+  return result.mode === "executable_task";
 }
 
 export class SupervisorManager {
@@ -1035,7 +1077,6 @@ export class SupervisorManager {
         updatedAt: Date.now(),
       });
 
-      this.storeSnapshot(failedSupervisor);
       if (workspace) {
         await this.writeErrorTargetCycleRecord(
           workspace.path,
@@ -1045,7 +1086,12 @@ export class SupervisorManager {
           1
         );
       }
-      this.broadcastState(failedSupervisor, "state_changed");
+      const enrichedFailedSupervisor = workspace
+        ? await this.attachTargetState(failedSupervisor, workspace.path)
+        : this.withCurrentTargetState(failedSupervisor);
+
+      this.storeSnapshot(enrichedFailedSupervisor);
+      this.broadcastState(enrichedFailedSupervisor, "state_changed");
 
       if (this.pendingDeletes.has(supervisorId)) {
         this.pendingDeletes.delete(supervisorId);
@@ -1060,6 +1106,119 @@ export class SupervisorManager {
     }
   }
 
+  private async prepareExecutableNode(
+    supervisor: Supervisor,
+    context: SupervisorEvaluationContext,
+    targetId: string,
+    signal?: AbortSignal
+  ): Promise<{ context: SupervisorEvaluationContext; guidance: string | undefined }> {
+    let currentMemory = context.targetMemory;
+    let currentContext = context;
+
+    for (let guard = 0; guard < currentMemory.maxDepth + 2; guard += 1) {
+      const activeNode = resolveActiveNode(currentMemory);
+      if (!activeNode) {
+        return { context: currentContext, guidance: undefined };
+      }
+
+      const checkedAt = Date.now();
+      const ready = await this.evaluator.evaluate(supervisor, currentContext, {
+        signal,
+        mode: "ready_check",
+      });
+      if (!isReadyCheckResult(ready)) {
+        throw new Error("Supervisor ready_check pass did not return a ready_check result");
+      }
+
+      currentMemory = saveReadyCheckOnNode(
+        currentMemory,
+        activeNode.id,
+        { ...ready, checkedAt },
+        Date.now()
+      );
+      await this.savePreparedMemory(
+        supervisor.id,
+        currentContext.workspacePath,
+        targetId,
+        currentMemory
+      );
+      currentContext = { ...currentContext, targetMemory: currentMemory };
+
+      const activeDepth = Math.max(getActiveNodePath(currentMemory).length - 1, 0);
+      if (ready.granularity === "ready" || activeDepth >= currentMemory.maxDepth) {
+        const executable = await this.evaluator.evaluate(supervisor, currentContext, {
+          signal,
+          mode: "executable_task",
+        });
+        if (!isExecutableTaskResult(executable)) {
+          throw new Error("Supervisor executable_task pass did not return executable guidance");
+        }
+        currentMemory = saveExecutionOnNode(
+          currentMemory,
+          activeNode.id,
+          executable.guidance,
+          Date.now()
+        );
+        await this.savePreparedMemory(
+          supervisor.id,
+          currentContext.workspacePath,
+          targetId,
+          currentMemory
+        );
+        return {
+          context: { ...currentContext, targetMemory: currentMemory },
+          guidance: executable.guidance,
+        };
+      }
+
+      if (ready.granularity === "too_small") {
+        return { context: { ...currentContext, targetMemory: currentMemory }, guidance: undefined };
+      }
+
+      const decomposed = await this.evaluator.evaluate(supervisor, currentContext, {
+        signal,
+        mode: "decompose_child",
+      });
+      if (!isDecomposeChildResult(decomposed)) {
+        throw new Error("Supervisor decompose_child pass did not return children");
+      }
+      currentMemory = attachChildNodes(
+        currentMemory,
+        activeNode.id,
+        decomposed.children,
+        Date.now()
+      );
+      if (decomposed.progressSummary) {
+        currentMemory = {
+          ...currentMemory,
+          progressSummary: decomposed.progressSummary,
+        };
+      }
+      await this.savePreparedMemory(
+        supervisor.id,
+        currentContext.workspacePath,
+        targetId,
+        currentMemory
+      );
+      currentContext = { ...currentContext, targetMemory: currentMemory };
+    }
+
+    throw new Error("Supervisor recursive planning exceeded its maxDepth guard");
+  }
+
+  private async savePreparedMemory(
+    supervisorId: string,
+    workspacePath: string,
+    targetId: string,
+    memory: SupervisorTargetMemory
+  ): Promise<void> {
+    await this.deps.targetStore.saveTargetMemory(workspacePath, targetId, memory);
+    const currentSupervisor = this.supervisors.get(supervisorId);
+    if (currentSupervisor?.targetId === targetId) {
+      this.storeSnapshot({ ...currentSupervisor, currentTargetMemory: memory });
+    }
+  }
+
   private async executeCycleWithRetry(
     started: StartedCycle,
     signal?: AbortSignal
@@ -1070,7 +1229,7 @@ export class SupervisorManager {
 
     for (let attemptIndex = 0; ; attemptIndex += 1) {
       try {
-        if (!currentMemory.decompositionGenerated || currentMemory.items.length === 0) {
+        if (currentMemory.planTree.children.length === 0) {
           const decomposition = await this.evaluator.evaluate(supervisor, context, {
             signal,
             mode: "decompose",
@@ -1079,15 +1238,22 @@ export class SupervisorManager {
             throw new Error("Supervisor decompose pass did not return a decomposition result");
           }
 
-          currentMemory = {
-            ...currentMemory,
-            decompositionGenerated: true,
-            decompositionMode: decomposition.decompositionMode,
-            items: decomposition.items,
-            activeItemId: decomposition.activeItemId,
-            progressSummary: decomposition.progressSummary ?? currentMemory.progressSummary,
-            updatedAt: Date.now(),
-          };
+          currentMemory = attachChildNodes(
+            {
+              ...currentMemory,
+              progressSummary: decomposition.progressSummary ?? currentMemory.progressSummary,
+              updatedAt: Date.now(),
+            },
+            currentMemory.planTree.id,
+            decomposition.children,
+            Date.now()
+          );
+          if (decomposition.activeNodeId) {
+            currentMemory = {
+              ...currentMemory,
+              activeNodeId: decomposition.activeNodeId,
+            };
+          }
 
           const workspace = this.requireWorkspace(context.workspaceId);
           await this.deps.targetStore.saveTargetMemory(
@@ -1112,13 +1278,22 @@ export class SupervisorManager {
           };
         }
 
+        const prepared = await this.prepareExecutableNode(
+          supervisor,
+          context,
+          started.targetId,
+          signal
+        );
+        context = prepared.context;
+        currentMemory = prepared.context.targetMemory;
+
         const evaluation = await this.evaluator.evaluate(supervisor, context, {
           signal,
           mode: "evaluate",
         });
 
-        if (isDecomposeResult(evaluation)) {
-          throw new Error("Supervisor evaluate pass returned a decompose result");
+        if (!isEvaluateResult(evaluation)) {
+          throw new Error("Supervisor evaluate pass returned a non-evaluate result");
         }
 
         const nextTargetMemory = this.applyEvaluationToTargetMemory(
@@ -1137,7 +1312,9 @@ export class SupervisorManager {
           };
         }
 
-        if (!evaluation.guidance?.trim()) {
+        const guidanceForInjection = prepared.guidance?.trim() || evaluation.guidance;
+
+        if (!guidanceForInjection?.trim()) {
           return {
             evaluation,
             injected: false,
@@ -1173,7 +1350,7 @@ export class SupervisorManager {
         const injection = await this.injector.inject(
           injectingSupervisor,
           {
-            message: evaluation.guidance,
+            message: guidanceForInjection,
           },
           [],
           { signal }
@@ -1257,8 +1434,7 @@ export class SupervisorManager {
           stopReason: evaluation.stopReason,
           reason: evaluation.reason,
           progressSummary: nextTargetMemory.progressSummary,
-          decompositionMode: nextTargetMemory.decompositionMode,
-          activeItemId: nextTargetMemory.activeItemId,
+          activeNodeId: nextTargetMemory.activeNodeId,
           injected: false,
           attemptCount: result.attemptCount,
         }
@@ -1271,9 +1447,8 @@ export class SupervisorManager {
           reason: evaluation.reason,
           guidance: result.injected ? result.injectedText : evaluation.guidance,
           progressSummary: nextTargetMemory.progressSummary,
-          decompositionMode: nextTargetMemory.decompositionMode,
-          activeItemId: nextTargetMemory.activeItemId,
-          itemUpdates: evaluation.itemUpdates,
+          activeNodeId: nextTargetMemory.activeNodeId,
+          nodeUpdates: evaluation.nodeUpdates,
           injected: result.injected,
           attemptCount: result.attemptCount,
         };
@@ -1333,8 +1508,12 @@ export class SupervisorManager {
         errorReason: reason,
         updatedAt: Date.now(),
       });
-      this.storeSnapshot(failed);
-      this.broadcastState(failed, "state_changed");
+      const workspace = this.deps.workspaceMgr.get(failed.workspaceId);
+      const enrichedFailed = workspace
+        ? await this.attachTargetState(failed, workspace.path)
+        : this.withCurrentTargetState(failed);
+      this.storeSnapshot(enrichedFailed);
+      this.broadcastState(enrichedFailed, "state_changed");
     } catch (writeError) {
       this.logger.warn(
         { err: writeError, supervisorId: id },
@@ -1566,29 +1745,26 @@ export class SupervisorManager {
 
   private applyEvaluationToTargetMemory(
     memory: SupervisorTargetMemory,
-    evaluation: Awaited<ReturnType<SupervisorEvaluator["evaluate"]>>,
+    evaluation: SupervisorDecomposeEvaluationResult | SupervisorEvaluateResult,
     injectedText: string | undefined,
     updatedAt: number
   ): SupervisorTargetMemory {
     if (isDecomposeResult(evaluation)) {
-      return {
-        ...memory,
-        decompositionGenerated: true,
-        decompositionMode: evaluation.decompositionMode,
-        items: evaluation.items,
-        activeItemId: evaluation.activeItemId,
-        progressSummary: evaluation.progressSummary ?? memory.progressSummary,
-        updatedAt,
-      };
+      return attachChildNodes(
+        {
+          ...memory,
+          progressSummary: evaluation.progressSummary ?? memory.progressSummary,
+          updatedAt,
+        },
+        memory.planTree.id,
+        evaluation.children,
+        updatedAt
+      );
     }
 
     if (isEvaluateStopResult(evaluation)) {
       return {
         ...memory,
-        decompositionGenerated: memory.decompositionGenerated,
-        decompositionMode: memory.decompositionMode,
-        items: memory.items,
-        activeItemId: memory.activeItemId,
         progressSummary: memory.progressSummary,
         lastGuidance: memory.lastGuidance,
         stalledCount: 0,
@@ -1596,30 +1772,35 @@ export class SupervisorManager {
       };
     }
 
-    let items = memory.items;
-    if (evaluation.itemUpdates?.length) {
-      const updates = new Map(evaluation.itemUpdates.map((item) => [item.id, item.status]));
-      items = memory.items.map((item) =>
-        updates.has(item.id) ? { ...item, status: updates.get(item.id)! } : item
-      );
-    }
-
     const progressSummary = evaluation.progressSummary ?? memory.progressSummary;
     const lastGuidance = injectedText ?? evaluation.guidance ?? memory.lastGuidance;
     const stalledCount =
-      !evaluation.progressSummary && !evaluation.itemUpdates?.length ? memory.stalledCount + 1 : 0;
+      !evaluation.progressSummary && !evaluation.nodeUpdates?.length ? memory.stalledCount + 1 : 0;
 
-    return {
+    let nextMemory: SupervisorTargetMemory = {
       ...memory,
-      decompositionGenerated: memory.decompositionGenerated,
-      decompositionMode: memory.decompositionMode,
-      items,
-      activeItemId: evaluation.activeItemId ?? memory.activeItemId,
       progressSummary,
       lastGuidance,
       stalledCount,
       updatedAt,
     };
+
+    if (evaluation.nodeUpdates?.length) {
+      nextMemory = applyNodeUpdates(nextMemory, evaluation.nodeUpdates, updatedAt);
+    }
+
+    if (evaluation.activeNodeId) {
+      nextMemory = applyNodeUpdates(
+        {
+          ...nextMemory,
+          activeNodeId: evaluation.activeNodeId,
+        },
+        [{ id: evaluation.activeNodeId, status: "in_progress" }],
+        updatedAt
+      );
+    }
+
+    return nextMemory;
   }
 
   private async updateTargetMetaStatus(

@@ -168,21 +168,32 @@ function makeContext(): SupervisorEvaluationContext {
     terminalExcerpt: "build passes",
     latestUserInput: "run the tests",
     targetMemory: {
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Verify the fix",
-          objective: "Confirm the fix works",
-          deliverable: "A passing focused verification run",
-          acceptanceCriteria: ["Focused verification passes"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "stage-1",
+      planTree: {
+        id: "root",
+        title: "Supervisor target",
+        objective: "Complete the supervised target",
+        deliverable: "Completed target",
+        acceptanceCriteria: ["Target objective is complete"],
+        status: "in_progress",
+        taskType: "generic",
+        children: [
+          {
+            id: "stage-1",
+            title: "Verify the fix",
+            objective: "Confirm the fix works",
+            deliverable: "A passing focused verification run",
+            acceptanceCriteria: ["Focused verification passes"],
+            status: "in_progress",
+            taskType: "generic",
+            children: [],
+          },
+        ],
+      },
+      activeNodeId: "stage-1",
+      maxDepth: 6,
+      planRevision: 0,
       progressSummary: "Verification in progress",
       lastGuidance: "Run the focused tests",
       stalledCount: 0,
@@ -282,23 +293,23 @@ describe("SupervisorEvaluator", () => {
     );
   });
 
-  it("parses a valid decompose result with stage items", async () => {
+  it("parses a valid decompose result with standard tree children", async () => {
     const evaluator = makeEvaluator(
       JSON.stringify({
         mode: "decompose",
-        decompositionMode: "stage",
-        items: [
+        children: [
           {
             id: "stage-1",
-            kind: "stage",
             title: "Inspect current behavior",
             objective: "Understand the current implementation",
             deliverable: "A verified behavior summary",
             acceptanceCriteria: ["Behavior summary is captured"],
             status: "in_progress",
+            taskType: "research",
+            children: [],
           },
         ],
-        activeItemId: "stage-1",
+        activeNodeId: "stage-1",
         progressSummary: "Decomposition complete",
       }),
       "claude"
@@ -309,10 +320,21 @@ describe("SupervisorEvaluator", () => {
       {
         ...makeContext(),
         targetMemory: {
+          schemaVersion: 2,
           targetId: "tgt-1",
-          decompositionGenerated: false,
-          items: [],
+          planTree: {
+            id: "root",
+            title: "Supervisor target",
+            objective: "Complete the supervised target",
+            deliverable: "Completed target",
+            acceptanceCriteria: ["Target objective is complete"],
+            status: "pending",
+            taskType: "generic",
+            children: [],
+          },
           stalledCount: 0,
+          maxDepth: 6,
+          planRevision: 0,
           updatedAt: 1,
         },
       },
@@ -320,16 +342,15 @@ describe("SupervisorEvaluator", () => {
     );
 
     expect(result.mode).toBe("decompose");
-    expect(result.decompositionMode).toBe("stage");
-    expect(result.items?.[0]?.title).toBe("Inspect current behavior");
+    expect(result.children[0]?.title).toBe("Inspect current behavior");
+    expect(result.activeNodeId).toBe("stage-1");
   });
 
-  it("rejects decompose results that do not return any items", async () => {
+  it("rejects decompose results that do not return any children", async () => {
     const evaluator = makeEvaluator(
       JSON.stringify({
         mode: "decompose",
-        decompositionMode: "stage",
-        items: [],
+        children: [],
       }),
       "claude"
     );
@@ -340,16 +361,128 @@ describe("SupervisorEvaluator", () => {
         {
           ...makeContext(),
           targetMemory: {
+            schemaVersion: 2,
             targetId: "tgt-1",
-            decompositionGenerated: false,
-            items: [],
+            planTree: {
+              id: "root",
+              title: "Supervisor target",
+              objective: "Complete the supervised target",
+              deliverable: "Completed target",
+              acceptanceCriteria: ["Target objective is complete"],
+              status: "pending",
+              taskType: "generic",
+              children: [],
+            },
             stalledCount: 0,
+            maxDepth: 6,
+            planRevision: 0,
             updatedAt: 1,
           },
         },
         { mode: "decompose" }
       )
-    ).rejects.toThrow(/at least one valid item/i);
+    ).rejects.toThrow(/at least one valid child/i);
+  });
+
+  it("parses a ready_check result", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        mode: "ready_check",
+        nodeId: "volume-1",
+        taskType: "writing",
+        granularity: "too_large",
+        reason: "A full volume is too broad",
+        recommendedUnit: "scene_card",
+        qualityRisk: "large_scope_quality_loss",
+        missingInputs: ["scene conflict"],
+        confidence: "high",
+      }),
+      "claude"
+    );
+
+    await expect(
+      evaluator.evaluate(makeSupervisor("claude"), makeContext(), { mode: "ready_check" })
+    ).resolves.toEqual({
+      mode: "ready_check",
+      nodeId: "volume-1",
+      taskType: "writing",
+      granularity: "too_large",
+      reason: "A full volume is too broad",
+      recommendedUnit: "scene_card",
+      qualityRisk: "large_scope_quality_loss",
+      missingInputs: ["scene conflict"],
+      confidence: "high",
+    });
+  });
+
+  it("rejects ready_check results without granularity", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        mode: "ready_check",
+        nodeId: "volume-1",
+        taskType: "writing",
+        reason: "A full volume is too broad",
+      }),
+      "claude"
+    );
+
+    await expect(
+      evaluator.evaluate(makeSupervisor("claude"), makeContext(), { mode: "ready_check" })
+    ).rejects.toThrow(/ready_check result is missing a valid granularity/i);
+  });
+
+  it("parses a decompose_child result", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        mode: "decompose_child",
+        parentNodeId: "volume-1",
+        children: [
+          {
+            id: "scene-card-1",
+            title: "Scene conflict card",
+            objective: "Define the scene conflict",
+            deliverable: "A scene card ready for drafting",
+            acceptanceCriteria: ["Conflict is specific"],
+            status: "pending",
+            taskType: "writing",
+            depth: 2,
+          },
+        ],
+        activeNodeId: "scene-card-1",
+        progressSummary: "Volume split into the first scene card",
+      }),
+      "claude"
+    );
+
+    const result = await evaluator.evaluate(makeSupervisor("claude"), makeContext(), {
+      mode: "decompose_child",
+    });
+
+    expect(result.mode).toBe("decompose_child");
+    expect(result.parentNodeId).toBe("volume-1");
+    expect(result.activeNodeId).toBe("scene-card-1");
+    expect(result.children[0]?.taskType).toBe("writing");
+  });
+
+  it("parses an executable_task result", async () => {
+    const evaluator = makeEvaluator(
+      JSON.stringify({
+        mode: "executable_task",
+        nodeId: "scene-card-1",
+        guidance: "Write the scene card with a concrete conflict.",
+        fallback: true,
+      }),
+      "claude"
+    );
+
+    await expect(
+      evaluator.evaluate(makeSupervisor("claude"), makeContext(), { mode: "executable_task" })
+    ).resolves.toEqual({
+      mode: "executable_task",
+      nodeId: "scene-card-1",
+      guidance: "Write the scene card with a concrete conflict.",
+      fallback: true,
+    });
   });
 
   it("parses a stop result with stopReason", async () => {
@@ -572,18 +705,18 @@ describe("SupervisorEvaluator", () => {
       "Drive execution through the supervised agent rather than by independently performing the work yourself."
     );
     expect(prompt).toContain("Use the target memory as the current supervision state.");
-    expect(prompt).toContain("Identify which decomposition item is currently active.");
+    expect(prompt).toContain("Identify which plan tree node is currently active.");
     expect(prompt).toContain(
-      "Keep the current active item unless there is evidence that it is done, blocked, or obsolete."
+      "Keep the current active node unless there is evidence that it is done, blocked, or obsolete."
     );
     expect(prompt).toContain(
       'Mark an item as "done" only when there is observable evidence that its deliverable or acceptanceCriteria were satisfied.'
     );
     expect(prompt).toContain(
-      "If the current item appears nearly complete but is not yet verified, keep the same active item and direct targeted verification."
+      "If the current node appears nearly complete but is not yet verified, keep the same active node and direct targeted verification."
     );
     expect(prompt).toContain(
-      "Advance to the next item only after the current item's deliverable or acceptanceCriteria are supported by observable evidence."
+      "Advance only after the current node's deliverable or acceptanceCriteria are supported by observable evidence."
     );
     expect(prompt).toContain(
       "If the current path is low-yield, brittle, repetitive, or producing low-quality output, redirect early."
@@ -598,7 +731,7 @@ describe("SupervisorEvaluator", () => {
     );
     expect(prompt).toContain("Completion standard:");
     expect(prompt).toContain("Optimize for finished, verified, and defensible delivery.");
-    expect(prompt).toContain("Use itemUpdates to reflect evidence-backed status changes only.");
+    expect(prompt).toContain("Use nodeUpdates to reflect evidence-backed status changes only.");
     expect(prompt).toContain(
       "If evidence is missing or ambiguous, prefer verification over further implementation."
     );
@@ -631,10 +764,21 @@ describe("SupervisorEvaluator", () => {
           objective: "Ship the fix",
           terminalExcerpt: "latest output",
           targetMemory: {
+            schemaVersion: 2,
             targetId: "tgt-1",
-            decompositionGenerated: false,
-            items: [],
+            planTree: {
+              id: "root",
+              title: "Supervisor target",
+              objective: "Complete the supervised target",
+              deliverable: "Completed target",
+              acceptanceCriteria: ["Target objective is complete"],
+              status: "pending",
+              taskType: "generic",
+              children: [],
+            },
             stalledCount: 0,
+            maxDepth: 6,
+            planRevision: 0,
             updatedAt: 1,
           },
         },
@@ -670,6 +814,52 @@ describe("SupervisorEvaluator", () => {
     expect(prompt).toContain("Planning boundary:");
     expect(prompt).toContain("Do not hard-code unnecessary implementation detail too early.");
     expect(prompt).toContain("No prose before or after the JSON.");
+  });
+
+  it("builds prompts for recursive planning evaluator modes", async () => {
+    const cases = [
+      {
+        mode: "ready_check" as const,
+        firstLine: "You are a task-granularity supervisor.",
+      },
+      {
+        mode: "decompose_child" as const,
+        firstLine: "You are a lazy recursive planning supervisor.",
+      },
+      {
+        mode: "executable_task" as const,
+        firstLine:
+          "You are a supervisor preparing one concrete instruction for an AI execution agent.",
+      },
+    ];
+
+    for (const entry of cases) {
+      const logger = createLogger();
+      const evaluator = new SupervisorEvaluator({
+        providerRegistry: [createProvider("codex", "")],
+        providerConfigRepo: createProviderConfigRepo(),
+        timeoutMs: 5000,
+        logger,
+      });
+
+      await expect(
+        evaluator.evaluate(
+          makeSupervisor("codex"),
+          {
+            ...makeContext(),
+            objective: "Ship the recursive planner",
+            terminalExcerpt: "latest recursive planner output",
+          },
+          { mode: entry.mode }
+        )
+      ).rejects.toThrow();
+
+      const prompt = (logger.warn.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt;
+      expect(prompt).toContain(entry.firstLine);
+      expect(prompt).toContain("Return JSON only.");
+      expect(prompt).toContain("Current target memory:");
+      expect(prompt).toContain("Current terminal snapshot:");
+    }
   });
 
   it("aborts the evaluator process group when the signal is cancelled", async () => {

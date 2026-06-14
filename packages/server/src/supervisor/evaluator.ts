@@ -4,11 +4,17 @@ import {
   type ProviderDefinition,
   type Supervisor,
   type SupervisorConfig,
-  type SupervisorCycleItemUpdate,
-  type SupervisorDecompositionMode,
+  type SupervisorCycleNodeUpdate,
+  type SupervisorGranularity,
+  type SupervisorPlanNode,
   type SupervisorStopReason,
-  type SupervisorWorkItem,
+  type SupervisorTaskType,
 } from "@coder-studio/core";
+import {
+  estimateCommandLineLength,
+  type HeadlessSpawnCommand,
+  prepareHeadlessSpawnCommand,
+} from "@coder-studio/utils";
 import type { FastifyBaseLogger } from "fastify";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
@@ -29,11 +35,113 @@ const NOOP_LOGGER: FastifyBaseLogger = {
   warn: () => {},
 };
 
+const EVALUATOR_BASE_ENV_KEYS = [
+  "PATH",
+  "Path",
+  "PATHEXT",
+  "HOME",
+  "USERPROFILE",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "XDG_STATE_HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "SystemRoot",
+  "WINDIR",
+  "COMSPEC",
+  "ComSpec",
+  "SHELL",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TERM",
+  "COLORTERM",
+  "NO_COLOR",
+  "FORCE_COLOR",
+] as const;
+
+const EVALUATOR_WINDOWS_ENV_KEYS = [
+  "APPDATA",
+  "LOCALAPPDATA",
+  "ProgramData",
+  "PROGRAMDATA",
+  "ProgramFiles",
+  "PROGRAMFILES",
+  "ProgramFiles(x86)",
+  "PROGRAMFILES(X86)",
+  "ProgramW6432",
+  "PROGRAMW6432",
+  "CommonProgramFiles",
+  "COMMONPROGRAMFILES",
+  "CommonProgramFiles(x86)",
+  "COMMONPROGRAMFILES(X86)",
+  "CommonProgramW6432",
+  "COMMONPROGRAMW6432",
+  "SystemDrive",
+  "SYSTEMDRIVE",
+  "USERNAME",
+  "USERDOMAIN",
+] as const;
+
+const EVALUATOR_NETWORK_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+  "REQUESTS_CA_BUNDLE",
+  "CURL_CA_BUNDLE",
+] as const;
+
+const EVALUATOR_PROVIDER_ENV_KEYS = [
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_GENAI_USE_VERTEXAI",
+  "VERTEXAI_PROJECT",
+  "VERTEXAI_LOCATION",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_PROFILE",
+  "AWS_REGION",
+  "AWS_DEFAULT_REGION",
+  "AZURE_OPENAI_API_KEY",
+  "AZURE_OPENAI_ENDPOINT",
+  "AZURE_OPENAI_API_VERSION",
+] as const;
+
+const EVALUATOR_PROVIDER_ENV_PREFIXES = [
+  "OPENAI_",
+  "ANTHROPIC_",
+  "GEMINI_",
+  "GOOGLE_",
+  "VERTEXAI_",
+  "AWS_",
+  "AZURE_OPENAI_",
+  "CODEX_",
+  "CLAUDE_",
+  "CURSOR_",
+  "OPENCODE_",
+] as const;
+
 export interface SupervisorDecomposeResult {
   mode: "decompose";
-  decompositionMode: SupervisorDecompositionMode;
-  items: SupervisorWorkItem[];
-  activeItemId?: string;
+  children: SupervisorPlanNode[];
+  activeNodeId?: string;
   progressSummary?: string;
 }
 
@@ -42,9 +150,9 @@ export interface SupervisorContinueResult {
   status: "continue";
   reason: string;
   guidance?: string;
-  activeItemId?: string;
+  activeNodeId?: string;
   progressSummary?: string;
-  itemUpdates?: SupervisorCycleItemUpdate[];
+  nodeUpdates?: SupervisorCycleNodeUpdate[];
 }
 
 export interface SupervisorStopResult {
@@ -54,16 +162,53 @@ export interface SupervisorStopResult {
   reason: string;
 }
 
+export interface SupervisorReadyCheckResult {
+  mode: "ready_check";
+  nodeId: string;
+  taskType: SupervisorTaskType;
+  granularity: SupervisorGranularity;
+  reason: string;
+  recommendedUnit?: string;
+  qualityRisk?: string;
+  missingInputs?: string[];
+  confidence?: "low" | "medium" | "high";
+}
+
+export interface SupervisorDecomposeChildResult {
+  mode: "decompose_child";
+  parentNodeId: string;
+  children: SupervisorPlanNode[];
+  activeNodeId?: string;
+  progressSummary?: string;
+}
+
+export interface SupervisorExecutableTaskResult {
+  mode: "executable_task";
+  nodeId: string;
+  guidance: string;
+  fallback?: boolean;
+}
+
 export type SupervisorEvaluationResult =
   | SupervisorDecomposeResult
   | SupervisorContinueResult
-  | SupervisorStopResult;
+  | SupervisorStopResult
+  | SupervisorReadyCheckResult
+  | SupervisorDecomposeChildResult
+  | SupervisorExecutableTaskResult;
 
 export type SupervisorResult = SupervisorEvaluationResult;
 
+type SupervisorEvaluatorMode =
+  | "decompose"
+  | "evaluate"
+  | "ready_check"
+  | "decompose_child"
+  | "executable_task";
+
 interface EvaluateOptions {
   signal?: AbortSignal;
-  mode?: "decompose" | "evaluate";
+  mode?: SupervisorEvaluatorMode;
 }
 
 export class SupervisorEvaluator {
@@ -128,7 +273,7 @@ export class SupervisorEvaluator {
     let stdout: string;
     try {
       stdout = await runCommand(
-        command,
+        prepareHeadlessSpawnCommand(command, prompt),
         this.deps.timeoutMs ?? getSupervisorEvaluationTimeoutMs(this.deps.settingsRepo),
         options
       );
@@ -173,7 +318,7 @@ export class SupervisorEvaluator {
   }
 }
 
-function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "evaluate"): string {
+function buildPrompt(context: SupervisorEvaluationContext, mode: SupervisorEvaluatorMode): string {
   if (mode === "decompose") {
     return [
       "You are an autonomous planner-supervisor for this target-scoped software task.",
@@ -194,13 +339,10 @@ function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "
       "- Do not propose options for the user to choose from.",
       "- If information is incomplete, make the most conservative reasonable assumptions and decide the decomposition yourself.",
       "- Your job is to return the best useful decomposition now, not to begin a discussion or planning workflow.",
-      "- Keep the user-visible target as the top-level supervision owner.",
-      '- Choose "stage" by default.',
-      '- Choose "subtarget" only when the work clearly breaks into independently deliverable and independently verifiable workstreams.',
-      "- If the distinction is unclear, choose stage.",
-      "- Produce 1 to 7 decomposition items.",
-      "- Each item must be concrete, milestone-sized, and useful for subsequent evaluation.",
-      "- Do not leave the structure empty.",
+      "- Keep the user-visible target as the root supervision owner.",
+      "- Produce 1 to 7 top-level child nodes for targetMemory.planTree.",
+      "- Each child node must be concrete, milestone-sized, and useful for subsequent evaluation.",
+      "- Do not leave the child list empty.",
       "",
       "Decomposition principles:",
       "- Prefer milestones that produce a concrete artifact, observable behavior change, test result, or verification result.",
@@ -226,22 +368,143 @@ function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "
       "- Do not hide assumptions inside the plan.",
       "- Do not create a brittle plan that depends on perfect execution.",
       "",
-      "Item requirements:",
-      '- Each item must include "id", "kind", "title", "objective", "deliverable", "acceptanceCriteria", and "status".',
-      '- "kind" must match the selected decompositionMode: all "stage" or all "subtarget".',
+      "Node requirements:",
+      '- Each node must include "id", "title", "objective", "deliverable", "acceptanceCriteria", "status", "taskType", and "children".',
       '- "acceptanceCriteria" must be a non-empty string array.',
-      '- Use statuses "pending", "in_progress", or "done".',
-      "- Usually mark the first active item as in_progress and the rest as pending.",
+      '- Use statuses "pending", "in_progress", "done", or "blocked".',
+      '- Use taskType "generic", "coding", "writing", "research", or "design".',
+      "- Usually mark the first active child as in_progress and the rest as pending.",
+      '- Do not include "parentId", "depth", "kind", or flat item fields.',
       "",
       "Output schema:",
       "{",
       '  "mode": "decompose",',
-      '  "decompositionMode": "stage" | "subtarget",',
-      '  "items": [',
-      '    { "id": string, "kind": "stage" | "subtarget", "title": string, "objective": string, "deliverable": string, "acceptanceCriteria": string[], "status": "pending" | "in_progress" | "done" }',
+      '  "children": [',
+      '    { "id": string, "title": string, "objective": string, "deliverable": string, "acceptanceCriteria": string[], "status": "pending" | "in_progress" | "done" | "blocked", "taskType": "coding" | "writing" | "research" | "design" | "generic", "children": [] }',
       "  ],",
-      '  "activeItemId": optional string,',
+      '  "activeNodeId": optional string,',
       '  "progressSummary": optional brief summary',
+      "}",
+      "",
+      "Current objective:",
+      context.objective,
+      "",
+      "Current target memory:",
+      JSON.stringify(context.targetMemory, null, 2),
+      "",
+      "Latest user input:",
+      context.latestUserInput?.trim() || "(none)",
+      "",
+      "Current terminal snapshot:",
+      context.terminalExcerpt || "(no output yet)",
+    ].join("\n");
+  }
+
+  if (mode === "ready_check") {
+    return [
+      "You are a task-granularity supervisor.",
+      "Decide whether the active plan node is sized appropriately for one high-quality execution pass.",
+      "Classify the work as too_large, ready, or too_small based on scope, available inputs, risk, and verifiability.",
+      "",
+      "Return JSON only.",
+      "No prose before or after the JSON.",
+      "",
+      "Ready-check policy:",
+      "- Use the active plan node when targetMemory.activeNodeId is available.",
+      "- Treat broad, multi-deliverable, or hard-to-verify work as too_large.",
+      "- Treat microscopic work that cannot produce a meaningful deliverable as too_small.",
+      "- Treat work as ready only when it has a concrete deliverable, clear acceptance criteria, and enough input to execute.",
+      "- Do not ask the user for clarification; report missingInputs when inputs are missing.",
+      "",
+      "Output schema:",
+      "{",
+      '  "mode": "ready_check",',
+      '  "nodeId": string,',
+      '  "taskType": "coding" | "writing" | "research" | "design" | "generic",',
+      '  "granularity": "too_large" | "ready" | "too_small",',
+      '  "reason": string,',
+      '  "recommendedUnit": optional string,',
+      '  "qualityRisk": optional string,',
+      '  "missingInputs": optional string[],',
+      '  "confidence": optional "low" | "medium" | "high"',
+      "}",
+      "",
+      "Current objective:",
+      context.objective,
+      "",
+      "Current target memory:",
+      JSON.stringify(context.targetMemory, null, 2),
+      "",
+      "Latest user input:",
+      context.latestUserInput?.trim() || "(none)",
+      "",
+      "Current terminal snapshot:",
+      context.terminalExcerpt || "(no output yet)",
+    ].join("\n");
+  }
+
+  if (mode === "decompose_child") {
+    return [
+      "You are a lazy recursive planning supervisor.",
+      "Decompose only the active parent plan node into the next useful children needed for execution.",
+      "Keep the tree shallow and defer decomposition until a node is too large for one high-quality execution pass.",
+      "",
+      "Return JSON only.",
+      "No prose before or after the JSON.",
+      "",
+      "Child decomposition policy:",
+      "- Use targetMemory.activeNodeId as the parent unless the target memory clearly identifies another active too-large node.",
+      "- Produce concrete child nodes with clear deliverables and acceptance criteria.",
+      "- Preserve dependency order and make the first useful child active when appropriate.",
+      "- Do not rewrite unrelated parts of the plan tree.",
+      "- Do not ask the user questions.",
+      "",
+      "Output schema:",
+      "{",
+      '  "mode": "decompose_child",',
+      '  "parentNodeId": string,',
+      '  "children": [',
+      '    { "id": string, "title": string, "objective": string, "deliverable": string, "acceptanceCriteria": string[], "status": "pending" | "in_progress" | "done" | "blocked", "taskType": "coding" | "writing" | "research" | "design" | "generic", "children": [] }',
+      "  ],",
+      '  "activeNodeId": optional string,',
+      '  "progressSummary": optional brief summary',
+      "}",
+      "",
+      "Current objective:",
+      context.objective,
+      "",
+      "Current target memory:",
+      JSON.stringify(context.targetMemory, null, 2),
+      "",
+      "Latest user input:",
+      context.latestUserInput?.trim() || "(none)",
+      "",
+      "Current terminal snapshot:",
+      context.terminalExcerpt || "(no output yet)",
+    ].join("\n");
+  }
+
+  if (mode === "executable_task") {
+    return [
+      "You are a supervisor preparing one concrete instruction for an AI execution agent.",
+      "Turn the active ready plan node into direct guidance that the execution agent can perform without another planning round.",
+      "Focus on one concrete unit of work and the evidence needed to verify it.",
+      "",
+      "Return JSON only.",
+      "No prose before or after the JSON.",
+      "",
+      "Executable-task policy:",
+      "- Use targetMemory.activeNodeId as the nodeId unless the active leaf path identifies a more specific ready leaf.",
+      "- Give concise, actionable guidance with files, commands, checks, or artifacts when the context supports them.",
+      "- Include a fallback flag only when the guidance is a conservative fallback because the node is underspecified.",
+      "- Do not ask the user to choose between options.",
+      "",
+      "Output schema:",
+      "{",
+      '  "mode": "executable_task",',
+      '  "nodeId": string,',
+      '  "guidance": string,',
+      '  "fallback": optional true',
       "}",
       "",
       "Current objective:",
@@ -283,19 +546,19 @@ function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "
     "",
     "Stage decision policy:",
     "- Use the target memory as the current supervision state.",
-    "- Base your decision on the objective, current decompositionMode, items, activeItemId, progressSummary, lastGuidance, stalledCount, latest user input, and terminal snapshot.",
-    "- Identify which decomposition item is currently active.",
-    "- Keep the current active item unless there is evidence that it is done, blocked, or obsolete.",
-    "- Decide whether the active item is done, still in progress, blocked, or obsolete based on observable evidence.",
+    "- Base your decision on the objective, targetMemory.planTree, activeNodeId, progressSummary, lastGuidance, stalledCount, latest user input, and terminal snapshot.",
+    "- Identify which plan tree node is currently active.",
+    "- Keep the current active node unless there is evidence that it is done, blocked, or obsolete.",
+    "- Decide whether the active node is done, still in progress, blocked, or obsolete based on observable evidence.",
     '- Treat statements like "done", "fixed", "implemented", or "should pass" as unverified unless supported by observable evidence.',
     '- Mark an item as "done" only when there is observable evidence that its deliverable or acceptanceCriteria were satisfied.',
     "- Prefer evidence from terminal output, test results, build results, explicit verification output, or other observable artifacts in the terminal snapshot.",
     "- If evidence is missing or ambiguous, keep the item in_progress and direct the agent to gather or produce the missing verification evidence.",
-    "- If the current item appears nearly complete but is not yet verified, keep the same active item and direct targeted verification.",
-    "- Advance to the next item only after the current item's deliverable or acceptanceCriteria are supported by observable evidence.",
-    '- When advancing to the next item, mark the previous item as "done" and set activeItemId to the next item explicitly.',
-    "- If the active item is blocked, give guidance that is most likely to unblock it.",
-    "- If the active item is obsolete, explain the reason briefly and move to the next useful item.",
+    "- If the current node appears nearly complete but is not yet verified, keep the same active node and direct targeted verification.",
+    "- Advance only after the current node's deliverable or acceptanceCriteria are supported by observable evidence.",
+    '- When advancing, use nodeUpdates to mark the current active node "done"; the manager will choose the next runnable node unless activeNodeId is explicitly provided.',
+    "- If the active node is blocked, give guidance that is most likely to unblock it.",
+    "- If the active node is obsolete, explain the reason briefly and move to the next useful node.",
     "- If the current path is low-yield, brittle, repetitive, or producing low-quality output, redirect early.",
     "- Diagnose stalls precisely: implementation failure, verification failure, environment failure, scope misframing, weak solution quality, or missing evidence.",
     "- Choose the next action that most improves objective-level progress, not merely the most local continuation.",
@@ -343,9 +606,10 @@ function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "
     "",
     "Evaluation policy:",
     "- Update progress incrementally against the existing decomposition.",
-    "- Use itemUpdates to reflect evidence-backed status changes only.",
-    "- Keep activeItemId on the current item by default.",
-    "- Change activeItemId only when there is a clear reason to switch items.",
+    "- Use nodeUpdates to reflect evidence-backed status changes only.",
+    "- Use nodeUpdates with the activeNodeId to mark the active leaf done; the manager will advance activeNodeId from the tree.",
+    "- Keep activeNodeId on the current node by default.",
+    "- Change activeNodeId only when there is a clear reason to switch to another existing tree node.",
     "- If evidence is missing or ambiguous, prefer verification over further implementation.",
     "",
     "Output schema:",
@@ -355,9 +619,9 @@ function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "
     '  "status": "continue",',
     '  "reason": "brief explanation of why more work is needed",',
     '  "guidance": "specific next action for the supervised agent",',
-    '  "activeItemId": optional item id,',
+    '  "activeNodeId": optional node id,',
     '  "progressSummary": optional brief progress summary,',
-    '  "itemUpdates": optional array of { "id": string, "status": "pending" | "in_progress" | "done" }',
+    '  "nodeUpdates": optional array of { "id": string, "status": "pending" | "in_progress" | "done" | "blocked" }',
     "}",
     "",
     "For stop:",
@@ -385,7 +649,7 @@ function buildPrompt(context: SupervisorEvaluationContext, mode: "decompose" | "
 }
 
 async function runCommand(
-  command: { argv: string[]; cwd?: string; env?: Record<string, string> },
+  command: HeadlessSpawnCommand,
   timeoutMs: number,
   options: EvaluateOptions = {}
 ): Promise<string> {
@@ -393,14 +657,58 @@ async function runCommand(
     throw createSupervisorEvalAbortedError();
   }
 
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command.argv[0]!, command.argv.slice(1), {
+  const standardEnv = buildEvaluatorSpawnEnv(command.env, "standard");
+  try {
+    return await runCommandWithEnv(command, timeoutMs, options, standardEnv);
+  } catch (error) {
+    if (!isSpawnE2BigError(error)) {
+      throw error;
+    }
+
+    const minimalEnv = buildEvaluatorSpawnEnv(command.env, "minimal");
+    if (estimateEnvironmentSize(minimalEnv) >= estimateEnvironmentSize(standardEnv)) {
+      throw error;
+    }
+
+    try {
+      return await runCommandWithEnv(command, timeoutMs, options, minimalEnv);
+    } catch (retryError) {
+      throw retryError;
+    }
+  }
+}
+
+async function runCommandWithEnv(
+  command: HeadlessSpawnCommand,
+  timeoutMs: number,
+  options: EvaluateOptions,
+  env: NodeJS.ProcessEnv
+): Promise<string> {
+  if (options.signal?.aborted) {
+    throw createSupervisorEvalAbortedError();
+  }
+
+  const stdio: ["pipe" | "ignore", "pipe", "pipe"] =
+    command.stdin !== undefined ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"];
+  let child: ReturnType<typeof spawn>;
+
+  try {
+    child = spawn(command.argv[0]!, command.argv.slice(1), {
       cwd: command.cwd,
       detached: process.platform !== "win32",
-      env: { ...process.env, ...command.env },
-      stdio: ["ignore", "pipe", "pipe"],
+      env,
+      stdio,
       windowsHide: true,
     });
+  } catch (error) {
+    throw createEvaluatorSpawnFailure(error, "", "", command.argv, env);
+  }
+
+  return await new Promise((resolve, reject) => {
+    if (command.stdin !== undefined && child.stdin) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(command.stdin);
+    }
 
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -478,6 +786,10 @@ async function runCommand(
         stderr: Buffer.concat(stderr).toString("utf8"),
         exitCode: null,
         spawnError: true,
+        spawnCode: getErrorCode(error),
+        argvBytes: estimateCommandLineLength(command.argv),
+        envBytes: estimateEnvironmentSize(env),
+        envKeyCount: Object.keys(env).length,
       } satisfies EvaluatorProcessError);
     });
     child.on("exit", (code) => {
@@ -511,6 +823,114 @@ interface EvaluatorProcessError {
   stderr: string;
   exitCode: number | null;
   spawnError: boolean;
+  spawnCode?: string;
+  argvBytes?: number;
+  envBytes?: number;
+  envKeyCount?: number;
+}
+
+type EvaluatorEnvMode = "standard" | "minimal";
+
+function buildEvaluatorSpawnEnv(
+  commandEnv: Record<string, string> | undefined,
+  mode: EvaluatorEnvMode
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+
+  copyEnvKeys(env, process.env, EVALUATOR_BASE_ENV_KEYS);
+  copyEnvKeys(env, process.env, EVALUATOR_WINDOWS_ENV_KEYS);
+  copyPrefixedEnvKeys(env, process.env, ["LC_"]);
+  copyEnvKeys(env, process.env, EVALUATOR_PROVIDER_ENV_KEYS);
+  copyPrefixedEnvKeys(env, process.env, EVALUATOR_PROVIDER_ENV_PREFIXES);
+  if (mode === "standard") {
+    copyEnvKeys(env, process.env, EVALUATOR_NETWORK_ENV_KEYS);
+  }
+
+  if (commandEnv) {
+    for (const [key, value] of Object.entries(commandEnv)) {
+      env[key] = value;
+    }
+  }
+
+  return env;
+}
+
+function copyEnvKeys(
+  target: NodeJS.ProcessEnv,
+  source: NodeJS.ProcessEnv,
+  keys: readonly string[]
+): void {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string") {
+      target[key] = value;
+    }
+  }
+}
+
+function copyPrefixedEnvKeys(
+  target: NodeJS.ProcessEnv,
+  source: NodeJS.ProcessEnv,
+  prefixes: readonly string[]
+): void {
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === "string" && prefixes.some((prefix) => key.startsWith(prefix))) {
+      target[key] = value;
+    }
+  }
+}
+
+function estimateEnvironmentSize(env: NodeJS.ProcessEnv): number {
+  let size = 0;
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    size += key.length + 1 + value.length + 1;
+  }
+  return size;
+}
+
+function createEvaluatorSpawnFailure(
+  error: unknown,
+  stdout: string,
+  stderr: string,
+  argv: string[],
+  env: NodeJS.ProcessEnv
+): EvaluatorProcessError {
+  return {
+    code: "supervisor_eval_failed",
+    message: error instanceof Error ? error.message : "Evaluator process failed to start",
+    stdout,
+    stderr,
+    exitCode: null,
+    spawnError: true,
+    spawnCode: getErrorCode(error),
+    argvBytes: estimateCommandLineLength(argv),
+    envBytes: estimateEnvironmentSize(env),
+    envKeyCount: Object.keys(env).length,
+  };
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function isSpawnE2BigError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  if ((error as { code?: unknown }).code === "E2BIG") {
+    return true;
+  }
+  if (isEvaluatorProcessError(error) && error.spawnError) {
+    return error.spawnCode === "E2BIG" || /\bE2BIG\b|argument list too long/i.test(error.message);
+  }
+  return false;
 }
 
 function isEvaluatorProcessError(error: unknown): error is EvaluatorProcessError {
@@ -559,6 +979,10 @@ function diagnoseEvaluatorProcessError(
       sessionProviderId: context.sessionProviderId,
       exitCode: error.exitCode,
       spawnError: error.spawnError,
+      spawnCode: error.spawnCode,
+      argvBytes: error.argvBytes,
+      envBytes: error.envBytes,
+      envKeyCount: error.envKeyCount,
       upstreamMessage,
       stderrPreview: buildStdoutPreview(error.stderr.trim(), 2000),
       stdoutPreview: buildStdoutPreview(error.stdout.trim(), 2000),
@@ -1095,10 +1519,71 @@ function extractSupervisorPayload(output: string, providerId: string): string {
   throw new Error("Supervisor did not return a recognizable message");
 }
 
+function readTaskType(value: unknown): SupervisorTaskType {
+  return value === "coding" ||
+    value === "writing" ||
+    value === "research" ||
+    value === "design" ||
+    value === "generic"
+    ? value
+    : "generic";
+}
+
+function readGranularity(value: unknown): SupervisorGranularity | undefined {
+  return value === "too_large" || value === "ready" || value === "too_small" ? value : undefined;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const values = value.flatMap<string>((entry) =>
+    typeof entry === "string" && entry.trim() ? [entry.trim()] : []
+  );
+  return values.length > 0 ? values : undefined;
+}
+
+function parsePlanNode(value: unknown): SupervisorPlanNode | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const node = value as Record<string, unknown>;
+  if (
+    typeof node.id !== "string" ||
+    typeof node.title !== "string" ||
+    typeof node.objective !== "string" ||
+    typeof node.deliverable !== "string" ||
+    !Array.isArray(node.acceptanceCriteria) ||
+    node.acceptanceCriteria.some((entry) => typeof entry !== "string")
+  ) {
+    return null;
+  }
+  const status =
+    node.status === "done" || node.status === "blocked" || node.status === "in_progress"
+      ? node.status
+      : "pending";
+  const children = Array.isArray(node.children)
+    ? node.children.flatMap<SupervisorPlanNode>((child) => {
+        const parsed = parsePlanNode(child);
+        return parsed ? [parsed] : [];
+      })
+    : [];
+  return {
+    id: node.id,
+    title: node.title,
+    objective: node.objective,
+    deliverable: node.deliverable,
+    acceptanceCriteria: node.acceptanceCriteria as string[],
+    status,
+    taskType: readTaskType(node.taskType),
+    children,
+  };
+}
+
 function parseSupervisorEvaluationResult(
   payloadText: string,
   guidanceMaxChars: number,
-  requestedMode: "decompose" | "evaluate",
+  requestedMode: SupervisorEvaluatorMode,
   logger: FastifyBaseLogger = NOOP_LOGGER
 ): SupervisorEvaluationResult {
   const attempt = tryParseSupervisorJson(payloadText);
@@ -1143,66 +1628,133 @@ function parseSupervisorEvaluationResult(
       throw createSupervisorEvalFailedError("Supervisor returned invalid decompose payload");
     }
 
-    const decompositionMode = record.decompositionMode;
-    if (decompositionMode !== "stage" && decompositionMode !== "subtarget") {
-      throw createSupervisorEvalFailedError(
-        "Supervisor decompose result is missing a valid decompositionMode"
-      );
-    }
-
-    const items = Array.isArray(record.items)
-      ? record.items.flatMap<SupervisorWorkItem>((value) => {
-          if (!value || typeof value !== "object") {
-            return [];
-          }
-          const item = value as Record<string, unknown>;
-          if (
-            typeof item.id !== "string" ||
-            (item.kind !== "stage" && item.kind !== "subtarget") ||
-            item.kind !== decompositionMode ||
-            typeof item.title !== "string" ||
-            typeof item.objective !== "string" ||
-            typeof item.deliverable !== "string" ||
-            !Array.isArray(item.acceptanceCriteria) ||
-            item.acceptanceCriteria.length === 0 ||
-            item.acceptanceCriteria.some((entry) => typeof entry !== "string") ||
-            (item.status !== "pending" && item.status !== "in_progress" && item.status !== "done")
-          ) {
-            return [];
-          }
-
-          return [
-            {
-              id: item.id,
-              kind: item.kind,
-              title: item.title,
-              objective: item.objective,
-              deliverable: item.deliverable,
-              acceptanceCriteria: item.acceptanceCriteria as string[],
-              status: item.status,
-            },
-          ];
+    const children = Array.isArray(record.children)
+      ? record.children.flatMap<SupervisorPlanNode>((value) => {
+          const child = parsePlanNode(value);
+          return child ? [child] : [];
         })
       : [];
 
-    if (items.length === 0) {
+    if (children.length === 0) {
       throw createSupervisorEvalFailedError(
-        "Supervisor decompose result must include at least one valid item"
+        "Supervisor decompose result must include at least one valid child"
       );
     }
 
     return {
       mode: "decompose",
-      decompositionMode,
-      items,
-      activeItemId:
-        typeof record.activeItemId === "string" && record.activeItemId.trim()
-          ? record.activeItemId
+      children,
+      activeNodeId:
+        typeof record.activeNodeId === "string" && record.activeNodeId.trim()
+          ? record.activeNodeId
           : undefined,
       progressSummary:
         typeof record.progressSummary === "string" && record.progressSummary.trim()
           ? record.progressSummary.trim()
           : undefined,
+    };
+  }
+
+  if (requestedMode === "ready_check") {
+    if (payloadMode !== "ready_check") {
+      throw createSupervisorEvalFailedError("Supervisor returned invalid ready_check payload");
+    }
+
+    const granularity = readGranularity(record.granularity);
+    if (!granularity) {
+      throw createSupervisorEvalFailedError(
+        "Supervisor ready_check result is missing a valid granularity"
+      );
+    }
+    if (
+      typeof record.nodeId !== "string" ||
+      !record.nodeId.trim() ||
+      typeof record.reason !== "string" ||
+      !record.reason.trim()
+    ) {
+      throw createSupervisorEvalFailedError("Supervisor returned invalid ready_check payload");
+    }
+
+    return {
+      mode: "ready_check",
+      nodeId: record.nodeId,
+      taskType: readTaskType(record.taskType),
+      granularity,
+      reason: record.reason.trim(),
+      recommendedUnit:
+        typeof record.recommendedUnit === "string" && record.recommendedUnit.trim()
+          ? record.recommendedUnit.trim()
+          : undefined,
+      qualityRisk:
+        typeof record.qualityRisk === "string" && record.qualityRisk.trim()
+          ? record.qualityRisk.trim()
+          : undefined,
+      missingInputs: readStringArray(record.missingInputs),
+      confidence:
+        record.confidence === "low" ||
+        record.confidence === "medium" ||
+        record.confidence === "high"
+          ? record.confidence
+          : undefined,
+    };
+  }
+
+  if (requestedMode === "decompose_child") {
+    if (payloadMode !== "decompose_child") {
+      throw createSupervisorEvalFailedError("Supervisor returned invalid decompose_child payload");
+    }
+    if (typeof record.parentNodeId !== "string" || !record.parentNodeId.trim()) {
+      throw createSupervisorEvalFailedError(
+        "Supervisor decompose_child result is missing a valid parentNodeId"
+      );
+    }
+
+    const children = Array.isArray(record.children)
+      ? record.children.flatMap<SupervisorPlanNode>((value) => {
+          const child = parsePlanNode(value);
+          return child ? [child] : [];
+        })
+      : [];
+
+    if (children.length === 0) {
+      throw createSupervisorEvalFailedError(
+        "Supervisor decompose_child result must include at least one valid child"
+      );
+    }
+
+    return {
+      mode: "decompose_child",
+      parentNodeId: record.parentNodeId,
+      children,
+      activeNodeId:
+        typeof record.activeNodeId === "string" && record.activeNodeId.trim()
+          ? record.activeNodeId
+          : undefined,
+      progressSummary:
+        typeof record.progressSummary === "string" && record.progressSummary.trim()
+          ? record.progressSummary.trim()
+          : undefined,
+    };
+  }
+
+  if (requestedMode === "executable_task") {
+    if (payloadMode !== "executable_task") {
+      throw createSupervisorEvalFailedError("Supervisor returned invalid executable_task payload");
+    }
+    if (
+      typeof record.nodeId !== "string" ||
+      !record.nodeId.trim() ||
+      typeof record.guidance !== "string" ||
+      !record.guidance.trim()
+    ) {
+      throw createSupervisorEvalFailedError("Supervisor returned invalid executable_task payload");
+    }
+
+    return {
+      mode: "executable_task",
+      nodeId: record.nodeId,
+      guidance: record.guidance.trim().slice(0, guidanceMaxChars),
+      fallback: record.fallback === true ? true : undefined,
     };
   }
 
@@ -1237,8 +1789,8 @@ function parseSupervisorEvaluationResult(
       ? record.guidance.trim().slice(0, guidanceMaxChars)
       : undefined;
 
-  const itemUpdates: SupervisorCycleItemUpdate[] | undefined = Array.isArray(record.itemUpdates)
-    ? record.itemUpdates.flatMap<SupervisorCycleItemUpdate>((value) => {
+  const nodeUpdates: SupervisorCycleNodeUpdate[] | undefined = Array.isArray(record.nodeUpdates)
+    ? record.nodeUpdates.flatMap<SupervisorCycleNodeUpdate>((value) => {
         if (!value || typeof value !== "object") {
           return [];
         }
@@ -1247,7 +1799,8 @@ function parseSupervisorEvaluationResult(
           typeof update.id !== "string" ||
           (update.status !== "pending" &&
             update.status !== "in_progress" &&
-            update.status !== "done")
+            update.status !== "done" &&
+            update.status !== "blocked")
         ) {
           return [];
         }
@@ -1260,14 +1813,14 @@ function parseSupervisorEvaluationResult(
     status,
     reason: reason.trim(),
     guidance,
-    activeItemId:
-      typeof record.activeItemId === "string" && record.activeItemId.trim()
-        ? record.activeItemId
+    activeNodeId:
+      typeof record.activeNodeId === "string" && record.activeNodeId.trim()
+        ? record.activeNodeId
         : undefined,
     progressSummary:
       typeof record.progressSummary === "string" && record.progressSummary.trim()
         ? record.progressSummary.trim()
         : undefined,
-    itemUpdates,
+    nodeUpdates,
   };
 }

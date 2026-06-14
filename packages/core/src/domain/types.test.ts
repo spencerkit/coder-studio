@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
+import type { SupervisorTargetMemory } from "./supervisor";
 import type {
   AgentContextKind,
   CustomProviderSessionMode,
@@ -180,5 +181,52 @@ describe("Git hunk contracts", () => {
       hunkId: string;
       operation: "stage" | "unstage" | "discard";
     }>();
+  });
+});
+
+describe("Supervisor target memory", () => {
+  it("allows supervisor target memory to hold a recursive plan tree", () => {
+    const memory: SupervisorTargetMemory = {
+      schemaVersion: 2,
+      targetId: "tgt-1",
+      planTree: {
+        id: "root",
+        title: "Write a 1M word novel",
+        objective: "Produce the full novel through small executable writing tasks",
+        deliverable: "Completed novel",
+        acceptanceCriteria: ["The novel is complete"],
+        status: "in_progress",
+        taskType: "writing",
+        children: [
+          {
+            id: "volume-1",
+            title: "Volume 1",
+            objective: "Draft the first volume",
+            deliverable: "Volume 1 draft",
+            acceptanceCriteria: ["Volume 1 has a complete arc"],
+            status: "in_progress",
+            taskType: "writing",
+            children: [],
+            readyCheck: {
+              granularity: "too_large",
+              reason: "A full volume is too broad for one execution step",
+              recommendedUnit: "scene_card",
+              qualityRisk: "large_scope_quality_loss",
+              missingInputs: ["scene conflict"],
+              confidence: "high",
+              checkedAt: 10,
+            },
+          },
+        ],
+      },
+      activeNodeId: "volume-1",
+      maxDepth: 6,
+      planRevision: 1,
+      stalledCount: 0,
+      updatedAt: 10,
+    };
+
+    expect(memory.planTree.children[0]?.readyCheck?.granularity).toBe("too_large");
+    expect(memory.activeNodeId).toBe("volume-1");
   });
 });

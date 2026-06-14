@@ -24,35 +24,57 @@ export type SupervisorStopReason =
   | "max_supervision_count_reached"
   | "supervisor_uncertain";
 
-export type SupervisorWorkItemStatus = "pending" | "in_progress" | "done";
-export type SupervisorDecompositionMode = "stage" | "subtarget";
-export type SupervisorWorkItemKind = SupervisorDecompositionMode;
+export type SupervisorPlanNodeStatus = "pending" | "in_progress" | "done" | "blocked";
+export type SupervisorTaskType = "coding" | "writing" | "research" | "design" | "generic";
+export type SupervisorGranularity = "too_large" | "ready" | "too_small";
 
-export interface SupervisorWorkItem {
+export interface SupervisorPlanNodeReadyCheck {
+  granularity: SupervisorGranularity;
+  reason: string;
+  recommendedUnit?: string;
+  qualityRisk?: string;
+  missingInputs?: string[];
+  confidence?: "low" | "medium" | "high";
+  checkedAt: number;
+}
+
+export interface SupervisorPlanNodeExecution {
+  executable: boolean;
+  guidance?: string;
+  lastInjectedAt?: number;
+}
+
+export interface SupervisorPlanNode {
   id: string;
-  kind: SupervisorWorkItemKind;
   title: string;
   objective: string;
   deliverable: string;
   acceptanceCriteria: string[];
-  status: SupervisorWorkItemStatus;
+  status: SupervisorPlanNodeStatus;
+  taskType: SupervisorTaskType;
+  children: SupervisorPlanNode[];
+  readyCheck?: SupervisorPlanNodeReadyCheck;
+  execution?: SupervisorPlanNodeExecution;
 }
 
+export const DEFAULT_SUPERVISOR_PLAN_MAX_DEPTH = 6;
+
 export interface SupervisorTargetMemory {
+  schemaVersion: 2;
   targetId: string;
-  decompositionGenerated: boolean;
-  decompositionMode?: SupervisorDecompositionMode;
-  items: SupervisorWorkItem[];
-  activeItemId?: string;
+  planTree: SupervisorPlanNode;
+  activeNodeId?: string;
+  maxDepth: number;
+  planRevision: number;
   progressSummary?: string;
   lastGuidance?: string;
   stalledCount: number;
   updatedAt: number;
 }
 
-export interface SupervisorCycleItemUpdate {
+export interface SupervisorCycleNodeUpdate {
   id: string;
-  status: SupervisorWorkItemStatus;
+  status: SupervisorPlanNodeStatus;
 }
 
 export interface SupervisorCycleTargetRecord {
@@ -65,9 +87,8 @@ export interface SupervisorCycleTargetRecord {
   reason?: string;
   guidance?: string;
   progressSummary?: string;
-  decompositionMode?: SupervisorDecompositionMode;
-  activeItemId?: string;
-  itemUpdates?: SupervisorCycleItemUpdate[];
+  activeNodeId?: string;
+  nodeUpdates?: SupervisorCycleNodeUpdate[];
   injected?: boolean;
   attemptCount?: number;
   errorReason?: string;

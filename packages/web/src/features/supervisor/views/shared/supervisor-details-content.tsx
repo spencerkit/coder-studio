@@ -1,21 +1,189 @@
-import { Button, Tag } from "../../../../components/ui";
+import type { SupervisorPlanNode, SupervisorPlanNodeStatus } from "@coder-studio/core";
+import { X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button, IconButton, Tag, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatProviderLabel } from "../../../notifications/format";
 import { useSupervisorActions } from "../../actions/use-supervisor-actions";
+import { SupervisorMindMapFlow } from "./supervisor-mind-map-flow";
+import { findPlanNodePath } from "./supervisor-mind-map-graph";
+
+const PLAN_NODE_STATUS_TAG_COLOR: Record<
+  SupervisorPlanNodeStatus,
+  "blue" | "green" | "amber" | "neutral"
+> = {
+  blocked: "amber",
+  done: "green",
+  in_progress: "blue",
+  pending: "neutral",
+};
 
 interface SupervisorDetailsContentProps {
   sessionId: string;
   workspaceId: string;
   onEdit: () => void;
+  showInlineEdit?: boolean;
+}
+
+interface SupervisorSelectedNodeDetailProps {
+  node: SupervisorPlanNode;
+  rootId: string;
+  rootTitle: string;
+  onClear: () => void;
+}
+
+function SupervisorSelectedNodeDetail({
+  node,
+  onClear,
+  rootId,
+  rootTitle,
+}: SupervisorSelectedNodeDetailProps) {
+  const t = useTranslation();
+  const title = node.id === rootId ? rootTitle : node.title;
+
+  return (
+    <div className="supervisor-node-detail supervisor-details-surface">
+      <div className="supervisor-node-detail__header">
+        <div className="supervisor-node-detail__heading-copy">
+          <h3 className="supervisor-details-card-title">
+            {t("supervisor.target_memory.node_detail_title")}
+          </h3>
+          <p className="supervisor-node-detail__title">{title}</p>
+        </div>
+        <Tooltip content={t("supervisor.target_memory.node_detail_close")}>
+          <IconButton
+            aria-label={t("supervisor.target_memory.node_detail_close")}
+            className="supervisor-node-detail__close"
+            icon={<X size={14} />}
+            onClick={onClear}
+            size="sm"
+          />
+        </Tooltip>
+      </div>
+
+      <div className="supervisor-node-detail__tags">
+        <Tag color={PLAN_NODE_STATUS_TAG_COLOR[node.status]} size="sm" caps={false}>
+          {t(`supervisor.target_memory.step_status.${node.status}`)}
+        </Tag>
+        {node.children.length ? (
+          <span className="supervisor-node-detail__child-count">
+            {t("supervisor.target_memory.child_count", { count: node.children.length })}
+          </span>
+        ) : null}
+      </div>
+
+      <dl className="supervisor-node-detail__body">
+        <div className="supervisor-node-detail__item">
+          <dt className="supervisor-node-detail__label">
+            {t("supervisor.target_memory.node_detail_objective_title")}
+          </dt>
+          <dd className="supervisor-node-detail__value">
+            <p className="supervisor-node-detail__text">{node.objective}</p>
+          </dd>
+        </div>
+        <div className="supervisor-node-detail__item">
+          <dt className="supervisor-node-detail__label">
+            {t("supervisor.target_memory.node_detail_deliverable_title")}
+          </dt>
+          <dd className="supervisor-node-detail__value">
+            <p className="supervisor-node-detail__text">{node.deliverable}</p>
+          </dd>
+        </div>
+        {node.acceptanceCriteria.length ? (
+          <div className="supervisor-node-detail__item">
+            <dt className="supervisor-node-detail__label">
+              {t("supervisor.target_memory.node_detail_acceptance_title")}
+            </dt>
+            <dd className="supervisor-node-detail__value">
+              <ul className="supervisor-node-detail__list">
+                {node.acceptanceCriteria.map((criterion, index) => (
+                  <li key={`${index}-${criterion}`}>{criterion}</li>
+                ))}
+              </ul>
+            </dd>
+          </div>
+        ) : null}
+        {node.readyCheck ? (
+          <div className="supervisor-node-detail__item">
+            <dt className="supervisor-node-detail__label">
+              {t("supervisor.target_memory.node_detail_ready_check_title")}
+            </dt>
+            <dd className="supervisor-node-detail__value">
+              <div className="supervisor-node-detail__inline-meta">
+                <Tag color="blue" size="sm" caps={false}>
+                  {t(
+                    `supervisor.target_memory.ready_check_granularity.${node.readyCheck.granularity}`
+                  )}
+                </Tag>
+                <span>{node.readyCheck.reason}</span>
+              </div>
+              {node.readyCheck.recommendedUnit ? (
+                <p className="supervisor-node-detail__text">
+                  {t("supervisor.target_memory.node_detail_recommended_unit")}:{" "}
+                  {node.readyCheck.recommendedUnit}
+                </p>
+              ) : null}
+              {node.readyCheck.qualityRisk ? (
+                <p className="supervisor-node-detail__text">
+                  {t("supervisor.target_memory.node_detail_quality_risk")}:{" "}
+                  {node.readyCheck.qualityRisk}
+                </p>
+              ) : null}
+              {node.readyCheck.missingInputs?.length ? (
+                <p className="supervisor-node-detail__text">
+                  {t("supervisor.target_memory.node_detail_missing_inputs")}:{" "}
+                  {node.readyCheck.missingInputs.join(", ")}
+                </p>
+              ) : null}
+            </dd>
+          </div>
+        ) : null}
+        {node.execution?.guidance ? (
+          <div className="supervisor-node-detail__item">
+            <dt className="supervisor-node-detail__label">
+              {t("supervisor.target_memory.node_detail_guidance_title")}
+            </dt>
+            <dd className="supervisor-node-detail__value">
+              <p className="supervisor-node-detail__text">{node.execution.guidance}</p>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </div>
+  );
 }
 
 export function SupervisorDetailsContent({
   sessionId,
-  workspaceId,
   onEdit,
+  showInlineEdit = true,
 }: SupervisorDetailsContentProps) {
   const t = useTranslation();
-  const { recentReasoning, supervisor, targetMemory } = useSupervisorActions({ sessionId });
+  const { supervisor, targetMemory } = useSupervisorActions({ sessionId });
+  const [selectedPlanNodeId, setSelectedPlanNodeId] = useState<string | null>(null);
+  const selectedPlanNodePath = useMemo(
+    () =>
+      targetMemory && selectedPlanNodeId
+        ? findPlanNodePath(targetMemory.planTree, selectedPlanNodeId)
+        : null,
+    [selectedPlanNodeId, targetMemory]
+  );
+  const selectedPlanNode = selectedPlanNodePath?.[selectedPlanNodePath.length - 1] ?? null;
+
+  useEffect(() => {
+    if (selectedPlanNodeId && !selectedPlanNode) {
+      setSelectedPlanNodeId(null);
+    }
+  }, [selectedPlanNode, selectedPlanNodeId]);
+
+  const handleInspectPlanNode = useCallback((nodeId: string) => {
+    setSelectedPlanNodeId(nodeId);
+  }, []);
+
+  const rootDetail =
+    targetMemory?.progressSummary ||
+    targetMemory?.planTree.deliverable ||
+    targetMemory?.planTree.objective;
 
   if (!supervisor) {
     return null;
@@ -36,119 +204,88 @@ export function SupervisorDetailsContent({
         : "idle";
 
   return (
-    <div className="supervisor-details" aria-label={t("supervisor.target_memory.title")}>
-      <section className="supervisor-details-section">
-        <div className="supervisor-details-section-header">
-          <h3 className="supervisor-details-section-title">
-            {t("supervisor.target_memory.basic_info_title")}
-          </h3>
-          <Button
-            className="supervisor-details-edit-btn"
-            onClick={onEdit}
-            size="sm"
-            variant="ghost"
-          >
-            {t("supervisor.action.edit_objective")}
-          </Button>
-        </div>
-        <div className="supervisor-summary-card supervisor-details-surface">
-          <div className="supervisor-meta-grid supervisor-meta-grid--stacked">
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">{t("supervisor.field.objective")}</p>
-              <p className="supervisor-meta-value supervisor-meta-value--wrap">
-                {supervisor.objective}
-              </p>
+    <div
+      className="supervisor-details"
+      data-runtime-status={runtimeStatus}
+      data-supervisor-state={supervisor.state}
+      aria-label={t("supervisor.target_memory.title")}
+    >
+      <section className="supervisor-details-section supervisor-details-section--summary">
+        <div
+          className="supervisor-summary-card supervisor-details-surface"
+          data-supervisor-state={supervisor.state}
+        >
+          {showInlineEdit ? (
+            <div className="supervisor-details-card-header">
+              <Button
+                className="supervisor-details-edit-btn"
+                onClick={onEdit}
+                size="sm"
+                variant="ghost"
+              >
+                {t("supervisor.action.edit_objective")}
+              </Button>
             </div>
-            <div className="supervisor-meta-item">
+          ) : null}
+          <div className="supervisor-meta-grid supervisor-meta-grid--inline">
+            <div className="supervisor-meta-item supervisor-meta-item--evaluator">
               <p className="supervisor-meta-label">{t("supervisor.field.evaluator")}</p>
               <p className="supervisor-meta-value supervisor-meta-value--strong">
                 {formatProviderLabel(supervisor.evaluatorProviderId)}
               </p>
             </div>
-            <div className="supervisor-meta-item">
+            <div className="supervisor-meta-item supervisor-meta-item--cycles">
               <p className="supervisor-meta-label">{t("supervisor.target_memory.cycles_title")}</p>
               <p className="supervisor-meta-value supervisor-meta-value--strong">
                 {completedCycles} / {cycleCap}
               </p>
             </div>
-            <div className="supervisor-meta-item">
-              <p className="supervisor-meta-label">{t("supervisor.target_memory.runtime_title")}</p>
+            <div className="supervisor-meta-item supervisor-meta-item--runtime">
+              <p className="supervisor-meta-label">
+                {t("supervisor.target_memory.runtime_status_label")}
+              </p>
               <p className="supervisor-meta-value supervisor-meta-value--strong">
                 {t(`supervisor.target_memory.runtime_status.${runtimeStatus}`)}
               </p>
             </div>
-            {runtimeStatus === "error" && evaluationError ? (
-              <div className="supervisor-meta-item">
-                <p className="supervisor-meta-label">
-                  {t("supervisor.target_memory.error_reason_label")}
-                </p>
-                <div className="supervisor-error" role="alert">
-                  {evaluationError}
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
       </section>
 
-      {recentReasoning && runtimeStatus !== "error" ? (
-        <section className="supervisor-details-section">
-          <h3 className="supervisor-details-section-title">
-            {t("supervisor.target_memory.reasoning_title")}
-          </h3>
-          <div className="supervisor-details-surface supervisor-details-surface--reasoning supervisor-meta-item--reasoning">
-            <p className="supervisor-meta-value supervisor-meta-value--wrap">{recentReasoning}</p>
+      {runtimeStatus === "error" && evaluationError ? (
+        <section className="supervisor-details-section supervisor-details-section--error">
+          <div className="supervisor-details-surface supervisor-details-surface--error">
+            <h3 className="supervisor-details-card-title">
+              {t("supervisor.target_memory.error_reason_label")}
+            </h3>
+            <div className="supervisor-error" role="alert">
+              {evaluationError}
+            </div>
           </div>
         </section>
       ) : null}
 
-      {targetMemory?.items.length ? (
-        <section className="supervisor-details-section">
-          <h3 className="supervisor-details-section-title">
-            {t("supervisor.target_memory.progress_list_title")}
-          </h3>
-          <div className="supervisor-details-surface supervisor-details-surface--progress">
-            <div className="supervisor-progress-list supervisor-progress-list--checklist">
-              {targetMemory.items.map((item) => {
-                const isActive = item.id === targetMemory.activeItemId;
-                const tagColor =
-                  item.status === "done"
-                    ? "green"
-                    : item.status === "in_progress"
-                      ? "blue"
-                      : "neutral";
-
-                return (
-                  <article
-                    key={item.id}
-                    className={`supervisor-progress-item${isActive ? " supervisor-progress-item--active" : ""}`}
-                  >
-                    <div className="supervisor-progress-item__rail" aria-hidden="true">
-                      <span
-                        className={`supervisor-progress-item__marker supervisor-progress-item__marker--${item.status}`}
-                      />
-                    </div>
-                    <div className="supervisor-progress-item__body">
-                      <div className="supervisor-progress-item__header">
-                        <p className="supervisor-progress-item__title">{item.title}</p>
-                        <Tag color={tagColor} size="sm" caps={false}>
-                          {t(`supervisor.target_memory.step_status.${item.status}`)}
-                        </Tag>
-                      </div>
-                      <p className="supervisor-progress-item__meta-label">
-                        {t("supervisor.target_memory.item_objective_title")}
-                      </p>
-                      <p className="supervisor-progress-item__meta-value">{item.objective}</p>
-                      <p className="supervisor-progress-item__meta-label">
-                        {t("supervisor.target_memory.item_deliverable_title")}
-                      </p>
-                      <p className="supervisor-progress-item__meta-value">{item.deliverable}</p>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+      {targetMemory ? (
+        <section className="supervisor-details-section supervisor-details-section--plan">
+          <div className="supervisor-details-surface supervisor-details-surface--plan">
+            <SupervisorMindMapFlow
+              memory={targetMemory}
+              onInspectNode={handleInspectPlanNode}
+              rootDetail={rootDetail}
+              rootTitle={supervisor.objective}
+              selectedNodeId={selectedPlanNodeId}
+            />
           </div>
+        </section>
+      ) : null}
+      {targetMemory && selectedPlanNode ? (
+        <section className="supervisor-details-section supervisor-details-section--node-detail supervisor-details-node-detail-region">
+          <SupervisorSelectedNodeDetail
+            node={selectedPlanNode}
+            rootId={targetMemory.planTree.id}
+            rootTitle={supervisor.objective}
+            onClear={() => setSelectedPlanNodeId(null)}
+          />
         </section>
       ) : null}
     </div>

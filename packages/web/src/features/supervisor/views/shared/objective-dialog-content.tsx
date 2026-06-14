@@ -177,9 +177,11 @@ export function ObjectiveDialogContent({
         </div>
       ) : null}
 
-      <div className="form-group">
-        <div className="supervisor-objective-label-row">
-          <label htmlFor="objective">{t("supervisor.field.objective")}</label>
+      <div className="form-group supervisor-dialog-section supervisor-dialog-section--objective">
+        <div className="supervisor-dialog-section__head supervisor-objective-label-row">
+          <label className="supervisor-dialog-section__label" htmlFor="objective">
+            {t("supervisor.field.objective")}
+          </label>
           <button type="button" className="supervisor-restore-link" onClick={onOpenRestoreStep}>
             {t("supervisor.dialog.restore.open")}
           </button>
@@ -196,79 +198,98 @@ export function ObjectiveDialogContent({
         <span id={objectiveHelperId} className="dialog-helper">
           {t("supervisor.field.objective_helper")}
         </span>
-        <p className="supervisor-restore-entry__hint">{t("supervisor.dialog.restore.hint")}</p>
       </div>
 
-      <div className="form-group">
-        <label id={evaluatorLabelId} htmlFor="evaluator-provider">
-          {t("supervisor.field.evaluator")}
-        </label>
-        <Select
-          id="evaluator-provider"
-          size="sm"
-          desktopMode="listbox"
-          mobileSheetTitle={t("supervisor.field.evaluator")}
-          mobileSheetPresentation="inline"
-          options={evaluatorOptions}
-          value={draftEvaluatorProviderId}
-          aria-labelledby={evaluatorLabelId}
-          aria-describedby={evaluatorHelperId}
-          onValueChange={onDraftEvaluatorProviderChange}
-        />
-        <span id={evaluatorHelperId} className="dialog-helper">
-          {t("supervisor.field.evaluator_helper")}
-        </span>
+      <div className="supervisor-dialog-section supervisor-dialog-section--evaluator">
+        <div className="supervisor-dialog-section__head">
+          <span className="supervisor-dialog-section__label">
+            {t("supervisor.field.evaluator")}
+          </span>
+        </div>
+        <div className="supervisor-dialog-field-grid">
+          <div className="form-group">
+            <label id={evaluatorLabelId} htmlFor="evaluator-provider">
+              {t("supervisor.field.evaluator")}
+            </label>
+            <Select
+              id="evaluator-provider"
+              size="sm"
+              desktopMode="listbox"
+              mobileSheetTitle={t("supervisor.field.evaluator")}
+              mobileSheetPresentation="inline"
+              options={evaluatorOptions}
+              value={draftEvaluatorProviderId}
+              aria-labelledby={evaluatorLabelId}
+              aria-describedby={evaluatorHelperId}
+              onValueChange={onDraftEvaluatorProviderChange}
+            />
+            <span id={evaluatorHelperId} className="dialog-helper">
+              {t("supervisor.field.evaluator_helper")}
+            </span>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="evaluator-model">{t("supervisor.field.evaluator_model")}</label>
+            <Input
+              id="evaluator-model"
+              size="sm"
+              value={draftEvaluatorModel}
+              onChange={(event) => onDraftEvaluatorModelChange(event.target.value)}
+              aria-describedby={evaluatorModelHelperId}
+              placeholder={t("supervisor.field.evaluator_model_placeholder")}
+            />
+            <span id={evaluatorModelHelperId} className="dialog-helper">
+              {t("supervisor.field.evaluator_model_helper")}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="form-group">
-        <label htmlFor="evaluator-model">{t("supervisor.field.evaluator_model")}</label>
-        <Input
-          id="evaluator-model"
-          size="sm"
-          value={draftEvaluatorModel}
-          onChange={(event) => onDraftEvaluatorModelChange(event.target.value)}
-          aria-describedby={evaluatorModelHelperId}
-          placeholder={t("supervisor.field.evaluator_model_placeholder")}
-        />
-        <span id={evaluatorModelHelperId} className="dialog-helper">
-          {t("supervisor.field.evaluator_model_helper")}
-        </span>
-      </div>
+      <div className="supervisor-dialog-section supervisor-dialog-section--guardrails">
+        <div className="supervisor-dialog-section__head">
+          <span className="supervisor-dialog-section__label">
+            {t("supervisor.dialog.guardrails_schedule")}
+          </span>
+        </div>
+        <div className="supervisor-dialog-field-grid">
+          <div className="form-group">
+            <label htmlFor="max-supervision-count">
+              {t("supervisor.field.max_supervision_count")}
+            </label>
+            <Input
+              id="max-supervision-count"
+              size="sm"
+              type="number"
+              min={0}
+              step={1}
+              value={draftMaxSupervisionCount}
+              onChange={(event) => onDraftMaxSupervisionCountChange(event.target.value)}
+              invalid={!isMaxSupervisionCountValid}
+              aria-invalid={!isMaxSupervisionCountValid}
+              aria-describedby={maxSupervisionCountHelperId}
+            />
+            <span id={maxSupervisionCountHelperId} className="dialog-helper">
+              {t("supervisor.field.max_supervision_count_helper")}
+            </span>
+          </div>
 
-      <div className="form-group">
-        <label htmlFor="max-supervision-count">{t("supervisor.field.max_supervision_count")}</label>
-        <Input
-          id="max-supervision-count"
-          size="sm"
-          type="number"
-          min={0}
-          step={1}
-          value={draftMaxSupervisionCount}
-          onChange={(event) => onDraftMaxSupervisionCountChange(event.target.value)}
-          invalid={!isMaxSupervisionCountValid}
-          aria-invalid={!isMaxSupervisionCountValid}
-          aria-describedby={maxSupervisionCountHelperId}
-        />
-        <span id={maxSupervisionCountHelperId} className="dialog-helper">
-          {t("supervisor.field.max_supervision_count_helper")}
-        </span>
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="scheduled-at">{t("supervisor.field.scheduled_at")}</label>
-        <DateTimePicker
-          label={t("supervisor.field.scheduled_at")}
-          size="sm"
-          value={draftScheduledAt}
-          onValueChange={onDraftScheduledAtChange}
-          placeholder={t("supervisor.field.scheduled_at_placeholder")}
-          clearable
-          minDate={new Date()}
-          aria-describedby={scheduledAtHelperId}
-        />
-        <span id={scheduledAtHelperId} className="dialog-helper">
-          {t("supervisor.field.scheduled_at_helper")}
-        </span>
+          <div className="form-group">
+            <label htmlFor="scheduled-at">{t("supervisor.field.scheduled_at")}</label>
+            <DateTimePicker
+              label={t("supervisor.field.scheduled_at")}
+              size="sm"
+              value={draftScheduledAt}
+              onValueChange={onDraftScheduledAtChange}
+              placeholder={t("supervisor.field.scheduled_at_placeholder")}
+              clearable
+              minDate={new Date()}
+              aria-describedby={scheduledAtHelperId}
+            />
+            <span id={scheduledAtHelperId} className="dialog-helper">
+              {t("supervisor.field.scheduled_at_helper")}
+            </span>
+          </div>
+        </div>
       </div>
     </>
   );
