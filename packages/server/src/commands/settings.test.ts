@@ -223,7 +223,7 @@ describe("settings commands", () => {
           settings: {
             updates: {
               autoCheckEnabled: false,
-              checkIntervalSec: 21600,
+              checkIntervalSec: 3600,
             },
           },
         },
@@ -233,7 +233,7 @@ describe("settings commands", () => {
 
     expect(result.ok).toBe(true);
     expect(settingsRepo.get("updates.autoCheckEnabled")).toBe(false);
-    expect(settingsRepo.get("updates.checkIntervalSec")).toBe(21600);
+    expect(settingsRepo.get("updates.checkIntervalSec")).toBe(3600);
     expect(updateService.reloadScheduleFromSettings).toHaveBeenCalledTimes(1);
   });
 

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
@@ -14,7 +14,6 @@ import {
   type OpenFile,
   openFilesAtomFamily,
 } from "../../atoms";
-import { OpenEditorsSection } from "../shared/open-editors-section";
 import { WorkspaceMobileView } from "./workspace-mobile-view";
 
 vi.hoisted(() => {
@@ -56,25 +55,13 @@ vi.mock("../../../../lib/i18n", () => ({
       "mobile.empty.start_session": "Start session",
       "mobile.files.editor_fallback": "Editor",
       "mobile.sheet.dismiss": "Dismiss sheet",
-      "action.close_all": "Close all",
       "workspace.sidebar.explorer": "Explorer",
-      "workspace.sidebar.open_editors": "Open Files",
-      "workspace.open_editors.collapse_label": "Collapse Open Files",
-      "workspace.open_editors.expand_label": "Expand Open Files",
       "workspace.sidebar.search": "Search",
       "workspace.sidebar.source_control": "Source Control",
     };
 
     if (key === "mobile.sheet.region") {
       return `Sheet ${params?.title ?? ""}`.trim();
-    }
-
-    if (key === "workspace.open_editors.title_with_count") {
-      return `${params?.title ?? "Open Files"} (${params?.count ?? "0"})`;
-    }
-
-    if (key === "workspace.open_editors.close_path") {
-      return `Close ${params?.path ?? ""}`.trim();
     }
 
     return translations[key] ?? key;
@@ -217,11 +204,13 @@ vi.mock("./mobile-agent-sheet", () => ({
 
 vi.mock("./mobile-dock", () => ({
   MobileDock: ({
+    activeItem,
     onSelectItem,
   }: {
+    activeItem: "agent" | "files" | "terminal" | null;
     onSelectItem: (item: "agent" | "files" | "terminal") => void;
   }) => (
-    <div>
+    <div data-testid="mobile-dock" data-active-item={activeItem ?? ""}>
       <button type="button" onClick={() => onSelectItem("files")}>
         Files
       </button>
@@ -231,11 +220,9 @@ vi.mock("./mobile-dock", () => ({
 
 vi.mock("./mobile-files-sheet", () => ({
   MobileFilesSheet: ({
-    workspaceId,
     route,
     onRouteChange,
   }: {
-    workspaceId: string;
     route: { kind: "root" } | { kind: "detail"; path?: string; title?: string };
     onRouteChange?: (
       route: { kind: "root" } | { kind: "detail"; path?: string; title?: string }
@@ -267,7 +254,6 @@ vi.mock("./mobile-files-sheet", () => ({
         >
           Open commit preview
         </button>
-        <OpenEditorsSection workspaceId={workspaceId} />
       </div>
     ) : (
       <div data-testid="mobile-files-sheet-detail">{route.title ?? route.path}</div>
@@ -304,11 +290,13 @@ function createSendCommandMock() {
   });
 }
 
-function renderMobileView(options: {
-  activePath: string | null;
-  openFiles: Record<string, OpenFile>;
-  diffPreview?: GitDiffPreview | null;
-}) {
+function renderMobileView(
+  options: {
+    activePath: string | null;
+    openFiles: Record<string, OpenFile>;
+    diffPreview?: GitDiffPreview | null;
+  } = { activePath: null, openFiles: {} }
+) {
   const store = createStore();
   currentStore = store;
   store.set(connectionStatusAtom, "connected");
@@ -346,6 +334,10 @@ function renderMobileView(options: {
 }
 
 describe("WorkspaceMobileView", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   afterEach(() => {
     currentStore = null;
     vi.restoreAllMocks();
@@ -475,7 +467,7 @@ describe("WorkspaceMobileView", () => {
     });
   });
 
-  it("preserves an active commit preview when close all clears open editors", async () => {
+  it("preserves an active commit preview after editor tabs clear open editors", async () => {
     const diffPreview = {
       kind: "commit-file-list" as const,
       path: "abc123",
@@ -511,10 +503,12 @@ describe("WorkspaceMobileView", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Files" }));
-    const openEditorsSection = screen
-      .getByRole("heading", { level: 2, name: "Open Files (1)" })
-      .closest("section") as HTMLElement;
-    fireEvent.click(within(openEditorsSection).getByRole("button", { name: "Close all" }));
+    expect(screen.queryByRole("heading", { level: 2, name: /Open Files|打开的文件/i })).toBeNull();
+
+    act(() => {
+      store.set(openFilesAtomFamily("ws-test"), {});
+      store.set(activeFilePathAtomFamily("ws-test"), null);
+    });
 
     await waitFor(() => {
       expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
@@ -551,5 +545,14 @@ describe("WorkspaceMobileView", () => {
     expect(screen.getByTestId("mobile-files-sheet-root")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Sheet Explorer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Explorer" })).toBeInTheDocument();
+  });
+
+  it("does not expose the dev browser sheet from the mobile dock", async () => {
+    renderMobileView();
+
+    expect(screen.queryByRole("button", { name: "Browser" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId("dev-browser-surface")).not.toBeInTheDocument();
+    });
   });
 });

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { CommandContext } from "../ws/dispatch.js";
 import "../commands/workspace-activity.js";
+import "../commands/ui-actions.js";
 import { dispatch, getRegisteredCommands, registerCommand } from "../ws/dispatch.js";
 
 describe("Command Dispatch", () => {
@@ -201,6 +202,36 @@ describe("Command Dispatch", () => {
 
       expect(result.ok).toBe(true);
       expect(ctx.autoFetch.unregisterViewer).toHaveBeenCalledWith("client-1");
+    });
+
+    it("allows UI action dispatch from command clients without an active browser lease", async () => {
+      const broadcast = vi.fn();
+      ctx = {
+        ...ctx,
+        broadcaster: {
+          broadcast,
+          getRequestMetadata: () => ({ url: "/ws" }),
+        } as never,
+        activationMgr: { getLease: () => undefined } as never,
+      };
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "ui-action-allowlist-1",
+          op: "uiAction.dispatch",
+          args: {
+            workspaceId: "ws-1",
+            requestId: "req-1",
+            intent: { type: "panel.show", panel: "terminal" },
+          },
+        },
+        ctx,
+        "cli-client"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(broadcast).toHaveBeenCalled();
     });
   });
 });

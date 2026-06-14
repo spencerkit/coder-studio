@@ -45,7 +45,14 @@ const gitStatus: GitStatus = {
   ahead: 0,
   behind: 0,
   staged: [],
-  modified: [{ path: "packages/web/src/app.tsx", status: "modified" }],
+  modified: [
+    { path: "packages/web/src/app.tsx", status: "modified" },
+    {
+      path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+      status: "modified",
+    },
+    { path: "packages/web/src/styles/components.css", status: "modified" },
+  ],
   untracked: [{ path: "e2e-ui/src/index.ts", status: "untracked" }],
   deleted: [],
 };
@@ -191,6 +198,75 @@ const previewProviderRuntimeStatus: ProviderRuntimeStatusResponse["providers"] =
   },
 };
 
+const previewSkillTargets = [
+  {
+    providerId: "codex",
+    displayName: "Codex",
+    kind: "built_in" as const,
+    skillDir: "/Users/spencer/.codex/skills",
+    mountPreference: "auto" as const,
+    lastHealthState: "healthy" as const,
+    mountedSkillCount: 2,
+  },
+  {
+    providerId: "claude",
+    displayName: "Claude Code",
+    kind: "built_in" as const,
+    skillDir: "/Users/spencer/.claude/skills",
+    mountPreference: "auto" as const,
+    lastHealthState: "healthy" as const,
+    mountedSkillCount: 1,
+  },
+  {
+    providerId: "gemini",
+    displayName: "Gemini CLI",
+    kind: "built_in" as const,
+    mountPreference: "auto" as const,
+    lastHealthState: "unconfigured" as const,
+    mountedSkillCount: 0,
+  },
+];
+
+const previewSkillMounts = [
+  {
+    providerId: "codex",
+    skillSlug: "frontend-design",
+    enabled: true,
+    sourcePath: "/Users/spencer/.coder-studio/skills/frontend-design",
+    targetPath: "/Users/spencer/.codex/skills/frontend-design",
+    mountModeResolved: "symlink" as const,
+    status: "mounted" as const,
+    lastSyncedAt: 1715731200000,
+  },
+  {
+    providerId: "claude",
+    skillSlug: "frontend-design",
+    enabled: false,
+    sourcePath: "/Users/spencer/.coder-studio/skills/frontend-design",
+    targetPath: "/Users/spencer/.claude/skills/frontend-design",
+    mountModeResolved: "symlink" as const,
+    status: "mounted" as const,
+    lastSyncedAt: 1715731200000,
+  },
+];
+
+const previewSkillsLibrary = [
+  {
+    slug: "frontend-design",
+    displayName: "Frontend Design",
+    description: "Design and verify production frontend UI changes in the workspace.",
+    version: "1.4.0",
+    source: "skillhub" as const,
+    libraryPath: "/Users/spencer/.coder-studio/skills/frontend-design",
+    installState: "installed" as const,
+    installedAt: 1715731200000,
+    updatedAt: 1715731200000,
+    mountedProviderIds: ["codex"],
+    mountStatus: "partially_mounted" as const,
+    errorCount: 0,
+  },
+];
+
 const fileTreeMap = new Map<string, FileNode[]>();
 fileTreeMap.set(".", [
   { name: "packages", path: "packages", kind: "dir" },
@@ -198,7 +274,181 @@ fileTreeMap.set(".", [
   { name: "README.md", path: "README.md", kind: "file" },
 ]);
 
-const openPreviewFiles: Record<string, OpenFile> = {};
+const openPreviewFiles: Record<string, OpenFile> = {
+  "packages/web/src/features/code-editor/views/shared/editor-surface.tsx": {
+    kind: "text",
+    path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+    content: [
+      'export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }) => {',
+      "  const { t } = useTranslation();",
+      "  const { activeFilePath, openFiles, openEditorPaths } = state;",
+      "",
+      "  const visibleEditorPaths = mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles));",
+      "",
+      "  return (",
+      '    <header className="editor-surface__header editor-surface__header--tabs">',
+      '      <div className="code-editor-tabbar">',
+      '      <div className="code-editor-tabs" role="tablist">',
+      "        {visibleEditorPaths.map((path) => {",
+      "          const fileName = getFileName(path);",
+      "          return (",
+      '          <button key={path} type="button" role="tab" aria-selected={path === activeFilePath}>',
+      '            <span className="code-editor-tab__name">{fileName}</span>',
+      "          </button>",
+      "          );",
+      "        })}",
+      "      </div>",
+      "      <CodeEditorDesktopHeaderActions showModeActions={false} />",
+      "      </div>",
+      "    </header>",
+      "  );",
+      "};",
+    ].join("\n"),
+    savedContent: [
+      "export const EditorSurface: FC<EditorSurfaceProps> = ({ state }) => {",
+      "  return <CodeEditorHost state={state} />;",
+      "};",
+    ].join("\n"),
+    baseHash: "preview:editor-surface-tsx",
+    isDirty: true,
+  },
+  "packages/web/src/features/code-editor/views/shared/code-editor-host.tsx": {
+    kind: "text",
+    path: "packages/web/src/features/code-editor/views/shared/code-editor-host.tsx",
+    content: [
+      "export const CodeEditorDesktopHeaderActions: FC<Props> = ({ state, onRequestClose }) => {",
+      "  return (",
+      '    <div className="editor-surface__toolbar" role="toolbar">',
+      '      <IconButton icon={<PencilLine size={14} />} aria-label={t("code_editor.mode_edit")} />',
+      '      <IconButton icon={<GitCompareArrows size={14} />} aria-label={t("code_editor.mode_diff")} />',
+      '      <IconButton icon={<Eye size={14} />} aria-label={t("code_editor.mode_preview")} />',
+      '      <IconButton icon={<X size={14} />} aria-label={t("code_editor.close_editor_view")} />',
+      "    </div>",
+      "  );",
+      "};",
+    ].join("\n"),
+    savedContent: [
+      "export const CodeEditorDesktopHeaderActions: FC<Props> = ({ state, onRequestClose }) => {",
+      "  return <EditorToolbar state={state} onClose={onRequestClose} />;",
+      "};",
+    ].join("\n"),
+    baseHash: "preview:code-editor-host-tsx",
+    isDirty: false,
+  },
+  "packages/web/src/styles/components.css": {
+    kind: "text",
+    path: "packages/web/src/styles/components.css",
+    content: [
+      ".editor-surface__header--tabs {",
+      "  flex-direction: column;",
+      "  gap: 0;",
+      "  padding: 0;",
+      "}",
+      "",
+      ".code-editor-tabs {",
+      "  display: flex;",
+      "  min-height: 34px;",
+      "  overflow-x: auto;",
+      "  border-bottom: 1px solid var(--workspace-editor-toolbar-border);",
+      "}",
+      "",
+      ".code-editor-tab {",
+      "  width: 196px;",
+      "  border-radius: 0;",
+      "}",
+    ].join("\n"),
+    savedContent: [
+      ".code-editor-tabs {",
+      "  display: flex;",
+      "  min-height: 34px;",
+      "  border-bottom: 1px solid var(--workspace-editor-toolbar-border);",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:components-css",
+    isDirty: true,
+  },
+  "packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx": {
+    kind: "text",
+    path: "packages/web/src/features/workspace/views/desktop/workspace-desktop-view.tsx",
+    content: [
+      "export function WorkspaceDesktopView() {",
+      "  return (",
+      "    <WorkspaceShell>",
+      "      <AgentPanes />",
+      "      <BottomPanel />",
+      "    </WorkspaceShell>",
+      "  );",
+      "}",
+    ].join("\n"),
+    savedContent: [
+      "export function WorkspaceDesktopView() {",
+      "  return <WorkspaceShell />;",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:workspace-desktop-view-tsx",
+    isDirty: false,
+  },
+  "packages/web/src/features/code-editor/actions/use-code-editor-actions.ts": {
+    kind: "text",
+    path: "packages/web/src/features/code-editor/actions/use-code-editor-actions.ts",
+    content: [
+      "export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {",
+      "  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtom);",
+      "  const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));",
+      "",
+      "  const activateOpenFile = useCallback((path: string) => {",
+      "    setActiveFilePath(path);",
+      "    void persistUiState({ activeEditorPath: path });",
+      "  }, [persistUiState, setActiveFilePath]);",
+      "",
+      "  return { activeFilePath, openEditorPaths, activateOpenFile };",
+      "}",
+    ].join("\n"),
+    savedContent: [
+      "export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {",
+      "  return useEditorActions(options);",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:use-code-editor-actions-ts",
+    isDirty: false,
+  },
+  "packages/web/src/features/workspace/index.tsx": {
+    kind: "text",
+    path: "packages/web/src/features/workspace/index.tsx",
+    content: [
+      'export { WorkspaceDesktopView } from "./views/desktop/workspace-desktop-view";',
+      'export { WorkspaceMobileView } from "./views/mobile/workspace-mobile-view";',
+    ].join("\n"),
+    savedContent: [
+      'export { WorkspaceDesktopView } from "./views/desktop/workspace-desktop-view";',
+      'export { WorkspaceMobileView } from "./views/mobile/workspace-mobile-view";',
+    ].join("\n"),
+    baseHash: "preview:workspace-index-tsx",
+    isDirty: false,
+  },
+  "packages/web/src/locales/zh.json": {
+    kind: "text",
+    path: "packages/web/src/locales/zh.json",
+    content: [
+      "{",
+      '  "code_editor": {',
+      '    "open_editor_tabs": "打开的编辑器标签",',
+      '    "current_file_path": "当前文件路径",',
+      '    "close_editor_view": "关闭编辑器视图"',
+      "  }",
+      "}",
+    ].join("\n"),
+    savedContent: [
+      "{",
+      '  "code_editor": {',
+      '    "open_editor_tabs": "打开的编辑器标签"',
+      "  }",
+      "}",
+    ].join("\n"),
+    baseHash: "preview:zh-json",
+    isDirty: false,
+  },
+};
 
 const editorPanePreviewFiles: Record<string, OpenFile> = {
   "packages/web/src/app.tsx": {
@@ -632,7 +882,7 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
       [workspace.id]: openPreviewFiles,
     },
     activeFilePathByWorkspaceId: {
-      [workspace.id]: "README.md",
+      [workspace.id]: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
     },
     gitStateByWorkspaceId: {
       [workspace.id]: gitStatus,
@@ -708,6 +958,30 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
       terminalListByWorkspaceId: {
         [workspace.id]: [],
       },
+      skillsLibraryList: previewSkillsLibrary,
+      skillsHealthScan: {
+        targets: previewSkillTargets,
+        mounts: previewSkillMounts,
+      },
+      skillsRecommendations: [
+        {
+          slug: "test-automation",
+          displayName: "Test Automation",
+          description: "Detect and run the most relevant project checks.",
+          reason: "This workspace has pnpm scripts for test, build, and lint.",
+          sourceQuery: "workspace scripts",
+          score: 0.88,
+          installed: false,
+        },
+      ],
+      skillsVersionChecks: [
+        {
+          slug: "frontend-design",
+          currentVersion: "1.4.0",
+          latestVersion: "1.4.0",
+          status: "up_to_date",
+        },
+      ],
     },
   };
 }

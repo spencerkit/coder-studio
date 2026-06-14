@@ -1,3 +1,4 @@
+import { LSP_SEMANTIC_TOKEN_TYPES } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
 import zh from "../locales/zh.json";
@@ -182,6 +183,10 @@ function getTranslationValue(messages: Record<string, unknown>, key: string): un
 
     return undefined;
   }, messages);
+}
+
+function normalizeMonacoColor(color: string | undefined): string | undefined {
+  return color?.replace(/^#/, "").toLowerCase();
 }
 
 describe("theme registry", () => {
@@ -426,6 +431,41 @@ describe("theme registry", () => {
       expect(theme?.iconTheme.icons["git.commit"]).toEqual(
         expect.objectContaining({ tone: expected.icon.gitTone })
       );
+    }
+  });
+
+  it("covers LSP semantic token colors for Monaco themes", () => {
+    const highlightedSemanticTokens = [
+      "class",
+      "decorator",
+      "enum",
+      "function",
+      "interface",
+      "method",
+      "namespace",
+      "number",
+      "property",
+      "regexp",
+      "struct",
+      "type",
+      "typeParameter",
+    ];
+
+    for (const theme of THEMES) {
+      const rulesByToken = new Map(theme.monaco.rules.map((rule) => [rule.token, rule]));
+      const editorForeground = normalizeMonacoColor(theme.monaco.colors["editor.foreground"]);
+
+      for (const token of LSP_SEMANTIC_TOKEN_TYPES) {
+        expect(rulesByToken.get(token)?.foreground, `${theme.id} missing ${token}`).toEqual(
+          expect.any(String)
+        );
+      }
+
+      for (const token of highlightedSemanticTokens) {
+        expect(normalizeMonacoColor(rulesByToken.get(token)?.foreground)).not.toBe(
+          editorForeground
+        );
+      }
     }
   });
 

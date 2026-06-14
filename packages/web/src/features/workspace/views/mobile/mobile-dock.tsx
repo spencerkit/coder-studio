@@ -1,9 +1,11 @@
 import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 
+type MobileDockItem = "agent" | "files" | "terminal";
+
 interface MobileDockProps {
-  activeItem: "agent" | "files" | "terminal" | null;
-  onSelectItem: (item: "agent" | "files" | "terminal") => void;
+  activeItem: MobileDockItem | null;
+  onSelectItem: (item: MobileDockItem) => void;
 }
 
 export function MobileDock({ activeItem, onSelectItem }: MobileDockProps) {

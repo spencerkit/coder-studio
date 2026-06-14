@@ -19,6 +19,9 @@ mkdirSync(stateDir, { recursive: true });
 rmSync(join(stateDir, "state"), { recursive: true, force: true });
 
 const now = Date.now();
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const latestCompleteHourStart = now - (now % HOUR_MS) - HOUR_MS;
 const siblingWorkspacePath = join(join(workspacePath, ".."), "workspace-b");
 const externalWorkspacePath = join(join(workspacePath, ".."), "workspace-c");
 const availableWorkspacePaths = [workspacePath, siblingWorkspacePath, externalWorkspacePath].sort(
@@ -32,7 +35,51 @@ const settingsRepo = new SettingsRepo({
   filePath: join(stateDir, "state", "settings.json"),
 });
 const workAnalysisRepo = new WorkAnalysisRepo({
-  filePath: join(stateDir, "state", "work-analysis.json"),
+  filePath: join(stateDir, "state", "work-analysis.sqlite"),
+});
+
+const buildIndexedSession = ({
+  sessionId,
+  workspacePath: targetWorkspacePath,
+  hourStart,
+  inputTokens,
+  outputTokens,
+}: {
+  sessionId: string;
+  workspacePath: string;
+  hourStart: number;
+  inputTokens: number;
+  outputTokens: number;
+}) => ({
+  providerId: "codex" as const,
+  sessionId,
+  workspacePath: targetWorkspacePath,
+  startedAt: hourStart,
+  lastActiveAt: hourStart + 45 * 60 * 1000,
+  sourceRef: `codex:${sessionId}`,
+  title: `${sessionId} summary`,
+  modelId: "gpt-5-codex",
+  gitBranch: "develop",
+  userTurnCount: 3,
+  assistantTurnCount: 4,
+  toolUseCount: 2,
+  usage: {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: Math.round(inputTokens * 0.1),
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: Math.round(inputTokens * 0.05),
+    reasoningOutputTokens: 0,
+    totalTokens: inputTokens + outputTokens,
+  },
+  usageCoverage: {
+    hasUsage: true,
+    callCount: 1,
+    callsWithTotalTokens: 1,
+    estimatedCallCount: 0,
+  },
+  parseErrorCount: 0,
+  timestampQuality: "explicit" as const,
 });
 
 workspaceRepo.create({
@@ -429,6 +476,73 @@ workAnalysisRepo.upsert({
       emptySessionCount: 0,
     },
   },
+});
+
+workAnalysisRepo.upsertHourlyIndex({
+  version: 1,
+  bucketMode: "hourly_session_slices",
+  indexedAt: now,
+  indexedThroughHourStart: latestCompleteHourStart,
+  sourceDigest: "analysis-e2e-source",
+  providerStatuses: [
+    {
+      providerId: "codex",
+      status: "supported",
+      sessionCount: 4,
+      parseErrorCount: 0,
+      warningCount: 0,
+    },
+  ],
+  buckets: [
+    {
+      hourStart: latestCompleteHourStart - 4 * DAY_MS,
+      sessions: [
+        buildIndexedSession({
+          sessionId: "sess-1",
+          workspacePath,
+          hourStart: latestCompleteHourStart - 4 * DAY_MS,
+          inputTokens: 360,
+          outputTokens: 260,
+        }),
+      ],
+    },
+    {
+      hourStart: latestCompleteHourStart - 3 * DAY_MS,
+      sessions: [
+        buildIndexedSession({
+          sessionId: "sess-2",
+          workspacePath,
+          hourStart: latestCompleteHourStart - 3 * DAY_MS,
+          inputTokens: 220,
+          outputTokens: 200,
+        }),
+      ],
+    },
+    {
+      hourStart: latestCompleteHourStart - 2 * DAY_MS,
+      sessions: [
+        buildIndexedSession({
+          sessionId: "sess-3",
+          workspacePath: siblingWorkspacePath,
+          hourStart: latestCompleteHourStart - 2 * DAY_MS,
+          inputTokens: 210,
+          outputTokens: 100,
+        }),
+      ],
+    },
+    {
+      hourStart: latestCompleteHourStart - DAY_MS,
+      sessions: [
+        buildIndexedSession({
+          sessionId: "sess-4",
+          workspacePath: externalWorkspacePath,
+          hourStart: latestCompleteHourStart - DAY_MS,
+          inputTokens: 530,
+          outputTokens: 320,
+        }),
+      ],
+    },
+  ],
 });
 
 settingsRepo.set("workspace.lastViewedTarget", {

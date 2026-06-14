@@ -6,6 +6,8 @@ import { LoginPage } from "../../features/auth";
 import { SessionGatePage } from "../../features/auth/session-gate";
 import { CommandPalette } from "../../features/command-palette";
 import { DiagnosticsPage } from "../../features/diagnostics";
+import { MonitoringPage } from "../../features/monitoring";
+import { MoreFeaturesPage } from "../../features/more";
 import { NotFoundPage } from "../../features/not-found";
 import { ToastContainer } from "../../features/notifications";
 import { SettingsPage } from "../../features/settings";
@@ -36,7 +38,9 @@ export function MobileShell() {
   const shouldBypassAuthLoading =
     location.pathname.startsWith("/settings") ||
     location.pathname.startsWith("/analytics") ||
+    location.pathname.startsWith("/monitoring") ||
     location.pathname.startsWith("/diagnostics") ||
+    location.pathname.startsWith("/more") ||
     location.pathname === "/session-gate";
 
   return (
@@ -66,6 +70,8 @@ export function MobileShell() {
             <Route path="/session-gate" element={<SessionGatePage />} />
             <Route path="/diagnostics" element={<DiagnosticsPage />} />
             <Route path="/analytics" element={<WorkAnalyticsPage />} />
+            <Route path="/monitoring" element={<MonitoringPage />} />
+            <Route path="/more/*" element={<MoreFeaturesPage />} />
             <Route
               path="/workspace"
               element={

@@ -25,6 +25,16 @@ type ReadyEnsureSessionResult = {
 };
 type ResolveEnsureSession = (summary: ReadyEnsureSessionResult) => void;
 
+const { mockRegistryGetOrCreate } = vi.hoisted(() => ({
+  mockRegistryGetOrCreate: vi.fn(),
+}));
+
+vi.mock("../monaco/model-registry", () => ({
+  monacoModelRegistry: {
+    getOrCreate: mockRegistryGetOrCreate,
+  },
+}));
+
 vi.mock("monaco-editor", () => ({
   Uri: {
     file: (path: string) => ({
@@ -83,11 +93,16 @@ function createMockModel(
   };
 }
 
+function createMockPosition(lineNumber: number, column: number): monaco.Position {
+  return { lineNumber, column } as monaco.Position;
+}
+
 describe("createLspBridge", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     vi.mocked(monaco.editor.getModel).mockReturnValue(null);
+    mockRegistryGetOrCreate.mockClear();
   });
 
   afterEach(() => {
@@ -452,6 +467,94 @@ describe("createLspBridge", () => {
     await Promise.resolve();
 
     expect(sendCommand.mock.calls.filter(([op]) => op === "lsp.openDocument")).toHaveLength(0);
+  });
+
+  it("preloads the target Monaco model before returning cross-file definitions", async () => {
+    const sendCommand = vi.fn(async (op: string, args?: { path?: string }) => {
+      if (op === "lsp.ensureSession") {
+        return {
+          kind: "ready",
+          displayName: "TypeScript language server",
+          source: "bundled",
+          summary: {
+            workspaceId: "ws-1",
+            serverKind: "typescript",
+            status: "ready",
+            capabilities: {
+              definition: true,
+              references: true,
+              hover: true,
+              documentSymbols: true,
+              diagnostics: true,
+            },
+          },
+        };
+      }
+
+      if (op === "lsp.definition") {
+        return [
+          {
+            path: "src/shared.ts",
+            range: {
+              startLine: 1,
+              startColumn: 14,
+              endLine: 1,
+              endColumn: 25,
+            },
+          },
+        ];
+      }
+
+      if (op === "file.read" && args?.path === "src/shared.ts") {
+        return {
+          kind: "text",
+          content: "export const sharedValue = 1;\n",
+          baseHash: "hash-shared",
+          encoding: "utf-8",
+        };
+      }
+
+      return undefined;
+    });
+
+    const bridge = createLspBridge({
+      sendCommand: sendCommand as BridgeSendCommand,
+      subscribe: vi.fn(() => () => {}),
+    });
+    const model = createMockModel(
+      'import { sharedValue } from "./shared";\nexport const computedValue = sharedValue + 1;\n',
+      1,
+      monaco.Uri.file("/repo/src/consumer.ts")
+    );
+
+    bridge.attachModel({
+      workspaceId: "ws-1",
+      workspaceRootPath: "/repo",
+      path: "src/consumer.ts",
+      monacoLanguage: "typescript",
+      model,
+    });
+
+    const location = await bridge.provideDefinition(model, createMockPosition(1, 10));
+
+    expect(sendCommand).toHaveBeenCalledWith("file.read", {
+      workspaceId: "ws-1",
+      path: "src/shared.ts",
+    });
+    expect(mockRegistryGetOrCreate).toHaveBeenCalledWith({
+      workspaceRootPath: "/repo",
+      path: "src/shared.ts",
+      language: "typescript",
+      content: "export const sharedValue = 1;\n",
+    });
+    expect(location).toEqual([
+      expect.objectContaining({
+        uri: expect.objectContaining({
+          path: "/repo/src/shared.ts",
+          scheme: "file",
+        }),
+      }),
+    ]);
   });
 
   it("applies diagnostics against the latest workspace root path for a reused workspace subscription", async () => {

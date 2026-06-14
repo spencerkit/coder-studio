@@ -9,6 +9,9 @@ import type {
 } from "@coder-studio/core";
 import { Topics } from "@coder-studio/core";
 import * as monaco from "monaco-editor";
+import { detectEditorLanguage } from "../monaco/language";
+import { monacoModelRegistry } from "../monaco/model-registry";
+import { toWorkspaceFileUri } from "../monaco/uri";
 import { createDiagnosticsController } from "./diagnostics";
 import { resolveLspServerKind } from "./language-map";
 import { createLspProviderRegistry } from "./providers";
@@ -54,6 +57,13 @@ type InstallableReadiness = Extract<
   LspEnsureSessionResult,
   { kind: "tool_missing" | "installing" | "failed" }
 >;
+
+type FileReadTextPayload = {
+  kind: "text";
+  content: string;
+  baseHash: string;
+  encoding: "utf-8";
+};
 
 function isInstallableReadiness(
   readiness: LspEnsureSessionResult
@@ -133,6 +143,31 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
         workspaceId: meta.workspaceId,
         path: meta.path,
       }),
+    ensureLocationModel: async ({ meta, location }) => {
+      const uri = toWorkspaceFileUri(meta.workspaceRootPath, location.path);
+      if (monaco.editor.getModel(uri)) {
+        return;
+      }
+
+      const result = await transport.sendCommand<FileReadTextPayload | { kind: "image" } | null>(
+        "file.read",
+        {
+          workspaceId: meta.workspaceId,
+          path: location.path,
+        }
+      );
+
+      if (!result || result.kind !== "text") {
+        return;
+      }
+
+      monacoModelRegistry.getOrCreate({
+        workspaceRootPath: meta.workspaceRootPath,
+        path: location.path,
+        language: detectEditorLanguage(location.path),
+        content: result.content,
+      });
+    },
   });
 
   function configure(nextTransport: Partial<LspBridgeTransport>): void {

@@ -53,16 +53,14 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
     return unsubscribe;
   }, [workspaceId]);
 
-  const pendingActivePath =
+  const activeOpenEditorPath =
     activeFilePath &&
-    !(activeFilePath in openFiles) &&
-    hasPendingEditorLoad(workspaceId, activeFilePath)
+    (activeFilePath in openFiles || hasPendingEditorLoad(workspaceId, activeFilePath))
       ? activeFilePath
       : null;
   const openEditorPaths = orderOpenEditorPaths([
     ...persistedOpenEditorPaths,
-    ...Object.keys(openFiles),
-    ...(pendingActivePath ? [pendingActivePath] : []),
+    ...(activeOpenEditorPath ? [activeOpenEditorPath] : []),
   ]);
   const resolvedTitle = title ?? t("workspace.sidebar.open_editors");
   const headingLabel = t("workspace.open_editors.title_with_count", {
@@ -74,9 +72,10 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
   const toggleLabel = isExpanded
     ? t("workspace.open_editors.collapse_label")
     : t("workspace.open_editors.expand_label");
-  const dirtyOpenEditorPaths = Object.values(openFiles)
-    .filter((file) => file.kind === "text" && file.isDirty)
-    .map((file) => file.path);
+  const dirtyOpenEditorPaths = openEditorPaths.filter((path) => {
+    const file = openFiles[path];
+    return file?.kind === "text" && file.isDirty;
+  });
   const closeConfirmDescription =
     pendingCloseRequest?.kind === "path"
       ? t("code_editor.close_unsaved_description", { name: pendingCloseRequest.path })

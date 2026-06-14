@@ -1,7 +1,12 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { isWithinRange, resolveHomePath, safeJsonParse } from "./path-encoding.js";
+import {
+  decodeProviderWorkspacePathFromProjectDir,
+  isWithinRange,
+  resolveHomePath,
+  safeJsonParse,
+} from "./path-encoding.js";
 import type {
   ProviderWorkLogDiscovery,
   ProviderWorkLogSource,
@@ -47,6 +52,10 @@ export function createCursorWorkLogSource(options: { home?: string } = {}): Prov
         if (!projectDir.isDirectory()) {
           continue;
         }
+        const projectWorkspacePath = decodeProviderWorkspacePathFromProjectDir(
+          projectDir.name,
+          input.workspacePaths
+        );
         const dir = join(root, projectDir.name, "agent-transcripts");
         const dirStat = await stat(dir).catch(() => undefined);
         if (!dirStat?.isDirectory()) {
@@ -85,7 +94,7 @@ export function createCursorWorkLogSource(options: { home?: string } = {}): Prov
             let assistantTurnCount = 0;
             let toolUseCount = 0;
             let fileParseErrors = 0;
-            let workspacePath: string | undefined;
+            let workspacePathFromRecord: string | undefined;
 
             for (const line of lines) {
               const record = safeJsonParse<CursorRecord>(line);
@@ -93,7 +102,7 @@ export function createCursorWorkLogSource(options: { home?: string } = {}): Prov
                 fileParseErrors += 1;
                 continue;
               }
-              workspacePath ??=
+              workspacePathFromRecord ??=
                 typeof record.cwd === "string" && record.cwd.length > 0 ? record.cwd : undefined;
               if (record.role === "user") {
                 userTurnCount += 1;
@@ -113,6 +122,7 @@ export function createCursorWorkLogSource(options: { home?: string } = {}): Prov
             }
 
             parseErrorCount += fileParseErrors;
+            const workspacePath = workspacePathFromRecord ?? projectWorkspacePath;
             if (
               !workspacePath ||
               !isWithinRange(fileStat.mtimeMs, fileStat.mtimeMs, input.timeRange)

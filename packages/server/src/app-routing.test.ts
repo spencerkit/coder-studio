@@ -41,8 +41,11 @@ describe("app routing", () => {
 
   const createApp = async (
     authEnabled = false,
-    extraConfig: Record<string, unknown> = {}
+    extraConfig: Record<string, unknown> = {},
+    options?: { webRoot?: string | null }
   ): Promise<FastifyInstance> => {
+    const effectiveWebRoot =
+      options?.webRoot === undefined ? webRoot : (options.webRoot ?? undefined);
     const eventBus = new EventBus();
     const fencingMgr = new FencingManager();
     const config = {
@@ -51,7 +54,7 @@ describe("app routing", () => {
       stateDir,
       uploadsDir: join(tempDir, "uploads"),
       logLevel: "info" as const,
-      webRoot,
+      webRoot: effectiveWebRoot,
       auth: {
         enabled: authEnabled,
         password: authEnabled ? "sekrit" : undefined,
@@ -67,7 +70,7 @@ describe("app routing", () => {
 
     app = await buildFastifyApp({
       wsHub,
-      webRoot,
+      webRoot: effectiveWebRoot,
       workspaceMgr: new WorkspaceManager({
         workspaceRepo: new WorkspaceRepo({
           filePath: join(tempDir, "state", "workspaces.json"),
@@ -238,6 +241,34 @@ describe("app routing", () => {
     expect(response.body).not.toContain("<!doctype html>");
   });
 
+  it("registers dev browser session API routes", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "POST",
+      url: "/api/dev-proxy/session",
+      payload: { url: "http://example.com:8000" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: "invalid_dev_browser_target" });
+  });
+
+  it("does not serve index.html for dev browser proxy paths", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/dev-browser/session/missing/proxy/app.js",
+      headers: {
+        accept: "application/javascript",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("<!doctype html>");
+  });
+
   it("treats root static files as public even when auth is enabled", async () => {
     const instance = await createApp(true);
 
@@ -248,5 +279,44 @@ describe("app routing", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe("fake-wave");
+  });
+
+  it("serves the dev browser service worker when a web root is configured", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/dev-browser-sw.js",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("javascript");
+    expect(response.body).toContain("coder-studio-dev-browser-session");
+  });
+
+  it("serves the dev browser service worker without a configured web root", async () => {
+    const instance = await createApp(false, {}, { webRoot: null });
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/dev-browser-sw.js",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("javascript");
+    expect(response.body).toContain("coder-studio-dev-browser-session");
+  });
+
+  it("treats the dev browser service worker as public when auth is enabled", async () => {
+    const instance = await createApp(true, {}, { webRoot: null });
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/dev-browser-sw.js",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("javascript");
+    expect(response.body).toContain("coder-studio-dev-browser-session");
   });
 });

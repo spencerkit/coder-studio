@@ -9,10 +9,10 @@ export async function expectWelcomeCopy(page: Page): Promise<void> {
 
 export async function expectOpenWorkspaceButton(locator: Locator): Promise<void> {
   await expect(locator).toBeVisible();
-  await expect(locator.locator("span")).toContainText(translateForE2E("action.open_workspace"));
+  await expect(locator).toContainText(translateForE2E("action.open_workspace"));
 }
 
 export async function expectSettingsButton(locator: Locator): Promise<void> {
   await expect(locator).toBeVisible();
-  await expect(locator.locator("span")).toContainText(translateForE2E("action.settings"));
+  await expect(locator).toContainText(translateForE2E("action.settings"));
 }

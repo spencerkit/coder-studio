@@ -31,6 +31,7 @@ export const WorkspaceActivityBar: FC<WorkspaceActivityBarProps> = ({
       label: t("workspace.agent_instructions.title"),
       icon: "nav.agent",
     },
+    { view: "memory", label: t("workspace.sidebar.memory"), icon: "nav.memory" },
     { view: "skills", label: t("workspace.sidebar.skills"), icon: "nav.skills" },
   ];
 

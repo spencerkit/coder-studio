@@ -1,4 +1,4 @@
-import type { Session } from "@coder-studio/core";
+import type { ProviderListItem, Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { LifeBuoy, X } from "lucide-react";
 import { useState } from "react";
@@ -6,7 +6,10 @@ import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { useProviderLauncher } from "../../../agent-panes/actions/use-provider-launcher";
+import {
+  type ProviderId,
+  useProviderLauncher,
+} from "../../../agent-panes/actions/use-provider-launcher";
 import { buildDiagnosticsPath } from "../../../diagnostics";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
@@ -23,6 +26,11 @@ interface MobileAgentSheetProps {
 }
 
 type AgentSheetMode = "sessions" | "providers";
+
+const PROVIDER_ICON_SEMANTICS = {
+  claude: "agent.provider.claude",
+  codex: "agent.provider.codex",
+} as const;
 
 function formatSessionLabel(session: Session) {
   if (session.title?.trim()) {
@@ -56,6 +64,23 @@ function formatSessionStateLabel(state: Session["state"], t: ReturnType<typeof u
   }
 }
 
+function formatProviderLabel(provider: Pick<ProviderListItem, "badge" | "displayName" | "id">) {
+  return provider.badge || provider.displayName || provider.id;
+}
+
+function renderProviderIcon(provider: ProviderListItem) {
+  const semantic = PROVIDER_ICON_SEMANTICS[provider.id as keyof typeof PROVIDER_ICON_SEMANTICS];
+  if (semantic) {
+    return <ThemedIcon semantic={semantic} size={16} />;
+  }
+
+  return (
+    <span aria-hidden="true" className="agent-provider-card-monogram">
+      {formatProviderLabel(provider).slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
+
 export function MobileAgentSheet({
   activeSessionId,
   activeWorkspaceId,
@@ -77,30 +102,13 @@ export function MobileAgentSheet({
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null;
   const canLaunchSession = Boolean(activeWorkspaceId);
-  const providerButtons = [
-    {
-      id: "claude" as const,
-      title: "Claude",
-      icon: <ThemedIcon semantic="agent.provider.claude" size={16} />,
-    },
-    {
-      id: "codex" as const,
-      title: "Codex",
-      icon: <ThemedIcon semantic="agent.provider.codex" size={16} />,
-    },
-  ];
-
-  const canAutoInstall = (providerId: "claude" | "codex"): boolean => {
-    const runtime = states[providerId]?.runtime;
-    return Boolean(runtime?.autoInstallSupported && runtime.installReadiness === "ready");
-  };
 
   const closeSheet = () => {
     setMode(defaultMode === "create" ? "providers" : "sessions");
     onClose();
   };
 
-  const { states, launch } = useProviderLauncher(
+  const { providers, states, launch } = useProviderLauncher(
     dispatch,
     activeWorkspaceId ?? "__workspace_placeholder__",
     (session, _providerId) => {
@@ -112,6 +120,11 @@ export function MobileAgentSheet({
       closeSheet();
     }
   );
+
+  const canAutoInstall = (providerId: ProviderId): boolean => {
+    const runtime = states[providerId]?.runtime;
+    return Boolean(runtime?.autoInstallSupported && runtime.installReadiness === "ready");
+  };
 
   const sessionSections = [
     {
@@ -158,11 +171,12 @@ export function MobileAgentSheet({
     {
       kind: "options" as const,
       id: "providers",
-      items: providerButtons.flatMap((provider) => {
+      items: providers.flatMap((provider) => {
         const state = states[provider.id];
         if (!state) {
           return [];
         }
+        const label = formatProviderLabel(provider);
         const busy =
           state.loading ||
           state.installJob?.status === "queued" ||
@@ -176,11 +190,10 @@ export function MobileAgentSheet({
         return [
           {
             id: provider.id,
-            label: provider.title,
-            description:
-              guideMessage || t("mobile.agent.start_session", { provider: provider.title }),
+            label,
+            description: guideMessage || t("mobile.agent.start_session", { provider: label }),
             meta: busy ? t("mobile.agent.starting") : t("mobile.agent.start_new_session"),
-            icon: provider.icon,
+            icon: renderProviderIcon(provider),
             disabled: !canLaunchSession || busy,
             trailingAction:
               !busy && guideMessage && activeWorkspaceId
@@ -228,7 +241,7 @@ export function MobileAgentSheet({
           return;
         }
 
-        return launch(id as "claude" | "codex");
+        return launch(id);
       }}
     />
   );

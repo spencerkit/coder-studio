@@ -1216,12 +1216,10 @@ describe("file provider work log sources", () => {
       [
         JSON.stringify({
           role: "user",
-          cwd: "/repo/app",
           message: { content: [{ type: "text", text: "fix" }] },
         }),
         JSON.stringify({
           role: "assistant",
-          cwd: "/repo/app",
           message: { content: [{ type: "tool_call", name: "shell" }] },
         }),
       ].join("\n")
@@ -1242,10 +1240,97 @@ describe("file provider work log sources", () => {
     });
   });
 
-  it("skips Cursor transcripts that do not expose a workspace path in the log records", async () => {
+  it("reads Cursor transcripts from WSL-style project directories without cwd in records", async () => {
     const home = await makeHome();
-    const encodedPath = "-tmp-a-b-c";
-    const dir = join(home, `.cursor/projects/${encodedPath}/agent-transcripts/cursor-session-1`);
+    const dir = join(
+      home,
+      ".cursor/projects/home-w-workspace-lark-docs/agent-transcripts/cursor-session-1"
+    );
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "transcript.jsonl"),
+      [
+        JSON.stringify({
+          role: "user",
+          message: { content: [{ type: "text", text: "fix docs" }] },
+        }),
+        JSON.stringify({
+          role: "assistant",
+          message: { content: [{ type: "tool_use", name: "Read" }] },
+        }),
+      ].join("\n")
+    );
+
+    const result = await createCursorWorkLogSource({ home }).discover({
+      workspacePaths: ["/home/w/workspace/lark-docs"],
+      timeRange: { startAt: 0, endAt: Date.now() + 60_000, label: "custom" },
+    });
+
+    expect(result.sessions[0]).toMatchObject({
+      providerId: "cursor",
+      sessionId: "transcript",
+      workspacePath: "/home/w/workspace/lark-docs",
+      userTurnCount: 1,
+      assistantTurnCount: 1,
+      toolUseCount: 1,
+    });
+  });
+
+  it("reads Cursor transcripts from Windows-style project directories without cwd in records", async () => {
+    const home = await makeHome();
+    const dir = join(
+      home,
+      ".cursor/projects/c-Users-yeshaopeng-workspace-coder-studio/agent-transcripts/cursor-session-1"
+    );
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "transcript.jsonl"),
+      [
+        JSON.stringify({
+          role: "user",
+          message: { content: [{ type: "text", text: "fix work analysis" }] },
+        }),
+      ].join("\n")
+    );
+
+    const result = await createCursorWorkLogSource({ home }).discover({
+      workspacePaths: ["c:\\Users\\yeshaopeng\\workspace\\coder-studio"],
+      timeRange: { startAt: 0, endAt: Date.now() + 60_000, label: "custom" },
+    });
+
+    expect(result.sessions[0]).toMatchObject({
+      providerId: "cursor",
+      sessionId: "transcript",
+      workspacePath: "c:\\Users\\yeshaopeng\\workspace\\coder-studio",
+      userTurnCount: 1,
+    });
+  });
+
+  it("prefers cwd from Cursor transcript records when present", async () => {
+    const home = await makeHome();
+    const dir = join(home, ".cursor/projects/-repo-app/agent-transcripts/cursor-session-1");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "transcript.jsonl"),
+      [
+        JSON.stringify({
+          role: "user",
+          cwd: "/repo/app/feature",
+          message: { content: [{ type: "text", text: "fix" }] },
+        }),
+      ].join("\n")
+    );
+
+    const result = await createCursorWorkLogSource({ home }).discover({
+      timeRange: { startAt: 0, endAt: Date.now() + 60_000, label: "custom" },
+    });
+
+    expect(result.sessions[0]?.workspacePath).toBe("/repo/app/feature");
+  });
+
+  it("skips Cursor project directories that cannot be mapped to a workspace path", async () => {
+    const home = await makeHome();
+    const dir = join(home, ".cursor/projects/empty-window/agent-transcripts/cursor-session-1");
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, "transcript.jsonl"),

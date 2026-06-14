@@ -10,6 +10,7 @@ describe("ui preview scene metadata", () => {
         "workspace-icon-review",
         "toast-icon-review",
         "supervisor-icon-review",
+        "supervisor-details-tree-review",
       ])
     );
   });
@@ -76,6 +77,17 @@ describe("ui preview scene metadata", () => {
     expect(scene?.devices).toEqual(["desktop", "mobile"]);
     expect(scene?.capture?.selector).toBe(".settings-monitoring-shell");
     expect(scene?.description.toLowerCase()).toContain("monitoring");
+  });
+
+  it("captures the supervisor details mind map review from the desktop details dialog", () => {
+    const scene = UI_PREVIEW_SCENE_METADATA.find(
+      (entry) => entry.id === "supervisor-details-tree-review"
+    );
+
+    expect(scene?.devices).toEqual(["desktop"]);
+    expect(scene?.capture?.selector).toBe(".supervisor-dialog--details");
+    expect(scene?.description.toLowerCase()).toContain("zoomable mind map");
+    expect(scene?.description.toLowerCase()).toContain("react flow + elk");
   });
 
   it("captures the README scenes from their full workspace shells", () => {

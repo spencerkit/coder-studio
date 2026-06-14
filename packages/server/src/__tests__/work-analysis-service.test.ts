@@ -48,10 +48,10 @@ describe("WorkAnalysisService", () => {
           assistantTurnCount: 2,
           toolUseCount: 1,
           usage: {
-            inputTokens: 800,
-            outputTokens: 150,
+            inputTokens: 7_557_137_523,
+            outputTokens: 63_241_890,
             reasoningOutputTokens: 50,
-            totalTokens: 1_000,
+            totalTokens: 7_620_379_413,
           },
           usageCoverage: {
             hasUsage: true,
@@ -164,11 +164,16 @@ describe("WorkAnalysisService", () => {
     const dashboard = await service.refreshDashboard({ timeRange: { preset: "7d" } }, "manual");
 
     expect(dashboard.scanState.status).toBe("succeeded");
-    expect(dashboard.dashboard.kpis.find((item) => item.key === "totalTokens")?.value).toBe(1_500);
+    expect(dashboard.dashboard.kpis.find((item) => item.key === "totalTokens")?.value).toBe(
+      7_620_379_913
+    );
+    expect(dashboard.dashboard.kpis.find((item) => item.key === "inputOutput")?.helper).toBe(
+      "7.56B input / 63.24M output"
+    );
     expect(dashboard.dashboard.trends.tokenHourly).toEqual([
       expect.objectContaining({
         hourStart: Date.UTC(2026, 5, 1, 10),
-        totalTokens: 1_000,
+        totalTokens: 7_620_379_413,
         sessionCount: 1,
       }),
       expect.objectContaining({
@@ -1205,6 +1210,130 @@ describe("WorkAnalysisService", () => {
       }),
     ]);
     expect(dashboard.dashboard?.kpis.find((item) => item.key === "totalTokens")?.value).toBe(500);
+  });
+
+  it("refreshes stale hourly index before returning a dashboard request", async () => {
+    let hourlyIndex: WorkAnalysisHourlyIndex = {
+      version: 1,
+      bucketMode: "hourly_session_slices",
+      indexedAt: Date.UTC(2026, 5, 7, 1, 30),
+      indexedThroughHourStart: Date.UTC(2026, 5, 7, 0),
+      sourceDigest: "hourly-index-stale",
+      providerStatuses: [
+        {
+          providerId: "codex",
+          status: "supported",
+          sessionCount: 1,
+          parseErrorCount: 0,
+          warningCount: 0,
+        },
+      ],
+      buckets: [
+        {
+          hourStart: Date.UTC(2026, 5, 7, 0),
+          sessions: [
+            {
+              providerId: "codex",
+              sessionId: "codex-old",
+              workspacePath: "/repo/app",
+              startedAt: Date.UTC(2026, 5, 7, 0, 10),
+              lastActiveAt: Date.UTC(2026, 5, 7, 0, 20),
+              sourceRef: "codex-old",
+              userTurnCount: 1,
+              assistantTurnCount: 1,
+              toolUseCount: 0,
+              usage: {
+                inputTokens: 100,
+                totalTokens: 100,
+              },
+              usageCoverage: {
+                hasUsage: true,
+                callCount: 1,
+                callsWithTotalTokens: 1,
+                estimatedCallCount: 0,
+              },
+              parseErrorCount: 0,
+              timestampQuality: "explicit",
+              events: [],
+            },
+          ],
+        },
+      ],
+    };
+    const collect = vi.fn(async () => ({
+      sourceDigest: "source-refreshed",
+      providers: [
+        {
+          providerId: "codex" as const,
+          status: "supported" as const,
+          sessions: [],
+          sourceRefs: [],
+          parseErrorCount: 0,
+          warnings: [],
+        },
+      ],
+      sessions: [
+        {
+          providerId: "codex" as const,
+          sessionId: "codex-new",
+          workspacePath: "/repo/app",
+          startedAt: Date.UTC(2026, 5, 7, 2, 10),
+          lastActiveAt: Date.UTC(2026, 5, 7, 2, 30),
+          sourceRef: "codex-new",
+          userTurnCount: 1,
+          assistantTurnCount: 1,
+          toolUseCount: 0,
+          usage: {
+            inputTokens: 200,
+            totalTokens: 200,
+          },
+          usageCoverage: {
+            hasUsage: true,
+            callCount: 1,
+            callsWithTotalTokens: 1,
+            estimatedCallCount: 0,
+          },
+          parseErrorCount: 0,
+          timestampQuality: "explicit" as const,
+          events: [],
+        },
+      ],
+    }));
+
+    const service = new WorkAnalysisService({
+      repo: {
+        findByQueryDigest: vi.fn(() => undefined),
+        upsert: vi.fn((record) => record),
+        findHourlyIndex: vi.fn(() => hourlyIndex),
+        upsertHourlyIndex: vi.fn((nextIndex) => {
+          hourlyIndex = nextIndex;
+          return nextIndex;
+        }),
+      },
+      workspaceMgr: { get: vi.fn() },
+      workLogCollector: { collect },
+      skillLibraryRepo: { list: vi.fn(() => []) },
+      skillMountRepo: { list: vi.fn(() => []) },
+      deepRunner: {
+        run: vi.fn(),
+      },
+      now: () => Date.UTC(2026, 5, 7, 3, 30),
+    });
+
+    const dashboard = await service.getDashboard({ timeRange: { preset: "24h" } });
+
+    expect(collect).toHaveBeenCalledWith({
+      workspacePaths: [],
+      timeRange: {
+        startAt: Date.UTC(2026, 5, 7, 1),
+        endAt: Date.UTC(2026, 5, 7, 3, 30),
+        label: "incremental",
+      },
+    });
+    expect(hourlyIndex.indexedThroughHourStart).toBe(Date.UTC(2026, 5, 7, 2));
+    expect(dashboard.scanState.mode).toBe("auto");
+    expect(dashboard.scanState.sourceDigest).toBe("source-refreshed");
+    expect(dashboard.dashboard?.kpis.find((item) => item.key === "totalTokens")?.value).toBe(300);
   });
 
   it("serializes concurrent dashboard refreshes without returning another query result", async () => {

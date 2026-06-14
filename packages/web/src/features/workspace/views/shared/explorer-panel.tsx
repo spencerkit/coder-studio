@@ -2,7 +2,6 @@ import type { FC } from "react";
 import { useState } from "react";
 import type { WorkspaceCreateRequest } from "../../actions/use-workspace-screen-model";
 import { FileTreePanel } from "./file-tree-panel";
-import { OpenEditorsSection } from "./open-editors-section";
 import { WorkspaceSectionHeader } from "./workspace-section-header";
 
 interface ExplorerPanelProps {
@@ -41,8 +40,6 @@ export const ExplorerPanel: FC<ExplorerPanelProps> = ({
   return (
     <div className="workspace-sidebar-view">
       <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
-        <OpenEditorsSection workspaceId={workspaceId} />
-
         <section className="workspace-sidebar-section workspace-sidebar-section--fill">
           <WorkspaceSectionHeader
             count={workspaceLoading ? undefined : workspaceCount}

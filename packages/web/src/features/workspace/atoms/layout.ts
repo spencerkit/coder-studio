@@ -17,6 +17,7 @@ export type DesktopSidebarView =
   | "search"
   | "source-control"
   | "agent-instructions"
+  | "memory"
   | "skills";
 
 export interface WorkspaceLayoutState {
@@ -35,6 +36,7 @@ const DESKTOP_SIDEBAR_VIEW_VALUES = new Set<DesktopSidebarView>([
   "search",
   "source-control",
   "agent-instructions",
+  "memory",
   "skills",
 ]);
 const DEFAULT_WORKSPACE_LAYOUT_STATE: WorkspaceLayoutState = {

@@ -1,6 +1,9 @@
 import type { PendingEditorNavigation } from "../../code-editor/atoms";
 
 interface TerminalBufferLineLike {
+  isWrapped?: boolean;
+  length?: number;
+  getCell?(column: number): { getChars(): string; getWidth(): number } | undefined;
   translateToString(trimRight?: boolean): string;
 }
 
@@ -35,6 +38,23 @@ interface WorkspaceFileTarget {
   column?: number;
 }
 
+interface TerminalLinkCandidate {
+  text: string;
+  startIndex: number;
+}
+
+interface LogicalLineSegment {
+  row: number;
+  line: TerminalBufferLineLike;
+  startIndex: number;
+  endIndex: number;
+}
+
+interface LogicalTerminalLine {
+  text: string;
+  segments: LogicalLineSegment[];
+}
+
 interface TerminalWorkspaceLinkProviderOptions {
   terminal: TerminalLike;
   workspaceId: string;
@@ -42,7 +62,8 @@ interface TerminalWorkspaceLinkProviderOptions {
   openWorkspaceFile(input: PendingEditorNavigation): void | Promise<void>;
 }
 
-const TOKEN_PATTERN = /(?:^|[\s([{"'`])([^\s<>"'`]+)/g;
+const LINK_CANDIDATE_PATTERN =
+  /https?:\/\/[^\s<>"'`]+|[a-z]:[\\/][^\s<>"'`]+|\/[^\s<>"'`]+|(?:[a-z0-9_.@+-]+\/)+[^\s<>"'`]+/giu;
 const TRAILING_PUNCTUATION_PATTERN = /[),.;\]}]+$/;
 const HTTP_URL_PATTERN = /^https?:\/\//iu;
 
@@ -57,6 +78,25 @@ function normalizeWorkspaceRoot(path: string): string {
 
 function trimCandidateToken(token: string): string {
   return token.replace(TRAILING_PUNCTUATION_PATTERN, "");
+}
+
+function findLinkCandidates(lineText: string): TerminalLinkCandidate[] {
+  const candidates: TerminalLinkCandidate[] = [];
+
+  for (const match of lineText.matchAll(LINK_CANDIDATE_PATTERN)) {
+    const rawText = match[0];
+    const text = trimCandidateToken(rawText);
+    if (!text) {
+      continue;
+    }
+
+    candidates.push({
+      text,
+      startIndex: match.index ?? 0,
+    });
+  }
+
+  return candidates;
 }
 
 function parsePathLocation(rawPath: string): WorkspaceFileTarget {
@@ -114,8 +154,136 @@ function resolveWorkspaceFileTarget(
   };
 }
 
+function getLogicalTerminalLine(
+  terminal: TerminalLike,
+  bufferLineNumber: number
+): LogicalTerminalLine | null {
+  const activeBuffer = terminal.buffer.active;
+  let startRow = bufferLineNumber - 1;
+  let currentLine = activeBuffer.getLine(startRow);
+  if (!currentLine) {
+    return null;
+  }
+
+  while (currentLine.isWrapped === true) {
+    startRow -= 1;
+    if (startRow < 0) {
+      return null;
+    }
+
+    currentLine = activeBuffer.getLine(startRow);
+    if (!currentLine) {
+      return null;
+    }
+  }
+
+  const lines: Array<{ row: number; line: TerminalBufferLineLike }> = [
+    { row: startRow, line: currentLine },
+  ];
+  let scanRow = startRow;
+
+  while (true) {
+    const nextLine = activeBuffer.getLine(scanRow + 1);
+    if (!nextLine || nextLine.isWrapped !== true) {
+      break;
+    }
+
+    scanRow += 1;
+    lines.push({ row: scanRow, line: nextLine });
+  }
+
+  let text = "";
+  const segments = lines.map((segment, index) => {
+    const segmentText = segment.line.translateToString(index === lines.length - 1);
+    const startIndex = text.length;
+    text += segmentText;
+
+    return {
+      row: segment.row,
+      line: segment.line,
+      startIndex,
+      endIndex: text.length,
+    };
+  });
+
+  return { text, segments };
+}
+
+function findSegmentForStringIndex(
+  segments: LogicalLineSegment[],
+  index: number
+): LogicalLineSegment | null {
+  for (const segment of segments) {
+    if (index >= segment.startIndex && index < segment.endIndex) {
+      return segment;
+    }
+  }
+
+  return null;
+}
+
+function getCellXForStringIndex(line: TerminalBufferLineLike, stringIndex: number): number {
+  if (typeof line.getCell !== "function") {
+    return stringIndex + 1;
+  }
+
+  const scanLimit =
+    typeof line.length === "number" && Number.isFinite(line.length)
+      ? Math.max(0, line.length)
+      : Number.POSITIVE_INFINITY;
+  let currentStringIndex = 0;
+
+  for (let column = 0; column < scanLimit; column += 1) {
+    const cell = line.getCell(column);
+    if (!cell) {
+      break;
+    }
+
+    const chars = cell.getChars();
+    if (!chars) {
+      continue;
+    }
+
+    const nextStringIndex = currentStringIndex + chars.length;
+    if (stringIndex < nextStringIndex) {
+      return column + 1;
+    }
+
+    currentStringIndex = nextStringIndex;
+  }
+
+  return stringIndex + 1;
+}
+
+function buildCandidateRange(
+  logicalLine: LogicalTerminalLine,
+  candidate: TerminalLinkCandidate
+): TerminalLinkRange | null {
+  const endIndex = candidate.startIndex + candidate.text.length - 1;
+  const startSegment = findSegmentForStringIndex(logicalLine.segments, candidate.startIndex);
+  const endSegment = findSegmentForStringIndex(logicalLine.segments, endIndex);
+  if (!startSegment || !endSegment) {
+    return null;
+  }
+
+  return {
+    start: {
+      x: getCellXForStringIndex(startSegment.line, candidate.startIndex - startSegment.startIndex),
+      y: startSegment.row + 1,
+    },
+    end: {
+      x: getCellXForStringIndex(endSegment.line, endIndex - endSegment.startIndex),
+      y: endSegment.row + 1,
+    },
+  };
+}
+
+function rangeIntersectsBufferLine(range: TerminalLinkRange, bufferLineNumber: number): boolean {
+  return range.start.y <= bufferLineNumber && range.end.y >= bufferLineNumber;
+}
+
 function buildWorkspaceFileLinks(
-  lineText: string,
+  logicalLine: LogicalTerminalLine,
   bufferLineNumber: number,
   workspacePath: string | undefined,
   openWorkspaceFile: TerminalWorkspaceLinkProviderOptions["openWorkspaceFile"],
@@ -123,28 +291,18 @@ function buildWorkspaceFileLinks(
 ): TerminalLink[] {
   const links: TerminalLink[] = [];
 
-  for (const match of lineText.matchAll(TOKEN_PATTERN)) {
-    const rawToken = match[1];
-    if (!rawToken) {
+  for (const candidate of findLinkCandidates(logicalLine.text)) {
+    const range = buildCandidateRange(logicalLine, candidate);
+    if (!range || !rangeIntersectsBufferLine(range, bufferLineNumber)) {
       continue;
     }
 
-    const tokenStartIndex = (match.index ?? 0) + match[0].length - rawToken.length;
-    const text = trimCandidateToken(rawToken);
+    const text = candidate.text;
 
     if (HTTP_URL_PATTERN.test(text)) {
       links.push({
         text,
-        range: {
-          start: {
-            x: tokenStartIndex + 1,
-            y: bufferLineNumber,
-          },
-          end: {
-            x: tokenStartIndex + text.length,
-            y: bufferLineNumber,
-          },
-        },
+        range,
         activate: () => {
           window.open(text, "_blank", "noopener,noreferrer");
         },
@@ -160,16 +318,7 @@ function buildWorkspaceFileLinks(
 
       links.push({
         text,
-        range: {
-          start: {
-            x: tokenStartIndex + 1,
-            y: bufferLineNumber,
-          },
-          end: {
-            x: tokenStartIndex + text.length,
-            y: bufferLineNumber,
-          },
-        },
+        range,
         activate: () => {
           void openWorkspaceFile({
             workspaceId,
@@ -190,14 +339,14 @@ export function createTerminalWorkspaceLinkProvider(options: TerminalWorkspaceLi
   return {
     provideLinks(bufferLineNumber: number, callback: (links: TerminalLink[] | undefined) => void) {
       const workspacePath = options.getWorkspacePath();
-      const line = options.terminal.buffer.active.getLine(bufferLineNumber - 1);
-      if (!line) {
+      const logicalLine = getLogicalTerminalLine(options.terminal, bufferLineNumber);
+      if (!logicalLine) {
         callback(undefined);
         return;
       }
 
       const links = buildWorkspaceFileLinks(
-        line.translateToString(true),
+        logicalLine,
         bufferLineNumber,
         workspacePath,
         options.openWorkspaceFile,

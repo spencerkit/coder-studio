@@ -40,7 +40,7 @@ function createDeps(overrides?: Partial<ConstructorParameters<typeof UpdateServi
     settingsRepo: {
       get: vi.fn((key: string) => {
         if (key === "updates.autoCheckEnabled") return true;
-        if (key === "updates.checkIntervalSec") return 21600;
+        if (key === "updates.checkIntervalSec") return 3600;
         return undefined;
       }),
     },

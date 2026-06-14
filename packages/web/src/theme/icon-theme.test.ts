@@ -135,6 +135,7 @@ describe("theme icon resolver", () => {
         getIconPresentation(themeId, "nav.explorer").tone,
         getIconPresentation(themeId, "nav.search").tone,
         getIconPresentation(themeId, "nav.sourceControl").tone,
+        getIconPresentation(themeId, "nav.memory").tone,
       ]);
 
       expect(tones.size).toBe(1);

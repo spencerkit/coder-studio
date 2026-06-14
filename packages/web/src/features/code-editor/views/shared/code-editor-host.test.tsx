@@ -28,6 +28,16 @@ vi.mock("../../../../lib/i18n", () => ({
         return "Image";
       case "code_editor.saving":
         return "Saving";
+      case "code_editor.minimize_editor":
+        return "Minimize editor";
+      case "code_editor.pin_editor_view":
+        return "Pin editor view";
+      case "code_editor.unpin_editor_view":
+        return "Unpin editor view";
+      case "code_editor.move_floating_editor":
+        return "Move floating editor";
+      case "code_editor.close_editor_view":
+        return "Close editor view";
       case "action.save_file":
         return "Save File";
       case "action.close":
@@ -53,15 +63,21 @@ vi.mock("../../components/image-preview", () => ({
 function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState {
   return {
     activeFilePath: null,
+    activeEditorTab: null,
     activeDiffChange: null,
     activeExternalStatus: null,
     activeLoadError: null,
+    activateEditorTab: vi.fn(),
+    activateOpenFile: vi.fn(),
+    closeEditorTab: vi.fn(),
+    closeOpenFilePath: vi.fn(),
     canSave: true,
     canDiff: false,
     canEdit: true,
     canPreview: false,
     currentFile: undefined,
     handleClose: vi.fn(),
+    hideEditorView: vi.fn(),
     handleContentChange: vi.fn(),
     handleSave: vi.fn(),
     hasUnsavedChangesOutsideDiff: false,
@@ -71,13 +87,18 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     isTextFile: true,
     documentPreview: {
       iframeSrc: null,
+      allowScripts: false,
       isBootstrapping: false,
       isSyncing: false,
       error: null,
       retry: vi.fn(),
     },
     mode: "edit",
+    openBrowserTab: vi.fn(),
     openCommitFileDiff: vi.fn(),
+    openEditorTabs: [],
+    openEditorPaths: [],
+    openFiles: {},
     openInDiffMode: vi.fn(),
     pendingNavigationAtom: atom<PendingEditorNavigation | null>(null),
     saveError: null,
@@ -133,9 +154,10 @@ describe("CodeEditorHeaderActions", () => {
 
     render(<CodeEditorHeaderActions state={state} />);
 
-    const closeButton = screen.getByRole("button", { name: "Close" });
+    const closeButton = screen.getByRole("button", { name: "Close editor view" });
 
     expect(closeButton).toHaveClass("btn", "btn-ghost", "btn-sm", "code-mode-btn");
+    expect(closeButton.querySelector(".lucide-x")).toBeInTheDocument();
 
     fireEvent.click(closeButton);
     expect(state.handleClose).toHaveBeenCalledTimes(1);
@@ -146,9 +168,76 @@ describe("CodeEditorHeaderActions", () => {
 
     render(<CodeEditorDesktopHeaderActions state={state} showCloseAction={false} />);
 
-    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close editor view" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+  });
+
+  it("can render only the desktop minimize action for tab bar chrome", () => {
+    const state = createState({
+      canDiff: true,
+      canEdit: true,
+      canPreview: true,
+    });
+
+    render(<CodeEditorDesktopHeaderActions state={state} showModeActions={false} />);
+
+    expect(screen.getByRole("button", { name: "Close editor view" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Diff" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("renders the desktop drag action beside the pin action while unpinned", () => {
+    const state = createState();
+    const onTogglePinned = vi.fn();
+    const onBeginMove = vi.fn();
+
+    render(
+      <CodeEditorDesktopHeaderActions
+        state={state}
+        showModeActions={false}
+        editorPinned={false}
+        onBeginFloatingEditorMove={onBeginMove}
+        onToggleEditorPinned={onTogglePinned}
+      />
+    );
+
+    const buttons = screen.getAllByRole("button");
+
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Move floating editor",
+      "Pin editor view",
+      "Close editor view",
+    ]);
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Move floating editor" }), {
+      button: 0,
+      pointerId: 7,
+    });
+    expect(onBeginMove).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin editor view" }));
+    expect(onTogglePinned).toHaveBeenCalledWith(true);
+    expect(state.handleClose).not.toHaveBeenCalled();
+  });
+
+  it("labels the desktop pin action as unpin when the editor is pinned", () => {
+    const state = createState();
+    const onTogglePinned = vi.fn();
+
+    render(
+      <CodeEditorDesktopHeaderActions
+        state={state}
+        showModeActions={false}
+        editorPinned
+        onToggleEditorPinned={onTogglePinned}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpin editor view" }));
+
+    expect(onTogglePinned).toHaveBeenCalledWith(false);
   });
 
   it("renders desktop mode actions as icon-only buttons without save chrome", () => {

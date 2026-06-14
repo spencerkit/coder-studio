@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./token-metric": {
+      "types": "./src/token-metric.ts",
+      "default": "./src/token-metric.ts"
     }
   },
   "publishConfig": {
@@ -17,6 +21,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./token-metric": {
+        "types": "./dist/token-metric.d.ts",
+        "import": "./dist/token-metric.js"
       }
     }
   },

@@ -2166,7 +2166,7 @@ describe("FileTreePanel", () => {
           workspaceId: "ws-test",
           path: "src/app.tsx",
         },
-        undefined
+        { timeoutMs: 180_000 }
       );
     });
 
@@ -2242,7 +2242,7 @@ describe("FileTreePanel", () => {
           workspaceId: "ws-test",
           path: "src",
         },
-        undefined
+        { timeoutMs: 180_000 }
       );
     });
 
@@ -2327,7 +2327,7 @@ describe("FileTreePanel", () => {
           workspaceId: "ws-test",
           path: "src/app.tsx",
         },
-        undefined
+        { timeoutMs: 180_000 }
       );
     });
 

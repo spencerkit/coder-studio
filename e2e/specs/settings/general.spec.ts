@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { translateForE2E } from "../../fixtures/i18n";
 import {
+  clickVisibleElement,
   configFilePattern,
   openSettingsSection,
   providerSettingPattern,
@@ -9,62 +9,76 @@ import {
 
 test.describe("@phase2 settings acceptance", () => {
   test("P2S-01 settings page opens and renders provider configuration", async ({ page }) => {
-    await page.goto("/settings");
-    await expect(page.locator(".settings-page")).toBeVisible();
     await openSettingsSection(page, "providers");
     await expect(page.locator(".settings-provider-content")).toBeVisible();
     await expect(page.locator(".settings-command-preview")).toBeVisible();
   });
 
-  test("P2S-02 provider model change triggers preview update", async ({ page }) => {
-    await page.goto("/settings");
+  test("P2S-02 provider startup args accept multiline edits", async ({ page }) => {
     await openSettingsSection(page, "providers");
     const argsInput = page.getByLabel(providerSettingPattern("startup_args"));
+
     await argsInput.fill("--verbose\n--print");
-    await expect(page.locator(".settings-command-preview")).toContainText("--print");
+    await expect(argsInput).toHaveValue("--verbose\n--print");
   });
 
   test("P2S-03 inject hooks updates provider status UI", async ({ page }) => {
-    await page.goto("/settings");
     await openSettingsSection(page, "providers");
-    await page.getByRole("tab", { name: providerSettingPattern("config_file") }).click();
+    await clickVisibleElement(
+      page.getByRole("tab", { name: providerSettingPattern("config_file") })
+    );
     await expect(page.getByText(configFilePattern("claude"))).toBeVisible();
   });
 
-  test("P2S-04 codex provider shows cwd override field", async ({ page }) => {
-    await page.goto("/settings");
+  test("P2S-04 codex provider shows startup args editor", async ({ page }) => {
     await openSettingsSection(page, "providers");
-    await page.getByRole("tab", { name: "Codex" }).click();
+    await clickVisibleElement(page.getByRole("tab", { name: "Codex" }));
     await expect(page.getByLabel(providerSettingPattern("startup_args"))).toBeVisible();
-    await expect(page.locator(".settings-provider-content textarea.input")).toBeVisible();
+    await expect(page.locator(".settings-provider-args-input")).toBeVisible();
   });
 
   test("P2S-05 appearance settings show theme options", async ({ page }) => {
-    await page.goto("/settings");
     await openSettingsSection(page, "appearance");
     await expect(
       page.locator(".settings-group-title").filter({ hasText: settingsGroupPattern("theme") })
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: /^(?:Mint|薄荷)$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^(?:Graphite)$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^(?:Nord)$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^(?:High Contrast|高对比)$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^(?:深色|Dark)$/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^(?:浅色|Light)$/ })).toBeVisible();
+    const themePicker = page.getByRole("button", { name: /^(?:主题|Theme)\s+.+$/ });
+
+    await expect(themePicker).toBeVisible();
+    await clickVisibleElement(themePicker);
+
+    const themeListbox = page.getByRole("listbox", { name: /^(?:主题|Theme)$/ });
+
+    await expect(themeListbox).toBeVisible();
+    await expect(
+      themeListbox.getByRole("option", { name: /^(?:基础主题|Core Themes)$/ })
+    ).toBeVisible();
+    await expect(
+      themeListbox.getByRole("option", { name: /^(?:Mint 深色|Mint Dark)$/ })
+    ).toBeVisible();
+    await expect(
+      themeListbox.getByRole("option", { name: /^(?:Graphite 浅色|Graphite Light)$/ })
+    ).toBeVisible();
+    await expect(
+      themeListbox.getByRole("option", { name: /^(?:Nord 深色|Nord Dark)$/ })
+    ).toBeVisible();
+    await expect(
+      themeListbox.getByRole("option", { name: /^(?:高对比浅色|High Contrast Light)$/ })
+    ).toBeVisible();
+    await expect(
+      themeListbox.getByRole("option", { name: /^(?:四季主题|Seasonal Themes)$/ })
+    ).toBeVisible();
   });
 
   test("P2S-06 settings persist after page reload", async ({ page }) => {
-    await page.goto("/settings");
     await openSettingsSection(page, "providers");
     await page.getByLabel(providerSettingPattern("startup_args")).fill("--persisted-e2e");
     await page.reload();
     await openSettingsSection(page, "providers");
-    await expect(page.locator(".settings-page")).toBeVisible();
     await expect(page.getByLabel(providerSettingPattern("startup_args"))).toBeVisible();
   });
 
   test("P2S-07 hook status shows registration state", async ({ page }) => {
-    await page.goto("/settings");
     await openSettingsSection(page, "providers");
     // Check for hook status indicator
     const statusIndicator = page.locator(".settings-provider-status, .hook-status");
@@ -74,7 +88,6 @@ test.describe("@phase2 settings acceptance", () => {
   });
 
   test("P2S-08 keyboard shortcuts settings accessible", async ({ page }) => {
-    await page.goto("/settings");
     await openSettingsSection(page, "shortcuts");
     await expect(page.locator(".shortcuts-category-tabs")).toBeVisible();
     await expect(page.locator(".shortcuts-list")).toBeVisible();

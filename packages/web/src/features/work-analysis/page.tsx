@@ -15,9 +15,13 @@ import {
   DateTimePicker,
   Notice,
   Popover,
+  ProgressBar,
   Tooltip,
 } from "../../components/ui";
+import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
+import { MobilePageHeader } from "../shared/components/mobile-page-header";
+import { PageHeader } from "../shared/components/page-header";
 import { formatDuration, formatInteger, formatPercent, formatTokenMetric } from "./format";
 import { WORK_ANALYSIS_PRESET_OPTIONS } from "./lib/time-range";
 import { buildWorkAnalyticsPath, parseWorkAnalyticsSearch } from "./navigation";
@@ -616,7 +620,31 @@ function DashboardStatusStrip({
   readonly scanState?: WorkAnalysisDashboardScanState;
 }) {
   const status = scanState?.status ?? "idle";
-  const modeLabel = scanState?.mode === "manual" ? "手动扫描" : "自动扫描";
+  const isBusy = isRefreshing || isRebuilding || status === "running";
+  const visibleStatus: WorkAnalysisStatus = isBusy ? "running" : status;
+  const isManualScan = isRefreshing || isRebuilding || scanState?.mode === "manual";
+  const modeLabel = isManualScan ? "手动扫描" : "自动扫描";
+  const activityAriaLabel = isRebuilding
+    ? "正在重建工作分析索引"
+    : isRefreshing
+      ? "正在刷新工作分析索引"
+      : status === "running"
+        ? "正在自动补齐工作分析索引"
+        : null;
+  const activityTitle = isRebuilding
+    ? "正在重建小时索引"
+    : isRefreshing
+      ? "正在补齐小时索引"
+      : status === "running"
+        ? "自动补齐索引中"
+        : null;
+  const activityDetail = isRebuilding
+    ? "完成后会替换当前统计"
+    : isRefreshing
+      ? "页面数据保持可读"
+      : status === "running"
+        ? "服务会自动返回最新数据"
+        : null;
 
   return (
     <section
@@ -634,7 +662,9 @@ function DashboardStatusStrip({
           <h1 style={{ fontSize: 24, letterSpacing: "-0.02em", lineHeight: 1.15, margin: 0 }}>
             工作分析
           </h1>
-          <StatusBadge tone={getStatusTone(status)}>{formatStatus(status)}</StatusBadge>
+          <StatusBadge tone={getStatusTone(visibleStatus)}>
+            {formatStatus(visibleStatus)}
+          </StatusBadge>
           <StatusBadge>{modeLabel}</StatusBadge>
         </div>
         <div
@@ -651,6 +681,13 @@ function DashboardStatusStrip({
           <span>下次自动扫描：{formatDateTime(scanState?.nextScheduledAt)}</span>
         </div>
         <ProviderSourceSummary providers={providers} />
+        {activityAriaLabel && activityTitle && activityDetail ? (
+          <DashboardRefreshActivity
+            ariaLabel={activityAriaLabel}
+            detail={activityDetail}
+            title={activityTitle}
+          />
+        ) : null}
       </div>
       <div
         data-testid="work-analysis-header-actions"
@@ -671,7 +708,7 @@ function DashboardStatusStrip({
           onClick={onRefresh}
           variant="primary"
         >
-          立即刷新
+          {isRefreshing ? "刷新中" : "立即刷新"}
         </Button>
         <Button
           disabled={isRefreshing}
@@ -679,11 +716,81 @@ function DashboardStatusStrip({
           onClick={onRebuild}
           variant="secondary"
         >
-          强制刷新
+          {isRebuilding ? "重建中" : "强制刷新"}
         </Button>
         <RefreshActionTip />
       </div>
     </section>
+  );
+}
+
+function DashboardRefreshActivity({
+  ariaLabel,
+  detail,
+  title,
+}: {
+  readonly ariaLabel: string;
+  readonly detail: string;
+  readonly title: string;
+}) {
+  return (
+    <div
+      aria-label={ariaLabel}
+      role="status"
+      style={{
+        background: "var(--field-bg)",
+        border: "1px solid var(--border-default)",
+        borderRadius: "var(--radius-control-sm)",
+        display: "grid",
+        gap: 8,
+        maxWidth: 560,
+        padding: "10px 12px",
+      }}
+    >
+      <div
+        style={{
+          alignItems: "center",
+          color: "var(--text-secondary)",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "6px 10px",
+          justifyContent: "space-between",
+          minWidth: 0,
+        }}
+      >
+        <span
+          style={{
+            alignItems: "center",
+            display: "inline-flex",
+            gap: 8,
+            minWidth: 0,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              animation: "pulse 1.2s ease-in-out infinite",
+              background: "var(--status-info-fg)",
+              borderRadius: 999,
+              boxShadow: "0 0 0 4px var(--status-info-bg)",
+              flex: "0 0 auto",
+              height: 7,
+              width: 7,
+            }}
+          />
+          <span style={{ fontSize: 13 }}>{title}</span>
+        </span>
+        <span style={{ color: "var(--text-tertiary)", fontSize: 12 }}>{detail}</span>
+      </div>
+      <ProgressBar
+        aria-hidden="true"
+        indeterminate
+        max={100}
+        tone="info"
+        value={0}
+        style={{ borderRadius: 999, height: 4 }}
+      />
+    </div>
   );
 }
 
@@ -1918,7 +2025,7 @@ function HourHeatmap({
   );
 }
 
-function WorkAnalyticsContent() {
+function WorkAnalyticsContent({ syncRoute = true }: { syncRoute?: boolean } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
@@ -1954,6 +2061,10 @@ function WorkAnalyticsContent() {
   });
 
   useEffect(() => {
+    if (!syncRoute) {
+      return;
+    }
+
     const nextPath = buildWorkAnalyticsPath({
       customEndAt: customRange.endAt,
       customStartAt: customRange.startAt,
@@ -1973,9 +2084,19 @@ function WorkAnalyticsContent() {
     navigate,
     rangePreset,
     selectedWorkspacePaths,
+    syncRoute,
   ]);
 
   const scanState = dashboardRecord?.scanState;
+  const displayedScanState: WorkAnalysisDashboardScanState | undefined =
+    scanState ??
+    (dashboardLoading
+      ? {
+          mode: "auto",
+          status: "running",
+          providerStatuses: [],
+        }
+      : undefined);
   const providerStatuses = scanState?.providerStatuses ?? dashboard?.quality.providers ?? [];
   const warningMessages = [
     ...(scanState?.errorMessage ? [scanState.errorMessage] : []),
@@ -2010,7 +2131,7 @@ function WorkAnalyticsContent() {
         isRebuilding={isRebuildingDashboard}
         isRefreshing={isRefreshingDashboard}
         providers={providerStatuses}
-        scanState={scanState}
+        scanState={displayedScanState}
         onRebuild={() => setRebuildConfirmOpen(true)}
         onRefresh={refreshDashboard}
       />
@@ -2041,7 +2162,11 @@ function WorkAnalyticsContent() {
       ) : null}
 
       {dashboardLoading && !dashboard ? (
-        <Notice tone="info" title="正在读取索引" message="如果还没有索引，可直接点击立即刷新。" />
+        <Notice
+          tone="info"
+          title="正在读取或补齐索引"
+          message="如果索引缺失或落后，服务会自动补齐后返回最新数据。"
+        />
       ) : null}
 
       {dashboard ? (
@@ -2084,7 +2209,7 @@ function WorkAnalyticsContent() {
         <section style={{ ...panelContentStyle, display: "grid", gap: 14 }}>
           <SectionHeader
             title="暂无工作分析索引"
-            subtitle="首次进入时可以先点击立即刷新；之后服务会每小时自动扫描并更新小时索引。"
+            subtitle="服务会在进入页面时自动补齐缺失或落后的小时索引，也可以手动立即刷新。"
           />
           <div>
             <Button loading={isRefreshingDashboard} onClick={refreshDashboard} variant="primary">
@@ -2097,26 +2222,44 @@ function WorkAnalyticsContent() {
   );
 }
 
-export function WorkAnalyticsSettingsSection() {
+export function WorkAnalyticsSettingsSection({ embedded = true }: { embedded?: boolean } = {}) {
   return (
     <div className="settings-section" style={{ display: "grid", gap: 16 }}>
-      <WorkAnalyticsContent />
+      <WorkAnalyticsContent syncRoute={!embedded} />
     </div>
   );
 }
 
 export function WorkAnalyticsPage() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const routeState = useMemo(() => parseWorkAnalyticsSearch(location.search), [location.search]);
+  const isMobile = useViewport() === "mobile";
+  const t = useTranslation();
 
-  useEffect(() => {
-    const nextPath = buildWorkAnalyticsPath(routeState);
-
-    if (`${location.pathname}${location.search}` !== nextPath) {
-      navigate(nextPath, { replace: true });
-    }
-  }, [location.pathname, location.search, navigate, routeState]);
-
-  return null;
+  return (
+    <div
+      className={`work-analytics-page ${isMobile ? "work-analytics-page--mobile" : ""}`}
+      data-testid="work-analytics-page"
+    >
+      <header className="work-analytics-page__header">
+        {isMobile ? (
+          <MobilePageHeader
+            title={t("settings.analysis.title")}
+            titleAs="div"
+            onBack={() => window.history.back()}
+            backLabel={t("action.back")}
+          />
+        ) : (
+          <PageHeader
+            title={t("settings.analysis.title")}
+            titleAs="div"
+            level="secondary"
+            onBack={() => window.history.back()}
+            backLabel={t("action.back")}
+          />
+        )}
+      </header>
+      <main className="work-analytics-page__content">
+        <WorkAnalyticsContent />
+      </main>
+    </div>
+  );
 }

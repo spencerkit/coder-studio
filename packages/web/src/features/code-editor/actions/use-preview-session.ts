@@ -24,6 +24,7 @@ export function usePreviewSession(input: {
   const [retryNonce, setRetryNonce] = useState(0);
   const latestContentRef = useRef(input.content ?? "");
   const lastSyncedContentRef = useRef(input.content ?? "");
+  const allowScripts = input.kind === "html";
   const targetKey =
     input.enabled && input.workspaceId && input.filePath && input.kind
       ? `${input.workspaceId}:${input.kind}:${input.filePath}`
@@ -60,6 +61,7 @@ export function usePreviewSession(input: {
       entryPath: input.filePath,
       kind: input.kind,
       content: latestContentRef.current,
+      allowScripts,
     })
       .then((created) => {
         if (cancelled) {
@@ -92,7 +94,7 @@ export function usePreviewSession(input: {
         void deletePreviewSession(createdSessionId).catch(() => undefined);
       }
     };
-  }, [input.filePath, input.kind, input.workspaceId, retryNonce, targetKey]);
+  }, [allowScripts, input.filePath, input.kind, input.workspaceId, retryNonce, targetKey]);
 
   useEffect(() => {
     if (!targetKey || !sessionId || !previewUrl || sessionTargetKey !== targetKey) {
@@ -126,6 +128,7 @@ export function usePreviewSession(input: {
 
   return {
     iframeSrc: previewUrl ? `${previewUrl}?rev=${revision}` : null,
+    allowScripts,
     isBootstrapping,
     isSyncing,
     error,

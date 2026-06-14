@@ -1,14 +1,13 @@
 import type {
   SearchSessionApplyResult,
   SearchSessionApplyScope,
-  SearchSessionMatchPreview,
   SearchSessionStartResult,
 } from "@coder-studio/core";
 import { atom, useAtom, useAtomValue } from "jotai";
 import { atomFamily } from "jotai-family";
 import { useCallback, useEffect, useMemo } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
-import { openFilesAtomFamily } from "../../atoms";
+import { openEditorPathsAtomFamily } from "../../atoms";
 
 export const SEARCH_PANEL_DEBOUNCE_MS = 250;
 export const SEARCH_PANEL_MAX_FILES = 50;
@@ -161,9 +160,8 @@ function buildSearchRequestKey(
 
 export function useSearchPanelState(workspaceId: string, refreshToken = 0) {
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
+  const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
   const [state, setState] = useAtom(searchPanelStateAtomFamily(workspaceId));
-  const openEditorPaths = useMemo(() => Object.keys(openFiles), [openFiles]);
   const request = useMemo(
     () =>
       buildSearchRequestKey(

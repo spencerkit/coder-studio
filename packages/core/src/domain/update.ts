@@ -1,6 +1,6 @@
 export const UPDATE_CHECK_INTERVAL_OPTIONS = [3600, 21600, 43200, 86400] as const;
 
-export const DEFAULT_UPDATE_CHECK_INTERVAL_SEC = 21600;
+export const DEFAULT_UPDATE_CHECK_INTERVAL_SEC = 3600;
 export const DEFAULT_UPDATE_AUTO_CHECK_ENABLED = true;
 
 export type UpdateCheckIntervalSec = (typeof UPDATE_CHECK_INTERVAL_OPTIONS)[number];

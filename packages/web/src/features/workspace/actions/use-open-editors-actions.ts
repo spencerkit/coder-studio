@@ -1,35 +1,37 @@
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { type PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 import { workspaceByIdAtomFamily } from "../../../atoms/workspaces";
-import {
-  cancelAllPendingEditorLoads,
-  cancelPendingEditorLoad,
-  hasAnyPendingEditorLoads,
-} from "../../code-editor/actions/pending-editor-loads";
+import { cancelPendingEditorLoad } from "../../code-editor/actions/pending-editor-loads";
 import { monacoModelRegistry } from "../../code-editor/monaco/model-registry";
 import { isSystemAgentInstructionsEditorPath } from "../../code-editor/system-agent-instructions-path";
 import {
   activeFilePathAtomFamily,
   editorModeAtomFamily,
+  editorViewVisibleAtomFamily,
   type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   gitDiffPreviewDismissedAtomFamily,
   openEditorPathsAtomFamily,
   openFilesAtomFamily,
+  type WorkspaceEditorMode,
 } from "../atoms";
 import { mergeOpenEditorPaths, removeOpenEditorPaths } from "./open-editor-state";
 import { resolveOpenEditorsClose } from "./open-editors-close";
 import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 interface UseOpenEditorsActionsOptions {
+  activeFilePathAtom?: PrimitiveAtom<string | null>;
+  editorModeAtom?: PrimitiveAtom<WorkspaceEditorMode>;
+  getActivationHistoryPaths?: () => string[];
+  openEditorPathsAtom?: PrimitiveAtom<string[]>;
+  persistEditorUiState?: boolean;
   workspaceRootPath?: string;
 }
 
 function shouldClearDiffPreview(
   preview: GitDiffPreview | null,
   removedPaths: string[],
-  shouldExitEditor: boolean,
-  options?: { preserveCommitPreviewOnExit?: boolean }
+  shouldExitEditor: boolean
 ): boolean {
   if (!preview) {
     return false;
@@ -49,12 +51,22 @@ function shouldClearDiffPreview(
 export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEditorsActionsOptions) {
   const workspace = useAtomValue(workspaceByIdAtomFamily(workspaceId));
   const workspaceRootPath = options?.workspaceRootPath ?? workspace?.path;
-  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtomFamily(workspaceId));
-  const [openEditorPaths, setOpenEditorPaths] = useAtom(openEditorPathsAtomFamily(workspaceId));
+  const activeFilePathAtom = options?.activeFilePathAtom ?? activeFilePathAtomFamily(workspaceId);
+  const editorModeAtom = options?.editorModeAtom ?? editorModeAtomFamily(workspaceId);
+  const openEditorPathsAtom =
+    options?.openEditorPathsAtom ?? openEditorPathsAtomFamily(workspaceId);
+  const isGlobalEditorState =
+    options?.activeFilePathAtom === undefined &&
+    options?.editorModeAtom === undefined &&
+    options?.openEditorPathsAtom === undefined;
+  const shouldPersistEditorUiState = options?.persistEditorUiState !== false;
+  const [activeFilePath, setActiveFilePath] = useAtom(activeFilePathAtom);
+  const [openEditorPaths, setOpenEditorPaths] = useAtom(openEditorPathsAtom);
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId));
   const [diffPreview, setDiffPreview] = useAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setDiffPreviewDismissed = useSetAtom(gitDiffPreviewDismissedAtomFamily(workspaceId));
-  const [, setEditorMode] = useAtom(editorModeAtomFamily(workspaceId));
+  const setEditorViewVisible = useSetAtom(editorViewVisibleAtomFamily(workspaceId));
+  const [, setEditorMode] = useAtom(editorModeAtom);
   const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   const closePath = useCallback(
@@ -64,6 +76,7 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       const resolution = resolveOpenEditorsClose({
         openFiles,
         openEditorPaths,
+        activationHistoryPaths: options?.getActivationHistoryPaths?.(),
         activeFilePath,
         pendingActiveFilePath: transientActiveFilePath,
         targetPath,
@@ -71,6 +84,10 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
       if (resolution.removedPaths.length === 0) {
         return;
+      }
+
+      if (isGlobalEditorState && activeFilePath === targetPath) {
+        setEditorViewVisible(true);
       }
 
       setOpenFiles((prev) => {
@@ -100,7 +117,6 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       const nextOpenEditorPaths = removeOpenEditorPaths(
         mergeOpenEditorPaths(
           openEditorPaths,
-          Object.keys(openFiles),
           transientActiveFilePath ? [transientActiveFilePath] : undefined
         ),
         resolution.removedPaths
@@ -111,10 +127,12 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       if (resolution.nextActiveFilePath !== activeFilePath || resolution.shouldExitEditor) {
         setEditorMode("edit");
       }
-      void persistUiState({
-        openEditorPaths: nextOpenEditorPaths,
-        activeEditorPath: resolution.nextActiveFilePath,
-      });
+      if (shouldPersistEditorUiState) {
+        void persistUiState({
+          openEditorPaths: nextOpenEditorPaths,
+          activeEditorPath: resolution.nextActiveFilePath,
+        });
+      }
 
       const shouldDismissPreview =
         (diffPreview?.kind === "worktree-file-diff" ||
@@ -133,15 +151,19 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
     [
       activeFilePath,
       diffPreview,
+      isGlobalEditorState,
       openEditorPaths,
       openFiles,
+      options?.getActivationHistoryPaths,
       setActiveFilePath,
       setDiffPreview,
       setDiffPreviewDismissed,
+      setEditorViewVisible,
       setEditorMode,
       setOpenEditorPaths,
       setOpenFiles,
       persistUiState,
+      shouldPersistEditorUiState,
       workspaceId,
       workspaceRootPath,
     ]
@@ -158,16 +180,28 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
       closeAll: true,
     });
 
-    if (
-      resolution.removedPaths.length === 0 &&
-      activeFilePath === null &&
-      !hasAnyPendingEditorLoads(workspaceId)
-    ) {
+    if (resolution.removedPaths.length === 0 && activeFilePath === null) {
       return;
     }
 
-    cancelAllPendingEditorLoads(workspaceId);
-    setOpenFiles({});
+    if (isGlobalEditorState) {
+      setEditorViewVisible(false);
+    }
+
+    for (const path of resolution.removedPaths) {
+      cancelPendingEditorLoad(workspaceId, path);
+    }
+    setOpenFiles((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const path of resolution.removedPaths) {
+        if (path in next) {
+          delete next[path];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
     setOpenEditorPaths([]);
 
     for (const path of resolution.removedPaths) {
@@ -183,38 +217,39 @@ export function useOpenEditorsActions(workspaceId: string, options?: UseOpenEdit
 
     setActiveFilePath(null);
     setEditorMode("edit");
-    void persistUiState({
-      openEditorPaths: [],
-      activeEditorPath: null,
-    });
+    if (shouldPersistEditorUiState) {
+      void persistUiState({
+        openEditorPaths: [],
+        activeEditorPath: null,
+      });
+    }
     const shouldDismissPreview =
       (diffPreview?.kind === "worktree-file-diff" ||
         diffPreview?.kind === "search-replace-file-diff") &&
-      shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor, {
-        preserveCommitPreviewOnExit: true,
-      });
+      shouldClearDiffPreview(diffPreview, resolution.removedPaths, resolution.shouldExitEditor);
     if (shouldDismissPreview) {
       setDiffPreviewDismissed(true);
     }
     setDiffPreview((current) =>
-      shouldClearDiffPreview(current, resolution.removedPaths, resolution.shouldExitEditor, {
-        preserveCommitPreviewOnExit: true,
-      })
+      shouldClearDiffPreview(current, resolution.removedPaths, resolution.shouldExitEditor)
         ? null
         : current
     );
   }, [
     activeFilePath,
     diffPreview,
+    isGlobalEditorState,
     openEditorPaths,
     openFiles,
     setActiveFilePath,
     setDiffPreview,
     setDiffPreviewDismissed,
+    setEditorViewVisible,
     setEditorMode,
     setOpenEditorPaths,
     setOpenFiles,
     persistUiState,
+    shouldPersistEditorUiState,
     workspaceId,
     workspaceRootPath,
   ]);

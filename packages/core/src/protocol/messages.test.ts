@@ -155,3 +155,9 @@ describe("terminal recovery protocol types", () => {
     expect(event.reason).toBe("stream_drop");
   });
 });
+
+describe("ui action protocol events", () => {
+  it("exports a workspace UI action topic builder", () => {
+    expect(Topics.workspaceUiAction("ws-1")).toBe("workspace.ws-1.ui.action");
+  });
+});

@@ -23,6 +23,7 @@ import { useOpenLocation } from "../actions/use-open-location";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 import { globalLspBridge, type LspBridgeState } from "../lsp/bridge";
 import { lspRuntimeModeAtom } from "../lsp/runtime-mode";
+import { detectEditorLanguage } from "../monaco/language";
 import { monacoModelRegistry } from "../monaco/model-registry";
 import { fromWorkspaceFileUri } from "../monaco/uri";
 import { ensureVueLanguageRegistered } from "../monaco/vue-language";
@@ -422,37 +423,6 @@ export const MonacoHost: FC<MonacoHostProps> = ({
     </>
   );
 };
-
-/**
- * Detect language from file extension
- */
-function detectEditorLanguage(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  const langMap: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    json: "json",
-    md: "markdown",
-    css: "css",
-    scss: "scss",
-    html: "html",
-    py: "python",
-    go: "go",
-    rs: "rust",
-    vue: "vue",
-    java: "java",
-    cpp: "cpp",
-    c: "c",
-    yaml: "yaml",
-    yml: "yaml",
-    sh: "shell",
-    bash: "shell",
-  };
-
-  return langMap[ext || ""] || "plaintext";
-}
 
 function detectLspLanguage(filePath: string, editorLanguage: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase();

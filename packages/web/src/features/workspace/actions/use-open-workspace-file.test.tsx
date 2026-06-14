@@ -9,6 +9,7 @@ import { workspacesAtom } from "../../../atoms/workspaces";
 import {
   activeEditorPaneIdAtomFamily,
   editorPaneActiveFilePathAtomFamily,
+  editorPaneOpenEditorPathsAtomFamily,
   editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
 } from "../../agent-panes/atoms/editor-panes";
@@ -239,6 +240,57 @@ describe("useOpenWorkspaceFile", () => {
     expect(
       store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-test", "right")))
     ).toBe("src/reused.ts");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+  });
+
+  it("opens dropped files in an existing target editor pane instead of the standalone editor", async () => {
+    const store = createStore();
+    seedWorkspace(store);
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    store.set(
+      editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-test", "root")),
+      "src/current.ts"
+    );
+    store.set(editorPaneOpenEditorPathsAtomFamily(editorPaneStateKey("ws-test", "root")), [
+      "src/current.ts",
+    ]);
+
+    const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openWorkspaceFile(
+        {
+          workspaceId: "ws-test",
+          path: "src/dropped.ts",
+          source: "file-tree",
+        },
+        {
+          targetDraftPaneId: "root",
+        }
+      );
+    });
+
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBe("root");
+    expect(
+      store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-test", "root")))
+    ).toBe("src/dropped.ts");
+    expect(
+      store.get(editorPaneOpenEditorPathsAtomFamily(editorPaneStateKey("ws-test", "root")))
+    ).toEqual(["src/current.ts", "src/dropped.ts"]);
+    expect(
+      store.get(editorPanePendingNavigationAtomFamily(editorPaneStateKey("ws-test", "root")))
+    ).toMatchObject({
+      workspaceId: "ws-test",
+      path: "src/dropped.ts",
+      source: "file-tree",
+    });
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
   });
 

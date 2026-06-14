@@ -44,6 +44,7 @@ import {
   resolveAppearancePersonalizationSetting,
   uploadAppearanceAsset,
 } from "../../../appearance";
+import { activationStatusAtom } from "../../../atoms/activation";
 import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../atoms/app-ui";
 import { connectionStatusAtom, serverInfoAtom } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
@@ -68,11 +69,12 @@ import {
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
 import { WorkAnalyticsSettingsSection } from "../../work-analysis";
-import { AboutSettings } from "./about-settings";
+import { AboutSettings, type AboutSettingsView } from "./about-settings";
 import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
 import { resolveSettingsExitTargetFromBrowserHistory } from "./settings-navigation";
 import {
+  ALL_SETTINGS_SECTIONS,
   MOBILE_SETTINGS_SECTIONS,
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -96,6 +98,10 @@ type SettingsContentLayoutMode = "default" | "fill-height";
 type SettingsWorkspaceMode = "readable" | "wide";
 type AppearanceAssetScope = "common" | "desktop" | "mobile";
 type AppearanceOverrideTarget = Exclude<AppearanceAssetScope, "common">;
+type EmbeddedSettingsSection = Extract<
+  SettingsSection,
+  "general" | "providers" | "appearance" | "shortcuts" | "about" | "monitoring"
+>;
 
 const CORE_THEME_IDS = [
   "mint-dark",
@@ -231,11 +237,11 @@ function getMobileSectionHintKey(section: SettingsSection) {
 const MOBILE_SETTINGS_GROUPS = [
   {
     titleKey: "settings.mobile_groups.workspace_runtime",
-    sections: ["general", "providers", "monitoring", "analysis", "diagnostics"],
+    sections: ["general", "providers"],
   },
   {
     titleKey: "settings.mobile_groups.interface_interaction",
-    sections: ["appearance", "shortcuts", "about"],
+    sections: ["appearance", "shortcuts"],
   },
 ] as const satisfies readonly {
   titleKey: string;
@@ -341,7 +347,12 @@ function MonitoringSettingsSection({
  *   - Provider: config fields and command preview
  *   - Appearance: theme
  */
-export function SettingsPage() {
+interface SettingsPageProps {
+  embeddedSection?: EmbeddedSettingsSection;
+  aboutView?: AboutSettingsView;
+}
+
+export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPageProps = {}) {
   const t = useTranslation();
   const settingsLoadFailedUnknown = t("settings.load_failed_unknown");
   const location = useLocation();
@@ -349,13 +360,14 @@ export function SettingsPage() {
   const viewport = useViewport();
   const isMobile = viewport === "mobile";
   const dispatch = useSessionGateDispatch();
+  const activationStatus = useAtomValue(activationStatusAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const serverInfo = useAtomValue(serverInfoAtom);
   const resolvedActiveWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
   const activeWorkspaceId = resolvedActiveWorkspaceId;
   const requestedSection = (() => {
     const section = new URLSearchParams(location.search).get("section");
-    return SETTINGS_SECTIONS.some((item) => item.id === section)
+    return ALL_SETTINGS_SECTIONS.some((item) => item.id === section)
       ? (section as SettingsSection)
       : null;
   })();
@@ -439,9 +451,11 @@ export function SettingsPage() {
   const monitoringSelectionVersionRef = useRef(0);
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
+  const effectiveSection = embeddedSection ?? detailSection;
   const availableSections = isMobile ? MOBILE_SETTINGS_SECTIONS : SETTINGS_SECTIONS;
   const activeSectionMeta =
-    availableSections.find((section) => section.id === detailSection) ?? availableSections[0];
+    ALL_SETTINGS_SECTIONS.find((section) => section.id === effectiveSection) ??
+    availableSections[0];
 
   const syncTerminalPreferences = (
     next: Partial<{
@@ -494,7 +508,7 @@ export function SettingsPage() {
   }, [isMobile, requestedSection]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -691,6 +705,7 @@ export function SettingsPage() {
       cancelled = true;
     };
   }, [
+    activationStatus,
     connectionStatus,
     dispatch,
     setLocaleState,
@@ -858,10 +873,10 @@ export function SettingsPage() {
   };
 
   useEffect(() => {
-    if (detailSection !== "providers" && detailSection !== "monitoring") {
+    if (effectiveSection !== "providers" && effectiveSection !== "monitoring") {
       setContentLayoutMode("default");
     }
-  }, [detailSection]);
+  }, [effectiveSection]);
 
   const handlePageExit = () => {
     const target = resolveSettingsExitTargetFromBrowserHistory(Boolean(activeWorkspaceId));
@@ -891,8 +906,8 @@ export function SettingsPage() {
   };
 
   // Render content based on active section
-  const renderContent = () => {
-    switch (detailSection) {
+  const renderContent = (section: SettingsSection, currentAboutView: AboutSettingsView) => {
+    switch (section) {
       case "general":
         return (
           <GeneralSettings
@@ -980,12 +995,54 @@ export function SettingsPage() {
             onAutoCheckEnabledChange={handleUpdateAutoCheckChange}
             onCheckIntervalChange={handleUpdateIntervalChange}
             locale={locale}
+            view={currentAboutView}
           />
         );
       default:
         return null;
     }
   };
+
+  if (embeddedSection) {
+    const embeddedWorkspaceMode = resolveDesktopWorkspaceMode(effectiveSection);
+    const embeddedContentLayoutMode =
+      effectiveSection === "monitoring" ? "fill-height" : contentLayoutMode;
+
+    return (
+      <main
+        className={`settings-content ${
+          embeddedContentLayoutMode === "fill-height" ? "settings-content--fill-height" : ""
+        }`}
+      >
+        <div
+          className={`settings-content-surface ${
+            effectiveSection === "monitoring" ? "settings-content-surface--monitoring-dense" : ""
+          }`}
+        >
+          {settingsLoadError ? (
+            <Notice
+              role="alert"
+              tone="error"
+              title={t("settings.load_failed")}
+              message={settingsLoadError}
+              action={
+                <button
+                  type="button"
+                  className="settings-link"
+                  onClick={() => setSettingsRefreshKey((value) => value + 1)}
+                >
+                  {t("action.refresh")}
+                </button>
+              }
+            />
+          ) : null}
+          <div className={`settings-workspace settings-workspace--${embeddedWorkspaceMode}`}>
+            {renderContent(effectiveSection, aboutView)}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   const renderMobileRoot = () => (
     <main className="settings-content settings-content--mobile-root">
@@ -1025,7 +1082,7 @@ export function SettingsPage() {
 
   const shouldShowMobileRoot = isMobile && navigationState.kind === "root";
   const isMobileDetailView = isMobile && navigationState.kind === "detail";
-  const desktopWorkspaceMode = resolveDesktopWorkspaceMode(detailSection);
+  const desktopWorkspaceMode = resolveDesktopWorkspaceMode(effectiveSection);
   const headerTitle = isMobile
     ? t(shouldShowMobileRoot ? "settings.title" : activeSectionMeta.labelKey)
     : t("settings.title");
@@ -1105,7 +1162,7 @@ export function SettingsPage() {
                     : `settings-workspace--${desktopWorkspaceMode}`
                 }`}
               >
-                {renderContent()}
+                {renderContent(effectiveSection, aboutView)}
               </div>
             </div>
           </main>

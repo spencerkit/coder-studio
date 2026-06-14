@@ -27,7 +27,7 @@ describe("update domain helpers", () => {
   it("creates the default update settings shape", () => {
     expect(createDefaultUpdateSettings()).toEqual({
       autoCheckEnabled: true,
-      checkIntervalSec: 21600,
+      checkIntervalSec: 3600,
     });
   });
 

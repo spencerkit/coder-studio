@@ -14,7 +14,8 @@ function renderAboutSettings({
   updateState,
   locale = "zh" as const,
   autoCheckEnabled = true,
-  checkIntervalSec = 21600,
+  checkIntervalSec = 3600,
+  view = "all" as const,
   onAutoCheckEnabledChange = vi.fn<(value: boolean) => void>(),
   onCheckIntervalChange = vi.fn<(value: number) => void>(),
 }: {
@@ -23,6 +24,7 @@ function renderAboutSettings({
   locale?: "zh" | "en";
   autoCheckEnabled?: boolean;
   checkIntervalSec?: number;
+  view?: "all" | "product" | "update-status" | "auto-update";
   onAutoCheckEnabledChange?: (value: boolean) => void;
   onCheckIntervalChange?: (value: number) => void;
 } = {}) {
@@ -61,6 +63,7 @@ function renderAboutSettings({
         onAutoCheckEnabledChange={onAutoCheckEnabledChange}
         onCheckIntervalChange={onCheckIntervalChange}
         locale={locale}
+        view={view}
       />
     </Provider>
   );
@@ -223,5 +226,21 @@ describe("AboutSettings", () => {
 
     expect(screen.getByRole("button", { name: "立即检查" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "立即更新" })).toBeDisabled();
+  });
+
+  it("renders only update status details for the update-status subview", () => {
+    renderAboutSettings({ view: "update-status" });
+
+    expect(screen.getByText("最新版本")).toBeInTheDocument();
+    expect(screen.queryByText("产品名称")).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "自动检查更新" })).not.toBeInTheDocument();
+  });
+
+  it("renders only automatic update controls for the auto-update subview", () => {
+    renderAboutSettings({ view: "auto-update" });
+
+    expect(screen.getByRole("switch", { name: "自动检查更新" })).toBeInTheDocument();
+    expect(screen.queryByText("产品名称")).not.toBeInTheDocument();
+    expect(screen.queryByText("最新版本")).not.toBeInTheDocument();
   });
 });

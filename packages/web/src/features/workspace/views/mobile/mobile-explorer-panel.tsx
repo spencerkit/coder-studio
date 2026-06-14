@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { CreateRequest } from "../../actions/use-file-actions";
 import { FileTreePanel } from "../shared/file-tree-panel";
-import { OpenEditorsSection } from "../shared/open-editors-section";
 import { QuickJumpSection } from "../shared/quick-jump-section";
 import { WorkspaceSectionHeader } from "../shared/workspace-section-header";
 
@@ -42,7 +41,6 @@ export function MobileExplorerPanel({
   return (
     <div className="mobile-explorer-panel">
       <QuickJumpSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
-      <OpenEditorsSection workspaceId={workspaceId} onSelectFile={routeToDetail} />
       <section className="workspace-sidebar-section workspace-sidebar-section--fill">
         <WorkspaceSectionHeader
           isExpanded={!workspaceCollapsed}

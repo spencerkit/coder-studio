@@ -5,10 +5,11 @@ import { useTranslation } from "../../../lib/i18n";
 export const DocumentPreview: FC<{
   src: string | null;
   title: string;
+  allowScripts: boolean;
   isLoading: boolean;
   error: string | null;
   onRetry?: () => void;
-}> = ({ src, title, isLoading, error, onRetry }) => {
+}> = ({ src, title, allowScripts, isLoading, error, onRetry }) => {
   const t = useTranslation();
   const [frameErrored, setFrameErrored] = useState(false);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -66,7 +67,7 @@ export const DocumentPreview: FC<{
         className="document-preview-frame"
         title={`${title} preview`}
         src={src}
-        sandbox=""
+        sandbox={allowScripts ? "allow-scripts" : ""}
       />
     </div>
   );

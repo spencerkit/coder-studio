@@ -6,6 +6,7 @@ import type {
 import { useAtomValue } from "jotai";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { activationStatusAtom } from "../../../atoms/activation";
 import { connectionStatusAtom } from "../../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag, Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
@@ -65,6 +66,7 @@ export function ProviderSettings({
   const t = useTranslation();
   const navigate = useNavigate();
   const dispatch = useSessionGateDispatch();
+  const activationStatus = useAtomValue(activationStatusAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const commandPreviewTitle = t("settings.provider.command_preview_title");
   const commandPreviewHint = t("settings.provider.command_preview_hint");
@@ -204,7 +206,7 @@ export function ProviderSettings({
   }, [desktopView, mobileView, providerSupportsConfigEditor]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -233,10 +235,10 @@ export function ProviderSettings({
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, providers]);
+  }, [activationStatus, connectionStatus, dispatch, providers]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -273,7 +275,7 @@ export function ProviderSettings({
     return () => {
       cancelled = true;
     };
-  }, [additionalArgs, additionalArgsText, connectionStatus, dispatch, provider]);
+  }, [activationStatus, additionalArgs, additionalArgsText, connectionStatus, dispatch, provider]);
 
   useEffect(() => {
     if (!provider || !showConfig) {

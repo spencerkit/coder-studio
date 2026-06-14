@@ -55,7 +55,7 @@ describe("discoverTasks", () => {
     expect(result.tasks.map((task) => task.source)).toContain("package-json");
   });
 
-  it("keeps ci:verify as a verify task and displays the original script body", async () => {
+  it("keeps ci:verify as a verify task and displays the runnable package script command", async () => {
     await writeFile(
       join(root, "package.json"),
       JSON.stringify({
@@ -77,7 +77,7 @@ describe("discoverTasks", () => {
       label: "ci:verify",
       command: "pnpm",
       args: ["ci:verify"],
-      displayCommand: "pnpm changeset:validate && pnpm ci:lint && pnpm ci:test && pnpm ci:build",
+      displayCommand: "pnpm ci:verify",
       source: "package-json",
     });
     expect(result.tasks.map((task) => task.id)).toEqual(["ci:verify", "test", "lint", "build"]);
@@ -118,7 +118,7 @@ describe("discoverTasks", () => {
         kind: "dev",
         command: "pnpm",
         args: ["dev"],
-        displayCommand: "tsx scripts/dev.ts",
+        displayCommand: "pnpm dev",
       },
       {
         id: "dev:web",
@@ -126,7 +126,7 @@ describe("discoverTasks", () => {
         kind: "dev",
         command: "pnpm",
         args: ["dev:web"],
-        displayCommand: "tsx scripts/dev-web.ts",
+        displayCommand: "pnpm dev:web",
       },
       {
         id: "ci:test",
@@ -134,7 +134,7 @@ describe("discoverTasks", () => {
         kind: "test",
         command: "pnpm",
         args: ["ci:test"],
-        displayCommand: "pnpm ci:test:scripts && pnpm ci:test:workspace",
+        displayCommand: "pnpm ci:test",
       },
       {
         id: "lint:fix",
@@ -142,7 +142,7 @@ describe("discoverTasks", () => {
         kind: "lint",
         command: "pnpm",
         args: ["lint:fix"],
-        displayCommand: "biome lint --write .",
+        displayCommand: "pnpm lint:fix",
       },
       {
         id: "publish:cli",
@@ -150,12 +150,12 @@ describe("discoverTasks", () => {
         kind: "custom",
         command: "pnpm",
         args: ["publish:cli"],
-        displayCommand: "tsx scripts/publish-cli.ts",
+        displayCommand: "pnpm publish:cli",
       },
     ]);
   });
 
-  it("uses package-manager-safe script arguments for npm and bun projects", async () => {
+  it("uses package-manager-safe script arguments and display commands for npm and bun projects", async () => {
     await writeFile(
       join(root, "package.json"),
       JSON.stringify({
@@ -170,8 +170,18 @@ describe("discoverTasks", () => {
 
     expect(npmResult.tasks).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "ci:verify", command: "npm", args: ["run", "ci:verify"] }),
-        expect.objectContaining({ id: "lint", command: "npm", args: ["run", "lint"] }),
+        expect.objectContaining({
+          id: "ci:verify",
+          command: "npm",
+          args: ["run", "ci:verify"],
+          displayCommand: "npm run ci:verify",
+        }),
+        expect.objectContaining({
+          id: "lint",
+          command: "npm",
+          args: ["run", "lint"],
+          displayCommand: "npm run lint",
+        }),
       ])
     );
 
@@ -180,8 +190,44 @@ describe("discoverTasks", () => {
 
     expect(bunResult.tasks).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "ci:verify", command: "bun", args: ["run", "ci:verify"] }),
-        expect.objectContaining({ id: "lint", command: "bun", args: ["run", "lint"] }),
+        expect.objectContaining({
+          id: "ci:verify",
+          command: "bun",
+          args: ["run", "ci:verify"],
+          displayCommand: "bun run ci:verify",
+        }),
+        expect.objectContaining({
+          id: "lint",
+          command: "bun",
+          args: ["run", "lint"],
+          displayCommand: "bun run lint",
+        }),
+      ])
+    );
+  });
+
+  it("prefers the package.json packageManager field over lockfile heuristics", async () => {
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        packageManager: "yarn@4.9.1",
+        scripts: {
+          dev: "vite --host 0.0.0.0",
+        },
+      })
+    );
+    await writeFile(join(root, "pnpm-lock.yaml"), "");
+
+    const result = await discoverTasks({ workspaceId: "ws-1", rootPath: root });
+
+    expect(result.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dev",
+          command: "yarn",
+          args: ["run", "dev"],
+          displayCommand: "yarn run dev",
+        }),
       ])
     );
   });

@@ -1,6 +1,181 @@
 import type { Workspace } from "@coder-studio/core";
 import type { Store } from "jotai/vanilla/store";
-import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../atoms";
+import {
+  activeEditorTabAtomFamily,
+  activeFilePathAtomFamily,
+  editorViewVisibleAtomFamily,
+  openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
+  type WorkspaceBrowserEditorTab,
+  type WorkspaceEditorTab,
+  type WorkspaceFileEditorTab,
+} from "../atoms";
+
+const LEGACY_BROWSER_TAB_ID = "dev-browser-legacy";
+const MAX_BROWSER_VIEWPORT_DIMENSION = 4096;
+
+function normalizeViewportDimension(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= MAX_BROWSER_VIEWPORT_DIMENSION
+    ? value
+    : null;
+}
+
+function normalizeBrowserDevicePreset(value: unknown): WorkspaceBrowserEditorTab["devicePreset"] {
+  return value === "desktop" || value === "iphone-14" || value === "pixel-7" || value === "custom"
+    ? value
+    : "desktop";
+}
+
+function normalizeBrowserOrientation(value: unknown): WorkspaceBrowserEditorTab["orientation"] {
+  return value === "portrait" || value === "landscape" ? value : "portrait";
+}
+
+function normalizeBrowserUserAgentMode(value: unknown): WorkspaceBrowserEditorTab["userAgentMode"] {
+  return value === "desktop" || value === "mobile" ? value : "desktop";
+}
+
+function readLegacyDevBrowserTargetUrl(uiState: object): string | null {
+  const candidate = (uiState as { devBrowserTargetUrl?: unknown }).devBrowserTargetUrl;
+  if (typeof candidate !== "string") {
+    return null;
+  }
+
+  const next = candidate.trim();
+  return next.length > 0 ? next : null;
+}
+
+function normalizeWorkspaceBrowserEditorTab(
+  entry: unknown,
+  legacyUrl: string | null
+): WorkspaceBrowserEditorTab | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const candidate = entry as Partial<WorkspaceBrowserEditorTab>;
+  if (candidate.kind !== "browser") {
+    return null;
+  }
+
+  if (typeof candidate.id !== "string" || candidate.id.trim().length === 0) {
+    return null;
+  }
+
+  const id = candidate.id.trim();
+  const normalizedUrl =
+    typeof candidate.url === "string" && candidate.url.trim().length > 0
+      ? candidate.url.trim()
+      : null;
+  const deviceSettings = {
+    devicePreset: normalizeBrowserDevicePreset(candidate.devicePreset),
+    viewportWidth: normalizeViewportDimension(candidate.viewportWidth),
+    viewportHeight: normalizeViewportDimension(candidate.viewportHeight),
+    orientation: normalizeBrowserOrientation(candidate.orientation),
+    userAgentMode: normalizeBrowserUserAgentMode(candidate.userAgentMode),
+  };
+
+  if (id === "dev-browser") {
+    return {
+      kind: "browser",
+      id: LEGACY_BROWSER_TAB_ID,
+      url: normalizedUrl ?? legacyUrl,
+      ...deviceSettings,
+    };
+  }
+
+  return {
+    kind: "browser",
+    id,
+    url: normalizedUrl,
+    ...deviceSettings,
+  };
+}
+
+function normalizeWorkspaceFileEditorTab(entry: unknown): WorkspaceFileEditorTab | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const candidate = entry as Partial<WorkspaceFileEditorTab>;
+  if (candidate.kind !== "file") {
+    return null;
+  }
+
+  if (typeof candidate.path !== "string" || candidate.path.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    kind: "file",
+    path: candidate.path.trim(),
+  };
+}
+
+function normalizeWorkspaceEditorTab(
+  entry: unknown,
+  legacyUrl: string | null
+): WorkspaceEditorTab | null {
+  return (
+    normalizeWorkspaceBrowserEditorTab(entry, legacyUrl) ?? normalizeWorkspaceFileEditorTab(entry)
+  );
+}
+
+function normalizeWorkspaceEditorTabs(
+  value: unknown,
+  legacyUrl: string | null
+): WorkspaceEditorTab[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seenFilePaths = new Set<string>();
+  const seenBrowserIds = new Set<string>();
+  const next: WorkspaceEditorTab[] = [];
+
+  for (const entry of value) {
+    const normalizedTab = normalizeWorkspaceEditorTab(entry, legacyUrl);
+    if (!normalizedTab) {
+      continue;
+    }
+
+    if (normalizedTab.kind === "browser") {
+      if (seenBrowserIds.has(normalizedTab.id)) {
+        continue;
+      }
+
+      seenBrowserIds.add(normalizedTab.id);
+      next.push(normalizedTab);
+      continue;
+    }
+
+    if (seenFilePaths.has(normalizedTab.path)) {
+      continue;
+    }
+
+    seenFilePaths.add(normalizedTab.path);
+    next.push(normalizedTab);
+  }
+
+  return next;
+}
+
+function appendMissingActiveBrowserTab(
+  openEditorTabs: WorkspaceEditorTab[],
+  activeEditorTab: WorkspaceEditorTab | null
+): WorkspaceEditorTab[] {
+  if (activeEditorTab?.kind !== "browser") {
+    return openEditorTabs;
+  }
+
+  if (openEditorTabs.some((tab) => tab.kind === "browser" && tab.id === activeEditorTab.id)) {
+    return openEditorTabs;
+  }
+
+  return [...openEditorTabs, activeEditorTab];
+}
 
 function hasOwnProperty<T extends object>(value: T, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
@@ -32,6 +207,10 @@ export function normalizeActiveEditorPath(value: unknown): string | null {
   }
 
   return value;
+}
+
+export function normalizeActiveEditorTab(value: unknown): WorkspaceEditorTab | null {
+  return normalizeWorkspaceEditorTab(value, null);
 }
 
 export function mergeOpenEditorPaths(...pathLists: Array<Iterable<string> | undefined>): string[] {
@@ -77,16 +256,48 @@ export function rewriteOpenEditorPaths(
 }
 
 export function normalizeWorkspaceEditorUiStatePatch(
-  uiState: Partial<Pick<Workspace["uiState"], "openEditorPaths" | "activeEditorPath">>
-): { openEditorPaths?: string[]; activeEditorPath?: string | null } | null {
+  uiState: Partial<
+    Pick<
+      Workspace["uiState"],
+      | "openEditorPaths"
+      | "activeEditorPath"
+      | "editorViewVisible"
+      | "openEditorTabs"
+      | "activeEditorTab"
+      | "devBrowserTargetUrl"
+    >
+  >
+): {
+  openEditorPaths?: string[];
+  activeEditorPath?: string | null;
+  editorViewVisible?: boolean;
+  openEditorTabs?: WorkspaceEditorTab[];
+  activeEditorTab?: WorkspaceEditorTab | null;
+} | null {
   const hasOpenEditorPaths = hasOwnProperty(uiState, "openEditorPaths");
   const hasActiveEditorPath = hasOwnProperty(uiState, "activeEditorPath");
+  const hasEditorViewVisible = hasOwnProperty(uiState, "editorViewVisible");
+  const hasOpenEditorTabs = hasOwnProperty(uiState, "openEditorTabs");
+  const hasActiveEditorTab = hasOwnProperty(uiState, "activeEditorTab");
+  const legacyBrowserTargetUrl = readLegacyDevBrowserTargetUrl(uiState);
 
-  if (!hasOpenEditorPaths && !hasActiveEditorPath) {
+  if (
+    !hasOpenEditorPaths &&
+    !hasActiveEditorPath &&
+    !hasEditorViewVisible &&
+    !hasOpenEditorTabs &&
+    !hasActiveEditorTab
+  ) {
     return null;
   }
 
-  const next: { openEditorPaths?: string[]; activeEditorPath?: string | null } = {};
+  const next: {
+    openEditorPaths?: string[];
+    activeEditorPath?: string | null;
+    editorViewVisible?: boolean;
+    openEditorTabs?: WorkspaceEditorTab[];
+    activeEditorTab?: WorkspaceEditorTab | null;
+  } = {};
 
   if (hasOpenEditorPaths) {
     const openEditorPaths = normalizeOpenEditorPaths(uiState.openEditorPaths);
@@ -104,24 +315,75 @@ export function normalizeWorkspaceEditorUiStatePatch(
     next.activeEditorPath = normalizeActiveEditorPath(uiState.activeEditorPath);
   }
 
+  if (hasEditorViewVisible) {
+    next.editorViewVisible = uiState.editorViewVisible === true;
+  }
+
+  if (hasOpenEditorTabs) {
+    const openEditorTabs = normalizeWorkspaceEditorTabs(
+      uiState.openEditorTabs,
+      legacyBrowserTargetUrl
+    );
+    next.openEditorTabs = openEditorTabs;
+
+    if (hasActiveEditorTab) {
+      const activeEditorTab = normalizeWorkspaceEditorTab(
+        uiState.activeEditorTab,
+        legacyBrowserTargetUrl
+      );
+      next.activeEditorTab = activeEditorTab;
+      if (activeEditorTab?.kind === "browser") {
+        next.openEditorTabs = appendMissingActiveBrowserTab(openEditorTabs, activeEditorTab);
+      }
+    }
+  } else if (hasActiveEditorTab) {
+    const activeEditorTab = normalizeWorkspaceEditorTab(
+      uiState.activeEditorTab,
+      legacyBrowserTargetUrl
+    );
+    next.activeEditorTab = activeEditorTab;
+    if (activeEditorTab?.kind === "browser") {
+      next.openEditorTabs = appendMissingActiveBrowserTab([], activeEditorTab);
+    }
+  }
+
   return next;
 }
 
 export function normalizeWorkspaceEditorUiState(
   uiState: Workspace["uiState"]
 ): Workspace["uiState"] {
+  const hasLegacyBrowserTargetUrl = hasOwnProperty(uiState, "devBrowserTargetUrl");
   const normalizedPatch = normalizeWorkspaceEditorUiStatePatch(uiState);
   if (!normalizedPatch) {
-    return uiState;
+    if (!hasLegacyBrowserTargetUrl) {
+      return uiState;
+    }
+
+    const { devBrowserTargetUrl: _legacyBrowserTargetUrl, ...restUiState } =
+      uiState as Workspace["uiState"] & { devBrowserTargetUrl?: string | null };
+    return restUiState;
   }
 
+  const { devBrowserTargetUrl: _legacyBrowserTargetUrl, ...restUiState } =
+    uiState as Workspace["uiState"] & { devBrowserTargetUrl?: string | null };
+
   return {
-    ...uiState,
+    ...restUiState,
     ...(hasOwnProperty(normalizedPatch, "openEditorPaths")
       ? { openEditorPaths: normalizedPatch.openEditorPaths }
       : {}),
     ...(hasOwnProperty(normalizedPatch, "activeEditorPath")
       ? { activeEditorPath: normalizedPatch.activeEditorPath }
+      : {}),
+    ...(hasOwnProperty(normalizedPatch, "editorViewVisible")
+      ? { editorViewVisible: normalizedPatch.editorViewVisible }
+      : {}),
+    ...(hasOwnProperty(normalizedPatch, "openEditorTabs")
+      ? { openEditorTabs: normalizedPatch.openEditorTabs }
+      : {}),
+    ...(hasOwnProperty(normalizedPatch, "activeEditorTab")
+      ? { activeEditorTab: normalizedPatch.activeEditorTab }
       : {}),
   };
 }
@@ -137,7 +399,16 @@ export function hydrateWorkspaceEditorState(
 
   const hasOpenEditorPaths = hasOwnProperty(uiState, "openEditorPaths");
   const hasActiveEditorPath = hasOwnProperty(uiState, "activeEditorPath");
-  if (!hasOpenEditorPaths && !hasActiveEditorPath) {
+  const hasEditorViewVisible = hasOwnProperty(uiState, "editorViewVisible");
+  const hasOpenEditorTabs = hasOwnProperty(uiState, "openEditorTabs");
+  const hasActiveEditorTab = hasOwnProperty(uiState, "activeEditorTab");
+  if (
+    !hasOpenEditorPaths &&
+    !hasActiveEditorPath &&
+    !hasEditorViewVisible &&
+    !hasOpenEditorTabs &&
+    !hasActiveEditorTab
+  ) {
     return;
   }
 
@@ -152,5 +423,17 @@ export function hydrateWorkspaceEditorState(
 
   if (hasActiveEditorPath) {
     store.set(activeFilePathAtomFamily(workspaceId), normalizedPatch.activeEditorPath ?? null);
+  }
+
+  if (hasEditorViewVisible) {
+    store.set(editorViewVisibleAtomFamily(workspaceId), normalizedPatch.editorViewVisible === true);
+  }
+
+  if (hasOpenEditorTabs) {
+    store.set(openEditorTabsAtomFamily(workspaceId), normalizedPatch.openEditorTabs ?? []);
+  }
+
+  if (hasActiveEditorTab) {
+    store.set(activeEditorTabAtomFamily(workspaceId), normalizedPatch.activeEditorTab ?? null);
   }
 }

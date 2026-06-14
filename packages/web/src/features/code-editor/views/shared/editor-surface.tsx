@@ -1,15 +1,11 @@
-import { X } from "lucide-react";
-import type { FC } from "react";
+import { Globe, X } from "lucide-react";
+import type { FC, PointerEvent } from "react";
 import { useState } from "react";
-import {
-  ConfirmDialog,
-  EmptyState,
-  IconButton,
-  ThemedIcon,
-  Tooltip,
-} from "../../../../components/ui";
+import { EmptyState, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
-import { deriveDocumentPreviewKind } from "../../../workspace/atoms";
+import { DevBrowserSurface } from "../../../dev-browser/dev-browser-surface";
+import { mergeOpenEditorPaths } from "../../../workspace/actions/open-editor-state";
+import { deriveDocumentPreviewKind, type WorkspaceEditorTab } from "../../../workspace/atoms";
 import { CommitFileListPreview } from "../../components/commit-file-list-preview";
 import { DocumentPreview } from "../../components/document-preview";
 import { ImageDiffPreview } from "../../components/image-diff-preview";
@@ -19,11 +15,21 @@ import { MonacoHost } from "../../components/monaco-host";
 import { isSystemAgentInstructionsEditorPath } from "../../system-agent-instructions-path";
 import type { CodeEditorChrome, CodeEditorState } from "./code-editor-host";
 import { CodeEditorDesktopHeaderActions } from "./code-editor-host";
+import {
+  CodeEditorTabsHeader,
+  getFileName,
+  getFullWorkspaceFilePath,
+} from "./code-editor-tabs-header";
 
 interface EditorSurfaceProps {
   state: CodeEditorState;
   chrome?: CodeEditorChrome;
+  editorPinned?: boolean;
+  onBeginFloatingEditorMove?: (event: PointerEvent<HTMLButtonElement>) => void;
+  onToggleEditorPinned?: (pinned: boolean) => void;
 }
+
+const CLOSE_TO_RESTORE_ANIMATION_MS = 180;
 
 type TextDiffPreview = Extract<
   NonNullable<CodeEditorState["activeDiffChange"]>,
@@ -31,10 +37,6 @@ type TextDiffPreview = Extract<
     kind: "worktree-file-diff" | "commit-file-diff" | "search-replace-file-diff";
   }
 >;
-
-function getFileName(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
-}
 
 function getTextDiffFilePath(preview: TextDiffPreview, fallbackPath?: string): string {
   if (preview.kind === "worktree-file-diff" || preview.kind === "commit-file-diff") {
@@ -52,21 +54,37 @@ function getTextDiffModifiedContent(preview: TextDiffPreview): string {
   return preview.modifiedContent ?? "";
 }
 
-export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }) => {
+export const EditorSurface: FC<EditorSurfaceProps> = ({
+  state,
+  chrome = "full",
+  editorPinned,
+  onBeginFloatingEditorMove,
+  onToggleEditorPinned,
+}) => {
   const t = useTranslation();
-  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [closingToRestore, setClosingToRestore] = useState(false);
   const {
     activeFilePath,
+    activeEditorTab,
     activeDiffChange,
     activeExternalStatus,
     activeLoadError,
+    activateEditorTab,
+    activateOpenFile,
+    closeEditorTab,
+    closeOpenFilePath,
     currentFile,
     documentPreview,
     handleClose,
     handleContentChange,
+    hideEditorView,
     handleSave,
     hasUnsavedChangesOutsideDiff,
     mode,
+    openBrowserTab,
+    openEditorPaths,
+    openEditorTabs,
+    openFiles,
     pendingNavigationAtom,
     saveError,
     workspace,
@@ -88,6 +106,13 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   }
 
   const activePreviewKind = activeDiffChange?.kind;
+  const resolvedActiveEditorTab =
+    activeEditorTab?.kind === "browser"
+      ? activeEditorTab
+      : activeFilePath
+        ? { kind: "file" as const, path: activeFilePath }
+        : activeEditorTab;
+  const isBrowserEditorTabActive = resolvedActiveEditorTab?.kind === "browser";
   const currentTextFile = currentFile?.kind === "text" ? currentFile : null;
   const currentImageFile = currentFile?.kind === "image" ? currentFile : null;
   const showHeader = chrome === "full";
@@ -102,13 +127,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
   const isCommitPreview = isCommitFileListPreview || isCommitFileDiffPreview;
   const commitPreview = commitFileListPreview ?? commitFileDiffPreview;
   const isDirtyTextFile = !isCommitPreview && currentTextFile?.isDirty === true;
-  const dirtyIndicator = isDirtyTextFile ? (
-    <span
-      className="dirty-indicator"
-      aria-label={t("code_editor.unsaved_changes")}
-      title={t("code_editor.unsaved_changes")}
-    />
-  ) : null;
   const textDiffPreview =
     worktreeFileDiffPreview && mode === "diff" && worktreeFileDiffPreview.renderAs === "text"
       ? worktreeFileDiffPreview
@@ -137,19 +155,44 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
     : currentFile
       ? (currentFile.displayPath ?? getFileName(currentFile.path))
       : (activeDiffChange?.title ?? activeFilePath ?? t("file.title"));
-  const closeConfirmFileName =
-    currentTextFile?.path !== undefined ? getFileName(currentTextFile.path) : t("file.title");
-  const requestClose = () => {
-    if (isDirtyTextFile) {
-      setCloseConfirmOpen(true);
+  const visibleEditorPaths = isCommitPreview
+    ? []
+    : mergeOpenEditorPaths(openEditorPaths, activeFilePath ? [activeFilePath] : undefined);
+  const visibleEditorTabs = isCommitPreview
+    ? []
+    : [
+        ...visibleEditorPaths.map((path) => ({ kind: "file" as const, path })),
+        ...openEditorTabs.filter((tab) => tab.kind === "browser"),
+      ];
+  const activeFullPath =
+    currentFile?.displayPath ??
+    (activeFilePath ? getFullWorkspaceFilePath(workspace.path, activeFilePath) : titleText);
+  const dirtyStatusLabel = isDirtyTextFile ? t("code_editor.modified_unsaved_changes") : null;
+  const handleActivateEditorTab = (tab: WorkspaceEditorTab) => {
+    if (tab.kind === "browser" || isBrowserEditorTabActive) {
+      activateEditorTab(tab);
       return;
     }
 
-    void handleClose();
+    activateOpenFile(tab.path);
   };
-  const confirmClose = () => {
-    setCloseConfirmOpen(false);
-    void handleClose();
+  const handleCloseEditorTab = (tab: WorkspaceEditorTab) => {
+    if (tab.kind === "browser" || isBrowserEditorTabActive) {
+      closeEditorTab(tab);
+      return;
+    }
+
+    closeOpenFilePath?.(tab.path);
+  };
+  const requestClose = () => {
+    if (closingToRestore) {
+      return;
+    }
+
+    setClosingToRestore(true);
+    window.setTimeout(() => {
+      void hideEditorView();
+    }, CLOSE_TO_RESTORE_ANIMATION_MS);
   };
   const buildRevisionUrl = (path: string, revision?: string) => {
     const query = new URLSearchParams({
@@ -186,28 +229,16 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
       : undefined;
 
   return (
-    <div className="workspace-git-view">
+    <div
+      className={`workspace-git-view${closingToRestore ? " workspace-git-view--closing-to-restore" : ""}`}
+    >
       <div className="code-editor workspace-git-editor">
         {showHeader ? (
-          <div className="code-editor-header editor-surface__header">
-            <span
-              className="code-file-path"
-              title={
-                commitPreview
-                  ? titleText
-                  : (currentFile?.displayPath ?? currentFile?.path ?? titleText)
-              }
-            >
-              {currentFile && !isCommitPreview ? (
-                <>
-                  <span className="code-file-path__name">{titleText}</span>
-                  {dirtyIndicator}
-                </>
-              ) : (
-                titleText
-              )}
-            </span>
-            {isCommitPreview ? (
+          isCommitPreview ? (
+            <div className="code-editor-header editor-surface__header">
+              <span className="code-file-path" title={titleText}>
+                {titleText}
+              </span>
               <div
                 className="editor-surface__toolbar"
                 role="toolbar"
@@ -223,20 +254,60 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
                   />
                 </Tooltip>
               </div>
-            ) : (
-              <CodeEditorDesktopHeaderActions state={state} onRequestClose={requestClose} />
-            )}
-          </div>
+            </div>
+          ) : (
+            <CodeEditorTabsHeader
+              activeFilePath={activeFilePath}
+              activeFullPath={activeFullPath}
+              activeEditorTab={resolvedActiveEditorTab}
+              dirtyStatusLabel={dirtyStatusLabel}
+              onActivateOpenFile={activateOpenFile}
+              onActivateEditorTab={handleActivateEditorTab}
+              onCloseEditorTab={handleCloseEditorTab}
+              onCloseOpenFilePath={closeOpenFilePath}
+              openEditorPaths={visibleEditorPaths}
+              openEditorTabs={visibleEditorTabs}
+              openFiles={openFiles}
+              showPathRow={!isBrowserEditorTabActive}
+              workspaceRootPath={workspace.path}
+              tabbarActions={
+                <>
+                  <Tooltip content={t("code_editor.open_browser_tab")}>
+                    <IconButton
+                      aria-label={t("code_editor.open_browser_tab")}
+                      className="code-mode-btn editor-surface__action-btn editor-surface__browser-btn"
+                      icon={<Globe size={14} />}
+                      onClick={openBrowserTab}
+                      size="sm"
+                    />
+                  </Tooltip>
+                  <CodeEditorDesktopHeaderActions
+                    state={state}
+                    onRequestClose={requestClose}
+                    editorPinned={editorPinned}
+                    onBeginFloatingEditorMove={onBeginFloatingEditorMove}
+                    onToggleEditorPinned={onToggleEditorPinned}
+                    showModeActions={false}
+                  />
+                </>
+              }
+              pathActions={
+                <>
+                  <CodeEditorDesktopHeaderActions state={state} showCloseAction={false} />
+                </>
+              }
+            />
+          )
         ) : null}
 
-        {!isCommitPreview && saveError ? (
+        {!isCommitPreview && !isBrowserEditorTabActive && saveError ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon semantic="state.error" size={14} />
             <span>{saveError}</span>
           </div>
         ) : null}
 
-        {!isCommitPreview && activeExternalStatus ? (
+        {!isCommitPreview && !isBrowserEditorTabActive && activeExternalStatus ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon
               semantic={
@@ -252,7 +323,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           </div>
         ) : null}
 
-        {!isCommitPreview && hasUnsavedChangesOutsideDiff ? (
+        {!isCommitPreview && !isBrowserEditorTabActive && hasUnsavedChangesOutsideDiff ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon semantic="state.warning" size={14} />
             <span>{t("code_editor.diff_saved_only")}</span>
@@ -260,7 +331,13 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
         ) : null}
 
         <div className="code-editor-body">
-          {isCommitFileListPreview ? (
+          {isBrowserEditorTabActive ? (
+            <DevBrowserSurface
+              key={resolvedActiveEditorTab.id}
+              workspaceId={workspace.id}
+              browserTab={resolvedActiveEditorTab}
+            />
+          ) : isCommitFileListPreview ? (
             <CommitFileListPreview
               preview={commitFileListPreview}
               onOpenFile={(file) => void state.openCommitFileDiff(file)}
@@ -283,6 +360,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
             <DocumentPreview
               src={documentPreview.iframeSrc}
               title={currentTextFile.path}
+              allowScripts={documentPreview.allowScripts}
               isLoading={documentPreview.isBootstrapping}
               error={documentPreview.error}
               onRetry={documentPreview.retry}
@@ -328,16 +406,6 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({ state, chrome = "full" }
           )}
         </div>
       </div>
-      <ConfirmDialog
-        open={closeConfirmOpen}
-        onOpenChange={setCloseConfirmOpen}
-        title={t("code_editor.close_unsaved_title")}
-        description={t("code_editor.close_unsaved_description", { name: closeConfirmFileName })}
-        cancelText={t("common.cancel")}
-        confirmText={t("code_editor.discard_and_close")}
-        tone="danger"
-        onConfirm={confirmClose}
-      />
     </div>
   );
 };

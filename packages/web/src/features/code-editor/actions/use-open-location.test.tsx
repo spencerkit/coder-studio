@@ -2,7 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import type { PropsWithChildren } from "react";
 import { describe, expect, it } from "vitest";
-import { activeFilePathAtomFamily, openFilesAtomFamily } from "../../workspace/atoms";
+import {
+  activeEditorTabAtomFamily,
+  activeFilePathAtomFamily,
+  openFilesAtomFamily,
+} from "../../workspace/atoms";
 import { pendingEditorNavigationAtomFamily } from "../atoms";
 import { useOpenLocation } from "./use-open-location";
 
@@ -10,6 +14,10 @@ function createWrapper(store: ReturnType<typeof createStore>) {
   return function Wrapper({ children }: PropsWithChildren) {
     return <Provider store={store}>{children}</Provider>;
   };
+}
+
+function browserTab(id: string, url: string | null) {
+  return { kind: "browser" as const, id, url };
 }
 
 describe("useOpenLocation", () => {
@@ -36,6 +44,27 @@ describe("useOpenLocation", () => {
       column: 5,
       source: "manual",
       requestId: expect.any(Number),
+    });
+  });
+
+  it("switches back to the file editor tab when opening a file while browser is active", async () => {
+    const store = createStore();
+    store.set(activeFilePathAtomFamily("ws-1"), "src/utils/math.ts");
+    store.set(activeEditorTabAtomFamily("ws-1"), browserTab("browser-1", "localhost:8001"));
+    const wrapper = createWrapper(store);
+    const { result } = renderHook(() => useOpenLocation("ws-1"), { wrapper });
+
+    await act(async () => {
+      await result.current.openLocation({
+        workspaceId: "ws-1",
+        path: "src/utils/math.ts",
+        source: "manual",
+      });
+    });
+
+    expect(store.get(activeEditorTabAtomFamily("ws-1"))).toEqual({
+      kind: "file",
+      path: "src/utils/math.ts",
     });
   });
 

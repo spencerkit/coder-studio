@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { lastViewedTargetAtom } from "../../atoms/app-ui";
+import { lastViewedTargetAtom, localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
@@ -55,6 +55,12 @@ vi.mock("./views/shared/agent-instructions-section", () => ({
 vi.mock("./views/shared/skills-panel", () => ({
   SkillsPanel: ({ workspaceId }: { workspaceId: string }) => (
     <div data-testid="skills-panel" data-workspace-id={workspaceId} />
+  ),
+}));
+
+vi.mock("./views/shared/memory-panel", () => ({
+  MemoryPanel: ({ workspaceId }: { workspaceId: string }) => (
+    <div data-testid="memory-panel" data-workspace-id={workspaceId} />
   ),
 }));
 
@@ -327,6 +333,7 @@ describe("WorkspacePage", () => {
     });
 
     const store = createStore();
+    store.set(localeAtom, "en");
     store.set(connectionStatusAtom, "connected");
     store.set(wsClientAtom, { sendCommand } as never);
     seedReadyWorkspaceState(store, {
@@ -361,12 +368,19 @@ describe("WorkspacePage", () => {
     expect(document.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.sourceControl"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.agent"]')).toBeTruthy();
+    expect(document.querySelector('[data-icon-semantic="nav.memory"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.skills"]')).toBeTruthy();
     expect(document.querySelector('[data-icon-semantic="nav.extensions"]')).toBeNull();
     expect(
       screen.getByRole("button", { name: /agent\.md|Agent Instructions|Agent 指令/i })
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Memory|记忆/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Skills|技能/i })).toBeInTheDocument();
+    const activityLabels = Array.from(
+      document.querySelectorAll(".workspace-activity-bar__label"),
+      (label) => label.textContent
+    );
+    expect(activityLabels.slice(-2)).toEqual(["Memory", "Skills"]);
     expect(document.querySelector(".workspace-sidebar-panel__tabs")).toBeNull();
     expect(document.querySelector(".workspace-sidebar-panel__tab")).toBeNull();
   });
@@ -435,12 +449,13 @@ describe("WorkspacePage", () => {
       </Provider>
     );
 
-    await screen.findByText(/Open Files|打开的文件/i);
+    await screen.findByRole("heading", { level: 2, name: /Workspace|工作区/i });
 
     const explorerButton = screen.getByRole("button", { name: /Explorer|资源管理器/i });
     expect(explorerButton).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "README.md" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "src/app.tsx" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: /Open Files|打开的文件/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "README.md" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "src/app.tsx" })).toBeNull();
     expect(screen.queryByLabelText(/Search files|搜索文件/i)).toBeNull();
     expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
   });
@@ -554,6 +569,9 @@ describe("WorkspacePage", () => {
     );
     expect(screen.getByTestId("agent-instructions-section")).toBeInTheDocument();
     expect(screen.queryByTestId("file-tree-panel")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Memory|记忆/i }));
+    expect(screen.getByTestId("memory-panel")).toHaveAttribute("data-workspace-id", "ws-test");
   });
 
   it("mounts desktop workspace navigation shortcuts and switches workspaces on Ctrl+Shift+ArrowRight", async () => {
@@ -1726,7 +1744,7 @@ describe("WorkspacePage", () => {
     expect(screen.queryByTestId("git-diff-viewer")).not.toBeInTheDocument();
   });
 
-  it("returns from editor mode to the agent session view when close all closes the last desktop editor", async () => {
+  it("keeps the desktop file side panel free of obsolete Open Files controls", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -1785,18 +1803,12 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
-
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
-    const section = heading.closest("section") as HTMLElement;
-    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
-    expect(within(section).getByText("1")).toHaveClass("workspace-open-editors__count");
-    fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
-
-    await screen.findByTestId("agent-panes");
-    expect(within(section).getByText("0")).toHaveClass("workspace-open-editors__count");
-    expect(screen.queryByTestId("code-editor-host")).not.toBeInTheDocument();
-    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
-    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /Close all|全部关闭/i })).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toHaveProperty("src/app.tsx");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
   });
 
   it("keeps commit-history diff previews reachable on desktop without an active file", async () => {
@@ -1867,7 +1879,7 @@ describe("WorkspacePage", () => {
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
   });
 
-  it("keeps commit-history diff previews reachable after close all clears open editors", async () => {
+  it("keeps commit-history diff previews reachable with open editors after removing side-panel open files controls", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -1945,14 +1957,13 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
-    const section = heading.closest("section") as HTMLElement;
-    fireEvent.click(within(section).getByRole("button", { name: /Close all|全部关闭/i }));
-
-    await screen.findByTestId("code-editor-host");
+    expect(
+      screen.queryByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /Close all|全部关闭/i })).toBeNull();
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
-    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({});
-    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(openFilesAtomFamily("ws-test"))).toHaveProperty("src/app.tsx");
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
     expect(store.get(gitDiffPreviewAtomFamily("ws-test"))).toEqual({
       kind: "commit-file-list",
       path: "abc123",
@@ -1974,7 +1985,7 @@ describe("WorkspacePage", () => {
     });
   });
 
-  it("clearing the final open editor from Open Files preserves an active commit preview", async () => {
+  it("keeps the active commit preview when the editor tab closes the final open editor", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {
         return {
@@ -2052,13 +2063,14 @@ describe("WorkspacePage", () => {
 
     await screen.findByTestId("code-editor-host");
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i })
+    ).toBeNull();
 
-    const activeRow = screen
-      .getByRole("button", { name: "src/app.tsx" })
-      .closest(".workspace-open-editors__row") as HTMLElement;
-    fireEvent.click(
-      within(activeRow).getByRole("button", { name: /^(Close|关闭) src\/app\.tsx$/ })
-    );
+    act(() => {
+      store.set(activeFilePathAtomFamily("ws-test"), null);
+      store.set(openFilesAtomFamily("ws-test"), {});
+    });
 
     await screen.findByTestId("code-editor-host");
     expect(screen.getByTestId("agent-panes")).toBeInTheDocument();

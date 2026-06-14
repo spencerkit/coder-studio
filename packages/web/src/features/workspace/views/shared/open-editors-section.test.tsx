@@ -107,6 +107,7 @@ function renderSection(
     activePath ?? (files["src/beta.ts"] ? "src/beta.ts" : (Object.keys(files)[0] ?? null))
   );
   store.set(openFilesAtomFamily("ws-test"), files);
+  store.set(openEditorPathsAtomFamily("ws-test"), Object.keys(files));
   seedStore?.(store);
 
   render(
@@ -254,6 +255,77 @@ describe("OpenEditorsSection", () => {
 
     expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/app.tsx"]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+  });
+
+  it("does not list files that only exist in the shared open-file cache", () => {
+    renderSection(
+      {
+        "src/global.ts": createFile("src/global.ts"),
+        "src/panel-only.ts": createFile("src/panel-only.ts"),
+      },
+      "src/global.ts",
+      (draftStore) => {
+        draftStore.set(openEditorPathsAtomFamily("ws-test"), ["src/global.ts"]);
+      }
+    );
+
+    const heading = screen.getByRole("heading", { level: 2, name: "Open Files (1)" });
+    const section = heading.closest("section") as HTMLElement;
+
+    expect(within(section).getByRole("button", { name: "src/global.ts" })).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: "src/panel-only.ts" })).toBeNull();
+  });
+
+  it("closes global editor files without discarding dirty panel-only cache entries", () => {
+    const { store } = renderSection(
+      {
+        "src/global.ts": createFile("src/global.ts"),
+        "src/panel-only.ts": createDirtyFile("src/panel-only.ts"),
+      },
+      "src/global.ts",
+      (draftStore) => {
+        draftStore.set(openEditorPathsAtomFamily("ws-test"), ["src/global.ts"]);
+      }
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close all" }));
+
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([]);
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({
+      "src/panel-only.ts": expect.objectContaining({
+        path: "src/panel-only.ts",
+        isDirty: true,
+      }),
+    });
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+  });
+
+  it("closes a global editor row without promoting panel-only cache entries", () => {
+    const { store } = renderSection(
+      {
+        "src/global.ts": createFile("src/global.ts"),
+        "src/panel-only.ts": createFile("src/panel-only.ts"),
+      },
+      "src/global.ts",
+      (draftStore) => {
+        draftStore.set(openEditorPathsAtomFamily("ws-test"), ["src/global.ts"]);
+      }
+    );
+
+    const row = screen
+      .getByRole("button", { name: "src/global.ts" })
+      .closest(".workspace-open-editors__row") as HTMLElement;
+
+    fireEvent.click(within(row).getByRole("button", { name: "Close src/global.ts" }));
+
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([]);
+    expect(store.get(openFilesAtomFamily("ws-test"))).toEqual({
+      "src/panel-only.ts": expect.objectContaining({
+        path: "src/panel-only.ts",
+      }),
+    });
+    expect(screen.queryByRole("button", { name: "src/panel-only.ts" })).toBeNull();
   });
 
   it("opens open-editor clicks in the standalone editor when an editor pane is focused", () => {

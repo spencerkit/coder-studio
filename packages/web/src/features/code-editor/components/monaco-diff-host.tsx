@@ -9,6 +9,7 @@ import type { FC } from "react";
 import { useEffect, useRef } from "react";
 import { themeAtom } from "../../../atoms/app-ui";
 import { createWorkspaceMonacoTheme, getThemeById } from "../../../theme";
+import { detectEditorLanguage } from "../monaco/language";
 import { ensureVueLanguageRegistered } from "../monaco/vue-language";
 
 const monacoGlobal = globalThis as typeof globalThis & {
@@ -119,33 +120,5 @@ export const MonacoDiffHost: FC<MonacoDiffHostProps> = ({
     />
   );
 };
-
-function detectEditorLanguage(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  const langMap: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    json: "json",
-    md: "markdown",
-    css: "css",
-    scss: "scss",
-    html: "html",
-    py: "python",
-    go: "go",
-    rs: "rust",
-    vue: "vue",
-    java: "java",
-    cpp: "cpp",
-    c: "c",
-    yaml: "yaml",
-    yml: "yaml",
-    sh: "shell",
-    bash: "shell",
-  };
-
-  return langMap[ext || ""] || "plaintext";
-}
 
 export default MonacoDiffHost;

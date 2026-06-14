@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { atom } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import type { PendingEditorNavigation } from "../../atoms";
@@ -6,7 +6,7 @@ import { type CodeEditorState } from "./code-editor-host";
 import { EditorSurface } from "./editor-surface";
 
 vi.mock("../../../../lib/i18n", () => ({
-  useTranslation: () => (key: string) => {
+  useTranslation: () => (key: string, params?: Record<string, string>) => {
     const dictionary: Record<string, string> = {
       "code_editor.mode_preview": "预览",
       "code_editor.mode_edit": "编辑",
@@ -15,9 +15,21 @@ vi.mock("../../../../lib/i18n", () => ({
       "code_editor.close_unsaved_title": "Discard unsaved changes?",
       "code_editor.close_unsaved_description": "app.ts has unsaved changes.",
       "code_editor.discard_and_close": "Discard and Close",
+      "code_editor.minimize_editor": "Minimize editor",
+      "code_editor.pin_editor_view": "Pin editor view",
+      "code_editor.unpin_editor_view": "Unpin editor view",
+      "code_editor.close_editor_view": "Close editor view",
+      "code_editor.close_editor_tab": `Close file ${params?.name ?? "editor tab"}`,
+      "code_editor.open_browser_tab": "Open Browser tab",
+      "code_editor.close_browser_tab": "Close Browser tab",
+      "code_editor.open_editor_tabs": "Open editor tabs",
+      "code_editor.current_file_path": "Current file path",
+      "code_editor.modified_unsaved_changes": "modified · Unsaved changes",
+      "code_editor.toolbar_actions": "Editor actions",
       "action.close": "Close",
       "action.save_file": "Save File",
       "common.cancel": "Cancel",
+      "dev_browser.title": "Browser",
     };
     return dictionary[key] ?? key;
   },
@@ -98,8 +110,18 @@ vi.mock("../../components/image-diff-preview", () => ({
 }));
 
 vi.mock("../../components/document-preview", () => ({
-  DocumentPreview: ({ src }: { src: string | null }) => (
-    <div data-testid="document-preview" data-src={src ?? ""} />
+  DocumentPreview: ({ allowScripts, src }: { allowScripts: boolean; src: string | null }) => (
+    <div
+      data-testid="document-preview"
+      data-allow-scripts={String(allowScripts)}
+      data-src={src ?? ""}
+    />
+  ),
+}));
+
+vi.mock("../../../dev-browser/dev-browser-surface", () => ({
+  DevBrowserSurface: ({ workspaceId }: { workspaceId?: string }) => (
+    <div data-testid="dev-browser-surface" data-workspace-id={workspaceId ?? ""} />
   ),
 }));
 
@@ -109,6 +131,11 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     activeDiffChange: null,
     activeExternalStatus: null,
     activeLoadError: null,
+    activeEditorTab: { kind: "file", path: "src/app.ts" },
+    activateOpenFile: vi.fn(),
+    activateEditorTab: vi.fn(),
+    closeEditorTab: vi.fn(),
+    closeOpenFilePath: vi.fn(),
     canSave: true,
     canDiff: true,
     canEdit: true,
@@ -122,6 +149,7 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
       isDirty: false,
     },
     handleClose: vi.fn(),
+    hideEditorView: vi.fn(),
     handleContentChange: vi.fn(),
     handleSave: vi.fn(),
     hasUnsavedChangesOutsideDiff: false,
@@ -131,13 +159,27 @@ function createState(overrides: Partial<CodeEditorState> = {}): CodeEditorState 
     isTextFile: true,
     documentPreview: {
       iframeSrc: null,
+      allowScripts: false,
       isBootstrapping: false,
       isSyncing: false,
       error: null,
       retry: vi.fn(),
     },
     mode: "edit",
+    openBrowserTab: vi.fn(),
     openCommitFileDiff: vi.fn(),
+    openEditorTabs: [{ kind: "file", path: "src/app.ts" }],
+    openEditorPaths: ["src/app.ts"],
+    openFiles: {
+      "src/app.ts": {
+        kind: "text",
+        path: "src/app.ts",
+        content: "export const app = 2;\n",
+        savedContent: "export const app = 2;\n",
+        baseHash: "hash-1",
+        isDirty: false,
+      },
+    },
     openInDiffMode: vi.fn(),
     pendingNavigationAtom: atom<PendingEditorNavigation | null>(null),
     saveError: null,
@@ -206,6 +248,7 @@ describe("EditorSurface", () => {
       },
       documentPreview: {
         iframeSrc: "/api/preview/session/session-1/README.md?rev=1",
+        allowScripts: false,
         isBootstrapping: false,
         isSyncing: false,
         error: null,
@@ -219,6 +262,33 @@ describe("EditorSurface", () => {
       "data-src",
       "/api/preview/session/session-1/README.md?rev=1"
     );
+    expect(screen.getByTestId("document-preview")).toHaveAttribute("data-allow-scripts", "false");
+  });
+
+  it("passes HTML preview script permission into the document preview frame", () => {
+    const state = createState({
+      mode: "preview",
+      currentFile: {
+        kind: "text",
+        path: "docs/page.html",
+        content: "<script src='./app.js'></script>",
+        savedContent: "<script src='./app.js'></script>",
+        baseHash: "hash-1",
+        isDirty: false,
+      },
+      documentPreview: {
+        iframeSrc: "/api/preview/session/session-1/docs/page.html?rev=1",
+        allowScripts: true,
+        isBootstrapping: false,
+        isSyncing: false,
+        error: null,
+        retry: vi.fn(),
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("document-preview")).toHaveAttribute("data-allow-scripts", "true");
   });
 
   it("renders Monaco diff when diff kind is text", () => {
@@ -308,21 +378,314 @@ describe("EditorSurface", () => {
 
   it("renders desktop header actions in the fixed order without a save button", () => {
     const state = createState({ canSave: true });
-    const { container } = render(<EditorSurface state={state} />);
+    const onToggleEditorPinned = vi.fn();
+    const { container } = render(
+      <EditorSurface
+        state={state}
+        editorPinned={false}
+        onToggleEditorPinned={onToggleEditorPinned}
+      />
+    );
 
-    const toolbar = container.querySelector(".editor-surface__toolbar");
-    expect(toolbar).toBeTruthy();
+    const pathActions = container.querySelector(".code-editor-path__actions");
+    expect(pathActions).toBeTruthy();
 
-    const buttonLabels = within(toolbar as HTMLElement)
+    const pathButtonLabels = within(pathActions as HTMLElement)
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label") ?? button.textContent ?? "");
 
-    expect(buttonLabels).toEqual(["Diff", "预览", "编辑", "Close"]);
+    expect(pathButtonLabels).toEqual(["Diff", "预览", "编辑"]);
+
+    const tabbarActions = container.querySelector(".code-editor-tabbar__actions");
+    expect(tabbarActions).toBeTruthy();
+    const tabbarButtonLabels = within(tabbarActions as HTMLElement)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? "");
+
+    expect(tabbarButtonLabels).toEqual([
+      "Open Browser tab",
+      "Pin editor view",
+      "Close editor view",
+    ]);
+
+    fireEvent.click(
+      within(tabbarActions as HTMLElement).getByRole("button", { name: "Pin editor view" })
+    );
+    expect(onToggleEditorPinned).toHaveBeenCalledWith(true);
     expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
   });
 
-  it("shows only the active filename in the header and marks dirty files with a status dot", () => {
+  it("opens a browser editor tab from the editor header action", () => {
+    const openBrowserTab = vi.fn();
+    const state = createState({ openBrowserTab });
+
+    render(<EditorSurface state={state} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Browser tab" }));
+
+    expect(openBrowserTab).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the dev browser surface when the browser editor tab is active", () => {
+    const activateEditorTab = vi.fn();
+    const closeEditorTab = vi.fn();
     const state = createState({
+      activeEditorTab: { kind: "browser", id: "dev-browser", url: null },
+      openEditorTabs: [
+        { kind: "file", path: "src/app.ts" },
+        { kind: "browser", id: "dev-browser", url: null },
+      ],
+      activateEditorTab,
+      closeEditorTab,
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("dev-browser-surface")).toBeInTheDocument();
+    expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Current file path" })).not.toBeInTheDocument();
+
+    const tablist = screen.getByRole("tablist", { name: "Open editor tabs" });
+    expect(within(tablist).getByRole("tab", { selected: true })).toHaveTextContent("Browser");
+
+    fireEvent.click(within(tablist).getByRole("tab", { name: /app\.ts/ }));
+    expect(activateEditorTab).toHaveBeenCalledWith({ kind: "file", path: "src/app.ts" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close Browser tab" }));
+    expect(closeEditorTab).toHaveBeenCalledWith({ kind: "browser", id: "dev-browser", url: null });
+  });
+
+  it("renders duplicate same-url browser tabs as separate tabs with the url label", () => {
+    const activateEditorTab = vi.fn();
+    const closeEditorTab = vi.fn();
+    const state = createState({
+      activeEditorTab: { kind: "browser", id: "browser-2", url: "localhost:8001" },
+      openEditorTabs: [
+        { kind: "file", path: "src/app.ts" },
+        { kind: "browser", id: "browser-1", url: "localhost:8001" },
+        { kind: "browser", id: "browser-2", url: "localhost:8001" },
+      ],
+      activateEditorTab,
+      closeEditorTab,
+    });
+
+    render(<EditorSurface state={state} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Open editor tabs" });
+    const browserTabs = within(tablist).getAllByRole("tab", { name: "localhost:8001" });
+
+    expect(browserTabs).toHaveLength(2);
+
+    fireEvent.click(browserTabs[0]!);
+    expect(activateEditorTab).toHaveBeenCalledWith({
+      kind: "browser",
+      id: "browser-1",
+      url: "localhost:8001",
+    });
+
+    const browserCloseButtons = screen.getAllByRole("button", { name: "Close Browser tab" });
+    fireEvent.click(browserCloseButtons[0]!);
+    expect(closeEditorTab).toHaveBeenCalledWith({
+      kind: "browser",
+      id: "browser-1",
+      url: "localhost:8001",
+    });
+  });
+
+  it("closes the desktop editor view without discarding dirty file buffers", () => {
+    vi.useFakeTimers();
+    const hideEditorView = vi.fn();
+    const state = createState({
+      currentFile: {
+        kind: "text",
+        path: "src/app.ts",
+        content: "changed",
+        savedContent: "saved",
+        baseHash: "hash-app",
+        isDirty: true,
+      },
+      hideEditorView,
+    });
+
+    const { container } = render(<EditorSurface state={state} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
+
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
+    expect(container.querySelector(".workspace-git-view--closing-to-restore")).toBeTruthy();
+    expect(hideEditorView).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+
+    expect(hideEditorView).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("renders overlay editor tabs with file names and one full path row", () => {
+    const activateOpenFile = vi.fn();
+    const closeOpenFilePath = vi.fn();
+    const state = {
+      ...createState({
+        activeFilePath: "packages/web/src/styles/components.css",
+        currentFile: {
+          kind: "text",
+          path: "packages/web/src/styles/components.css",
+          content: "changed",
+          savedContent: "saved",
+          baseHash: "hash-css",
+          isDirty: true,
+        },
+      }),
+      activateOpenFile,
+      closeOpenFilePath,
+      openEditorPaths: [
+        "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+        "packages/web/src/styles/components.css",
+        "packages/web/src/features/agent-panes/index.tsx",
+        "packages/web/src/features/workspace/index.tsx",
+      ],
+      openFiles: {
+        "packages/web/src/features/code-editor/views/shared/editor-surface.tsx": {
+          kind: "text",
+          path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+          content: "",
+          savedContent: "",
+          baseHash: "hash-surface",
+          isDirty: false,
+        },
+        "packages/web/src/styles/components.css": {
+          kind: "text",
+          path: "packages/web/src/styles/components.css",
+          content: "changed",
+          savedContent: "saved",
+          baseHash: "hash-css",
+          isDirty: true,
+        },
+        "packages/web/src/features/agent-panes/index.tsx": {
+          kind: "text",
+          path: "packages/web/src/features/agent-panes/index.tsx",
+          content: "",
+          savedContent: "",
+          baseHash: "hash-agent-index",
+          isDirty: false,
+        },
+        "packages/web/src/features/workspace/index.tsx": {
+          kind: "text",
+          path: "packages/web/src/features/workspace/index.tsx",
+          content: "",
+          savedContent: "",
+          baseHash: "hash-workspace-index",
+          isDirty: false,
+        },
+      },
+    } as unknown as CodeEditorState;
+
+    render(<EditorSurface state={state} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Open editor tabs" });
+    const tabs = within(tablist).getAllByRole("tab");
+    expect(tabs).toHaveLength(4);
+    expect(within(tablist).getByText("editor-surface.tsx")).toBeInTheDocument();
+    expect(within(tablist).getByText("components.css")).toBeInTheDocument();
+    expect(within(tablist).getAllByText("index.tsx")).toHaveLength(2);
+    expect(
+      within(tablist).getByRole("button", { name: "Close file components.css" })
+    ).toBeInTheDocument();
+    expect(within(tablist).getByText("agent-panes")).toHaveClass("code-editor-tab__folder");
+    expect(within(tablist).getByText("workspace")).toHaveClass("code-editor-tab__folder");
+    expect(within(tablist).queryByText("packages/web/src/styles/components.css")).toBeNull();
+
+    const activeTab = within(tablist).getByRole("tab", { selected: true });
+    expect(activeTab).toHaveTextContent("components.css");
+    expect(activeTab.querySelector(".dirty-indicator")).toBeTruthy();
+
+    const pathRows = screen.getAllByRole("navigation", { name: "Current file path" });
+    expect(pathRows).toHaveLength(1);
+    const pathRow = pathRows[0] as HTMLElement;
+    expect(pathRow).toHaveAttribute("title", "/tmp/ws-1/packages/web/src/styles/components.css");
+    expect(within(pathRow).getByText("/tmp")).toBeInTheDocument();
+    expect(within(pathRow).getByText("ws-1")).toBeInTheDocument();
+    expect(within(pathRow).getByText("packages")).toBeInTheDocument();
+    expect(within(pathRow).getByText("web")).toBeInTheDocument();
+    expect(within(pathRow).getByText("src")).toBeInTheDocument();
+    expect(within(pathRow).getByText("styles")).toBeInTheDocument();
+    expect(within(pathRow).getByText("components.css")).toBeInTheDocument();
+    expect(within(pathRow).getByText("modified · Unsaved changes")).toHaveClass(
+      "code-editor-path__state"
+    );
+    expect(within(pathRow).getByRole("button", { name: "Diff" })).toBeInTheDocument();
+    expect(within(pathRow).getByRole("button", { name: "预览" })).toBeInTheDocument();
+    expect(within(pathRow).getByRole("button", { name: "编辑" })).toBeInTheDocument();
+    expect(within(pathRow).queryByRole("button", { name: "Close editor view" })).toBeNull();
+    const tabbarActions = screen
+      .getByRole("tablist", { name: "Open editor tabs" })
+      .closest(".code-editor-tabbar")
+      ?.querySelector(".code-editor-tabbar__actions");
+    expect(tabbarActions).toBeTruthy();
+    expect(
+      within(tabbarActions as HTMLElement).getByRole("button", { name: "Close editor view" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save File" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(tablist).getByRole("tab", { name: /editor-surface\.tsx/ }));
+    expect(activateOpenFile).toHaveBeenCalledWith(
+      "packages/web/src/features/code-editor/views/shared/editor-surface.tsx"
+    );
+
+    fireEvent.click(within(tablist).getByRole("button", { name: "Close file components.css" }));
+    expect(closeOpenFilePath).toHaveBeenCalledWith("packages/web/src/styles/components.css");
+    expect(state.hideEditorView).not.toHaveBeenCalled();
+    expect(state.handleClose).not.toHaveBeenCalled();
+    expect(activateOpenFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not derive global editor tabs from shared open-file cache entries", () => {
+    const state = createState({
+      activeFilePath: "src/global.ts",
+      currentFile: {
+        kind: "text",
+        path: "src/global.ts",
+        content: "export const globalFile = true;\n",
+        savedContent: "export const globalFile = true;\n",
+        baseHash: "hash-global",
+        isDirty: false,
+      },
+      openEditorPaths: ["src/global.ts"],
+      openFiles: {
+        "src/global.ts": {
+          kind: "text",
+          path: "src/global.ts",
+          content: "export const globalFile = true;\n",
+          savedContent: "export const globalFile = true;\n",
+          baseHash: "hash-global",
+          isDirty: false,
+        },
+        "src/panel-only.ts": {
+          kind: "text",
+          path: "src/panel-only.ts",
+          content: "export const panelOnly = true;\n",
+          savedContent: "export const panelOnly = true;\n",
+          baseHash: "hash-panel",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    const tablist = screen.getByRole("tablist", { name: "Open editor tabs" });
+    const tabs = within(tablist).getAllByRole("tab");
+
+    expect(tabs).toHaveLength(1);
+    expect(within(tablist).getByText("global.ts")).toBeInTheDocument();
+    expect(within(tablist).queryByText("panel-only.ts")).toBeNull();
+  });
+
+  it("shows the active filename in tabs and the full path in the path row", () => {
+    const state = createState({
+      activeFilePath: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
       currentFile: {
         kind: "text",
         path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
@@ -331,16 +694,34 @@ describe("EditorSurface", () => {
         baseHash: "hash-1",
         isDirty: true,
       },
+      openEditorPaths: ["packages/web/src/features/code-editor/views/shared/editor-surface.tsx"],
+      openFiles: {
+        "packages/web/src/features/code-editor/views/shared/editor-surface.tsx": {
+          kind: "text",
+          path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+          content: "changed",
+          savedContent: "saved",
+          baseHash: "hash-1",
+          isDirty: true,
+        },
+      },
     });
 
     render(<EditorSurface state={state} />);
 
-    const title = screen.getByText("editor-surface.tsx");
-    const titleContainer = title.closest(".code-file-path");
+    const tablist = screen.getByRole("tablist", { name: "Open editor tabs" });
+    const activeTab = within(tablist).getByRole("tab", { selected: true });
+    const pathRow = screen.getByRole("navigation", { name: "Current file path" });
 
-    expect(titleContainer).toHaveTextContent("editor-surface.tsx");
-    expect(titleContainer).not.toHaveTextContent("packages/web/src");
-    expect(titleContainer?.querySelector(".dirty-indicator")).toBeTruthy();
+    expect(activeTab).toHaveTextContent("editor-surface.tsx");
+    expect(activeTab).not.toHaveTextContent("packages/web/src");
+    expect(activeTab.querySelector(".dirty-indicator")).toBeTruthy();
+    expect(pathRow).toHaveAttribute(
+      "title",
+      "/tmp/ws-1/packages/web/src/features/code-editor/views/shared/editor-surface.tsx"
+    );
+    expect(within(pathRow).getByText("packages")).toBeInTheDocument();
+    expect(within(pathRow).getByText("editor-surface.tsx")).toBeInTheDocument();
   });
 
   it("renders a commit file list preview inside the shared editor surface", () => {
@@ -434,36 +815,6 @@ describe("EditorSurface", () => {
       "export const app = 1;\n"
     );
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(state.handleClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("confirms before closing a dirty text file and only closes after discard", () => {
-    const state = createState({
-      currentFile: {
-        kind: "text",
-        path: "src/app.ts",
-        content: "changed",
-        savedContent: "saved",
-        baseHash: "hash-1",
-        isDirty: true,
-      },
-    });
-
-    render(<EditorSurface state={state} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-
-    expect(state.handleClose).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
-    expect(screen.getByText("app.ts has unsaved changes.")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(state.handleClose).not.toHaveBeenCalled();
-    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
-
     expect(state.handleClose).toHaveBeenCalledTimes(1);
   });
 

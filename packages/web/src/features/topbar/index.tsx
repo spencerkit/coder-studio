@@ -128,13 +128,13 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
         </Tooltip>
-        <Tooltip content={t("settings.title")}>
+        <Tooltip content={t("more.title")}>
           <IconButton
-            aria-label={t("settings.title")}
+            aria-label={t("more.title")}
             className="topbar-btn"
-            data-testid="settings-open"
-            icon={<ThemedIcon semantic="nav.settings" size={14} />}
-            onClick={() => navigate("/settings")}
+            data-testid="more-open"
+            icon={<ThemedIcon semantic="nav.workspaceMenu" size={14} />}
+            onClick={() => navigate("/more")}
           />
         </Tooltip>
         <WorkspaceFullscreenButton

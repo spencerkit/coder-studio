@@ -93,7 +93,6 @@ describe("base.css theme-sensitive shells", () => {
     const thumbHover = getRuleBlock("::-webkit-scrollbar-thumb:hover");
     const button = getRuleBlock("::-webkit-scrollbar-button");
     const corner = getRuleBlock("::-webkit-scrollbar-corner");
-    const firefox = getRuleBlock("*");
 
     expect(scrollbar).toContain("width: var(--scrollbar-width)");
     expect(scrollbar).toContain("height: var(--scrollbar-width)");
@@ -102,10 +101,17 @@ describe("base.css theme-sensitive shells", () => {
     expect(thumb).toContain("background: var(--scrollbar-thumb)");
     expect(thumb).toContain("border-radius: var(--radius-full)");
     expect(thumbHover).toContain("background: var(--border-focus)");
-    expect(button).toContain("background: var(--scrollbar-track)");
+    expect(button).toContain("-webkit-appearance: none");
+    expect(button).toContain("appearance: none");
+    expect(button).toContain("display: none");
+    expect(button).toContain("width: 0");
+    expect(button).toContain("height: 0");
+    expect(button).toContain("background: transparent");
+    expect(stylesheet).toContain("::-webkit-scrollbar-button:vertical:start:decrement");
     expect(corner).toContain("background: var(--scrollbar-track)");
-    expect(firefox).toContain("scrollbar-width: thin");
-    expect(firefox).toContain("scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)");
+    expect(stylesheet).toContain("@supports not selector(::-webkit-scrollbar)");
+    expect(stylesheet).toContain("scrollbar-width: thin");
+    expect(stylesheet).toContain("scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track)");
   });
 
   it("defines app-shell background variables and shared background dim hooks", () => {

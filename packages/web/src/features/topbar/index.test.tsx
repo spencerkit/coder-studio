@@ -173,7 +173,7 @@ describe("TopBar", () => {
     const quickActionsButton = screen.getByRole("button", { name: "Quick Actions" });
     const terminalButton = screen.getByRole("button", { name: "Hide Terminal" });
     const filesButton = screen.getByRole("button", { name: "Hide Files" });
-    const settingsButton = screen.getByRole("button", { name: "Settings" });
+    const moreFeaturesButton = screen.getByRole("button", { name: "More Features" });
 
     expect(emptyState).not.toBeNull();
     expect(emptyState).toHaveTextContent("No workspace open");
@@ -183,7 +183,10 @@ describe("TopBar", () => {
     expect(quickActionsButton.querySelector('[data-icon-semantic="nav.search"]')).toBeTruthy();
     expect(terminalButton.querySelector('[data-icon-semantic="nav.panelTerminal"]')).toBeTruthy();
     expect(filesButton.querySelector('[data-icon-semantic="nav.panelFiles"]')).toBeTruthy();
-    expect(settingsButton.querySelector('[data-icon-semantic="nav.settings"]')).toBeTruthy();
+    expect(
+      moreFeaturesButton.querySelector('[data-icon-semantic="nav.workspaceMenu"]')
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Workspace Menu" })).not.toBeInTheDocument();
   });
 
   it("shows shared tooltip content for bounded topbar actions on desktop without changing button names", () => {
@@ -198,17 +201,33 @@ describe("TopBar", () => {
     );
 
     const addWorkspace = screen.getByRole("button", { name: "New workspace" });
-    const settings = screen.getByRole("button", { name: "Settings" });
+    const moreFeatures = screen.getByRole("button", { name: "More Features" });
 
     expect(addWorkspace).not.toHaveAttribute("title");
-    expect(settings).not.toHaveAttribute("title");
+    expect(moreFeatures).not.toHaveAttribute("title");
 
     fireEvent.mouseEnter(addWorkspace);
     expect(screen.getByRole("tooltip")).toHaveTextContent("New workspace");
     fireEvent.mouseLeave(addWorkspace);
 
-    fireEvent.focus(settings);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Settings");
+    fireEvent.focus(moreFeatures);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("More Features");
+  });
+
+  it("navigates directly to /more when the more-features entry is clicked", () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(workspacesLoadStateAtom, "ready");
+
+    render(
+      <Provider store={store}>
+        <TopBar />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "More Features" }));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/more");
   });
 
   it("does not render tooltip overlays for bounded topbar actions on mobile/coarse viewports", () => {
@@ -280,11 +299,11 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "New workspace" })).toHaveClass("btn", "btn-ghost");
     expect(screen.getByRole("button", { name: "Show Terminal" })).toHaveClass("btn", "btn-ghost");
     expect(screen.getByRole("button", { name: "Hide Files" })).toHaveClass("btn", "btn-ghost");
-    expect(screen.getByRole("button", { name: "Settings" })).toHaveClass("btn", "btn-ghost");
+    expect(screen.getByRole("button", { name: "More Features" })).toHaveClass("btn", "btn-ghost");
     expect(screen.getByRole("button", { name: "Quick Actions" })).not.toHaveClass("btn");
   });
 
-  it("renders the fullscreen toggle immediately to the right of settings when supported", () => {
+  it("renders the fullscreen toggle immediately to the right of the more-features entry when supported", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(workspacesLoadStateAtom, "ready");
@@ -303,10 +322,10 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    const settingsButton = screen.getByTestId("settings-open");
+    const moreFeaturesButton = screen.getByTestId("more-open");
     const fullscreenButton = screen.getByRole("button", { name: "Enter Fullscreen" });
 
-    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
+    expect(moreFeaturesButton.nextElementSibling).toBe(fullscreenButton);
   });
 
   it("keeps the fullscreen toggle visible when the controller reports unsupported", () => {
@@ -331,7 +350,7 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 
-  it("keeps the settings entry plain when an update is available", () => {
+  it("keeps the more-features entry plain when an update is available", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(workspacesLoadStateAtom, "ready");
@@ -359,7 +378,7 @@ describe("TopBar", () => {
       </Provider>
     );
 
-    const settingsButton = screen.getByTestId("settings-open");
-    expect(settingsButton.querySelector(".topbar-unread")).toBeNull();
+    const moreFeaturesButton = screen.getByTestId("more-open");
+    expect(moreFeaturesButton.querySelector(".topbar-unread")).toBeNull();
   });
 });

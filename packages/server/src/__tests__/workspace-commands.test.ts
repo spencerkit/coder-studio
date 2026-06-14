@@ -832,6 +832,184 @@ describe("Workspace Commands", () => {
       ).toBe("src/app.tsx");
     });
 
+    it("persists multiple browser editor tabs with duplicate urls", async () => {
+      const dir = join(tmpdir(), `workspace-browser-editors-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-browser-editors",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-browser-editors",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              openEditorTabs: [
+                {
+                  kind: "browser",
+                  id: "browser-1",
+                  url: "localhost:8001",
+                  devicePreset: "desktop",
+                  viewportWidth: null,
+                  viewportHeight: null,
+                  orientation: "portrait",
+                  userAgentMode: "desktop",
+                },
+                {
+                  kind: "browser",
+                  id: "browser-2",
+                  url: "localhost:8001",
+                  devicePreset: "desktop",
+                  viewportWidth: null,
+                  viewportHeight: null,
+                  orientation: "portrait",
+                  userAgentMode: "desktop",
+                },
+              ],
+              activeEditorTab: {
+                kind: "browser",
+                id: "browser-2",
+                url: "localhost:8001",
+                devicePreset: "desktop",
+                viewportWidth: null,
+                viewportHeight: null,
+                orientation: "portrait",
+                userAgentMode: "desktop",
+              },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { openEditorTabs?: unknown[] } }).uiState.openEditorTabs
+      ).toEqual([
+        {
+          kind: "browser",
+          id: "browser-1",
+          url: "localhost:8001",
+          devicePreset: "desktop",
+          viewportWidth: null,
+          viewportHeight: null,
+          orientation: "portrait",
+          userAgentMode: "desktop",
+        },
+        {
+          kind: "browser",
+          id: "browser-2",
+          url: "localhost:8001",
+          devicePreset: "desktop",
+          viewportWidth: null,
+          viewportHeight: null,
+          orientation: "portrait",
+          userAgentMode: "desktop",
+        },
+      ]);
+      expect(
+        (result.data as { uiState: { activeEditorTab?: unknown } }).uiState.activeEditorTab
+      ).toEqual({
+        kind: "browser",
+        id: "browser-2",
+        url: "localhost:8001",
+        devicePreset: "desktop",
+        viewportWidth: null,
+        viewportHeight: null,
+        orientation: "portrait",
+        userAgentMode: "desktop",
+      });
+    });
+
+    it("accepts persisted browser device settings and returns them in open editor tabs", async () => {
+      const dir = join(tmpdir(), `workspace-browser-device-editors-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-browser-device-editors",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-browser-device-editors",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              openEditorTabs: [
+                {
+                  kind: "browser",
+                  id: "browser-1",
+                  url: "localhost:8001",
+                  devicePreset: "iphone-14",
+                  viewportWidth: 390,
+                  viewportHeight: 844,
+                  orientation: "portrait",
+                  userAgentMode: "mobile",
+                },
+              ],
+              activeEditorTab: {
+                kind: "browser",
+                id: "browser-1",
+                url: "localhost:8001",
+                devicePreset: "iphone-14",
+                viewportWidth: 390,
+                viewportHeight: 844,
+                orientation: "portrait",
+                userAgentMode: "mobile",
+              },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { openEditorTabs?: unknown[] } }).uiState.openEditorTabs
+      ).toEqual([
+        {
+          kind: "browser",
+          id: "browser-1",
+          url: "localhost:8001",
+          devicePreset: "iphone-14",
+          viewportWidth: 390,
+          viewportHeight: 844,
+          orientation: "portrait",
+          userAgentMode: "mobile",
+        },
+      ]);
+    });
+
     it("drops auto attach state while persisting other agent instruction ui state", async () => {
       const dir = join(tmpdir(), `workspace-agent-instructions-ui-state-${Date.now()}`);
       await mkdir(dir);

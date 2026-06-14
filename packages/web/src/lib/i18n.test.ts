@@ -46,6 +46,34 @@ describe("i18n coverage", () => {
     expect(en.workspace.open_editors.collapse_label).toBe("Collapse Open Files");
   });
 
+  it("labels skill enablement state without mount terminology", () => {
+    expect(zh.skills.detail_targets).toBe("启用状态");
+    expect(zh.skills.enable_skill_tooltip).toBe("为所有已配置的 Agent 启用此 Skill。");
+    expect(zh.skills.disable_skill_tooltip).toBe("在已启用的 Agent 中停用此 Skill。");
+    expect(zh.skills.summary_state.mounted).toBe("已启用");
+    expect(zh.skills.summary_state.unmounted).toBe("未启用");
+    expect(zh.skills.summary_state.unconfigured).toBe("未启用");
+    expect(zh.skills.summary_reason.mounted_path).toBe("已启用于 {path}");
+    expect(zh.skills.summary_reason.unmounted_generic).toBe("当前未启用");
+    expect(zh.skills.mount_state.unmounted).toBe("未启用");
+    expect(zh.skills.mount_state.partially_mounted).toBe("已启用");
+    expect(zh.skills.mount_state.fully_mounted).toBe("已启用");
+    expect(zh.skills.targets.summary).toBe("已启用 {count} 个");
+
+    expect(en.skills.detail_targets).toBe("Agent Status");
+    expect(en.skills.enable_skill_tooltip).toBe("Enable this skill for every configured agent.");
+    expect(en.skills.disable_skill_tooltip).toBe("Disable this skill for enabled agents.");
+    expect(en.skills.summary_state.mounted).toBe("Enabled");
+    expect(en.skills.summary_state.unmounted).toBe("Disabled");
+    expect(en.skills.summary_state.unconfigured).toBe("Disabled");
+    expect(en.skills.summary_reason.mounted_path).toBe("Enabled at {path}");
+    expect(en.skills.summary_reason.unmounted_generic).toBe("Not enabled");
+    expect(en.skills.mount_state.unmounted).toBe("Disabled");
+    expect(en.skills.mount_state.partially_mounted).toBe("Enabled");
+    expect(en.skills.mount_state.fully_mounted).toBe("Enabled");
+    expect(en.skills.targets.summary).toBe("{count} enabled");
+  });
+
   it("resolves every static translation key used in source files", () => {
     const localeKeys = new Set(flattenKeys(zh));
     const sourceRoot = path.resolve(__dirname, "..");

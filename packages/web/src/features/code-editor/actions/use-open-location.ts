@@ -1,6 +1,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useRef } from "react";
 import {
+  activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   deriveEditorModeForOpenFile,
   deriveEditorModeForPath,
@@ -17,6 +18,7 @@ export function useOpenLocation(workspaceId: string): {
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
+  const setActiveEditorTab = useSetAtom(activeEditorTabAtomFamily(workspaceId));
   const setEditorMode = useSetAtom(editorModeAtomFamily(workspaceId));
   const setDiffPreview = useSetAtom(gitDiffPreviewAtomFamily(workspaceId));
   const setPendingNavigation = useSetAtom(pendingEditorNavigationAtomFamily(workspaceId));
@@ -37,6 +39,7 @@ export function useOpenLocation(workspaceId: string): {
       }
 
       setActiveFilePath(input.path);
+      setActiveEditorTab({ kind: "file", path: input.path });
 
       if (!openFiles[input.path]) {
         // Existing editor load flow is keyed off activeFilePath. Setting it is
@@ -48,7 +51,15 @@ export function useOpenLocation(workspaceId: string): {
         requestId: ++nextRequestIdRef.current,
       });
     },
-    [diffPreview, openFiles, setActiveFilePath, setDiffPreview, setEditorMode, setPendingNavigation]
+    [
+      diffPreview,
+      openFiles,
+      setActiveEditorTab,
+      setActiveFilePath,
+      setDiffPreview,
+      setEditorMode,
+      setPendingNavigation,
+    ]
   );
 
   const clearPendingNavigation = useCallback(

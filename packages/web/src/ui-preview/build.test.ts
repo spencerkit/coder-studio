@@ -33,5 +33,5 @@ describe("ui-preview build outputs", () => {
     });
 
     expect(() => readFileSync(join(uiPreviewBuildDir, "ui-preview.html"), "utf8")).not.toThrow();
-  }, 60_000);
+  }, 120_000);
 });

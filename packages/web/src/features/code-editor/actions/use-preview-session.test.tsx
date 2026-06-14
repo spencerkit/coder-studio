@@ -41,6 +41,11 @@ describe("usePreviewSession", () => {
     );
 
     await waitFor(() => expect(result.current.iframeSrc).toContain("rev=1"));
+    expect(result.current.allowScripts).toBe(true);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      allowScripts: true,
+      kind: "html",
+    });
 
     rerender({ content: "<h1>two</h1>" });
 
@@ -77,6 +82,7 @@ describe("usePreviewSession", () => {
     );
 
     await waitFor(() => expect(result.current.iframeSrc).toContain("rev=1"));
+    expect(result.current.allowScripts).toBe(true);
 
     await act(async () => {
       vi.advanceTimersByTime(300);
@@ -90,12 +96,10 @@ describe("usePreviewSession", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
     let createCount = 0;
-    let resolveSecondCreate:
-      | ((value: {
-          ok: boolean;
-          json: () => Promise<{ id: string; previewUrl: string; revision: number }>;
-        }) => void)
-      | null = null;
+    let resolveSecondCreate!: (value: {
+      ok: boolean;
+      json: () => Promise<{ id: string; previewUrl: string; revision: number }>;
+    }) => void;
 
     const secondCreate = new Promise<{
       ok: boolean;
@@ -169,6 +173,11 @@ describe("usePreviewSession", () => {
     );
 
     await waitFor(() => expect(result.current.iframeSrc).toContain("session-1"));
+    expect(result.current.allowScripts).toBe(false);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      allowScripts: false,
+      kind: "markdown",
+    });
 
     rerender({
       filePath: "docs/guide/two.md",
@@ -190,10 +199,6 @@ describe("usePreviewSession", () => {
       "/api/preview/session/session-1",
       expect.objectContaining({ method: "PUT" })
     );
-
-    if (!resolveSecondCreate) {
-      throw new Error("second create resolver missing");
-    }
 
     resolveSecondCreate({
       ok: true,

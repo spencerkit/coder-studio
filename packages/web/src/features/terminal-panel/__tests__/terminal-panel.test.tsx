@@ -246,7 +246,7 @@ describe("TerminalPanel", () => {
   it("opens package commands from the toolbar button next to new terminal", async () => {
     const user = userEvent.setup();
     const store = createStore();
-    const fullBuildCommand =
+    const buildScriptBody =
       "vite build --mode production && tsc -p tsconfig.json --noEmit --pretty false";
     const tasks = [
       buildTask({
@@ -257,7 +257,7 @@ describe("TerminalPanel", () => {
       buildTask({
         id: "build",
         label: "build",
-        displayCommand: fullBuildCommand,
+        displayCommand: buildScriptBody,
       }),
     ];
     const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
@@ -337,17 +337,19 @@ describe("TerminalPanel", () => {
 
     await user.click(commandButton);
 
-    const sidePanel = await screen.findByRole("complementary", { name: "Commands" });
+    const sidePanel = await screen.findByRole("complementary", { name: "Managed commands" });
     expect(sidePanel).toHaveClass("terminal-command-side-panel");
+    expect(within(sidePanel).getByText("Managed commands")).toBeInTheDocument();
+    expect(within(sidePanel).queryByRole("heading", { name: "Commands" })).not.toBeInTheDocument();
     expect(sidePanel.querySelector(".terminal-command-side-panel__list")).toHaveClass(
       "terminal-command-side-panel__list--scroll"
     );
-    expect(within(sidePanel).getByText("vite --host 0.0.0.0")).toBeInTheDocument();
-    const buildCommand = within(sidePanel).getByText(fullBuildCommand);
+    expect(within(sidePanel).getByText("pnpm dev")).toBeInTheDocument();
+    const buildCommand = within(sidePanel).getByText("pnpm build");
     expect(buildCommand).toBeInTheDocument();
     expect(buildCommand.closest(".terminal-command-side-panel__row")).toHaveAttribute(
       "title",
-      fullBuildCommand
+      "pnpm build"
     );
 
     await user.click(within(sidePanel).getByRole("button", { name: "Insert build" }));
@@ -357,7 +359,7 @@ describe("TerminalPanel", () => {
     });
     const [terminalId, bytes, activity, submittedText] = sendTerminalInput.mock.calls[0]!;
     expect(terminalId).toBe("term_1");
-    expect(new TextDecoder().decode(bytes)).toBe(fullBuildCommand);
+    expect(new TextDecoder().decode(bytes)).toBe("pnpm build");
     expect(activity).toBe("typing");
     expect(submittedText).toBeUndefined();
     expect(sendCommand).not.toHaveBeenCalledWith("task.run", expect.anything(), expect.anything());
