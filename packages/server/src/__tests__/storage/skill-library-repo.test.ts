@@ -83,13 +83,13 @@ describe("SkillLibraryRepo", () => {
 
   it("does not let scanned local skills override persisted built-in entries", async () => {
     const skillsRoot = join(tempDir, "agents-skills");
-    const localSkillDir = join(skillsRoot, "coder-studio-automation");
+    const localSkillDir = join(skillsRoot, "coder-studio-example-builtin");
     await mkdir(localSkillDir, { recursive: true });
     await writeFile(
       join(localSkillDir, "SKILL.md"),
       [
         "---",
-        "name: coder-studio-automation",
+        "name: coder-studio-example-builtin",
         "description: Local shadow copy",
         "---",
         "",
@@ -100,16 +100,16 @@ describe("SkillLibraryRepo", () => {
     );
 
     repo.set({
-      slug: "coder-studio-automation",
-      displayName: "Coder Studio Automation",
-      description: "Built-in automation skill",
+      slug: "coder-studio-example-builtin",
+      displayName: "Coder Studio Example Builtin",
+      description: "Built-in test fixture",
       version: "1.0.0",
       source: "builtin",
-      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-automation"),
+      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-example-builtin"),
       installState: "installed",
       installedAt: 1,
       updatedAt: 2,
-      builtin: { defaultEnabled: true, autoMount: true },
+      builtin: { defaultEnabled: true, autoMount: false },
     });
 
     const scannedRepo = new SkillLibraryRepo({
@@ -117,12 +117,12 @@ describe("SkillLibraryRepo", () => {
       localSkillRoots: [skillsRoot],
     });
 
-    expect(scannedRepo.get("coder-studio-automation")).toMatchObject({
-      slug: "coder-studio-automation",
-      description: "Built-in automation skill",
+    expect(scannedRepo.get("coder-studio-example-builtin")).toMatchObject({
+      slug: "coder-studio-example-builtin",
+      description: "Built-in test fixture",
       source: "builtin",
-      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-automation"),
-      builtin: { defaultEnabled: true, autoMount: true },
+      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-example-builtin"),
+      builtin: { defaultEnabled: true, autoMount: false },
     });
   });
 });

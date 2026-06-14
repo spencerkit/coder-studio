@@ -1,3 +1,4 @@
+import type { SkillRecommendationEntry } from "./skill-management.js";
 import {
   isSkillMountStatus,
   SKILL_INSTALL_STATES,
@@ -5,6 +6,7 @@ import {
   SKILL_LIBRARY_SOURCES,
   SKILL_MOUNT_STATUSES,
   SKILL_TARGET_HEALTH_STATES,
+  SKILL_VERSION_CHECK_STATUSES,
 } from "./skill-management.js";
 
 describe("skill management domain", () => {
@@ -35,6 +37,15 @@ describe("skill management domain", () => {
     ]);
   });
 
+  it("exports stable skill version check statuses", () => {
+    expect(SKILL_VERSION_CHECK_STATUSES).toEqual([
+      "up_to_date",
+      "update_available",
+      "unknown",
+      "error",
+    ]);
+  });
+
   it("exports stable target health states", () => {
     expect(SKILL_TARGET_HEALTH_STATES).toEqual(["healthy", "warning", "error", "unconfigured"]);
   });
@@ -43,5 +54,19 @@ describe("skill management domain", () => {
     expect(isSkillMountStatus("mounted")).toBe(true);
     expect(isSkillMountStatus("failed")).toBe(true);
     expect(isSkillMountStatus("unknown")).toBe(false);
+  });
+
+  it("exports a stable skill recommendation entry shape", () => {
+    const entry: SkillRecommendationEntry = {
+      slug: "code-review",
+      displayName: "Code Review",
+      description: "Reviews code changes",
+      reason: "Matches the workspace test workflow",
+      sourceQuery: "test workflow",
+      score: 42,
+      installed: false,
+    };
+
+    expect(entry.slug).toBe("code-review");
   });
 });

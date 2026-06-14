@@ -4,8 +4,9 @@ import type { SkillLibraryRepo } from "../../storage/repositories/skill-library-
 import type { SkillMountRepo } from "../../storage/repositories/skill-mount-repo.js";
 import type { SkillMountManager } from "../mount-manager.js";
 import { materializeBuiltinSkills } from "./materialize.js";
-
-const DISABLED_MOUNTS_SETTING_KEY = "skills.builtin.disabledMounts";
+import { BuiltinSkillMountPreferences } from "./mount-preferences.js";
+import type { BuiltinSkillDefinition } from "./registry.js";
+import { removeStaleBuiltinSkills } from "./stale-cleanup.js";
 
 export interface BuiltinSkillSyncManagerDeps {
   builtinRoot: string;
@@ -15,27 +16,40 @@ export interface BuiltinSkillSyncManagerDeps {
   skillMountMgr: SkillMountManager;
   settingsRepo: SettingsRepo;
   now?: () => number;
+  skills?: readonly BuiltinSkillDefinition[];
 }
 
 export interface BuiltinSkillSyncResult {
   libraryEntries: SkillLibraryEntry[];
   mounted: SkillMountRelation[];
   skipped: Array<{ providerId: string; skillSlug: string; reason: string }>;
+  removed: Array<{ skillSlug: string; unmountedProviderIds: string[] }>;
 }
 
 export class BuiltinSkillSyncManager {
+  private preferences?: BuiltinSkillMountPreferences;
+
   constructor(private readonly deps: BuiltinSkillSyncManagerDeps) {}
 
   async sync(): Promise<BuiltinSkillSyncResult> {
     const entries = await materializeBuiltinSkills({
       builtinRoot: this.deps.builtinRoot,
       now: this.deps.now,
+      skills: this.deps.skills,
     });
     for (const entry of entries) {
       this.deps.skillLibraryRepo.set(entry);
     }
+    const removed = await removeStaleBuiltinSkills({
+      builtinRoot: this.deps.builtinRoot,
+      currentEntries: entries,
+      libraryRepo: this.deps.skillLibraryRepo,
+      mountRepo: this.deps.skillMountRepo,
+      mountManager: this.deps.skillMountMgr,
+      getProviderRegistry: this.deps.getProviderRegistry,
+      preferences: this.getPreferences(),
+    });
 
-    const disabled = this.readDisabledMounts();
     const mounted: SkillMountRelation[] = [];
     const skipped: BuiltinSkillSyncResult["skipped"] = [];
 
@@ -45,13 +59,20 @@ export class BuiltinSkillSyncManager {
       }
 
       for (const entry of entries) {
-        if (!entry.builtin?.autoMount) {
-          skipped.push({ providerId: provider.id, skillSlug: entry.slug, reason: "not_mvp_auto" });
+        const decision = this.getPreferences().getMountDecision(
+          provider.id,
+          entry.slug,
+          entry.builtin?.autoMount === true
+        );
+
+        if (!decision.shouldMount && decision.reason === "disabled") {
+          await this.deps.skillMountMgr.unmount(provider.id, entry.slug);
+          skipped.push({ providerId: provider.id, skillSlug: entry.slug, reason: "disabled" });
           continue;
         }
 
-        if (disabled[disabledKey(provider.id, entry.slug)]) {
-          skipped.push({ providerId: provider.id, skillSlug: entry.slug, reason: "disabled" });
+        if (!decision.shouldMount && decision.reason === "not_mvp_auto") {
+          skipped.push({ providerId: provider.id, skillSlug: entry.slug, reason: "not_mvp_auto" });
           continue;
         }
 
@@ -65,22 +86,15 @@ export class BuiltinSkillSyncManager {
       }
     }
 
-    return { libraryEntries: entries, mounted, skipped };
+    return { libraryEntries: entries, mounted, skipped, removed };
   }
 
   setMountEnabled(providerId: string, skillSlug: string, enabled: boolean): void {
-    const disabled = this.readDisabledMounts();
-    const key = disabledKey(providerId, skillSlug);
-    if (enabled) {
-      delete disabled[key];
-    } else {
-      disabled[key] = true;
-    }
-    this.deps.settingsRepo.set(DISABLED_MOUNTS_SETTING_KEY, disabled);
+    this.getPreferences().setMountEnabled(providerId, skillSlug, enabled);
   }
 
   isMountDisabled(providerId: string, skillSlug: string): boolean {
-    return Boolean(this.readDisabledMounts()[disabledKey(providerId, skillSlug)]);
+    return this.getPreferences().isMountDisabled(providerId, skillSlug);
   }
 
   private shouldAutoMountProvider(provider: ProviderDefinition): boolean {
@@ -91,18 +105,12 @@ export class BuiltinSkillSyncManager {
     return provider.kind !== "custom" || provider.supportsSkillsMount === true;
   }
 
-  private readDisabledMounts(): Record<string, true> {
-    const raw = this.deps.settingsRepo.get<Record<string, unknown>>(DISABLED_MOUNTS_SETTING_KEY);
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      return {};
+  private getPreferences(): BuiltinSkillMountPreferences {
+    if (this.preferences) {
+      return this.preferences;
     }
-    return Object.fromEntries(Object.entries(raw).filter(([, value]) => value === true)) as Record<
-      string,
-      true
-    >;
-  }
-}
 
-function disabledKey(providerId: string, skillSlug: string): string {
-  return `${providerId}:${skillSlug}`;
+    this.preferences = new BuiltinSkillMountPreferences(this.deps.settingsRepo);
+    return this.preferences;
+  }
 }

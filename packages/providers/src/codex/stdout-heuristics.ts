@@ -32,9 +32,6 @@ export const idlePromptPatterns: RegExp[] = [
 
   // Codex-specific: newline + ">>> "
   /\n>>>\s*$/,
-
-  // Prompt with cursor indicator
-  /\n.*\u2588\s*$/, // █ cursor
 ];
 
 /**

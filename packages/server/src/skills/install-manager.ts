@@ -8,12 +8,15 @@ import type {
   SkillLibraryEntry,
 } from "@coder-studio/core";
 import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
+import type { SkillMountManager } from "./mount-manager.js";
 import type { SkillsHubClient } from "./skills-hub-client.js";
 
 interface SkillInstallManagerDeps {
   skillsHubClient: SkillsHubClient;
   skillLibraryRepo: SkillLibraryRepo;
   libraryRoot: string;
+  skillMountMgr?: SkillMountManager;
+  getInstalledSkillTargetProviderIds?: () => Promise<string[]>;
 }
 
 interface InstallRecord {
@@ -98,6 +101,11 @@ export class SkillInstallManager {
       await this.writeLibraryEntry(job.slug, staged.exportDir, info);
       markStep(job, "write-library", "succeeded");
 
+      job.currentStepId = "mount-targets";
+      markStep(job, "mount-targets", "running");
+      await this.mountInstalledAgentTargets(job.slug);
+      markStep(job, "mount-targets", "succeeded");
+
       job.status = "succeeded";
       job.currentStepId = undefined;
       this.jobs.set(job.jobId, job);
@@ -162,6 +170,12 @@ export class SkillInstallManager {
         kind: "extract",
         status: "pending",
       },
+      {
+        id: "mount-targets",
+        titleKey: "skills.install.step.mount",
+        kind: "verify",
+        status: "pending",
+      },
     ];
 
     const job: SkillInstallJobSnapshot = {
@@ -194,6 +208,29 @@ export class SkillInstallManager {
 
     this.activeJobIdsBySlug.delete(slug);
     return undefined;
+  }
+
+  private async mountInstalledAgentTargets(slug: string): Promise<void> {
+    if (!this.deps.skillMountMgr || !this.deps.getInstalledSkillTargetProviderIds) {
+      return;
+    }
+
+    const targets = new Set(
+      this.deps.skillMountMgr.listTargets().map((target) => target.providerId)
+    );
+    const installedProviderIds = await this.deps.getInstalledSkillTargetProviderIds();
+
+    for (const providerId of installedProviderIds) {
+      if (!targets.has(providerId)) {
+        continue;
+      }
+
+      await this.deps.skillMountMgr.mount({
+        providerId,
+        skillSlug: slug,
+        enabled: true,
+      });
+    }
   }
 }
 

@@ -44,10 +44,14 @@ describe("Codex Stdout Heuristics", () => {
       ["Output\n> ", true],
       ["Output\n$ ", true],
       ["Output\n>>> ", true],
-      ["Output\n█ ", true],
     ])('should detect idle prompt in "%s"', (output, expected) => {
       const result = detectIdlePrompt(output);
       expect(result).toBe(expected);
+    });
+
+    it("should not treat a block cursor as an idle prompt by itself", () => {
+      const result = detectIdlePrompt("Still working\n█ ");
+      expect(result).toBe(false);
     });
 
     it("should return false for no idle prompt", () => {

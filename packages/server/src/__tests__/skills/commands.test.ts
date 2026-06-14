@@ -1,14 +1,17 @@
 import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Topics } from "@coder-studio/core";
 import { describe, expect, it, vi } from "vitest";
+import { registerSkillsCommands } from "../../commands/skills/index.js";
 import { SkillHealthManager } from "../../skills/health-manager.js";
 import { SkillMountManager } from "../../skills/mount-manager.js";
 import { SkillLibraryRepo } from "../../storage/repositories/skill-library-repo.js";
 import { SkillMountRepo } from "../../storage/repositories/skill-mount-repo.js";
 import type { CommandContext } from "../../ws/dispatch.js";
 import { dispatch } from "../../ws/dispatch.js";
-import "../../commands/skills.js";
+
+registerSkillsCommands();
 
 function createBaseContext(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
@@ -86,6 +89,7 @@ describe("skills commands", () => {
             slug: "code-review",
             displayName: "Code Review",
             description: "Review code changes before merge",
+            version: "1.3.0",
           },
         ]),
       } as never,
@@ -107,11 +111,109 @@ describe("skills commands", () => {
         slug: "code-review",
         displayName: "Code Review",
         description: "Review code changes before merge",
+        version: "1.3.0",
         installed: true,
         installedVersion: "1.2.3",
         mountedProviderIds: ["codex"],
       },
     ]);
+  });
+
+  it("recommends uninstalled skills from workspace intelligence", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "skills-recommend-workspace-"));
+    try {
+      await writeFile(
+        join(workspaceRoot, "package.json"),
+        JSON.stringify(
+          {
+            dependencies: {
+              react: "^19.0.0",
+            },
+            devDependencies: {
+              vite: "^7.0.0",
+            },
+            scripts: {
+              test: "vitest run",
+              build: "vite build",
+              lint: "eslint .",
+            },
+          },
+          null,
+          2
+        )
+      );
+
+      const ctx = createBaseContext({
+        workspaceMgr: {
+          get: vi.fn(() => ({ id: "ws-1", path: workspaceRoot })),
+        } as never,
+        skillLibraryRepo: {
+          get: vi.fn((slug: string) =>
+            slug === "react-review"
+              ? {
+                  slug: "react-review",
+                  displayName: "React Review",
+                  description: "Review React code",
+                  version: "1.0.0",
+                  source: "skillhub",
+                  libraryPath: "/library/react-review",
+                  installState: "installed",
+                  installedAt: 1,
+                  updatedAt: 1,
+                }
+              : undefined
+          ),
+        } as never,
+        skillMountRepo: {
+          listBySkillSlug: vi.fn(() => []),
+        } as never,
+        skillsHubClient: {
+          search: vi.fn(async (query: string) => {
+            if (query.includes("React")) {
+              return [
+                {
+                  slug: "vite-testing",
+                  displayName: "Vite Testing",
+                  description: "Testing Vite apps",
+                },
+                {
+                  slug: "react-review",
+                  displayName: "React Review",
+                  description: "Review React code",
+                },
+              ];
+            }
+
+            return [];
+          }),
+        } as never,
+      });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "skills-recommend-1",
+          op: "skills.recommend",
+          args: { workspaceId: "ws-1" },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([
+        expect.objectContaining({
+          slug: "vite-testing",
+          installed: false,
+          reason: expect.any(String),
+          sourceQuery: expect.any(String),
+        }),
+      ]);
+      expect(
+        (result.data as Array<{ slug: string }>).some((item) => item.slug === "react-review")
+      ).toBe(false);
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("returns merged remote and local info for a skill", async () => {
@@ -228,21 +330,192 @@ describe("skills commands", () => {
     ]);
   });
 
+  it("checks installed Skill Hub versions and skips local or built-in skills", async () => {
+    const info = vi.fn(async (slug: string) => {
+      if (slug === "code-review") {
+        return {
+          slug,
+          name: "Code Review",
+          description: "Review code changes before merge",
+          version: "1.3.0",
+        };
+      }
+
+      if (slug === "security-review") {
+        return {
+          slug,
+          name: "Security Review",
+          description: "Review security issues",
+          version: "1.2.3",
+        };
+      }
+
+      return { slug };
+    });
+    const ctx = createBaseContext({
+      skillLibraryRepo: {
+        list: vi.fn(() => [
+          {
+            slug: "code-review",
+            displayName: "Code Review",
+            description: "Review code changes before merge",
+            version: "1.2.3",
+            source: "skillhub",
+            libraryPath: "/library/code-review",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+          {
+            slug: "security-review",
+            displayName: "Security Review",
+            description: "Review security issues",
+            version: "1.2.3",
+            source: "skillhub",
+            libraryPath: "/library/security-review",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+          {
+            slug: "local-helper",
+            displayName: "Local Helper",
+            version: "local",
+            source: "local",
+            libraryPath: "/library/local-helper",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+          {
+            slug: "coder-studio-example-builtin",
+            displayName: "Coder Studio Example Builtin",
+            version: "1.0.0",
+            source: "builtin",
+            libraryPath: "/library/builtin/example-builtin",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+            builtin: { defaultEnabled: true, autoMount: false },
+          },
+        ]),
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+      skillsHubClient: { info } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-versions-check-1",
+        op: "skills.versions.check",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([
+      {
+        slug: "code-review",
+        currentVersion: "1.2.3",
+        latestVersion: "1.3.0",
+        status: "update_available",
+      },
+      {
+        slug: "security-review",
+        currentVersion: "1.2.3",
+        latestVersion: "1.2.3",
+        status: "up_to_date",
+      },
+    ]);
+    expect(info).toHaveBeenCalledTimes(2);
+    expect(info).toHaveBeenCalledWith("code-review");
+    expect(info).toHaveBeenCalledWith("security-review");
+  });
+
+  it("reports unknown and error states when Skill Hub version checks cannot compare versions", async () => {
+    const info = vi.fn(async (slug: string) => {
+      if (slug === "missing-version") {
+        return { slug, name: "Missing Version" };
+      }
+
+      throw new Error("Skill Hub unavailable");
+    });
+    const ctx = createBaseContext({
+      skillLibraryRepo: {
+        list: vi.fn(() => [
+          {
+            slug: "missing-version",
+            displayName: "Missing Version",
+            version: "1.0.0",
+            source: "skillhub",
+            libraryPath: "/library/missing-version",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+          {
+            slug: "lookup-failed",
+            displayName: "Lookup Failed",
+            version: "1.0.0",
+            source: "skillhub",
+            libraryPath: "/library/lookup-failed",
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+        ]),
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+      skillsHubClient: { info } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-versions-check-unknown-1",
+        op: "skills.versions.check",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([
+      {
+        slug: "missing-version",
+        currentVersion: "1.0.0",
+        status: "unknown",
+      },
+      {
+        slug: "lookup-failed",
+        currentVersion: "1.0.0",
+        status: "error",
+        error: "Skill Hub unavailable",
+      },
+    ]);
+  });
+
   it("returns builtin library metadata", async () => {
     const ctx = createBaseContext({
       skillLibraryRepo: {
         list: vi.fn(() => [
           {
-            slug: "coder-studio-automation",
-            displayName: "Coder Studio Automation",
-            description: "Teach agents",
+            slug: "coder-studio-example-builtin",
+            displayName: "Coder Studio Example Builtin",
+            description: "Test fixture for built-in skill command behavior.",
             version: "1.0.0",
             source: "builtin",
-            libraryPath: "/skills/builtin/coder-studio-automation",
+            libraryPath: "/skills/builtin/coder-studio-example-builtin",
             installState: "installed",
             installedAt: 1,
             updatedAt: 2,
-            builtin: { defaultEnabled: true, autoMount: true },
+            builtin: { defaultEnabled: true, autoMount: false },
           },
         ]),
       } as never,
@@ -265,9 +538,9 @@ describe("skills commands", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toEqual([
       expect.objectContaining({
-        slug: "coder-studio-automation",
+        slug: "coder-studio-example-builtin",
         source: "builtin",
-        builtin: { defaultEnabled: true, autoMount: true },
+        builtin: { defaultEnabled: true, autoMount: false },
       }),
     ]);
   });
@@ -296,6 +569,40 @@ describe("skills commands", () => {
     expect(sync).toHaveBeenCalledTimes(1);
   });
 
+  it("broadcasts a skill library change after builtin sync removes stale skills", async () => {
+    const broadcast = vi.fn();
+    const removed = [{ skillSlug: "old-builtin-skill", unmountedProviderIds: ["codex"] }];
+    const sync = vi.fn(async () => ({
+      libraryEntries: [],
+      mounted: [],
+      skipped: [],
+      removed,
+    }));
+    const ctx = createBaseContext({
+      broadcaster: { broadcast } as never,
+      builtinSkillSyncMgr: { sync } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-builtin-sync-broadcast-1",
+        op: "skills.builtin.sync",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(broadcast).toHaveBeenCalledWith(
+      Topics.skillLibraryChanged,
+      expect.objectContaining({
+        reason: "builtin_sync",
+        removed,
+      })
+    );
+  });
+
   it("persists builtin mount disablement through command dispatch", async () => {
     const setMountEnabled = vi.fn();
     const sync = vi.fn(async () => ({
@@ -314,7 +621,7 @@ describe("skills commands", () => {
         op: "skills.builtin.setMountEnabled",
         args: {
           providerId: "codex",
-          skillSlug: "coder-studio-review",
+          skillSlug: "coder-studio-example-builtin",
           enabled: false,
         },
       },
@@ -322,7 +629,7 @@ describe("skills commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(setMountEnabled).toHaveBeenCalledWith("codex", "coder-studio-review", false);
+    expect(setMountEnabled).toHaveBeenCalledWith("codex", "coder-studio-example-builtin", false);
     expect(sync).toHaveBeenCalledTimes(1);
   });
 
@@ -366,6 +673,117 @@ describe("skills commands", () => {
     expect(fetched.ok).toBe(true);
     expect(start).toHaveBeenCalledWith("code-review");
     expect(get).toHaveBeenCalledWith("job-1");
+  });
+
+  it("starts updates for installed Skill Hub skills only", async () => {
+    const start = vi.fn(async () => ({
+      jobId: "job-update-1",
+      slug: "code-review",
+      status: "queued",
+      steps: [],
+    }));
+    const ctx = createBaseContext({
+      skillInstallMgr: { start } as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "code-review",
+          displayName: "Code Review",
+          description: "Review code changes before merge",
+          version: "1.2.3",
+          source: "skillhub",
+          libraryPath: "/library/code-review",
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 2,
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-update-start-1",
+        op: "skills.update.start",
+        args: { slug: "code-review" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(start).toHaveBeenCalledWith("code-review");
+  });
+
+  it("rejects update requests for non-Skill Hub skills", async () => {
+    const start = vi.fn();
+    const ctx = createBaseContext({
+      skillInstallMgr: { start } as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "local-helper",
+          displayName: "Local Helper",
+          version: "local",
+          source: "local",
+          libraryPath: "/library/local-helper",
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 2,
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-update-start-local-1",
+        op: "skills.update.start",
+        args: { slug: "local-helper" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "skill_update_unavailable",
+      message: "Only installed Skill Hub skills can be updated: local-helper",
+    });
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("rejects update requests for Skill Hub skills that are not installed", async () => {
+    const start = vi.fn();
+    const ctx = createBaseContext({
+      skillInstallMgr: { start } as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "code-review",
+          displayName: "Code Review",
+          description: "Review code changes before merge",
+          version: "1.2.3",
+          source: "skillhub",
+          libraryPath: "/library/code-review",
+          installState: "failed",
+          installedAt: 1,
+          updatedAt: 2,
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-update-start-failed-1",
+        op: "skills.update.start",
+        args: { slug: "code-review" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "skill_update_unavailable",
+      message: "Only installed Skill Hub skills can be updated: code-review",
+    });
+    expect(start).not.toHaveBeenCalled();
   });
 
   it("mounts a skill and persists scanned relation", async () => {
@@ -797,9 +1215,11 @@ describe("skills commands", () => {
     const tempDir = join(tmpdir(), `skill-uninstall-${Date.now()}`);
     const libraryPath = join(tempDir, "code-review");
     await mkdir(libraryPath, { recursive: true });
+    const broadcast = vi.fn();
     const deleteBySkillSlug = vi.fn();
     const deleteEntry = vi.fn();
     const ctx = createBaseContext({
+      broadcaster: { broadcast } as never,
       skillsHubClient: {} as never,
       skillLibraryRepo: {
         get: vi.fn(() => ({
@@ -834,7 +1254,63 @@ describe("skills commands", () => {
     expect(result.ok).toBe(true);
     expect(deleteBySkillSlug).toHaveBeenCalledWith("code-review");
     expect(deleteEntry).toHaveBeenCalledWith("code-review");
+    expect(broadcast).toHaveBeenCalledWith(
+      Topics.skillLibraryChanged,
+      expect.objectContaining({
+        reason: "uninstalled",
+        slug: "code-review",
+      })
+    );
     await expect(rm(libraryPath, { recursive: true, force: false })).rejects.toBeTruthy();
+  });
+
+  it("rejects uninstalling built-in skills", async () => {
+    const tempDir = join(tmpdir(), `skill-uninstall-builtin-${Date.now()}`);
+    const libraryPath = join(tempDir, "coder-studio-example-builtin");
+    await mkdir(libraryPath, { recursive: true });
+    const deleteBySkillSlug = vi.fn();
+    const deleteEntry = vi.fn();
+    const ctx = createBaseContext({
+      skillsHubClient: {} as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "coder-studio-example-builtin",
+          displayName: "Coder Studio Example Builtin",
+          description: "Test fixture for built-in skill command behavior.",
+          version: "1.0.0",
+          source: "builtin",
+          libraryPath,
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+          builtin: { defaultEnabled: true, autoMount: false },
+        })),
+        delete: deleteEntry,
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+        deleteBySkillSlug,
+      } as never,
+      skillMountMgr: {} as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-uninstall-builtin-1",
+        op: "skills.uninstall",
+        args: { slug: "coder-studio-example-builtin", force: true },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("skill_uninstall_unavailable");
+    expect(deleteBySkillSlug).not.toHaveBeenCalled();
+    expect(deleteEntry).not.toHaveBeenCalled();
+    expect((await lstat(libraryPath)).isDirectory()).toBe(true);
+
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   it("scans and persists mount health state", async () => {
