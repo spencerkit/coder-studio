@@ -10,7 +10,6 @@ import type { AgentInstructionsPublisher } from "../agent-instructions/publisher
 import type { AutomationAuditLog } from "../automation/audit-log.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { ServerConfig } from "../config.js";
-import type { WorkspaceExtensionStateService } from "../extension-state/workspace-extension-state-service.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import type { LspManager } from "../lsp/manager.js";
 import type { LspToolInstallManager } from "../lsp-tools/install-manager.js";
@@ -26,6 +25,7 @@ import type { SkillInstallManager } from "../skills/install-manager.js";
 import type { SkillMountManager } from "../skills/mount-manager.js";
 import type { SkillsHubClient } from "../skills/skills-hub-client.js";
 import type { CustomProviderRepo } from "../storage/repositories/custom-provider-repo.js";
+import type { MemoryRepo } from "../storage/repositories/memory-repo.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
@@ -84,7 +84,7 @@ export interface CommandContext {
   skillMountRepo?: SkillMountRepo;
   builtinSkillSyncMgr?: BuiltinSkillSyncManager;
   automationAuditLog?: AutomationAuditLog;
-  workspaceExtensionStateService?: WorkspaceExtensionStateService;
+  memoryRepo?: MemoryRepo;
   stateRoot?: string;
 }
 
@@ -118,20 +118,9 @@ const ACTIVATION_ALLOWLIST = new Set([
   "git.status",
   "session.list",
   "terminal.read",
+  "uiAction.capabilities",
+  "uiAction.dispatch",
   "workspace.list",
-  "workspace.extensionState.list",
-  "workspace.extensionState.statusPills.set",
-  "workspace.extensionState.statusPills.list",
-  "workspace.extensionState.statusPills.clear",
-  "workspace.extensionState.progress.set",
-  "workspace.extensionState.progress.list",
-  "workspace.extensionState.progress.clear",
-  "workspace.extensionState.logs.append",
-  "workspace.extensionState.logs.list",
-  "workspace.extensionState.logs.clear",
-  "workspace.extensionState.quickActions.set",
-  "workspace.extensionState.quickActions.list",
-  "workspace.extensionState.quickActions.clear",
 ]);
 
 /**

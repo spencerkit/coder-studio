@@ -91,6 +91,29 @@ const workspacePaneNodeSchema: z.ZodType<WorkspacePaneNode> = z.lazy(() =>
   ])
 );
 
+const MAX_BROWSER_VIEWPORT_DIMENSION = 4096;
+
+const workspaceEditorTabSchema = z.union([
+  z
+    .object({
+      kind: z.literal("file"),
+      path: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("browser"),
+      id: z.string(),
+      url: z.string().nullable(),
+      devicePreset: z.enum(["desktop", "iphone-14", "pixel-7", "custom"]),
+      viewportWidth: z.number().int().positive().max(MAX_BROWSER_VIEWPORT_DIMENSION).nullable(),
+      viewportHeight: z.number().int().positive().max(MAX_BROWSER_VIEWPORT_DIMENSION).nullable(),
+      orientation: z.enum(["portrait", "landscape"]),
+      userAgentMode: z.enum(["desktop", "mobile"]),
+    })
+    .strict(),
+]);
+
 // workspace.list
 registerCommand("workspace.list", z.object({}), async (_args, ctx) => {
   return ctx.workspaceMgr.list();
@@ -224,12 +247,16 @@ registerCommand(
       leftPanelWidth: z.number(),
       bottomPanelHeight: z.number(),
       focusMode: z.boolean(),
+      editorViewVisible: z.boolean().optional(),
       activeSessionId: z.string().optional(),
       agentInstructionsExpanded: z.boolean().optional(),
       fileTreeExpandedDirs: z.array(z.string()).optional(),
       paneLayout: workspacePaneNodeSchema.optional(),
       openEditorPaths: z.array(z.string()).optional(),
       activeEditorPath: z.string().nullable().optional(),
+      openEditorTabs: z.array(workspaceEditorTabSchema).optional(),
+      activeEditorTab: workspaceEditorTabSchema.nullable().optional(),
+      devBrowserTargetUrl: z.string().nullable().optional(),
     }),
   }),
   async (args, ctx) => {

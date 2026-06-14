@@ -2,7 +2,12 @@ import type { FastifyRequest } from "fastify";
 
 const RESERVED_PREFIXES = ["/api/", "/auth/", "/internal/", "/assets/"];
 const RESERVED_EXACT_PATHS = new Set(["/api", "/auth", "/assets", "/healthz", "/internal", "/ws"]);
-const ROOT_PUBLIC_FILE_PATHS = new Set(["/favicon.ico", "/index.html", "/task-complete.wav"]);
+const ROOT_PUBLIC_FILE_PATHS = new Set([
+  "/dev-browser-sw.js",
+  "/favicon.ico",
+  "/index.html",
+  "/task-complete.wav",
+]);
 
 export function getRequestPathname(url: string): string {
   return url.split("?", 1)[0] || "/";

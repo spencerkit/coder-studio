@@ -30,6 +30,10 @@ function cloneRecord(record: PreviewSessionRecord): PreviewSessionRecord {
   return { ...record };
 }
 
+function resolveAllowScripts(kind: PreviewKind, allowScripts: boolean | undefined): boolean {
+  return kind === "html" && (allowScripts ?? true);
+}
+
 export class PreviewSessionStore {
   #sessions = new Map<string, PreviewSessionRecord>();
 
@@ -42,7 +46,7 @@ export class PreviewSessionStore {
       content: input.content,
       revision: 1,
       updatedAt: Date.now(),
-      allowScripts: input.allowScripts ?? false,
+      allowScripts: resolveAllowScripts(input.kind, input.allowScripts),
     };
 
     this.#sessions.set(record.id, cloneRecord(record));
@@ -63,7 +67,7 @@ export class PreviewSessionStore {
     const next: PreviewSessionRecord = {
       ...current,
       content: patch.content ?? current.content,
-      allowScripts: patch.allowScripts ?? current.allowScripts,
+      allowScripts: resolveAllowScripts(current.kind, patch.allowScripts ?? current.allowScripts),
       revision: current.revision + 1,
       updatedAt: Date.now(),
     };

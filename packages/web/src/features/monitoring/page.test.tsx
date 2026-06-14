@@ -5,7 +5,7 @@ import { localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import * as monitoringExports from "./index";
 import * as monitoringPageExports from "./page";
-import { MonitoringContent } from "./page";
+import { MonitoringContent, MonitoringPage } from "./page";
 
 const viewportMocks = vi.hoisted(() => ({
   viewport: "desktop" as "desktop" | "mobile",
@@ -62,12 +62,12 @@ function renderMonitoringPage(
 describe("MonitoringContent", () => {
   it("exports reusable monitoring primitives from the feature entrypoint", () => {
     expect(monitoringExports.MonitoringContent).toBeDefined();
+    expect(monitoringExports.MonitoringPage).toBeDefined();
     expect(monitoringExports.useMonitoringData).toBeDefined();
-    expect("MonitoringPage" in monitoringExports).toBe(false);
   });
 
-  it("does not export a standalone MonitoringPage wrapper from the page module", () => {
-    expect("MonitoringPage" in monitoringPageExports).toBe(false);
+  it("exports a standalone MonitoringPage wrapper from the page module", () => {
+    expect("MonitoringPage" in monitoringPageExports).toBe(true);
   });
 
   it("renders reusable monitoring content without standalone page chrome", async () => {
@@ -127,6 +127,76 @@ describe("MonitoringContent", () => {
     expect(
       screen.queryByRole("heading", { level: 1, name: "Performance monitoring" })
     ).not.toBeInTheDocument();
+  });
+
+  it("renders a standalone monitoring page wrapper with page chrome", async () => {
+    const response = {
+      settings: {
+        enabled: true,
+        hostMetricsEnabled: true,
+        runtimeSummaryEnabled: true,
+        workspaceAttributionEnabled: true,
+        subprocessDrilldownEnabled: false,
+        sampleIntervalMs: 2000,
+      },
+      snapshot: {
+        sampledAt: 10,
+        mode: "standard",
+        host: {
+          cpuPercent: 72,
+          memoryUsedBytes: 800,
+          memoryTotalBytes: 1000,
+          memoryAvailableBytes: 200,
+          loadAverage: [1, 1, 1],
+          uptimeSec: 60,
+          pressure: "elevated",
+        },
+        runtime: {
+          serverCpuPercent: 10,
+          serverMemoryBytes: 100,
+          totalManagedCpuPercent: 30,
+          totalManagedMemoryBytes: 300,
+          managedProcessCount: 4,
+          cpuShareOfHostPercent: 41.67,
+          memoryShareOfHostPercent: 30,
+        },
+        workspaces: [],
+        sessions: [],
+        subprocessGroups: [],
+        backgroundGroups: [],
+      },
+      history: {
+        host: { points: [{ sampledAt: 10, cpuPercent: 72, memoryBytes: 800 }] },
+        runtime: { points: [{ sampledAt: 10, cpuPercent: 30, memoryBytes: 300, processCount: 4 }] },
+        workspaces: {},
+        sessions: {},
+        subprocessGroups: {},
+      },
+      capabilities: {
+        loadAverageAvailable: true,
+        processMetricsAvailable: true,
+        subprocessHistoryLimited: false,
+      },
+      telemetry: null,
+    };
+
+    const subscribe = vi.fn(() => () => {});
+    const sendCommand = vi.fn().mockResolvedValue(response);
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(connectionStatusAtom, "connected");
+    store.set(wsClientAtom, { sendCommand, subscribe } as never);
+
+    render(
+      <Provider store={store}>
+        <MonitoringPage />
+      </Provider>
+    );
+
+    expect(await screen.findByTestId("monitoring-page")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Performance monitoring" })
+    ).toBeInTheDocument();
   });
 
   it("loads the snapshot, subscribes for updates, and renders host plus runtime sections", async () => {

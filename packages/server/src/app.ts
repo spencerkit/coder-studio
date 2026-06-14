@@ -4,7 +4,9 @@
  * Builds the Fastify application with all routes and middleware
  */
 
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { IN_MEMORY_STATE_DIR } from "@coder-studio/core/state-paths";
 import compress from "@fastify/compress";
 import cors from "@fastify/cors";
@@ -22,6 +24,7 @@ import {
 import type { ServerConfig } from "./config.js";
 import { PreviewSessionStore } from "./preview/session-store.js";
 import { registerAppearanceAssetsRoutes } from "./routes/appearance-assets.js";
+import { registerDevBrowserRoutes } from "./routes/dev-browser.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
 import { registerPreviewRoutes } from "./routes/preview.js";
 import { registerUploadsRoute } from "./routes/uploads.js";
@@ -45,6 +48,22 @@ interface AppDeps {
   authLoginBlockRepo: AuthLoginBlockRepo;
   appearanceAssetRepo?: AppearanceAssetRepoType;
   logger?: FastifyServerOptions["logger"];
+}
+
+const SERVER_SRC_DIR = dirname(fileURLToPath(import.meta.url));
+const DEV_BROWSER_SW_FALLBACK_PATH = resolve(SERVER_SRC_DIR, "../../web/public/dev-browser-sw.js");
+
+function resolveDevBrowserServiceWorkerPath(webRoot?: string): string | null {
+  const webRootPath = webRoot ? join(webRoot, "dev-browser-sw.js") : null;
+  if (webRootPath && existsSync(webRootPath)) {
+    return webRootPath;
+  }
+
+  if (existsSync(DEV_BROWSER_SW_FALLBACK_PATH)) {
+    return DEV_BROWSER_SW_FALLBACK_PATH;
+  }
+
+  return null;
 }
 
 /**
@@ -74,25 +93,22 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     },
   });
 
-  // WebSocket plugin - routes must be registered within this scope
-  await app.register(async function (fastify) {
-    await fastify.register(websocket, {
-      options: {
-        // permessage-deflate: terminal ANSI streams (repeated escape codes,
-        // whitespace, color sequences) typically compress 5-10x. Cross-message
-        // context takeover is left enabled (default) so the zlib dictionary
-        // persists across frames for highest ratio on continuous streams.
-        perMessageDeflate: {
-          threshold: 1024,
-          zlibDeflateOptions: { level: 6 },
-        },
+  await app.register(websocket, {
+    options: {
+      // permessage-deflate: terminal ANSI streams (repeated escape codes,
+      // whitespace, color sequences) typically compress 5-10x. Cross-message
+      // context takeover is left enabled (default) so the zlib dictionary
+      // persists across frames for highest ratio on continuous streams.
+      perMessageDeflate: {
+        threshold: 1024,
+        zlibDeflateOptions: { level: 6 },
       },
-    });
+    },
+  });
 
-    // WebSocket endpoint - connection is the WebSocket directly in v11+
-    fastify.get("/ws", { websocket: true }, (connection: WebSocket, req: FastifyRequest) => {
-      deps.wsHub.handleConnection(connection, req);
-    });
+  // WebSocket endpoint - connection is the WebSocket directly in v11+
+  app.get("/ws", { websocket: true }, (connection: WebSocket, req: FastifyRequest) => {
+    deps.wsHub.handleConnection(connection, req);
   });
 
   // Phase 2: Configurable auth middleware
@@ -167,6 +183,8 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     repo: appearanceAssetRepo,
   });
 
+  registerDevBrowserRoutes(app);
+
   const previewSessions = new PreviewSessionStore();
   registerPreviewRoutes(app, {
     workspaceMgr: deps.workspaceMgr,
@@ -176,6 +194,17 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   registerUploadsRoute(app, {
     uploadsDir: deps.config.uploadsDir,
     workspaceMgr: deps.workspaceMgr,
+  });
+
+  app.get("/dev-browser-sw.js", async (_request, reply) => {
+    const scriptPath = resolveDevBrowserServiceWorkerPath(deps.webRoot);
+    if (!scriptPath) {
+      return reply.callNotFound();
+    }
+
+    const script = readFileSync(scriptPath, "utf8");
+    reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
+    return reply.type("application/javascript; charset=utf-8").send(script);
   });
 
   // Static file serving (for web UI)

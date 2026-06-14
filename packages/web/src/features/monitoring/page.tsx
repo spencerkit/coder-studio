@@ -13,6 +13,8 @@ import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
+import { MobilePageHeader } from "../shared/components/mobile-page-header";
+import { PageHeader } from "../shared/components/page-header";
 import { formatBytes, formatLoadAverage, formatPercent, formatUptime } from "./formatters";
 import { Sparkline } from "./sparkline";
 
@@ -888,6 +890,40 @@ export function MonitoringContent() {
     <div className={`monitoring-page ${isMobile ? "monitoring-page--mobile" : ""}`}>
       <main className="monitoring-content">
         <MonitoringDashboard {...monitoringData} />
+      </main>
+    </div>
+  );
+}
+
+export function MonitoringPage() {
+  const isMobile = useViewport() === "mobile";
+  const t = useTranslation();
+
+  return (
+    <div
+      className={`monitoring-standalone-page ${isMobile ? "monitoring-standalone-page--mobile" : ""}`}
+      data-testid="monitoring-page"
+    >
+      <header className="monitoring-standalone-page__header">
+        {isMobile ? (
+          <MobilePageHeader
+            title={t("monitoring.title")}
+            titleAs="div"
+            onBack={() => window.history.back()}
+            backLabel={t("action.back")}
+          />
+        ) : (
+          <PageHeader
+            title={t("monitoring.title")}
+            titleAs="h1"
+            level="secondary"
+            onBack={() => window.history.back()}
+            backLabel={t("action.back")}
+          />
+        )}
+      </header>
+      <main className="monitoring-standalone-page__content">
+        <MonitoringContent />
       </main>
     </div>
   );

@@ -7,10 +7,10 @@ export const Topics = {
 
   // Workspace-level
   workspaceMeta: (id: string) => `workspace.${id}.meta`,
-  workspaceExtensionState: (id: string) => `workspace.${id}.extension.state`,
   workspaceFsDirty: (id: string) => `workspace.${id}.fs.dirty`,
   workspaceGitState: (id: string) => `workspace.${id}.git.state`,
   workspaceLspDiagnostics: (workspaceId: string) => `workspace.${workspaceId}.lsp.diagnostics`,
+  workspaceUiAction: (workspaceId: string) => `workspace.${workspaceId}.ui.action`,
   workspaceAll: (id: string) => `workspace.${id}.*`,
 
   // Session-level
@@ -43,6 +43,7 @@ export const Topics = {
   notificationToast: "notification.toast",
   monitoringSnapshotUpdated: "monitoring.snapshot.updated",
   updateStateChanged: "update.state.changed",
+  skillLibraryChanged: "skills.library.changed",
   systemDependencyInstallOutput: (jobId: string) => `systemDeps.install.${jobId}.output`,
 
   // Supervisor-level (Phase 3)
