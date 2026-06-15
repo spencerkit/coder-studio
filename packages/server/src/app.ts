@@ -213,7 +213,7 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
       root: deps.webRoot,
       prefix: "/",
       wildcard: false,
-      globIgnore: ["index.html", "assets/**"],
+      globIgnore: ["index.html", "assets/**", "dev-browser-sw.js"],
       maxAge: "1y",
       immutable: true,
     });
