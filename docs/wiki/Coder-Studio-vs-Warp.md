@@ -40,7 +40,7 @@ Coder Studio is strongest when you want:
 
 ## Built-In Provider Reality
 
-Today, Coder Studio's built-in providers are Claude Code and OpenAI Codex. The agentic workspace direction is broader than that, but the current product should still be described accurately.
+Today, Coder Studio's built-in providers are Claude Code, Codex, Gemini CLI, Cursor Agent, and OpenCode. Aider-style workflows use preset/custom-provider configuration. The agentic workspace direction is broader than a single provider brand, but the current product should still be described accurately.
 
 ## They Can Be Complementary
 

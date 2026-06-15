@@ -1,5 +1,15 @@
-import { Eye, FileCode2, GitCompareArrows, Image as ImageIcon, PencilLine, X } from "lucide-react";
-import type { FC } from "react";
+import {
+  Eye,
+  FileCode2,
+  GitCompareArrows,
+  GripHorizontal,
+  Image as ImageIcon,
+  PencilLine,
+  Pin,
+  PinOff,
+  X,
+} from "lucide-react";
+import type { FC, PointerEvent } from "react";
 import { IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { useCodeEditorActions } from "../../actions/use-code-editor-actions";
@@ -11,12 +21,18 @@ export type CodeEditorState = ReturnType<typeof useCodeEditorActions>;
 
 interface CodeEditorHostProps {
   chrome?: CodeEditorChrome;
+  editorPinned?: boolean;
   editorState?: CodeEditorState;
+  onBeginFloatingEditorMove?: (event: PointerEvent<HTMLButtonElement>) => void;
+  onToggleEditorPinned?: (pinned: boolean) => void;
 }
 
 interface CodeEditorViewProps {
   state: CodeEditorState;
   chrome?: CodeEditorChrome;
+  editorPinned?: boolean;
+  onBeginFloatingEditorMove?: (event: PointerEvent<HTMLButtonElement>) => void;
+  onToggleEditorPinned?: (pinned: boolean) => void;
 }
 
 interface CodeEditorHeaderActionsProps {
@@ -25,15 +41,23 @@ interface CodeEditorHeaderActionsProps {
 }
 
 interface CodeEditorDesktopHeaderActionsProps {
+  editorPinned?: boolean;
+  onBeginFloatingEditorMove?: (event: PointerEvent<HTMLButtonElement>) => void;
+  onToggleEditorPinned?: (pinned: boolean) => void;
   state: CodeEditorState;
   onRequestClose?: () => void;
   showCloseAction?: boolean;
+  showModeActions?: boolean;
 }
 
 export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsProps> = ({
+  editorPinned,
+  onBeginFloatingEditorMove,
+  onToggleEditorPinned,
   onRequestClose,
   state,
   showCloseAction = true,
+  showModeActions = true,
 }) => {
   const t = useTranslation();
   const {
@@ -66,6 +90,12 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
   const diffLabel = t("code_editor.mode_diff");
   const previewLabel = t("code_editor.mode_preview");
   const editLabel = t("code_editor.mode_edit");
+  const showDragAction = editorPinned === false && onBeginFloatingEditorMove !== undefined;
+  const dragLabel = t("code_editor.move_floating_editor");
+  const showPinAction = onToggleEditorPinned !== undefined && editorPinned !== undefined;
+  const pinLabel = editorPinned
+    ? t("code_editor.unpin_editor_view")
+    : t("code_editor.pin_editor_view");
 
   return (
     <div
@@ -73,7 +103,7 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
       role="toolbar"
       aria-label={t("code_editor.toolbar_actions")}
     >
-      {canDiff ? (
+      {showModeActions && canDiff ? (
         <Tooltip content={diffLabel}>
           <button
             type="button"
@@ -86,7 +116,7 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
           </button>
         </Tooltip>
       ) : null}
-      {canPreview ? (
+      {showModeActions && canPreview ? (
         <Tooltip content={previewLabel}>
           <button
             type="button"
@@ -99,7 +129,7 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
           </button>
         </Tooltip>
       ) : null}
-      {canEdit ? (
+      {showModeActions && canEdit ? (
         <Tooltip content={editLabel}>
           <button
             type="button"
@@ -112,10 +142,33 @@ export const CodeEditorDesktopHeaderActions: FC<CodeEditorDesktopHeaderActionsPr
           </button>
         </Tooltip>
       ) : null}
-      {showCloseAction ? (
-        <Tooltip content={t("action.close")}>
+      {showDragAction ? (
+        <Tooltip content={dragLabel}>
           <IconButton
-            aria-label={t("action.close")}
+            aria-label={dragLabel}
+            className="code-mode-btn editor-surface__action-btn editor-surface__drag-btn"
+            icon={<GripHorizontal size={14} />}
+            onPointerDown={onBeginFloatingEditorMove}
+            size="sm"
+          />
+        </Tooltip>
+      ) : null}
+      {showPinAction ? (
+        <Tooltip content={pinLabel}>
+          <IconButton
+            aria-label={pinLabel}
+            aria-pressed={editorPinned}
+            className="code-mode-btn editor-surface__action-btn editor-surface__pin-btn"
+            icon={editorPinned ? <PinOff size={14} /> : <Pin size={14} />}
+            onClick={() => onToggleEditorPinned(!editorPinned)}
+            size="sm"
+          />
+        </Tooltip>
+      ) : null}
+      {showCloseAction ? (
+        <Tooltip content={t("code_editor.close_editor_view")}>
+          <IconButton
+            aria-label={t("code_editor.close_editor_view")}
             className="code-mode-btn editor-surface__action-btn"
             icon={<X size={14} />}
             onClick={handleCloseClick}
@@ -259,14 +312,42 @@ export const CodeEditorHeaderActions: FC<CodeEditorHeaderActionsProps> = ({
   );
 };
 
-export const CodeEditorView: FC<CodeEditorViewProps> = ({ state, chrome = "full" }) => {
-  return <EditorSurface state={state} chrome={chrome} />;
+export const CodeEditorView: FC<CodeEditorViewProps> = ({
+  state,
+  chrome = "full",
+  editorPinned,
+  onBeginFloatingEditorMove,
+  onToggleEditorPinned,
+}) => {
+  return (
+    <EditorSurface
+      state={state}
+      chrome={chrome}
+      editorPinned={editorPinned}
+      onBeginFloatingEditorMove={onBeginFloatingEditorMove}
+      onToggleEditorPinned={onToggleEditorPinned}
+    />
+  );
 };
 
-export const CodeEditorHost: FC<CodeEditorHostProps> = ({ chrome = "full", editorState }) => {
+export const CodeEditorHost: FC<CodeEditorHostProps> = ({
+  chrome = "full",
+  editorPinned,
+  editorState,
+  onBeginFloatingEditorMove,
+  onToggleEditorPinned,
+}) => {
   const state = editorState ?? useCodeEditorActions();
 
-  return <CodeEditorView state={state} chrome={chrome} />;
+  return (
+    <CodeEditorView
+      state={state}
+      chrome={chrome}
+      editorPinned={editorPinned}
+      onBeginFloatingEditorMove={onBeginFloatingEditorMove}
+      onToggleEditorPinned={onToggleEditorPinned}
+    />
+  );
 };
 
 export default CodeEditorHost;

@@ -62,6 +62,6 @@ That is the core promise behind inspectable vibe coding. Speed still matters, bu
 
 Coder Studio is designed as an agentic workspace for real development.
 
-Today, built-in support covers Claude Code and OpenAI Codex. The larger direction is a workspace that can bring more coding agents together over time while keeping the same engineering surfaces visible: terminals, files, Git, sessions, review, and cross-device supervision.
+Today, built-in support covers Claude Code, Codex, Gemini CLI, Cursor Agent, and OpenCode, with Aider-style workflows handled through preset/custom-provider configuration. The larger direction is a workspace that can bring more coding agents together over time while keeping the same engineering surfaces visible: terminals, files, Git, sessions, review, and cross-device supervision.
 
 Your code and runtime stay on your machine.

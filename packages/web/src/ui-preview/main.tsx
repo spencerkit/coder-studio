@@ -5,6 +5,7 @@ import { resolvePreviewRequest, UiPreviewApp } from "./app";
 import { buildUiPreviewStore } from "./preview-store";
 
 import "@xterm/xterm/css/xterm.css";
+import "@xyflow/react/dist/style.css";
 import "../styles/fonts.css";
 import "../styles/tokens.css";
 import "../styles/base.css";

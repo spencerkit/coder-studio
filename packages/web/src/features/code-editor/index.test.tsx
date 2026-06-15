@@ -19,10 +19,12 @@ import {
   activeFilePathAtomFamily,
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
+  editorViewVisibleAtomFamily,
   gitDiffPreviewAtomFamily,
   gitDiffPreviewDismissedAtomFamily,
   gitStateAtomFamily,
   type OpenFile,
+  openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../workspace/atoms";
 import { OpenEditorsSection } from "../workspace/views/shared/open-editors-section";
@@ -98,6 +100,7 @@ vi.mock("./components/image-preview", () => ({
 
 function setupStore(options?: {
   activePath?: string | null;
+  openEditorPaths?: string[];
   openFiles?: Record<string, OpenFile>;
   sendCommand?: ReturnType<typeof vi.fn>;
 }) {
@@ -140,8 +143,18 @@ function setupStore(options?: {
   if (options?.openFiles) {
     store.set(openFilesAtomFamily("ws-1"), options.openFiles);
   }
+  if (options?.openEditorPaths) {
+    store.set(openEditorPathsAtomFamily("ws-1"), options.openEditorPaths);
+  }
 
   return { store, sendCommand };
+}
+
+function expectCurrentFilePathTitle(path: string) {
+  expect(screen.getByRole("navigation", { name: "Current file path" })).toHaveAttribute(
+    "title",
+    path
+  );
 }
 
 function wrapperFor(store: ReturnType<typeof createStore>) {
@@ -243,7 +256,7 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("# Codex");
     });
-    expect(screen.getByText("~/.codex/AGENTS.md")).toBeInTheDocument();
+    expectCurrentFilePathTitle("~/.codex/AGENTS.md");
     expect(store.get(openFilesAtomFamily("ws-1"))["agent-system:codex"]).toMatchObject({
       kind: "text",
       path: "agent-system:codex",
@@ -443,7 +456,7 @@ describe("CodeEditorHost", () => {
 
     const editor = await screen.findByRole("textbox", { name: "Editor content" });
     expect(editor).toHaveValue(draftContent);
-    expect(screen.getByText("~/.codex/AGENTS.md")).toBeInTheDocument();
+    expectCurrentFilePathTitle("~/.codex/AGENTS.md");
     expect(sendCommand.mock.calls.some(([op]) => op === "agentInstructions.system.read")).toBe(
       false
     );
@@ -516,7 +529,7 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(screen.getByTestId("monaco-host")).toHaveTextContent("Updated on disk");
     });
-    expect(screen.getByText("~/.codex/AGENTS.md")).toBeInTheDocument();
+    expectCurrentFilePathTitle("~/.codex/AGENTS.md");
     expect(store.get(openFilesAtomFamily("ws-1"))["agent-system:codex"]).toMatchObject({
       path: "agent-system:codex",
       savedContent: "# Codex\n\nUpdated on disk\n",
@@ -542,7 +555,7 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByText(/connecting/i)).not.toBeInTheDocument();
   });
 
-  it("closes the editor from the header when file.read fails before a buffer opens", async () => {
+  it("hides the editor view from the header when file.read fails before a buffer opens", async () => {
     const sendCommand = vi.fn().mockRejectedValue(new Error("File not found"));
     const { store } = setupStore({ activePath: "src/missing.ts", sendCommand });
 
@@ -555,12 +568,15 @@ describe("CodeEditorHost", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("File not found");
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/missing.ts");
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("src/missing.ts");
   });
 
-  it("ignores a late file.read success after the unloaded path is explicitly closed", async () => {
+  it("hides a pending editor view without dropping the open editor record", async () => {
     let resolveRead:
       | ((value: { kind: "text"; content: string; baseHash: string; encoding: "utf-8" }) => void)
       | null = null;
@@ -589,9 +605,12 @@ describe("CodeEditorHost", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("src/pending.ts");
 
     await act(async () => {
       resolveRead?.({
@@ -605,7 +624,43 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
       expect(store.get(openFilesAtomFamily("ws-1"))["src/pending.ts"]).toBeUndefined();
+      expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("src/pending.ts");
     });
+  });
+
+  it("hides a loaded editor view while preserving open files and tab records", async () => {
+    const openFiles: Record<string, OpenFile> = {
+      "src/app.ts": {
+        kind: "text",
+        path: "src/app.ts",
+        content: "changed",
+        savedContent: "saved",
+        baseHash: "hash-app",
+        isDirty: true,
+      },
+    };
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openEditorPaths: ["src/app.ts", "src/other.ts"],
+      openFiles,
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("changed");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
+    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual(openFiles);
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toEqual(["src/app.ts", "src/other.ts"]);
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
   });
 
   it("reopens the same path with a fresh load after closing an older pending load", async () => {
@@ -650,8 +705,10 @@ describe("CodeEditorHost", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
 
     act(() => {
       store.set(activeFilePathAtomFamily("ws-1"), "src/foo.ts");
@@ -708,6 +765,7 @@ describe("CodeEditorHost", () => {
     const sendCommand = vi.fn().mockImplementation(() => pendingRead.promise);
     const { store } = setupStore({
       activePath: "src/pending.ts",
+      openEditorPaths: ["src/open.ts"],
       openFiles: {
         "src/open.ts": {
           kind: "text",
@@ -816,7 +874,7 @@ describe("CodeEditorHost", () => {
     });
   });
 
-  it("closing a pending active file from the header exits the editor and ignores the late load", async () => {
+  it("hiding a pending active file from the header keeps it inactive after the late load", async () => {
     const pendingRead = createDeferred<{
       kind: "text";
       content: string;
@@ -856,12 +914,15 @@ describe("CodeEditorHost", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
     expect(store.get(openFilesAtomFamily("ws-1"))).toMatchObject({
       "src/a.ts": expect.objectContaining({ content: "alpha" }),
     });
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("src/b.ts");
 
     await act(async () => {
       pendingRead.resolve({
@@ -875,6 +936,7 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
       expect(store.get(openFilesAtomFamily("ws-1"))["src/b.ts"]).toBeUndefined();
+      expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("src/b.ts");
     });
   });
 
@@ -941,9 +1003,10 @@ describe("CodeEditorHost", () => {
     });
   });
 
-  it("closing the active editor from open editors exits the editor instead of reactivating another tab", async () => {
+  it("closing the active editor tab keeps the editor open and reactivates the previous file", async () => {
     const { store } = setupStore({
       activePath: "src/c.ts",
+      openEditorPaths: ["src/a.ts", "src/b.ts", "src/c.ts"],
       openFiles: {
         "src/b.ts": {
           kind: "text",
@@ -975,19 +1038,28 @@ describe("CodeEditorHost", () => {
     render(
       <Provider store={store}>
         <CodeEditorHost />
-        <OpenEditorsSection workspaceId="ws-1" />
       </Provider>
     );
 
     expect(screen.getByTestId("monaco-host")).toHaveTextContent("gamma");
 
-    const activeRow = screen
-      .getByRole("button", { name: "src/c.ts" })
-      .closest(".workspace-open-editors__row") as HTMLElement;
-    fireEvent.click(within(activeRow).getByRole("button", { name: "Close src/c.ts" }));
+    fireEvent.click(screen.getByRole("tab", { name: "b.ts" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
-    expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
+    });
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("beta");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close file b.ts" }));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/c.ts");
+    });
+    expect(store.get(editorViewVisibleAtomFamily("ws-1"))).toBe(true);
+    expect(store.get(openEditorPathsAtomFamily("ws-1"))).toEqual(["src/a.ts", "src/c.ts"]);
+    expect(store.get(openFilesAtomFamily("ws-1"))["src/b.ts"]).toBeUndefined();
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("gamma");
+    expect(screen.getByRole("button", { name: "Close editor view" })).toBeInTheDocument();
   });
 
   it("cancels an older pending load when switching to a different path so it cannot resurrect after the newer path closes", async () => {
@@ -1043,9 +1115,11 @@ describe("CodeEditorHost", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
     expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
 
     await act(async () => {
@@ -1088,7 +1162,7 @@ describe("CodeEditorHost", () => {
     expect(sendCommand).not.toHaveBeenCalled();
   });
 
-  it("closing the active editor from the header exits to the empty editor state", async () => {
+  it("hiding the active editor from the header preserves open buffers and diff preview state", async () => {
     const { store } = setupStore({
       activePath: "src/c.ts",
       openFiles: {
@@ -1136,22 +1210,27 @@ describe("CodeEditorHost", () => {
 
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/c.ts");
 
-    const closeBtn = screen.getByRole("button", { name: "Close" });
+    const closeBtn = screen.getByRole("button", { name: "Close editor view" });
     expect(closeBtn).not.toHaveAttribute("title");
 
     fireEvent.mouseEnter(closeBtn);
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Close");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Close editor view");
 
     fireEvent.click(closeBtn);
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
-    expect(store.get(openFilesAtomFamily("ws-1"))["src/c.ts"]).toBeUndefined();
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
+    expect(store.get(openFilesAtomFamily("ws-1"))["src/c.ts"]).toBeDefined();
     expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
-    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
-    expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/c.ts");
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toMatchObject({
+      kind: "worktree-file-diff",
+      path: "src/unrelated.ts",
+    });
+    expect(mockRegistryDisposeFile).not.toHaveBeenCalledWith("/tmp/ws", "src/c.ts");
   });
 
-  it("closing the final remaining file from the header exits to the empty editor state", async () => {
+  it("hiding the final remaining file from the header keeps its open editor record", async () => {
     const { store } = setupStore({
       activePath: "src/final.ts",
       openFiles: {
@@ -1181,13 +1260,18 @@ describe("CodeEditorHost", () => {
       </Provider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
 
-    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
-    expect(store.get(openFilesAtomFamily("ws-1"))).toEqual({});
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+    });
+    expect(store.get(openFilesAtomFamily("ws-1"))["src/final.ts"]).toBeDefined();
     expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
-    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
-    expect(mockRegistryDisposeFile).toHaveBeenCalledWith("/tmp/ws", "src/final.ts");
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toMatchObject({
+      kind: "worktree-file-diff",
+      path: "src/final.ts",
+    });
+    expect(mockRegistryDisposeFile).not.toHaveBeenCalledWith("/tmp/ws", "src/final.ts");
   });
 
   it("can render without the editor header for mobile content-only chrome", async () => {
@@ -2272,6 +2356,71 @@ describe("CodeEditorHost", () => {
     expect(result.current.activeDiffChange).toBeNull();
   });
 
+  it("keeps diff enablement when the active file already has a worktree diff preview", () => {
+    const { store } = setupStore({
+      activePath: "src/app.ts",
+      openFiles: {
+        "src/app.ts": {
+          kind: "text",
+          path: "src/app.ts",
+          content: "export const app = 1;",
+          savedContent: "export const app = 1;",
+          baseHash: "hash-app",
+          isDirty: false,
+        },
+      },
+    });
+    store.set(gitDiffPreviewAtomFamily("ws-1"), {
+      kind: "worktree-file-diff",
+      path: "src/app.ts",
+      diff: "diff --git a/src/app.ts b/src/app.ts",
+      staged: false,
+      renderAs: "text",
+      status: "modified",
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(result.current.canDiff).toBe(true);
+    expect(result.current.activeDiffChange).toMatchObject({
+      kind: "worktree-file-diff",
+      path: "src/app.ts",
+    });
+  });
+
+  it("derives diff enablement from git rename old paths for the active file", () => {
+    const { store } = setupStore({
+      activePath: "src/old-name.ts",
+      openFiles: {
+        "src/old-name.ts": {
+          kind: "text",
+          path: "src/old-name.ts",
+          content: "export const app = 1;",
+          savedContent: "export const app = 1;",
+          baseHash: "hash-app",
+          isDirty: false,
+        },
+      },
+    });
+    store.set(gitStateAtomFamily("ws-1"), {
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      staged: [{ path: "src/new-name.ts", oldPath: "src/old-name.ts", status: "renamed" }],
+      modified: [],
+      deleted: [],
+      untracked: [],
+    });
+
+    const { result } = renderHook(() => useCodeEditorActions(), {
+      wrapper: wrapperFor(store),
+    });
+
+    expect(result.current.canDiff).toBe(true);
+  });
+
   it("shows the unsaved diff warning only when the active file is dirty in diff mode", () => {
     const { store } = setupStore({
       activePath: "src/app.ts",
@@ -2312,7 +2461,7 @@ describe("CodeEditorHost", () => {
     expect(result.current.hasUnsavedChangesOutsideDiff).toBe(true);
   });
 
-  it("marks file diff preview dismissed when closing the active diff editor", async () => {
+  it("hides the active diff editor without dismissing the diff preview", async () => {
     const { store } = setupStore({
       activePath: "src/app.ts",
       openFiles: {
@@ -2357,15 +2506,17 @@ describe("CodeEditorHost", () => {
       expect(screen.getByTestId("monaco-diff-host")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByRole("dialog", { name: "Discard unsaved changes?" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
+    expect(screen.queryByRole("dialog", { name: "Discard unsaved changes?" })).toBeNull();
 
     await waitFor(() => {
-      expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toBeNull();
-      expect(store.get(gitDiffPreviewDismissedAtomFamily("ws-1"))).toBe(true);
       expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
     });
+    expect(store.get(gitDiffPreviewAtomFamily("ws-1"))).toMatchObject({
+      kind: "worktree-file-diff",
+      path: "src/app.ts",
+    });
+    expect(store.get(gitDiffPreviewDismissedAtomFamily("ws-1"))).toBe(false);
   });
 
   it("omits the desktop save button for a text buffer", async () => {
@@ -2478,7 +2629,7 @@ describe("CodeEditorHost", () => {
     expect(screen.queryByText(/changed on disk/i)).not.toBeInTheDocument();
   });
 
-  it("clears a stale save error after closing the failed file from the sidebar without switching active file", async () => {
+  it("clears a stale save error after closing the failed file and switches to the previous open file", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
       if (op === "file.write" && args?.path === "src/a.ts") {
         throw new Error("Save failed on A");
@@ -2497,6 +2648,7 @@ describe("CodeEditorHost", () => {
     });
     const { store } = setupStore({
       activePath: "src/a.ts",
+      openEditorPaths: ["src/a.ts", "src/b.ts"],
       sendCommand,
       openFiles: {
         "src/a.ts": {
@@ -2537,11 +2689,11 @@ describe("CodeEditorHost", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard and Close" }));
 
     await waitFor(() => {
-      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/b.ts");
     });
 
     expect(screen.queryByText("Save failed on A")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("monaco-host")).not.toBeInTheDocument();
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("saved b");
   });
 
   it("keeps save state scoped to the active file when switching during an in-flight save", async () => {
@@ -2568,6 +2720,7 @@ describe("CodeEditorHost", () => {
     });
     const { store } = setupStore({
       activePath: "src/a.ts",
+      openEditorPaths: ["src/a.ts", "src/b.ts"],
       sendCommand,
       openFiles: {
         "src/a.ts": {
@@ -3583,7 +3736,7 @@ describe("CodeEditorHost", () => {
       expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     });
 
-    it("does not reopen a text-backed image as text when closed during the fetch stage", async () => {
+    it("does not reopen a text-backed image as text when hidden during the fetch stage", async () => {
       const fetchDeferred = createDeferred<{
         ok: true;
         text: () => Promise<string>;
@@ -3635,10 +3788,12 @@ describe("CodeEditorHost", () => {
         });
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+      fireEvent.click(screen.getByRole("button", { name: "Close editor view" }));
 
-      expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
-      expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toBeUndefined();
+      await waitFor(() => {
+        expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+      });
+      expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("icon.svg");
 
       await act(async () => {
         fetchDeferred.resolve({
@@ -3649,7 +3804,7 @@ describe("CodeEditorHost", () => {
 
       await waitFor(() => {
         expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
-        expect(store.get(openFilesAtomFamily("ws-1"))["icon.svg"]).toBeUndefined();
+        expect(store.get(openEditorPathsAtomFamily("ws-1"))).toContain("icon.svg");
       });
     });
   });

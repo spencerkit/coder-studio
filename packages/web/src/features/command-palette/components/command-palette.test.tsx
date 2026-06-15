@@ -393,7 +393,7 @@ describe("CommandPalette", () => {
 
     fireEvent.click(screen.getByText("Monitoring"));
 
-    expect(routerMocks.navigate).toHaveBeenCalledWith("/settings?section=monitoring");
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/monitoring");
     expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });
 });

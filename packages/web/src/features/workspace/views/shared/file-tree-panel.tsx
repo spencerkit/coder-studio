@@ -192,6 +192,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     fileTree,
     isLoading,
     isLoadingDir,
+    isDeleting,
     renameDialog,
     pendingDelete,
     cancelDelete,
@@ -501,6 +502,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
       />
 
       <DeleteFileModal
+        isDeleting={isDeleting}
         pendingDelete={pendingDelete}
         onCancel={cancelDelete}
         onConfirm={confirmDelete}
@@ -933,12 +935,18 @@ const CreatePathModal: FC<CreatePathModalProps> = ({
 };
 
 interface DeleteFileModalProps {
+  isDeleting: boolean;
   pendingDelete: PendingDeleteState | null;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
 }
 
-const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, onConfirm }) => {
+const DeleteFileModal: FC<DeleteFileModalProps> = ({
+  isDeleting,
+  pendingDelete,
+  onCancel,
+  onConfirm,
+}) => {
   const t = useTranslation();
 
   if (!pendingDelete) {
@@ -948,6 +956,10 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
   return (
     <ConfirmDialog
       open
+      cancelDisabled={isDeleting}
+      closeDisabled={isDeleting}
+      confirmDisabled={isDeleting}
+      dismissible={!isDeleting}
       onOpenChange={onCancel}
       title={t("file.delete")}
       description={
@@ -962,7 +974,7 @@ const DeleteFileModal: FC<DeleteFileModalProps> = ({ pendingDelete, onCancel, on
       }
       cancelText={t("action.cancel")}
       closeLabel={t("action.close")}
-      confirmText={t("action.confirm")}
+      confirmText={isDeleting ? t("action.deleting") : t("action.confirm")}
       onConfirm={() => {
         void onConfirm();
       }}

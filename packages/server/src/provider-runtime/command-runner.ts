@@ -1,11 +1,17 @@
 import { spawn } from "node:child_process";
-import { shouldUseShellForCommand } from "@coder-studio/utils";
+import {
+  type HeadlessSpawnCommand,
+  prepareHeadlessSpawnCommand,
+  shouldUseShellForCommand,
+} from "@coder-studio/utils";
 
 export type CommandRunnerOptions = {
   windowsHide?: boolean;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
+  /** When set, long prompts are delivered via stdin instead of argv. */
+  prompt?: string;
 };
 
 export interface CommandRunnerResult {
@@ -24,14 +30,30 @@ export async function runCommandAsString(
   args: string[],
   options?: CommandRunnerOptions
 ): Promise<CommandRunnerResult> {
+  const baseCommand: HeadlessSpawnCommand = {
+    argv: [file, ...args],
+    cwd: options?.cwd,
+  };
+  const prepared = options?.prompt
+    ? prepareHeadlessSpawnCommand(baseCommand, options.prompt)
+    : baseCommand;
+
   return new Promise((resolve, reject) => {
-    const child = spawn(file, args, {
-      cwd: options?.cwd,
+    const stdio: ["pipe" | "ignore", "pipe", "pipe"] =
+      prepared.stdin !== undefined ? ["pipe", "pipe", "pipe"] : ["ignore", "pipe", "pipe"];
+
+    const child = spawn(prepared.argv[0]!, prepared.argv.slice(1), {
+      cwd: prepared.cwd ?? options?.cwd,
       env: options?.env,
-      shell: shouldUseShellForCommand(file, process.platform),
-      stdio: ["ignore", "pipe", "pipe"],
+      shell: shouldUseShellForCommand(prepared.argv[0]!, process.platform),
+      stdio,
       windowsHide: options?.windowsHide ?? true,
     });
+
+    if (prepared.stdin !== undefined && child.stdin) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(prepared.stdin);
+    }
 
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];

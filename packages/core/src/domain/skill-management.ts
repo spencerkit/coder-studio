@@ -13,11 +13,18 @@ export const SKILL_MOUNT_STATUSES = [
   "missing_source",
   "failed",
 ] as const;
+export const SKILL_VERSION_CHECK_STATUSES = [
+  "up_to_date",
+  "update_available",
+  "unknown",
+  "error",
+] as const;
 export const SKILL_TARGET_HEALTH_STATES = ["healthy", "warning", "error", "unconfigured"] as const;
 
 type SkillInstallState = (typeof SKILL_INSTALL_STATES)[number];
 export type SkillLibrarySource = (typeof SKILL_LIBRARY_SOURCES)[number];
 type SkillMountStatus = (typeof SKILL_MOUNT_STATUSES)[number];
+export type SkillVersionCheckStatus = (typeof SKILL_VERSION_CHECK_STATUSES)[number];
 type SkillTargetHealthState = (typeof SKILL_TARGET_HEALTH_STATES)[number];
 
 export function isSkillMountStatus(value: string): value is SkillMountStatus {
@@ -39,6 +46,24 @@ export interface SkillLibraryEntry {
     defaultEnabled: boolean;
     autoMount: boolean;
   };
+}
+
+export interface SkillRecommendationEntry {
+  slug: string;
+  displayName: string;
+  description?: string;
+  reason: string;
+  sourceQuery: string;
+  score: number;
+  installed: boolean;
+}
+
+export interface SkillVersionCheckEntry {
+  slug: string;
+  currentVersion: string;
+  latestVersion?: string;
+  status: SkillVersionCheckStatus;
+  error?: string;
 }
 
 export interface AgentSkillTargetEntry {

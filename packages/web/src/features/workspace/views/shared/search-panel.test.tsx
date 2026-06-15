@@ -18,6 +18,7 @@ import {
   activeFilePathAtomFamily,
   editorModeAtomFamily,
   gitDiffPreviewAtomFamily,
+  openEditorPathsAtomFamily,
   openFilesAtomFamily,
 } from "../../atoms";
 import { SearchPanel } from "./search-panel";
@@ -106,6 +107,7 @@ describe("SearchPanel", () => {
         isDirty: false,
       },
     });
+    store.set(openEditorPathsAtomFamily("ws-test"), ["src/app.tsx"]);
     seedStore?.(store);
 
     return {

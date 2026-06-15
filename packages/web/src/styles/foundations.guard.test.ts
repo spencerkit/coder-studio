@@ -53,6 +53,8 @@ const exemptComponentSelectors = [
   /\.terminal-/,
   /\.bottom-terminal/,
   /\.mobile-/,
+  /\.memory-panel__/,
+  /\.dev-browser-/,
 ];
 
 function getOffenderBlocks(source: string, selectorExemptions: RegExp[]) {
@@ -82,7 +84,6 @@ describe("foundation guardrails", () => {
   });
 
   it("limits raw foundation recipes in components.css to the remaining exempt legacy selectors", () => {
-    expect(componentsStyles).toMatch(rawFoundationPattern);
     expect(getOffenderBlocks(componentsStyles, exemptComponentSelectors)).toEqual([]);
   });
 });

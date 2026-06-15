@@ -17,6 +17,7 @@ export function orderOpenEditorPaths(
 interface ResolveOpenEditorsCloseInput {
   openFiles: Record<string, OpenFile>;
   openEditorPaths?: string[];
+  activationHistoryPaths?: string[];
   activeFilePath: string | null;
   pendingActiveFilePath?: string | null;
   targetPath?: string;
@@ -34,8 +35,8 @@ export function resolveOpenEditorsClose(
   input: ResolveOpenEditorsCloseInput
 ): ResolveOpenEditorsCloseResult {
   const {
-    openFiles,
     openEditorPaths = [],
+    activationHistoryPaths = [],
     activeFilePath,
     pendingActiveFilePath = null,
     targetPath,
@@ -44,7 +45,7 @@ export function resolveOpenEditorsClose(
   const resolvedOrderedPaths = orderOpenEditorPaths(
     mergeOpenEditorPaths(
       openEditorPaths,
-      Object.keys(openFiles),
+      activeFilePath ? [activeFilePath] : undefined,
       pendingActiveFilePath ? [pendingActiveFilePath] : undefined
     )
   );
@@ -76,10 +77,23 @@ export function resolveOpenEditorsClose(
     };
   }
 
+  const remainingPaths = resolvedOrderedPaths.filter((path) => path !== targetPath);
+  const remainingPathSet = new Set(remainingPaths);
+  const activationHistoryCandidates = normalizeOpenEditorPaths(activationHistoryPaths).filter(
+    (path) => path !== targetPath && remainingPathSet.has(path)
+  );
+  const nextActiveFromHistory = activationHistoryCandidates[activationHistoryCandidates.length - 1];
+  const targetIndex = resolvedOrderedPaths.indexOf(targetPath);
+  const nextActiveFilePath =
+    nextActiveFromHistory ??
+    remainingPaths[Math.max(0, targetIndex - 1)] ??
+    remainingPaths[targetIndex] ??
+    null;
+
   return {
     orderedPaths: resolvedOrderedPaths,
     removedPaths: [targetPath],
-    nextActiveFilePath: null,
-    shouldExitEditor: true,
+    nextActiveFilePath,
+    shouldExitEditor: false,
   };
 }

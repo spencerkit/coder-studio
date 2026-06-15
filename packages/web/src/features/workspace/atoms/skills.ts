@@ -5,9 +5,10 @@ export interface SkillsPanelState {
   query: string;
   resolvedQuery: string;
   installJobIdBySlug: Record<string, string>;
-  expandedSkillSlugs: string[];
+  installedCollapsed: boolean;
+  builtinCollapsed: boolean;
   discoverCollapsed: boolean;
-  libraryCollapsed: boolean;
+  recommendationsCollapsed: boolean;
 }
 
 function createInitialSkillsPanelState(): SkillsPanelState {
@@ -15,12 +16,13 @@ function createInitialSkillsPanelState(): SkillsPanelState {
     query: "",
     resolvedQuery: "",
     installJobIdBySlug: {},
-    expandedSkillSlugs: [],
+    installedCollapsed: true,
+    builtinCollapsed: true,
     discoverCollapsed: false,
-    libraryCollapsed: false,
+    recommendationsCollapsed: false,
   };
 }
 
-export const skillsPanelStateAtomFamily = atomFamily((workspaceId: string) =>
+export const skillsPanelStateAtomFamily = atomFamily((_workspaceId: string) =>
   atom<SkillsPanelState>(createInitialSkillsPanelState())
 );

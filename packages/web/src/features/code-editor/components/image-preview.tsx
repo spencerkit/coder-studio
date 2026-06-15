@@ -27,8 +27,13 @@ interface PanState {
   pointerId: number;
   startX: number;
   startY: number;
-  scrollLeft: number;
-  scrollTop: number;
+  translateX: number;
+  translateY: number;
+}
+
+interface PanOffset {
+  x: number;
+  y: number;
 }
 
 const MIN_ZOOM = 0.25;
@@ -56,6 +61,25 @@ function formatZoom(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function clampPanOffset(
+  next: PanOffset,
+  dimensions: { w: number; h: number } | null,
+  zoom: number,
+  canvas: HTMLDivElement | null
+): PanOffset {
+  if (!dimensions || !canvas) {
+    return { x: 0, y: 0 };
+  }
+
+  const maxOffsetX = Math.max(0, (dimensions.w * zoom - canvas.clientWidth) / 2);
+  const maxOffsetY = Math.max(0, (dimensions.h * zoom - canvas.clientHeight) / 2);
+
+  return {
+    x: Math.min(maxOffsetX, Math.max(-maxOffsetX, next.x)),
+    y: Math.min(maxOffsetY, Math.max(-maxOffsetY, next.y)),
+  };
+}
+
 export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBytes, alt }) => {
   const t = useTranslation();
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -64,6 +88,7 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
   const [errored, setErrored] = useState(false);
   const [zoomMode, setZoomMode] = useState<ZoomMode>("fit");
   const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState<PanOffset>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const src = `${url}${url.includes("?") ? "&" : "?"}v=${version}`;
 
@@ -74,13 +99,18 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
     setErrored(false);
     setZoomMode("fit");
     setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
     panStateRef.current = null;
     setIsPanning(false);
   }, [url, version]);
 
   const changeZoom = (delta: number) => {
-    setZoom((currentZoom) => clampZoom((zoomMode === "fit" ? 1 : currentZoom) + delta));
+    const nextZoom = clampZoom((zoomMode === "fit" ? 1 : zoom) + delta);
+    setZoom(nextZoom);
     setZoomMode("manual");
+    setPanOffset((currentOffset) =>
+      clampPanOffset(currentOffset, dimensions, nextZoom, canvasRef.current)
+    );
   };
 
   const stopPan = (event?: PointerEvent<HTMLDivElement>) => {
@@ -109,11 +139,15 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
   const handleActualSize = () => {
     setZoomMode("manual");
     setZoom(1);
+    setPanOffset((currentOffset) =>
+      clampPanOffset(currentOffset, dimensions, 1, canvasRef.current)
+    );
   };
 
   const handleFit = () => {
     setZoomMode("fit");
     setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
     stopPan();
   };
 
@@ -129,10 +163,10 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
     const canvas = event.currentTarget;
     panStateRef.current = {
       pointerId: event.pointerId,
-      scrollLeft: canvas.scrollLeft,
-      scrollTop: canvas.scrollTop,
       startX: event.clientX,
       startY: event.clientY,
+      translateX: panOffset.x,
+      translateY: panOffset.y,
     };
     setIsPanning(true);
     canvas.setPointerCapture?.(event.pointerId);
@@ -146,8 +180,17 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
     }
 
     const canvas = canvasRef.current ?? event.currentTarget;
-    canvas.scrollLeft = panState.scrollLeft - (event.clientX - panState.startX);
-    canvas.scrollTop = panState.scrollTop - (event.clientY - panState.startY);
+    setPanOffset(
+      clampPanOffset(
+        {
+          x: panState.translateX + (event.clientX - panState.startX),
+          y: panState.translateY + (event.clientY - panState.startY),
+        },
+        dimensions,
+        zoom,
+        canvas
+      )
+    );
     event.preventDefault();
   };
 
@@ -155,6 +198,7 @@ export const ImagePreview: FC<ImagePreviewProps> = ({ url, version, mime, sizeBy
     zoomMode === "manual" && dimensions
       ? {
           height: `${Math.max(1, Math.round(dimensions.h * zoom))}px`,
+          transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0)`,
           width: `${Math.max(1, Math.round(dimensions.w * zoom))}px`,
         }
       : undefined;

@@ -10,9 +10,15 @@ import { type FC, useCallback, useEffect, useRef } from "react";
 import { activeWorkspaceAtom } from "../../atoms/workspaces";
 import { EmptyState } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
-import { useOpenEditorsActions } from "../workspace/actions/use-open-editors-actions";
+import { cancelPendingEditorLoad } from "../code-editor/actions/pending-editor-loads";
+import { monacoModelRegistry } from "../code-editor/monaco/model-registry";
+import { isSystemAgentInstructionsEditorPath } from "../code-editor/system-agent-instructions-path";
 import { useOpenWorkspaceFile } from "../workspace/actions/use-open-workspace-file";
-import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../workspace/atoms";
+import {
+  activeFilePathAtomFamily,
+  openEditorPathsAtomFamily,
+  openFilesAtomFamily,
+} from "../workspace/atoms";
 import type { PaneDropIntent } from "./actions/pane-drag-types";
 import { usePaneActions } from "./actions/use-pane-actions";
 import { usePaneDragController } from "./actions/use-pane-drag-controller";
@@ -23,6 +29,7 @@ import {
   activeEditorPaneIdAtomFamily,
   editorPaneActiveFilePathAtomFamily,
   editorPaneModeAtomFamily,
+  editorPaneOpenEditorPathsAtomFamily,
   editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
   getEditorPaneStateKey,
@@ -72,9 +79,6 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
   const paneActions = usePaneActions(workspaceId);
   const sessionActions = useSessionActions();
   const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
-  const { closePath } = useOpenEditorsActions(workspaceId, {
-    workspaceRootPath: workspace?.path,
-  });
   const globalActiveFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
   const openEditorPaths = useAtomValue(openEditorPathsAtomFamily(workspaceId));
   const setActiveEditorPaneId = useSetAtom(activeEditorPaneIdAtomFamily(workspaceId));
@@ -125,23 +129,44 @@ export const AgentPanes: FC<AgentPanesProps> = ({ hydrateSessions = true }) => {
         Boolean(editorPaneActiveFilePath && openEditorPaths.includes(editorPaneActiveFilePath));
 
       if (editorPaneActiveFilePath && !isOpenInGlobalEditor) {
-        closePath(editorPaneActiveFilePath);
+        const removedPath = editorPaneActiveFilePath;
+        const removedFile = paneActionsStore.get(openFilesAtomFamily(workspaceId))[removedPath];
+
+        paneActionsStore.set(openFilesAtomFamily(workspaceId), (current) => {
+          if (!(removedPath in current)) {
+            return current;
+          }
+
+          const next = { ...current };
+          delete next[removedPath];
+          return next;
+        });
+        cancelPendingEditorLoad(workspaceId, removedPath);
+
+        if (
+          workspace?.path &&
+          removedFile?.kind === "text" &&
+          !isSystemAgentInstructionsEditorPath(removedPath)
+        ) {
+          monacoModelRegistry.disposeFile(workspace.path, removedPath);
+        }
       }
       paneActions.closeEditorPane(paneId);
       setActiveEditorPaneId((current) => (current === paneId ? null : current));
       paneActionsStore.set(editorPaneActiveFilePathAtomFamily(editorPaneStateKey), null);
+      paneActionsStore.set(editorPaneOpenEditorPathsAtomFamily(editorPaneStateKey), []);
       paneActionsStore.set(editorPaneModeAtomFamily(editorPaneStateKey), "edit");
       paneActionsStore.set(editorPanePendingNavigationAtomFamily(editorPaneStateKey), null);
       setFocusedEditorPaneId((current) => (current === paneId ? null : current));
     },
     [
-      closePath,
       globalActiveFilePath,
       openEditorPaths,
       paneActions,
       paneActionsStore,
       setActiveEditorPaneId,
       setFocusedEditorPaneId,
+      workspace?.path,
       workspaceId,
     ]
   );

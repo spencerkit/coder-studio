@@ -103,25 +103,12 @@ export function useSupervisorActions({ sessionId }: UseSupervisorActionsArgs) {
     ? t(`supervisor.stop_reason.${supervisor.stopReason}`)
     : null;
   const targetMemory = supervisor?.currentTargetMemory;
-  const activeItem =
-    targetMemory?.items.find((item) => item.id === targetMemory.activeItemId) ??
-    targetMemory?.items[0] ??
+  const recentReasoning =
+    supervisor?.recentTargetCycles?.find((cycle) => typeof cycle.reason === "string")?.reason ??
     null;
-  const decompositionModeLabel = targetMemory?.decompositionMode
-    ? t(`supervisor.target_memory.decomposition_mode.${targetMemory.decompositionMode}`)
-    : null;
-  const decompositionStatusLabel = targetMemory
-    ? targetMemory.decompositionGenerated
-      ? t("supervisor.target_memory.decomposition_ready")
-      : t("supervisor.target_memory.decomposition_pending")
-    : null;
-  const recentReasoning = supervisor?.recentTargetCycles?.[0]?.reason ?? null;
 
   return {
-    activeItem,
     actionError,
-    decompositionModeLabel,
-    decompositionStatusLabel,
     handlePause,
     handleResume,
     handleTrigger,

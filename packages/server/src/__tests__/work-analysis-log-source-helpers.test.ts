@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCursorWorkspaceHash,
+  decodeProviderWorkspacePathFromProjectDir,
   encodeProviderWorkspacePath,
   isWithinRange,
   parseOptionalTimestamp,
@@ -14,6 +15,31 @@ describe("work analysis log source helpers", () => {
     expect(encodeProviderWorkspacePath("/home/spencer/workspace/coder-studio")).toBe(
       "-home-spencer-workspace-coder-studio"
     );
+  });
+
+  it("decodes Cursor project directories back to workspace paths", () => {
+    const projectDir = "c-Users-yeshaopeng-workspace-coder-studio";
+    expect(decodeProviderWorkspacePathFromProjectDir("-repo-app")).toBe("/repo/app");
+    expect(decodeProviderWorkspacePathFromProjectDir("home-w-workspace-lark-docs")).toBe(
+      "/home/w/workspace/lark/docs"
+    );
+    expect(
+      decodeProviderWorkspacePathFromProjectDir("home-w-workspace-lark-docs", [
+        "/home/w/workspace/lark-docs",
+      ])
+    ).toBe("/home/w/workspace/lark-docs");
+    expect(
+      decodeProviderWorkspacePathFromProjectDir(projectDir, [
+        "c:\\Users\\yeshaopeng\\workspace\\coder-studio",
+      ])
+    ).toBe("c:\\Users\\yeshaopeng\\workspace\\coder-studio");
+    expect(
+      decodeProviderWorkspacePathFromProjectDir(projectDir, [
+        "c:/Users/yeshaopeng/workspace/coder-studio",
+      ])
+    ).toBe("c:/Users/yeshaopeng/workspace/coder-studio");
+    expect(decodeProviderWorkspacePathFromProjectDir("empty-window")).toBeUndefined();
+    expect(decodeProviderWorkspacePathFromProjectDir("not-a-real-workspace")).toBeUndefined();
   });
 
   it("builds the Cursor md5 workspace hash from the absolute workspace path", () => {

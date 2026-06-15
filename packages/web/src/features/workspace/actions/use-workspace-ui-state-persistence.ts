@@ -9,11 +9,14 @@ import {
   toWorkspacePaneLayout,
 } from "../../agent-panes/atoms/pane-layout";
 import {
+  activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   bottomPanelHeightAtomFamily,
+  editorViewVisibleAtomFamily,
   focusModeAtomFamily,
   leftPanelWidthAtomFamily,
   openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
 } from "../atoms";
 
 function isWorkspace(value: unknown): value is Workspace {
@@ -34,6 +37,17 @@ type WorkspaceUiStatePatch = Omit<Partial<Workspace["uiState"]>, "paneLayout"> &
   paneLayout?: Workspace["uiState"]["paneLayout"] | PaneNode;
 };
 
+function stripLegacyDevBrowserTargetUrl(
+  uiState: Workspace["uiState"] | null | undefined
+): Partial<Omit<Workspace["uiState"], "devBrowserTargetUrl">> {
+  if (!uiState || typeof uiState !== "object") {
+    return {};
+  }
+
+  const { devBrowserTargetUrl: _legacyBrowserTargetUrl, ...restUiState } = uiState;
+  return restUiState;
+}
+
 export function useWorkspaceUiStatePersistence(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
@@ -53,19 +67,30 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
 
       const currentOpenEditorPaths = store.get(openEditorPathsAtomFamily(workspaceId));
       const currentActiveEditorPath = store.get(activeFilePathAtomFamily(workspaceId));
+      const currentEditorViewVisible = store.get(editorViewVisibleAtomFamily(workspaceId));
+      const currentOpenEditorTabs = store.get(openEditorTabsAtomFamily(workspaceId));
+      const currentActiveEditorTab = store.get(activeEditorTabAtomFamily(workspaceId));
       const currentPaneLayout = store.get(paneLayoutAtomFamily(workspaceId));
       const { paneLayout: patchPaneLayout, ...restPatch } = patch;
+      const baseUiState = stripLegacyDevBrowserTargetUrl(workspace.uiState);
+      const { devBrowserTargetUrl: _legacyBrowserTargetUrl, ...sanitizedPatch } = restPatch;
       const shouldIncludeEditorState =
         workspace.uiState?.openEditorPaths !== undefined ||
         workspace.uiState?.activeEditorPath !== undefined ||
         currentOpenEditorPaths.length > 0 ||
         currentActiveEditorPath !== null;
+      const shouldIncludeBrowserEditorState =
+        workspace.uiState?.openEditorTabs !== undefined ||
+        workspace.uiState?.activeEditorTab !== undefined ||
+        currentOpenEditorTabs.some((tab) => tab.kind === "browser") ||
+        currentActiveEditorTab?.kind === "browser";
 
       const nextUiState: Workspace["uiState"] = {
-        ...workspace.uiState,
+        ...baseUiState,
         leftPanelWidth: store.get(leftPanelWidthAtomFamily(workspaceId)),
         bottomPanelHeight: store.get(bottomPanelHeightAtomFamily(workspaceId)),
         focusMode: store.get(focusModeAtomFamily(workspaceId)),
+        editorViewVisible: currentEditorViewVisible,
         paneLayout: toWorkspacePaneLayout(patchPaneLayout ?? currentPaneLayout),
         ...(shouldIncludeEditorState
           ? {
@@ -73,7 +98,13 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
               activeEditorPath: currentActiveEditorPath,
             }
           : {}),
-        ...restPatch,
+        ...(shouldIncludeBrowserEditorState
+          ? {
+              openEditorTabs: currentOpenEditorTabs,
+              activeEditorTab: currentActiveEditorTab,
+            }
+          : {}),
+        ...sanitizedPatch,
       };
 
       setWorkspaces((previous) => {

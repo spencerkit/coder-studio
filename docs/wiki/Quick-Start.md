@@ -5,8 +5,7 @@ This guide gets Coder Studio installed, opened, and connected to a first workspa
 ## Requirements
 
 - Node.js 24 or newer
-- Optional: Claude Code CLI for Claude sessions
-- Optional: OpenAI Codex CLI for Codex sessions
+- Optional: at least one supported Provider CLI for agent sessions
 
 Coder Studio can still open files and terminals without an AI CLI installed.
 
@@ -30,6 +29,8 @@ coder-studio status
 
 Open the displayed local URL in your browser.
 
+After Coder Studio opens, continue with [First Agent Run](First-Agent-Run.md) to start a recommended first-run provider, inspect output, and review your first Git diff.
+
 ## Open A Project
 
 1. Click the workspace picker.
@@ -39,7 +40,7 @@ Open the displayed local URL in your browser.
 ## Start An AI Session
 
 1. Open the Agent panel.
-2. Choose Claude or Codex.
+2. Choose a detected provider. For a first trial, Claude or Codex is the recommended path.
 3. Create a session.
 4. Type a task into the session terminal.
 

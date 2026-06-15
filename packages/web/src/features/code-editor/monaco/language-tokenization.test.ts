@@ -30,6 +30,14 @@ import * as monaco from "monaco-editor";
 import { ensureVueLanguageRegistered } from "./vue-language";
 
 const samples = [
+  {
+    languageId: "typescript",
+    source: 'import { BrowserRouter } from "react-router-dom";\nconst viewport = "mobile";\n',
+  },
+  {
+    languageId: "javascript",
+    source: 'import { BrowserRouter } from "react-router-dom";\nconst viewport = "mobile";\n',
+  },
   { languageId: "python", source: "def main():\n    return 1\n" },
   { languageId: "go", source: "package main\nfunc main() {}\n" },
   { languageId: "rust", source: "fn main() {\n    let value = 1;\n}\n" },
@@ -53,6 +61,21 @@ describe("Monaco language tokenization", () => {
     const tokens = monaco.editor.tokenize(source, languageId).flat();
 
     expect(tokens.some((token) => token.type && token.type !== "source")).toBe(true);
+  });
+
+  it("tokenizes TypeScript/TSX syntax with keyword and string scopes", async () => {
+    const source =
+      'import { BrowserRouter } from "react-router-dom";\nconst viewport = "mobile";\n';
+
+    await monaco.editor.colorize(source, "typescript", {});
+
+    const tokenTypes = monaco.editor
+      .tokenize(source, "typescript")
+      .flatMap((line) => line.map((token) => token.type).filter((type) => Boolean(type)))
+      .flatMap((type) => type.split(".").filter(Boolean));
+
+    expect(tokenTypes).toContain("keyword");
+    expect(tokenTypes).toContain("string");
   });
 });
 

@@ -1,4 +1,5 @@
 import type {
+  AgentSkillTargetEntry,
   FileNode,
   GitBranch,
   GitCommitDetail,
@@ -12,6 +13,11 @@ import type {
   SearchSessionFilePreview,
   SearchSessionStartResult,
   Session,
+  SkillInstallJobSnapshot,
+  SkillLibraryEntry,
+  SkillMountRelation,
+  SkillRecommendationEntry,
+  SkillVersionCheckEntry,
   Supervisor,
   UpdateStateView,
   Workspace,
@@ -115,6 +121,43 @@ export interface UiPreviewCommands {
   worktreeStatusByPath?: Record<string, GitStatus>;
   worktreeDiffByPath?: Record<string, string>;
   worktreeTreeByPath?: Record<string, FileNode[]>;
+  skillsLibraryList?: Array<
+    SkillLibraryEntry & {
+      mountedProviderIds: string[];
+      mountStatus: "unmounted" | "partially_mounted" | "fully_mounted" | "error";
+      errorCount: number;
+    }
+  >;
+  skillsHealthScan?: {
+    targets: Array<AgentSkillTargetEntry & { mountedSkillCount: number }>;
+    mounts: SkillMountRelation[];
+  };
+  skillsRecommendations?: SkillRecommendationEntry[];
+  skillsSearchResultsByQuery?: Record<
+    string,
+    Array<{
+      slug: string;
+      displayName: string;
+      description?: string;
+      version?: string;
+      installed: boolean;
+      installedVersion?: string;
+      mountedProviderIds: string[];
+    }>
+  >;
+  skillsInfoBySlug?: Record<
+    string,
+    {
+      slug: string;
+      displayName: string;
+      description?: string;
+      version?: string;
+      installed: boolean;
+      libraryEntry?: SkillLibraryEntry;
+      mounts: SkillMountRelation[];
+    }
+  >;
+  skillsVersionChecks?: SkillVersionCheckEntry[];
   terminalListByWorkspaceId?: Record<
     string,
     Array<{
@@ -467,6 +510,85 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
     }
 
     if (op === "worktree.create" || op === "worktree.remove") {
+      return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "skills.library.list") {
+      return ok((commands.skillsLibraryList ?? []) as unknown as T);
+    }
+
+    if (op === "skills.health.scan") {
+      return ok((commands.skillsHealthScan ?? { targets: [], mounts: [] }) as unknown as T);
+    }
+
+    if (op === "skills.targets.list") {
+      return ok((commands.skillsHealthScan?.targets ?? []) as unknown as T);
+    }
+
+    if (op === "skills.recommend") {
+      return ok((commands.skillsRecommendations ?? []) as unknown as T);
+    }
+
+    if (op === "skills.search") {
+      const query = (args as { query?: string })?.query?.trim() ?? "";
+      return ok((commands.skillsSearchResultsByQuery?.[query] ?? []) as unknown as T);
+    }
+
+    if (op === "skills.info") {
+      const slug = (args as { slug?: string })?.slug ?? "";
+      const configured = commands.skillsInfoBySlug?.[slug];
+      if (configured) {
+        return ok(configured as unknown as T);
+      }
+
+      const libraryEntry = commands.skillsLibraryList?.find((skill) => skill.slug === slug);
+      if (libraryEntry) {
+        return ok({
+          slug: libraryEntry.slug,
+          displayName: libraryEntry.displayName,
+          description: libraryEntry.description,
+          version: libraryEntry.version,
+          installed: libraryEntry.installState === "installed",
+          libraryEntry,
+          mounts:
+            commands.skillsHealthScan?.mounts.filter((mount) => mount.skillSlug === slug) ?? [],
+        } as unknown as T);
+      }
+
+      return err(`Missing preview skill info for ${slug}`);
+    }
+
+    if (op === "skills.versions.check") {
+      return ok((commands.skillsVersionChecks ?? []) as unknown as T);
+    }
+
+    if (op === "skills.install.start" || op === "skills.update.start") {
+      const slug = (args as { slug?: string })?.slug ?? "preview-skill";
+      return ok({
+        jobId: `preview-${op}-${slug}`,
+        slug,
+        status: "queued",
+        steps: [],
+      } satisfies SkillInstallJobSnapshot as unknown as T);
+    }
+
+    if (op === "skills.install.get") {
+      const jobId = (args as { jobId?: string })?.jobId ?? "preview-job";
+      return ok({
+        jobId,
+        slug: "preview-skill",
+        status: "succeeded",
+        steps: [],
+      } satisfies SkillInstallJobSnapshot as unknown as T);
+    }
+
+    if (
+      op === "skills.mount" ||
+      op === "skills.repair" ||
+      op === "skills.unmount" ||
+      op === "skills.uninstall" ||
+      op === "skills.builtin.setMountEnabled"
+    ) {
       return ok({ ok: true } as unknown as T);
     }
 

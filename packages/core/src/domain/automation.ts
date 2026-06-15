@@ -1,8 +1,15 @@
+import { listUiActionCapabilities } from "./ui-actions.js";
+
 export const DEFAULT_AGENT_AUTOMATION_PERMISSIONS = [
   "workspace:read",
   "session:read",
   "terminal:read",
   "git:read",
+  "ui:read",
+  "ui:navigate",
+  "ui:command",
+  "memory:read",
+  "memory:write",
 ] as const;
 
 export type AutomationPermission = (typeof DEFAULT_AGENT_AUTOMATION_PERMISSIONS)[number];
@@ -92,6 +99,81 @@ const MVP_CAPABILITIES: AutomationCapability[] = [
     examples: ["coder-studio git diff --workspace ws_123 --path src/a.ts --json"],
     available: true,
   },
+  {
+    name: "memory.list",
+    cli: "coder-studio memory list",
+    description: "List workspace memory entries.",
+    inputSchema: { workspaceId: "string" },
+    output: "Workspace memory entries as JSON.",
+    permissions: ["memory:read"],
+    riskLevel: "read",
+    examples: ["coder-studio memory list --workspace ws_123 --json"],
+    available: true,
+  },
+  {
+    name: "memory.search",
+    cli: "coder-studio memory search",
+    description: "Search workspace memory entries by content or type.",
+    inputSchema: { workspaceId: "string", query: "string" },
+    output: "Matching workspace memory entries as JSON.",
+    permissions: ["memory:read"],
+    riskLevel: "read",
+    examples: ['coder-studio memory search "testing" --workspace ws_123 --json'],
+    available: true,
+  },
+  {
+    name: "memory.get",
+    cli: "coder-studio memory get",
+    description: "Read one workspace memory entry.",
+    inputSchema: { workspaceId: "string", id: "string" },
+    output: "Workspace memory entry as JSON.",
+    permissions: ["memory:read"],
+    riskLevel: "read",
+    examples: ["coder-studio memory get mem_abc --workspace ws_123 --json"],
+    available: true,
+  },
+  {
+    name: "memory.add",
+    cli: "coder-studio memory add",
+    description: "Create a workspace memory entry.",
+    inputSchema: {
+      workspaceId: "string",
+      type: "feature | todo | bugfix | project | note",
+      content: "string",
+    },
+    output: "Created workspace memory entry as JSON.",
+    permissions: ["memory:write"],
+    riskLevel: "write",
+    examples: ['coder-studio memory add --workspace ws_123 --type project --content "..." --json'],
+    available: true,
+  },
+  {
+    name: "memory.update",
+    cli: "coder-studio memory update",
+    description: "Update a workspace memory entry.",
+    inputSchema: {
+      workspaceId: "string",
+      id: "string",
+      type: "feature | todo | bugfix | project | note optional",
+      content: "string optional",
+    },
+    output: "Updated workspace memory entry as JSON.",
+    permissions: ["memory:write"],
+    riskLevel: "write",
+    examples: ['coder-studio memory update mem_abc --workspace ws_123 --content "..." --json'],
+    available: true,
+  },
+  {
+    name: "memory.delete",
+    cli: "coder-studio memory delete",
+    description: "Archive a workspace memory entry.",
+    inputSchema: { workspaceId: "string", id: "string" },
+    output: "Archived workspace memory entry as JSON.",
+    permissions: ["memory:write"],
+    riskLevel: "write",
+    examples: ["coder-studio memory delete mem_abc --workspace ws_123 --json"],
+    available: true,
+  },
 ];
 
 export function buildIdentifyResult(input: IdentifyInput = {}): IdentifyResult {
@@ -116,7 +198,21 @@ export function listAutomationCapabilities(input: {
   permissions: readonly string[];
 }): AutomationCapability[] {
   const allowed = new Set(input.permissions);
-  return MVP_CAPABILITIES.filter((capability) =>
+  const uiCapabilities: AutomationCapability[] = listUiActionCapabilities({
+    permissions: input.permissions,
+  }).map((capability) => ({
+    name: `ui.${capability.type}`,
+    cli: capability.cli,
+    description: capability.description,
+    inputSchema: capability.inputSchema,
+    output: "Accepted dispatch metadata as JSON. The frontend executes UI actions asynchronously.",
+    permissions: capability.permissions,
+    riskLevel: capability.riskLevel,
+    examples: capability.examples,
+    available: capability.available,
+  }));
+
+  return [...MVP_CAPABILITIES, ...uiCapabilities].filter((capability) =>
     capability.permissions.every((permission) => allowed.has(permission))
   );
 }

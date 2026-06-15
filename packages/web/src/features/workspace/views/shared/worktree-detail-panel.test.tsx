@@ -26,19 +26,23 @@ function buildStore(sendCommand: ReturnType<typeof vi.fn>) {
 
 describe("WorktreeDetailPanel", () => {
   it("loads status by default and renders commit/path metadata", async () => {
-    const sendCommand = vi.fn().mockResolvedValue({
-      status: {
-        branch: "feature/mobile-sheet",
-        ahead: 0,
-        behind: 0,
-        headSha: "abc1234567890",
-        headShortSha: "abc1234",
-        headSubject: "Initial mobile sheet setup",
-        staged: [],
-        modified: [],
-        untracked: [],
-        deleted: [],
-      },
+    const sendCommand = vi.fn().mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      return {
+        status: {
+          branch: "feature/mobile-sheet",
+          ahead: 0,
+          behind: 0,
+          headSha: "abc1234567890",
+          headShortSha: "abc1234",
+          headSubject: "Initial mobile sheet setup",
+          staged: [],
+          modified: [],
+          untracked: [],
+          deleted: [],
+        },
+      };
     });
 
     render(
@@ -54,11 +58,11 @@ describe("WorktreeDetailPanel", () => {
       });
     });
 
-    expect(screen.getByText("Path")).toBeInTheDocument();
-    expect(screen.getByText(worktree.path)).toBeInTheDocument();
-    expect(screen.getByText("Latest Commit")).toBeInTheDocument();
-    expect(screen.getByText("abc1234")).toBeInTheDocument();
-    expect(screen.getByText("Initial mobile sheet setup")).toBeInTheDocument();
+    expect(await screen.findByText("Path")).toBeInTheDocument();
+    expect(await screen.findByText(worktree.path)).toBeInTheDocument();
+    expect(await screen.findByText("Latest Commit")).toBeInTheDocument();
+    expect(await screen.findByText("abc1234")).toBeInTheDocument();
+    expect(await screen.findByText("Initial mobile sheet setup")).toBeInTheDocument();
   });
 
   it("reloads detail data when the tab changes", async () => {

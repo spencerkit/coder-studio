@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { formatTokenMetric } from "@coder-studio/utils";
 import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
 import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -131,10 +132,10 @@ export class WorkAnalysisService {
     const queryDigest = buildWorkAnalysisQueryDigest(normalized);
     const hourlyIndex = normalizeUsableHourlyIndex(this.deps.repo.findHourlyIndex?.());
 
-    if (hourlyIndex) {
+    if (hourlyIndex && isHourlyIndexFresh(hourlyIndex, this.now())) {
       return this.buildDashboardRecordFromIndex({
         indexedAt: hourlyIndex.indexedAt,
-        mode: "manual",
+        mode: "auto",
         normalized,
         queryDigest,
         requestedAt: this.now(),
@@ -142,7 +143,7 @@ export class WorkAnalysisService {
       });
     }
 
-    return await this.refreshDashboard(normalized, "manual");
+    return await this.refreshDashboard(normalized, "auto");
   }
 
   async refreshDashboard(
@@ -624,7 +625,9 @@ function buildDashboardProjection(
         key: "inputOutput",
         label: "Input / Output",
         value: totals.inputTokens + totals.outputTokens,
-        helper: `${totals.inputTokens} input / ${totals.outputTokens} output`,
+        helper: `${formatTokenMetric(totals.inputTokens)} input / ${formatTokenMetric(
+          totals.outputTokens
+        )} output`,
       },
       {
         key: "sessions",
@@ -739,6 +742,11 @@ function normalizeUsableHourlyIndex(
   }
 
   return index;
+}
+
+function isHourlyIndexFresh(index: WorkAnalysisHourlyIndex, now: number): boolean {
+  const latestCompleteHourStart = Math.max(0, floorToHour(now) - HOUR_MS);
+  return index.indexedThroughHourStart >= latestCompleteHourStart;
 }
 
 function normalizeHourlyIndexSession(

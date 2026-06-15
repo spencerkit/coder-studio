@@ -9,19 +9,17 @@ import {
 
 test.describe("@phase2 i18n acceptance", () => {
   test("P2I-01 language switch to English", async ({ page }) => {
-    await page.goto("/settings");
-    await openSettingsSection(page, "appearance");
+    await openSettingsSection(page, "general");
 
     await page.getByRole("button", { name: translateForE2E("settings.language.en") }).click();
 
     await expect(page.locator(".settings-group-title").first()).toHaveText(
-      settingsGroupLabel("theme", "en")
+      settingsGroupLabel("notifications", "en")
     );
   });
 
   test("P2I-02 language persists after reload", async ({ page }) => {
-    await page.goto("/settings");
-    await openSettingsSection(page, "appearance");
+    await openSettingsSection(page, "general");
     await page.getByRole("button", { name: translateForE2E("settings.language.en") }).click();
 
     await page.reload();
@@ -41,8 +39,8 @@ test.describe("@phase2 i18n acceptance", () => {
     await expectAppEntry(page);
 
     // Navigate to settings
-    await page.goto("/settings");
-    await expect(page.locator(".settings-page")).toBeVisible();
+    await page.goto("/more/settings/general");
+    await expect(page.getByTestId("more-features-page")).toBeVisible();
   });
 
   test("P2I-04 fallback to default language", async ({ page }) => {

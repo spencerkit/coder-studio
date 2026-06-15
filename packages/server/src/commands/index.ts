@@ -6,8 +6,8 @@
 
 import "./workspace.js";
 import "./workspace-activity.js";
-import "./workspace-extension-state.js";
 import "./automation.js";
+import "./ui-actions.js";
 import "./activation.js";
 import "./connection.js";
 import "./recovery.js";
@@ -33,3 +33,4 @@ import "./lsp.js";
 import "./updates.js";
 import "./monitoring.js";
 import "./work-analysis.js";
+import "./memory.js";

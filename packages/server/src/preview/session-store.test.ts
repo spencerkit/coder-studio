@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PreviewSessionStore } from "./session-store.js";
 
 describe("PreviewSessionStore", () => {
-  it("creates sessions at revision 1 and increments revisions on update", () => {
+  it("defaults HTML sessions to allow scripts and increments revisions on update", () => {
     const store = new PreviewSessionStore();
 
     const created = store.create({
@@ -13,7 +13,7 @@ describe("PreviewSessionStore", () => {
     });
 
     expect(created.revision).toBe(1);
-    expect(created.allowScripts).toBe(false);
+    expect(created.allowScripts).toBe(true);
 
     const updated = store.update(created.id, {
       content: "<h1>two</h1>",
@@ -24,6 +24,37 @@ describe("PreviewSessionStore", () => {
       revision: 2,
       content: "<h1>two</h1>",
     });
+  });
+
+  it("keeps markdown scripts disabled and honors explicit HTML script overrides", () => {
+    const store = new PreviewSessionStore();
+
+    const markdown = store.create({
+      workspaceId: "ws-1",
+      entryPath: "README.md",
+      kind: "markdown",
+      content: "# hi",
+    });
+    const markdownWithScriptsRequested = store.create({
+      workspaceId: "ws-1",
+      entryPath: "docs/guide/intro.md",
+      kind: "markdown",
+      content: "# hi",
+      allowScripts: true,
+    });
+    const htmlWithScriptsDisabled = store.create({
+      workspaceId: "ws-1",
+      entryPath: "docs/guide/index.html",
+      kind: "html",
+      content: "<h1>hi</h1>",
+      allowScripts: false,
+    });
+    const updatedMarkdown = store.update(markdown.id, { allowScripts: true });
+
+    expect(markdown.allowScripts).toBe(false);
+    expect(markdownWithScriptsRequested.allowScripts).toBe(false);
+    expect(updatedMarkdown?.allowScripts).toBe(false);
+    expect(htmlWithScriptsDisabled.allowScripts).toBe(false);
   });
 
   it("deletes sessions and treats missing ids as misses", () => {

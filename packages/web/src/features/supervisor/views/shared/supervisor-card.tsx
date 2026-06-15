@@ -26,7 +26,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   if (!supervisor) {
     return (
       <>
-        <div className="supervisor-card supervisor-card-inactive">
+        <div className="supervisor-card supervisor-card-inactive" data-supervisor-state="inactive">
           <Tooltip content={t("supervisor.action.enable")}>
             <button
               className="supervisor-enable-btn"
@@ -45,8 +45,12 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
   }
 
   return (
-    <div className={`supervisor-card ${stateClass}`} data-workspace-id={workspaceId}>
-      <div className="supervisor-strip-row">
+    <div
+      className={`supervisor-card ${stateClass}`}
+      data-supervisor-state={supervisor.state}
+      data-workspace-id={workspaceId}
+    >
+      <div className="supervisor-strip-row" data-supervisor-state={supervisor.state}>
         <span className="supervisor-strip-eyebrow">
           <span className={`supervisor-pulse ${stateClass}`} aria-hidden="true" />
           <span className="supervisor-label">{t("supervisor.title")}</span>

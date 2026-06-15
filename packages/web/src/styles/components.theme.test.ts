@@ -100,7 +100,7 @@ const selectStylesheet = readFileSync(
   "utf8"
 );
 
-function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
+function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp): string {
   const matches = Array.from(source.matchAll(pattern));
   const match = matches.length > 0 ? matches[matches.length - 1] : undefined;
 
@@ -108,13 +108,13 @@ function getLastGroupedRuleBlockFrom(source: string, pattern: RegExp) {
   return match?.[1] ?? "";
 }
 
-function getLastGroupedRuleBlock(pattern: RegExp) {
+function getLastGroupedRuleBlock(pattern: RegExp): string {
   return getLastGroupedRuleBlockFrom(stylesheet, pattern);
 }
 
-function getLastRuleBlockFrom(source: string, selector: string) {
+function getLastRuleBlockFrom(source: string, selector: string): string {
   const blocks = getRuleBlocksFrom(source, selector);
-  return blocks.length > 0 ? blocks[blocks.length - 1] : "";
+  return blocks.length > 0 ? (blocks[blocks.length - 1] ?? "") : "";
 }
 
 function getRuleBlocksFrom(source: string, selector: string) {
@@ -161,7 +161,7 @@ function hasRuleBlock(selector: string) {
   return hasRuleBlockFrom(stylesheet, selector);
 }
 
-function getLastRuleBlock(selector: string) {
+function getLastRuleBlock(selector: string): string {
   return getLastRuleBlockFrom(stylesheet, selector);
 }
 
@@ -974,36 +974,176 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(getLastRuleBlock(".config-status--error")).toContain("var(--icon-error)");
   });
 
-  it("keeps supervisor detail section titles on the denser body-strong scale", () => {
-    const supervisorDetailTitle = getLastRuleBlock(".supervisor-details-section-title");
+  it("keeps supervisor detail card titles on the compact strong scale", () => {
+    const supervisorDetailTitle = getLastRuleBlock(".supervisor-details-card-title");
 
-    expect(supervisorDetailTitle).toContain("font-size: var(--type-body-3-size)");
-    expect(supervisorDetailTitle).toContain("line-height: var(--type-body-3-line-height)");
-    expect(supervisorDetailTitle).toContain("font-weight: var(--type-body-3-weight)");
+    expect(supervisorDetailTitle).toContain("font-size: var(--type-body-5-size)");
+    expect(supervisorDetailTitle).toContain("line-height: var(--type-body-5-line-height)");
+    expect(supervisorDetailTitle).toContain("font-weight: var(--font-medium)");
   });
 
-  it("keeps supervisor details on a flatter single-surface hierarchy", () => {
+  it("keeps supervisor details on a flat operational panel hierarchy", () => {
     const editButton = getLastRuleBlock(".supervisor-details-edit-btn");
-    const detailsSurface = getLastRuleBlock(".supervisor-details-surface");
-    const summaryCard = getLastRuleBlock(".supervisor-summary-card");
-    const stackedMetaGrid = getLastRuleBlock(".supervisor-meta-grid--stacked");
-    const metaItem = getLastRuleBlock(".supervisor-meta-item");
+    const detailsRoot = getLastRuleBlock(".supervisor-details");
+    const inlineMetaGrid = getLastRuleBlock(".supervisor-meta-grid--inline");
+    const planSection = getLastRuleBlock(".supervisor-details-section--plan");
+    const nodeDetailRegion = getLastRuleBlock(".supervisor-details-node-detail-region");
+    const detailsSurface =
+      getRuleBlocksFrom(stylesheet, ".supervisor-details-surface").find((block) =>
+        block.includes("border: 1px solid var(--component-mix-border-default-56pct-transparent)")
+      ) ?? "";
+    const summaryCard =
+      getRuleBlocksFrom(stylesheet, ".supervisor-summary-card").find((block) =>
+        block.includes("border: 1px solid var(--component-mix-border-default-56pct-transparent)")
+      ) ?? "";
+    const stackedMetaGridBlocks = getRuleBlocksFrom(stylesheet, ".supervisor-meta-grid--stacked");
+    const metaItemBlocks = getRuleBlocksFrom(stylesheet, ".supervisor-meta-item");
     const reasoningItem = getLastRuleBlock(".supervisor-meta-item--reasoning");
+    const errorSurface = getLastRuleBlock(".supervisor-details-surface--error");
     const errorText = getLastRuleBlock(".supervisor-error");
+    const mindMapFlow = getLastRuleBlock(".supervisor-mind-map-flow");
+    const mindMapToolbarBlocks = getRuleBlocksFrom(stylesheet, ".supervisor-mind-map-toolbar");
+    const mindMapToolbar = mindMapToolbarBlocks[0] ?? "";
+    const mindMapViewportBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".supervisor-mind-map-flow__viewport"
+    );
+    const mindMapViewport = mindMapViewportBlocks[0] ?? "";
+    const mindMapNodeBlocks = getRuleBlocksFrom(stylesheet, ".supervisor-mind-map-flow__node");
+    const mindMapNode = mindMapNodeBlocks[0] ?? "";
+    const mindMapNodeHover = getLastRuleBlock(".supervisor-mind-map-flow__node:hover");
+    const mindMapRootNode = getLastRuleBlock(
+      '.supervisor-mind-map-flow__node[data-root-node="true"]'
+    );
+    const mindMapActiveNode = getLastRuleBlock(
+      '.supervisor-mind-map-flow__node[data-active-node="true"]'
+    );
+    const mindMapSelectedNode = getLastRuleBlock(
+      '.supervisor-mind-map-flow__node[data-selected-node="true"]'
+    );
+    const nodeDetail = getLastRuleBlock(".supervisor-node-detail");
+    const nodeDetailBody = getLastRuleBlock(".supervisor-node-detail__body");
+    const nodeDetailItemBlocks = getRuleBlocksFrom(stylesheet, ".supervisor-node-detail__item");
+    const nodeDetailItemBase = nodeDetailItemBlocks.find((block) =>
+      block.includes("display: grid")
+    );
+    const mindMapEdge = getLastRuleBlock(".supervisor-mind-map-flow .react-flow__edge-path");
+    const mindMapMinimapBlocks = getRuleBlocksFrom(
+      stylesheet,
+      ".supervisor-mind-map-flow .react-flow__minimap"
+    );
+    const mindMapMinimap = mindMapMinimapBlocks[0] ?? "";
+    const mindMapControls = getLastRuleBlock(".supervisor-mind-map-flow .react-flow__controls");
 
     expect(editButton).toContain("font-size: var(--type-body-6-size)");
-    expect(editButton).toContain("border-color: transparent");
-    expect(detailsSurface).not.toContain("border:");
-    expect(summaryCard).toContain("border: none");
-    expect(summaryCard).toContain("box-shadow: none");
-    expect(stackedMetaGrid).toContain("grid-template-columns: 1fr");
+    expect(editButton).toContain(
+      "border-color: var(--component-mix-border-default-44pct-transparent)"
+    );
+    expect(editButton).toContain(
+      "background: var(--component-mix-surface-panel-50pct-surface-page-50pct)"
+    );
+    expect(detailsRoot).toContain("display: flex");
+    expect(detailsRoot).toContain("flex-direction: column");
+    expect(detailsRoot).toContain("height: 100%");
+    expect(inlineMetaGrid).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
+    expect(planSection).toContain("flex: 1 1 0");
+    expect(planSection).toContain("min-height: clamp(380px, 52vh, 560px)");
+    expect(planSection).toContain("overflow: hidden");
+    expect(nodeDetailRegion).toContain("flex-shrink: 0");
+    expect(nodeDetailRegion).toContain("max-height: min(360px, 34vh)");
+    expect(nodeDetailRegion).toContain("min-width: 0");
+    expect(detailsSurface).toContain(
+      "border: 1px solid var(--component-mix-border-default-56pct-transparent)"
+    );
+    expect(detailsSurface).toContain("border-radius: var(--radius-sm)");
+    expect(detailsSurface).toContain(
+      "background: var(--component-mix-surface-panel-82pct-surface-page-18pct)"
+    );
+    expect(detailsSurface).not.toContain("box-shadow:");
+    expect(summaryCard).toContain(
+      "border: 1px solid var(--component-mix-border-default-56pct-transparent)"
+    );
+    expect(summaryCard).not.toContain("border-left: 3px");
+    expect(summaryCard).toContain("border-radius: var(--radius-sm)");
+    expect(summaryCard).toContain(
+      "background: var(--component-mix-surface-panel-82pct-surface-page-18pct)"
+    );
+    expect(summaryCard).not.toContain("radial-gradient(");
+    expect(summaryCard).not.toContain("box-shadow:");
+    expect(stylesheet).not.toContain(".supervisor-summary-card::before");
+    expect(
+      stackedMetaGridBlocks.some((block) => block.includes("grid-template-columns: minmax(0, 1fr)"))
+    ).toBe(true);
     expect(stylesheet).not.toMatch(/(^|,)\s*\.supervisor-details-surface--runtime\b/m);
-    expect(metaItem).toContain("padding: 0");
-    expect(metaItem).not.toContain("border:");
-    expect(reasoningItem).not.toContain("border-style: dashed");
+    expect(
+      metaItemBlocks.some(
+        (block) =>
+          block.includes("display: flex") &&
+          block.includes("justify-content: space-between") &&
+          block.includes("border-left: 0")
+      )
+    ).toBe(true);
+    expect(reasoningItem).not.toContain("border-left: 2px");
+    expect(reasoningItem).toContain(
+      "background: var(--component-mix-surface-panel-82pct-surface-page-18pct)"
+    );
+    expect(errorSurface).toContain("border-color: var(--state-error-border)");
+    expect(errorSurface).toContain("background: var(--state-error-bg)");
     expect(errorText).toContain("color: var(--status-danger-fg)");
     expect(errorText).not.toContain("background:");
     expect(errorText).not.toContain("border-left:");
+    expect(mindMapFlow).toContain("display: flex");
+    expect(mindMapFlow).toContain("flex: 1 1 auto");
+    expect(mindMapFlow).toContain("flex-direction: column");
+    expect(mindMapToolbar).toContain(
+      "border: 1px solid var(--component-mix-border-default-44pct-transparent)"
+    );
+    expect(mindMapToolbar).toContain(
+      "background: var(--component-mix-surface-panel-82pct-transparent)"
+    );
+    expect(mindMapViewport).toContain("flex: 1 1 auto");
+    expect(mindMapViewport).toContain("height: auto");
+    expect(mindMapViewport).toContain("min-height: clamp(380px, 52vh, 560px)");
+    expect(mindMapViewport).toContain("overflow: hidden");
+    expect(mindMapViewport).toContain(
+      "border: 1px solid var(--component-mix-border-default-56pct-transparent)"
+    );
+    expect(mindMapViewport).toContain(
+      "background: var(--component-mix-surface-page-68pct-surface-panel-32pct)"
+    );
+    expect(mindMapNode).toContain("border-radius: var(--radius-sm)");
+    expect(mindMapNode).toContain(
+      "background: var(--component-mix-surface-panel-88pct-surface-page-12pct)"
+    );
+    expect(mindMapNode).toContain("cursor: pointer");
+    expect(mindMapNodeHover).toContain(
+      "border-color: var(--component-mix-status-info-fg-28pct-border-default)"
+    );
+    expect(mindMapNodeHover).toContain(
+      "background: var(--component-mix-status-info-fg-7pct-surface-panel-93pct)"
+    );
+    expect(mindMapNodeHover).not.toContain("box-shadow:");
+    expect(mindMapRootNode).toContain("border-color: var(--supervisor-detail-accent-border)");
+    expect(mindMapActiveNode).not.toContain("border-left: 3px");
+    expect(mindMapSelectedNode).toContain(
+      "outline: 1px solid var(--component-mix-status-info-fg-48pct-border-default)"
+    );
+    expect(nodeDetail).toContain("max-height: min(360px, 34vh)");
+    expect(nodeDetail).toContain("overflow-y: auto");
+    expect(nodeDetailBody).toContain("display: grid");
+    expect(nodeDetailBody).toContain("grid-template-columns: minmax(0, 1fr)");
+    expect(nodeDetailBody).not.toContain("repeat(auto-fit");
+    expect(nodeDetailItemBase).toContain("display: grid");
+    expect(nodeDetailItemBase).toContain(
+      "grid-template-columns: minmax(120px, 0.22fr) minmax(0, 1fr)"
+    );
+    expect(mindMapEdge).toContain("stroke: var(--component-mix-border-default-68pct-transparent)");
+    expect(mindMapMinimap).toContain("border-radius: var(--radius-sm)");
+    expect(mindMapMinimap).toContain("width: 154px");
+    expect(mindMapMinimap).toContain("box-shadow: none");
+    expect(mindMapControls).toContain("box-shadow: none");
+    expect(stylesheet).not.toContain(".supervisor-mind-map-node__branch");
+    expect(stylesheet).not.toContain(".supervisor-mind-map-viewport::-webkit-scrollbar");
   });
 
   it("collapses supervisor progress headers based on container width, not only viewport width", () => {
@@ -1590,6 +1730,51 @@ describe("components.css theme-sensitive surfaces", () => {
   it("keeps workspace editor and diff surfaces theme-aware", () => {
     const editorShell = getLastRuleBlock(".workspace-git-editor");
     const editorHeader = getLastRuleBlock(".code-editor-header");
+    const editorOverlay = getLastRuleBlock(".workspace-main-stage__editor-overlay");
+    const editorOverlayPinned = getLastRuleBlock(".workspace-main-stage__editor-overlay--pinned");
+    const editorOverlayFloating =
+      getRuleBlocksFrom(stylesheet, ".workspace-main-stage__editor-overlay--floating")[0] ?? "";
+    const editorOverlayInteracting = getLastRuleBlock(
+      ".workspace-main-stage__editor-overlay--interacting"
+    );
+    const editorOverlayFloatingViewRules = getRuleBlocksFrom(
+      stylesheet,
+      ".workspace-main-stage__editor-overlay--floating .workspace-git-view"
+    ).join("\n");
+    const editorOverlayChrome = getLastGroupedRuleBlock(
+      /\.workspace-main-stage__editor-overlay \.workspace-git-view,\s*\.workspace-main-stage__editor-overlay \.workspace-git-editor,\s*\.workspace-main-stage__editor-overlay \.code-editor,\s*\.workspace-main-stage__editor-overlay \.editor-surface__header--tabs,\s*\.workspace-main-stage__editor-overlay \.code-editor-tabbar,\s*\.workspace-main-stage__editor-overlay \.code-editor-path\s*\{([^}]*)\}/g
+    );
+    const editorDragButton = getLastRuleBlock(".editor-surface__drag-btn");
+    const editorResizeHandle = getLastRuleBlock(".workspace-main-stage__editor-resize-handle");
+    const editorResizeTopLeft = getLastRuleBlock(
+      ".workspace-main-stage__editor-resize-handle--top-left"
+    );
+    const editorResizeTopRight = getLastRuleBlock(
+      ".workspace-main-stage__editor-resize-handle--top-right"
+    );
+    const editorResizeBottomLeft = getLastRuleBlock(
+      ".workspace-main-stage__editor-resize-handle--bottom-left"
+    );
+    const editorResizeBottomRight = getLastRuleBlock(
+      ".workspace-main-stage__editor-resize-handle--bottom-right"
+    );
+    const editorResizeTopLeftMark = getLastRuleBlock(
+      ".workspace-main-stage__editor-resize-handle--top-left::before"
+    );
+    const editorResizeBottomRightMark = getLastRuleBlock(
+      ".workspace-main-stage__editor-resize-handle--bottom-right::before"
+    );
+    const editorTabs = getLastRuleBlock(".code-editor-tabs");
+    const editorTabbar = getLastRuleBlock(".code-editor-tabbar");
+    const editorTabbarActions = getLastRuleBlock(".code-editor-tabbar__actions");
+    const editorTabFrame = getLastRuleBlock(".code-editor-tab-item");
+    const editorTabClose = getLastRuleBlock(".code-editor-tab__close");
+    const editorOverlayOpening =
+      getRuleBlocksFrom(stylesheet, ".workspace-main-stage__editor-overlay--opening")[0] ?? "";
+    const editorRestore = getRuleBlocksFrom(stylesheet, ".workspace-editor-restore")[0] ?? "";
+    const editorRestoreHover = getLastRuleBlock(".workspace-editor-restore:hover");
+    const editorRestoreRestoring =
+      getRuleBlocksFrom(stylesheet, ".workspace-editor-restore--restoring")[0] ?? "";
     const editorDirtyIndicator = getLastRuleBlock(".code-file-path .dirty-indicator");
     const editorPaneDirtyIndicator = getLastRuleBlock(".editor-pane-card__dirty-indicator");
     const editorError = getLastRuleBlock(".code-editor-error");
@@ -1615,6 +1800,77 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(editorHeader).toContain("background: var(--workspace-editor-toolbar-surface)");
     expect(editorHeader).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(editorHeader).not.toContain("var(--component-rgba-18-26-34-0-96)");
+    expect(editorOverlay).toContain("transition:");
+    expect(editorOverlayPinned).toContain("inset: 0");
+    expect(editorOverlayPinned).toContain("background: var(--surface-page)");
+    expect(editorOverlayFloating).toContain("position: fixed");
+    expect(editorOverlayFloating).toContain("width: min(760px, calc(100% - var(--sp-8)))");
+    expect(editorOverlayFloating).toContain("height: min(560px, calc(100% - var(--sp-8)))");
+    expect(editorOverlayFloating).toContain(
+      "border: 1px solid var(--workspace-editor-toolbar-border)"
+    );
+    expect(editorOverlayFloating).toContain("background: var(--workspace-editor-shell-surface)");
+    expect(editorOverlayFloating).toContain("box-shadow: var(--shadow-xl)");
+    expect(editorOverlayFloating).toContain(
+      "animation: workspace-editor-float-in 180ms var(--ease-out) both"
+    );
+    expect(editorOverlayInteracting).toContain("transition: none");
+    expect(editorOverlayInteracting).toContain("animation: none");
+    expect(editorOverlayFloatingViewRules).toContain("background: transparent");
+    expect(editorOverlayChrome).toContain("min-width: 0");
+    expect(editorOverlayChrome).toContain("max-width: 100%");
+    expect(stylesheet).not.toContain(".workspace-main-stage__editor-move-handle");
+    expect(editorDragButton).toContain("cursor: grab");
+    expect(editorDragButton).toContain("touch-action: none");
+    expect(editorResizeHandle).toContain("width: 16px");
+    expect(editorResizeHandle).toContain("height: 16px");
+    expect(editorResizeHandle).toContain("touch-action: none");
+    expect(editorResizeTopLeft).toContain("cursor: nwse-resize");
+    expect(editorResizeTopRight).toContain("cursor: nesw-resize");
+    expect(editorResizeBottomLeft).toContain("cursor: nesw-resize");
+    expect(editorResizeBottomRight).toContain("cursor: nwse-resize");
+    expect(editorResizeTopLeftMark).toContain("border-left: 1px solid var(--text-tertiary)");
+    expect(editorResizeTopLeftMark).toContain("border-top: 1px solid var(--text-tertiary)");
+    expect(editorResizeBottomRightMark).toContain("border-right: 1px solid var(--text-tertiary)");
+    expect(editorResizeBottomRightMark).toContain("border-bottom: 1px solid var(--text-tertiary)");
+    expect(editorTabs).toContain("overflow-x: auto");
+    expect(editorTabs).toContain("scrollbar-gutter: stable");
+    expect(editorTabs).toContain("height: calc(34px + 4px)");
+    expect(editorTabs).not.toContain("scrollbar-width:");
+    expect(editorTabs).not.toContain("padding-bottom");
+    expect(editorTabbar).toContain("display: flex");
+    expect(editorTabbar).toContain("min-height: calc(34px + 4px)");
+    expect(editorTabbar).toContain("overflow: hidden");
+    expect(editorTabbarActions).toContain("flex-shrink: 0");
+    expect(editorTabbarActions).not.toContain("position: sticky");
+    expect(editorTabFrame).toContain("grid-template-columns: minmax(0, 1fr) 28px");
+    expect(editorTabClose).toContain("width: 24px");
+    expect(editorTabClose).toContain("border: none");
+    expect(editorTabClose).not.toContain("border: 1px solid transparent");
+    expect(imageCanvasRules).toContain("overflow: hidden");
+    expect(imageCanvasRules).not.toContain("overflow: auto");
+    expect(editorOverlayOpening).toContain(
+      "animation: workspace-editor-open-from-restore 220ms var(--ease-out) both"
+    );
+    expect(editorOverlayOpening).toContain(
+      "transform-origin: var(--workspace-editor-restore-origin-x"
+    );
+    expect(editorRestore).toContain("border-radius: var(--radius-lg)");
+    expect(editorRestore).toContain("opacity: 0.84");
+    expect(editorRestore).toContain(
+      "animation: workspace-editor-restore-enter 180ms var(--ease-out) both"
+    );
+    expect(editorRestoreHover).not.toContain("border-color");
+    expect(editorRestoreHover).toContain("transform: translateY(calc(var(--sp-1) * -0.25))");
+    expect(editorRestoreRestoring).toContain("pointer-events: none");
+    expect(editorRestoreRestoring).toContain(
+      "animation: workspace-editor-restore-open 220ms var(--ease-out) both"
+    );
+    expect(stylesheet).toContain("@keyframes workspace-editor-open-from-restore");
+    expect(stylesheet).toContain("@keyframes workspace-editor-float-in");
+    expect(stylesheet).toContain(
+      ".workspace-main-stage__editor-overlay--opening,\n  .workspace-main-stage__editor-overlay--floating,\n  .workspace-editor-restore,\n  .workspace-editor-restore--restoring,\n  .workspace-git-view--closing-to-restore"
+    );
     expect(editorDirtyIndicator).toContain("width: 7px");
     expect(editorDirtyIndicator).toContain("height: 7px");
     expect(editorDirtyIndicator).toContain("background: var(--editor-dirty-indicator-fg)");
@@ -1692,7 +1948,8 @@ describe("components.css theme-sensitive surfaces", () => {
       "border: 1px solid var(--component-mix-border-focus-84pct-transparent)"
     );
     expect(activeSessionHeader).not.toContain("border-top:");
-    expect(supervisorCard).toContain("background: var(--workspace-session-header-surface)");
+    expect(supervisorCard).toContain("linear-gradient(");
+    expect(supervisorCard).toContain("var(--workspace-session-header-surface)");
     expect(supervisorCard).toContain("backdrop-filter: var(--material-backdrop-filter)");
     expect(sessionHeaderLeft).toContain("gap: var(--gap-default)");
     expect(sessionHeaderCopyBlocks.some((block) => block.includes("gap: var(--gap-compact)"))).toBe(
@@ -1819,6 +2076,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const toolbar = getLastRuleBlock(".editor-surface__toolbar");
     const toolbarButtons = getLastRuleBlock(".editor-surface__toolbar .code-mode-btn");
     const activeToolbarButtons = getLastRuleBlock(".editor-surface__toolbar .code-mode-btn.active");
+    const tabbarActions = getLastRuleBlock(".code-editor-tabbar__actions");
 
     expect(toolbar).toContain("display: inline-flex");
     expect(toolbar).toContain("justify-content: flex-end");
@@ -1831,6 +2089,23 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(toolbarButtons).toContain("width: 26px");
     expect(toolbarButtons).toContain("height: 26px");
     expect(activeToolbarButtons).toContain("box-shadow: none");
+    expect(tabbarActions).toContain("align-items: center");
+  });
+
+  it("keeps the dev browser frame stretched to the remaining editor height", () => {
+    const surface = getLastRuleBlock(".dev-browser-surface");
+    const frameShell = getLastRuleBlock(".dev-browser-frame-shell");
+    const frame = getLastRuleBlock(".dev-browser-frame");
+
+    expect(surface).toContain("display: flex");
+    expect(surface).toContain("flex-direction: column");
+    expect(surface).toContain("height: 100%");
+    expect(surface).toContain("min-height: 0");
+    expect(frameShell).toContain("flex: 1");
+    expect(frameShell).toContain("min-height: 0");
+    expect(frameShell).toContain("display: flex");
+    expect(frame).toContain("flex: 1");
+    expect(frame).toContain("height: 100%");
   });
 
   it("scopes disabled provider card styling to the draft launcher", () => {
@@ -2108,6 +2383,8 @@ describe("components.css theme-sensitive surfaces", () => {
       modalStylesheet,
       ":global(.dialog-header__description)"
     );
+    const supervisorDialog = getLastRuleBlock(".modal-card.supervisor-dialog");
+    const supervisorTitle = getLastRuleBlock(".supervisor-dialog .modal-title");
     const dialogIcon = getLastRuleBlock(".supervisor-dialog-header-icon");
     const editTone = getLastRuleBlock(".supervisor-dialog--edit .supervisor-dialog-header-icon");
 
@@ -2118,18 +2395,33 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(dialogDescription).toContain("line-height: var(--type-body-5-line-height)");
     expect(dialogDescription).toContain("font-weight: var(--type-body-5-weight)");
     expect(dialogHeader).toContain("align-items: flex-start");
-    expect(dialogIcon).toContain("width: 28px");
-    expect(dialogIcon).toContain("height: 28px");
+    expect(supervisorDialog).toContain("width: min(calc(100vw - var(--sp-8)), 760px)");
+    expect(supervisorDialog).toContain("max-width: 760px");
+    expect(supervisorDialog).toContain("border-radius: var(--radius-md)");
+    expect(supervisorTitle).toContain("font-size: var(--type-heading-5-size)");
+    expect(supervisorTitle).toContain("line-height: var(--type-heading-5-line-height)");
+    expect(dialogIcon).toContain("width: 24px");
+    expect(dialogIcon).toContain("height: 24px");
+    expect(dialogIcon).toContain(
+      "border: 1px solid var(--component-mix-border-default-56pct-transparent)"
+    );
+    expect(dialogIcon).toContain("border-radius: var(--radius-control-sm)");
     expect(editTone).toContain("var(--icon-surface-info)");
     expect(editTone).toContain("var(--icon-info)");
     expect(hasRuleBlock(".supervisor-dialog-header")).toBe(false);
     expect(hasRuleBlock(".supervisor-dialog-subtitle")).toBe(false);
+    expect(hasRuleBlock(".supervisor-dialog .dialog-header__description")).toBe(false);
     expect(hasRuleBlock(".supervisor-dialog .modal-header h3")).toBe(false);
   });
 
   it("keeps supervisor dialog body styling flat and dense", () => {
     const modalBody = getLastRuleBlock(".supervisor-dialog .modal-body");
     const formGroup = getLastRuleBlock(".supervisor-dialog .form-group");
+    const section = getLastRuleBlock(".supervisor-dialog-section");
+    const sectionFirst = getLastRuleBlock(".supervisor-dialog-section:first-child");
+    const sectionHead = getLastRuleBlock(".supervisor-dialog-section__head");
+    const sectionLabel = getLastRuleBlock(".supervisor-dialog-section__label");
+    const fieldGrid = getLastRuleBlock(".supervisor-dialog-field-grid");
     const intro = getLastRuleBlock(".supervisor-dialog-intro");
     const introEditTone = getLastRuleBlock(
       ".supervisor-dialog--edit .supervisor-dialog-intro__icon"
@@ -2141,9 +2433,22 @@ describe("components.css theme-sensitive surfaces", () => {
       /\.supervisor-dialog \.input,\s*\n\.supervisor-dialog \.mobile-select-trigger\s*\{([^}]*)\}/g
     );
     const textarea = getLastRuleBlock(".supervisor-dialog .textarea");
+    const footer = getLastRuleBlock(".supervisor-dialog .modal-footer");
 
     expect(modalBody).toContain("gap: var(--sp-3)");
+    expect(modalBody).toContain("padding: calc(var(--sp-4) + var(--gap-compact))");
     expect(formGroup).toContain("gap: var(--gap-tight)");
+    expect(section).toContain("border-top: 1px solid var(--border-default)");
+    expect(section).toContain("padding-top: var(--sp-3)");
+    expect(sectionFirst).toContain("border-top: 0");
+    expect(sectionFirst).toContain("padding-top: 0");
+    expect(sectionHead).toContain("display: flex");
+    expect(sectionHead).toContain("justify-content: space-between");
+    expect(sectionLabel).toContain("text-transform: uppercase");
+    expect(sectionLabel).toContain("letter-spacing: 0.08em");
+    expect(fieldGrid).toContain("display: grid");
+    expect(fieldGrid).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(fieldGrid).toContain("gap: var(--sp-3)");
     expect(intro).toContain("display: flex");
     expect(intro).toContain("padding: var(--sp-3)");
     expect(intro).toContain(
@@ -2163,12 +2468,21 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(compactInputGroup).toContain("font-size: var(--type-body-6-size)");
     expect(compactInputGroup).toContain("line-height: var(--type-body-6-line-height)");
     expect(textarea).toContain("font-size: var(--type-body-5-size)");
-    expect(textarea).toContain("min-height: 104px");
+    expect(textarea).toContain("min-height: 114px");
     expect(textarea).toContain("color: var(--text-secondary)");
+    expect(footer).toContain("gap: var(--sp-2)");
+    expect(footer).toContain("padding: var(--sp-3) 18px");
+    expect(footer).toContain(
+      "background: var(--component-mix-surface-panel-86pct-surface-page-14pct)"
+    );
   });
 
   it("keeps supervisor strip, history badges, and restore cards on shared state tokens", () => {
     const enableHover = getLastRuleBlock(".supervisor-enable-btn:hover");
+    const supervisorCard = getLastRuleBlock(".supervisor-card");
+    const evaluatingCard = getLastRuleBlock(".supervisor-card.supervisor-state-evaluating");
+    const injectingCard = getLastRuleBlock(".supervisor-card.supervisor-state-injecting");
+    const errorCard = getLastRuleBlock(".supervisor-card.supervisor-state-error");
     const pulse = getLastRuleBlock(".supervisor-pulse");
     const evaluatingPulse = getLastRuleBlock(".supervisor-pulse.supervisor-state-evaluating");
     const injectingPulse = getLastRuleBlock(".supervisor-pulse.supervisor-state-injecting");
@@ -2181,7 +2495,7 @@ describe("components.css theme-sensitive surfaces", () => {
     const errorTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-error");
     const stoppedTag = getLastRuleBlock(".supervisor-state-tag.supervisor-state-stopped");
     const cycleCount = getLastRuleBlock(".supervisor-cycle-count");
-    const actions = getLastRuleBlock(".supervisor-actions");
+    const actionBlocks = getRuleBlocksFrom(stylesheet, ".supervisor-actions");
     const dangerHover = getLastRuleBlock(".supervisor-icon-btn-danger:hover:not(:disabled)");
     const providerPill = getLastRuleBlock(".supervisor-provider-pill");
     const progressMarker = getLastRuleBlock(".supervisor-progress-item__marker");
@@ -2206,15 +2520,28 @@ describe("components.css theme-sensitive surfaces", () => {
     const restoreEntry = getLastRuleBlock(".supervisor-restore-entry");
     const restoreCard = getLastRuleBlock(".supervisor-restore-card");
 
-    expect(enableHover).toContain("background: var(--state-success-bg)");
-    expect(enableHover).toContain("border-color: var(--state-success-border)");
-    expect(enableHover).toContain("color: var(--state-success-text)");
-    expect(pulse).toContain("background: var(--state-success-text)");
-    expect(pulse).toContain("var(--component-mix-state-success-border-40pct-transparent)");
-    expect(evaluatingPulse).toContain("background: var(--state-info-text)");
-    expect(evaluatingPulse).toContain("var(--component-mix-state-info-border-40pct-transparent)");
-    expect(injectingPulse).toContain("background: var(--state-warning-text)");
-    expect(injectingPulse).toContain("var(--component-mix-state-warning-border-40pct-transparent)");
+    expect(enableHover).toContain(
+      "background: var(--component-mix-status-info-fg-7pct-surface-panel-93pct)"
+    );
+    expect(enableHover).toContain("border-color: var(--state-info-border)");
+    expect(enableHover).toContain("color: var(--text-primary)");
+    expect(supervisorCard).toContain("--supervisor-accent: var(--state-success-text)");
+    expect(supervisorCard).toContain("--supervisor-accent-bg: var(--state-success-bg)");
+    expect(supervisorCard).toContain("--supervisor-accent-border: var(--state-success-border)");
+    expect(evaluatingCard).toContain("--supervisor-accent: var(--state-info-text)");
+    expect(evaluatingCard).toContain("--supervisor-accent-bg: var(--state-info-bg)");
+    expect(evaluatingCard).toContain("--supervisor-accent-border: var(--state-info-border)");
+    expect(injectingCard).toContain("--supervisor-accent: var(--state-warning-text)");
+    expect(injectingCard).toContain("--supervisor-accent-bg: var(--state-warning-bg)");
+    expect(injectingCard).toContain("--supervisor-accent-border: var(--state-warning-border)");
+    expect(errorCard).toContain("--supervisor-accent: var(--state-error-text)");
+    expect(errorCard).toContain("--supervisor-accent-bg: var(--state-error-bg)");
+    expect(errorCard).toContain("--supervisor-accent-border: var(--state-error-border)");
+    expect(pulse).toContain("background: var(--supervisor-accent)");
+    expect(pulse).toContain("var(--supervisor-accent-bg)");
+    expect(pulse).toContain("var(--supervisor-accent-border)");
+    expect(evaluatingPulse).toContain("animation: supervisor-pulse 1.4s");
+    expect(injectingPulse).toContain("animation: supervisor-pulse 1.1s");
     expect(errorPulse).toContain("background: var(--state-error-text)");
     expect(errorPulse).toContain("var(--component-mix-state-error-border-40pct-transparent)");
     expect(stateTag).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
@@ -2232,8 +2559,14 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(stoppedTag).toContain("background: var(--state-disabled-bg)");
     expect(stoppedTag).toContain("color: var(--state-disabled-text)");
     expect(cycleCount).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
-    expect(cycleCount).toContain("background: var(--state-disabled-bg)");
-    expect(actions).toContain("gap: var(--gap-compact)");
+    expect(cycleCount).toContain(
+      "border: 1px solid var(--component-mix-border-default-64pct-transparent)"
+    );
+    expect(cycleCount).toContain(
+      "background: var(--component-mix-surface-page-44pct-surface-panel-56pct)"
+    );
+    expect(cycleCount).toContain("color: var(--text-tertiary)");
+    expect(actionBlocks.some((block) => block.includes("gap: var(--gap-compact)"))).toBe(true);
     expect(dangerHover).toContain("background: var(--state-error-bg)");
     expect(dangerHover).toContain("color: var(--state-error-text)");
     expect(providerPill).toContain("padding: var(--inset-chip-block) var(--inset-chip-inline)");
@@ -2534,6 +2867,69 @@ describe("components.css theme-sensitive surfaces", () => {
       "padding: var(--sp-2) calc(var(--mobile-safe-right) + var(--sp-4)) calc(var(--mobile-safe-bottom) + var(--sp-4)) calc(var(--mobile-safe-left) + var(--sp-4))"
     );
     expect(mobileSettingsFooter).toContain("min-height: 32px");
+  });
+
+  it("keeps more features on fixed viewport scaffolds with dedicated content scroll lanes", () => {
+    const moreFeaturesDesktopPage = getLastRuleBlock(".more-features-page--desktop");
+    const moreFeaturesShell = getRuleBlocksFrom(stylesheet, ".more-features-shell")[0] ?? "";
+    const moreFeaturesContent = getLastRuleBlock(".more-features-shell__content");
+    const moreFeaturesInnerContent = getLastRuleBlock(".more-features-content");
+    const moreFeaturesContentPanel = getLastRuleBlock(".more-features-content__panel");
+    const embeddedSettingsContent = getLastRuleBlock(
+      ".more-features-content__panel > .settings-content"
+    );
+    const embeddedSettingsSurface = getLastRuleBlock(
+      ".more-features-content__panel > .settings-content > .settings-content-surface"
+    );
+    const moreFeaturesMobilePage = getLastRuleBlock(".more-features-page--mobile");
+    const moreFeaturesMobileList = getLastRuleBlock(".more-features-mobile-list");
+    const moreFeaturesMobileDetail = getLastRuleBlock(".more-features-mobile-detail");
+    const moreFeaturesMobileDetailContent = getLastRuleBlock(
+      ".more-features-mobile-detail__content"
+    );
+    const embeddedMobileSettingsContent = getLastRuleBlock(
+      ".more-features-mobile-detail__surface .settings-content"
+    );
+
+    expect(moreFeaturesDesktopPage).toContain("display: flex");
+    expect(moreFeaturesDesktopPage).toContain("flex-direction: column");
+    expect(moreFeaturesDesktopPage).toContain("min-height: 100vh");
+    expect(moreFeaturesDesktopPage).toContain("height: 100vh");
+    expect(moreFeaturesShell).toContain("flex: 1");
+    expect(moreFeaturesShell).toContain("min-height: 0");
+    expect(moreFeaturesContent).toContain("display: flex");
+    expect(moreFeaturesContent).toContain("flex-direction: column");
+    expect(moreFeaturesContent).toContain("min-height: 0");
+    expect(moreFeaturesContent).toContain("overflow-y: auto");
+    expect(moreFeaturesInnerContent).toContain("display: flex");
+    expect(moreFeaturesInnerContent).toContain("flex-direction: column");
+    expect(moreFeaturesInnerContent).toContain("min-height: 100%");
+    expect(moreFeaturesContentPanel).toContain("min-height: 0");
+    expect(embeddedSettingsContent).toContain("padding-bottom: var(--sp-6)");
+    expect(embeddedSettingsContent).toContain("overflow: visible");
+    expect(embeddedSettingsSurface).toContain("min-height: auto");
+
+    expect(moreFeaturesMobilePage).toContain("display: flex");
+    expect(moreFeaturesMobilePage).toContain("flex-direction: column");
+    expect(moreFeaturesMobilePage).toContain("min-height: 100dvh");
+    expect(moreFeaturesMobilePage).toContain("height: 100dvh");
+    expect(moreFeaturesMobileList).toContain("flex: 1");
+    expect(moreFeaturesMobileList).toContain("min-height: 0");
+    expect(moreFeaturesMobileList).toContain(
+      "padding: var(--sp-3) 0 calc(var(--sp-6) + var(--mobile-safe-bottom))"
+    );
+    expect(moreFeaturesMobileList).toContain("overflow-y: auto");
+    expect(moreFeaturesMobileDetail).toContain("display: flex");
+    expect(moreFeaturesMobileDetail).toContain("flex-direction: column");
+    expect(moreFeaturesMobileDetail).toContain("min-height: 100dvh");
+    expect(moreFeaturesMobileDetail).toContain("height: 100dvh");
+    expect(moreFeaturesMobileDetailContent).toContain("flex: 1");
+    expect(moreFeaturesMobileDetailContent).toContain("min-height: 0");
+    expect(moreFeaturesMobileDetailContent).toContain(
+      "padding: var(--sp-4) var(--sp-3) calc(var(--sp-6) + var(--mobile-safe-bottom))"
+    );
+    expect(moreFeaturesMobileDetailContent).toContain("overflow-y: auto");
+    expect(embeddedMobileSettingsContent).toContain("overflow: visible");
   });
 
   it("keeps mobile container surfaces on shared radius tokens instead of bespoke rounded-card values", () => {
@@ -3527,6 +3923,16 @@ describe("components.css theme-sensitive surfaces", () => {
     const agentInstructionsTokenTrendState = getLastRuleBlock(
       ".workspace-agent-instructions__token-trend-state"
     );
+    const skillsCardHead = getLastRuleBlock(".skills-panel__card-head");
+    const skillsCardHeadActions = getLastRuleBlock(".skills-panel__card-head-actions");
+    const skillsCardHeadInlineActions = getLastRuleBlock(
+      ".skills-panel__card-head-actions .skills-panel__inline-actions"
+    );
+    const skillsCardOpen = getLastRuleBlock(".skills-panel__card-open");
+    const skillsCardDescriptionTruncated = getLastRuleBlock(
+      ".skills-panel__card-description--truncated"
+    );
+    const skillsTargetHead = getLastRuleBlock(".skills-panel__target-head");
     const skillsTargetName = getLastRuleBlock(".skills-panel__target-name");
 
     expect(sidebarRowSelected).toContain("--workspace-sidebar-selected-border");
@@ -3700,6 +4106,28 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(agentInstructionsTokenTrendChart).toContain("height: 96px");
     expect(agentInstructionsTokenTrendChart).toContain("min-width: 0");
     expect(agentInstructionsTokenTrendState).toContain("color: var(--text-secondary)");
+    expect(skillsCardHead).toContain("min-width: 0");
+    expect(skillsCardHeadActions).toContain("margin-left: auto");
+    expect(skillsCardHeadActions).toContain("margin-right: calc(var(--sp-3) * -1)");
+    expect(skillsCardHeadActions).toContain("gap: var(--gap-default)");
+    expect(skillsCardHeadInlineActions).toContain("gap: var(--gap-default)");
+    expect(skillsCardOpen).toContain("display: flex");
+    expect(skillsCardOpen).toContain("flex: 1 1 auto");
+    expect(skillsCardOpen).toContain("min-width: 0");
+    expect(skillsCardOpen).toContain("max-width: 100%");
+    expect(skillsCardDescriptionTruncated).toContain("max-width: 100%");
+    expect(skillsCardDescriptionTruncated).toContain("overflow: hidden");
+    expect(skillsCardDescriptionTruncated).toContain("text-overflow: ellipsis");
+    expect(skillsCardDescriptionTruncated).toContain("white-space: nowrap");
+    expect(skillsTargetHead).toContain("align-items: center");
+    expect(skillsTargetHead).toContain("justify-content: space-between");
+    expect(skillsTargetHead).toContain("flex-wrap: nowrap");
+    expect(skillsTargetHead).toContain("width: 100%");
+    expect(skillsTargetName).toContain("flex: 1 1 auto");
+    expect(skillsTargetName).toContain("min-width: 0");
+    expect(skillsTargetName).toContain("overflow: hidden");
+    expect(skillsTargetName).toContain("text-overflow: ellipsis");
+    expect(skillsTargetName).toContain("white-space: nowrap");
     expect(skillsTargetName).toContain("font-size: var(--type-body-5-size)");
     expect(skillsTargetName).toContain("line-height: var(--type-body-5-line-height)");
     expect(skillsTargetName).toContain("font-weight: var(--type-body-5-weight)");
@@ -3928,6 +4356,40 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(mobileBadgeLabel).toContain("display: inline-flex");
     expect(mobileBadgeLabel).toContain("align-items: center");
     expect(mobileBadgeLabel).toContain("line-height: var(--type-body-6-line-height)");
+  });
+
+  it("styles the dev browser device viewport as a fixed logical surface inside a scalable shell", () => {
+    const toolbar = getRuleBlocksFrom(stylesheet, ".dev-browser-toolbar")[0] ?? "";
+    const toolbarRow = getRuleBlocksFrom(stylesheet, ".dev-browser-toolbar__row")[0] ?? "";
+    const toolbarStrip =
+      getRuleBlocksFrom(stylesheet, ".dev-browser-toolbar__device-strip")[0] ?? "";
+    const toolbarField = getRuleBlocksFrom(stylesheet, ".dev-browser-toolbar__field--url")[0] ?? "";
+    const toolbarSelectShell =
+      getRuleBlocksFrom(stylesheet, ".dev-browser-toolbar__select-shell")[1] ?? "";
+    const toolbarDimensions =
+      getRuleBlocksFrom(stylesheet, ".dev-browser-toolbar__dimensions")[1] ?? "";
+    const shell = getLastRuleBlock(".dev-browser-frame-shell");
+    const viewport = getLastRuleBlock(".dev-browser-frame-viewport");
+    const viewportDevice = getLastRuleBlock(".dev-browser-frame-viewport--device");
+    const frame = getLastRuleBlock(".dev-browser-frame");
+
+    expect(toolbar).toContain("display: flex");
+    expect(toolbar).toContain("align-items: center");
+    expect(toolbarRow).toContain("display: flex");
+    expect(toolbarRow).toContain("flex: 1 1 auto");
+    expect(toolbarField).toContain("flex: 1 1 320px");
+    expect(toolbarStrip).toContain("display: inline-flex");
+    expect(toolbarStrip).toContain("flex: 0 1 auto");
+    expect(toolbarStrip).toContain("border: 1px solid var(--border-subtle)");
+    expect(toolbarSelectShell).toContain("flex: 0 1 184px");
+    expect(toolbarDimensions).toContain("flex: 0 1 180px");
+    expect(shell).toContain("overflow: auto");
+    expect(shell).toContain("padding: 16px");
+    expect(viewport).toContain("transform-origin: top left");
+    expect(viewport).toContain("margin: 0 auto");
+    expect(viewportDevice).toContain("overflow: hidden");
+    expect(frame).toContain("display: block");
+    expect(frame).toContain("border: none");
   });
 
   it("keeps the mobile terminal keybar flow-positioned and token-driven", () => {

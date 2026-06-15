@@ -22,8 +22,8 @@ node --version
 
 Coder Studio 本身不包含 AI 引擎，需要安装 Provider CLI 才能创建 Agent 会话：
 
-- **Claude**：需要安装 Claude Code CLI
-- **Codex**：需要安装 OpenAI Codex CLI
+- 推荐首次试跑：Claude Code 或 Codex
+- 其他内置 Provider：Gemini CLI、Cursor Agent、OpenCode
 
 安装步骤见 [Provider 配置指南](providers.md)。
 
@@ -64,7 +64,7 @@ coder-studio open
 
 ### 2. 创建第一个 Agent 会话
 
-打开工作区后，你会看到 Agent 工作区。点击 **"创建会话"**，选择 Claude 或 Codex 即可开始。
+打开工作区后，你会看到 Agent 工作区。点击 **"创建会话"**，选择已检测到的 Provider 即可开始。首次试跑建议选择 Claude 或 Codex。
 
 如果 Provider 未安装，界面上会显示安装提示和指引。
 
@@ -98,6 +98,8 @@ Coder Studio 需要 Node.js >= 24.0.0。可以用 `nvm use 24` 或从 [nodejs.or
 
 ## 下一步看什么
 
+- [第一次 Agent 运行](first-agent-run.md) — 完成第一个推荐 Provider 会话并审查 diff
 - [App 功能总览](app-overview.md) — 了解核心概念
 - [桌面端使用指南](desktop-guide.md) — 熟悉桌面端操作
 - [移动端使用指南](mobile-guide.md) — 在手机端访问和使用
+- [排障指南](troubleshooting.md) — 解决 Node、Provider、端口和认证问题

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Quick Start
+    url: https://github.com/spencerkit/coder-studio/blob/main/docs/wiki/Quick-Start.md
+    about: Install and launch Coder Studio.
+  - name: First Agent Run
+    url: https://github.com/spencerkit/coder-studio/blob/main/docs/wiki/First-Agent-Run.md
+    about: Run Claude or Codex and review your first diff.
+  - name: Security and Privacy
+    url: https://github.com/spencerkit/coder-studio/blob/main/docs/wiki/Security-and-Privacy.md
+    about: Understand local-first behavior and remote access risks.

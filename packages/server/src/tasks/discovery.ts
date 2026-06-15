@@ -33,6 +33,7 @@ const coderStudioTasksFileSchema = z.object({
 });
 
 const packageJsonSchema = z.object({
+  packageManager: z.string().optional(),
   scripts: z.record(z.string(), z.string()).optional(),
 });
 
@@ -44,6 +45,8 @@ const ROOT_FILE_CANDIDATES = [
   "yarn.lock",
   "bun.lockb",
   "bun.lock",
+  "package-lock.json",
+  "npm-shrinkwrap.json",
 ] as const;
 
 const MAKEFILE_TARGETS: Array<[target: string, kind: TaskKind, priority: number]> = [
@@ -68,7 +71,19 @@ function uniqueTasks(tasks: TaskDefinition[]): TaskDefinition[] {
   return result;
 }
 
-function packageManagerFor(rootFiles: Set<string>): PackageManager {
+function packageManagerFromPackageJson(value: string | undefined): PackageManager | undefined {
+  const [name] = value?.split("@") ?? [];
+  if (name === "pnpm" || name === "yarn" || name === "bun" || name === "npm") {
+    return name;
+  }
+  return undefined;
+}
+
+function packageManagerFor(rootFiles: Set<string>, packageManagerValue?: string): PackageManager {
+  const manifestPackageManager = packageManagerFromPackageJson(packageManagerValue);
+  if (manifestPackageManager) {
+    return manifestPackageManager;
+  }
   if (rootFiles.has("pnpm-lock.yaml") || rootFiles.has("pnpm-workspace.yaml")) return "pnpm";
   if (rootFiles.has("yarn.lock")) return "yarn";
   if (rootFiles.has("bun.lockb") || rootFiles.has("bun.lock")) return "bun";
@@ -95,19 +110,19 @@ function kindForPackageScript(scriptName: string): TaskKind {
 function scriptTask(
   workspaceId: string,
   scriptName: string,
-  scriptBody: string,
   packageManager: PackageManager,
   priority: number
 ): TaskDefinition {
   const kind = kindForPackageScript(scriptName);
+  const args = packageScriptArgs(packageManager, scriptName);
   return {
     id: scriptName,
     workspaceId,
     kind,
     label: scriptName,
     command: packageManager,
-    args: packageScriptArgs(packageManager, scriptName),
-    displayCommand: scriptBody,
+    args,
+    displayCommand: [packageManager, ...args].join(" "),
     cwdPath: ".",
     source: "package-json",
     priority,
@@ -179,15 +194,14 @@ async function discoverPackageJsonTasks(
   try {
     const packageJson = packageJsonSchema.parse(JSON.parse(await readFile(path, "utf8")));
     const scripts = packageJson.scripts ?? {};
-    const packageManager = packageManagerFor(rootFiles);
+    const packageManager = packageManagerFor(rootFiles, packageJson.packageManager);
     const tasks: TaskDefinition[] = [];
 
-    Object.entries(scripts).forEach(([scriptName, scriptBody], index) => {
+    Object.entries(scripts).forEach(([scriptName], index) => {
       tasks.push(
         scriptTask(
           input.workspaceId,
           scriptName,
-          scriptBody,
           packageManager,
           PACKAGE_SCRIPT_BASE_PRIORITY - index
         )

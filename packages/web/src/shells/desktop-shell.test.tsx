@@ -149,7 +149,21 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("shows the loading shell instead of MonitoringPage on /monitoring while auth status is still unknown", () => {
+  it("renders MoreFeaturesPage on /more/settings/general while auth status is still unknown", async () => {
+    window.history.replaceState({}, "", "/more/settings/general");
+
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    renderShell(store);
+
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(screen.queryByText("Page not found")).toBeNull();
+  });
+
+  it("renders MonitoringPage on /monitoring while auth status is still unknown", () => {
     window.history.replaceState({}, "", "/monitoring");
 
     const store = createStore();
@@ -159,12 +173,12 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
-    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
-    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeNull();
   });
 
-  it("renders not-found instead of MonitoringPage on /monitoring once auth status is resolved", () => {
+  it("renders MonitoringPage on /monitoring once auth status is resolved", () => {
     window.history.replaceState({}, "", "/monitoring");
 
     const store = createStore();
@@ -174,8 +188,8 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("Page not found")).toBeInTheDocument();
-    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(screen.queryByText("Page not found")).not.toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 

@@ -66,7 +66,7 @@ describe("MobileExplorerPanel", () => {
     fileTreePanelSpy.mockReset();
   });
 
-  it("renders quick jump above open editors and a file tree without the embedded tree search", async () => {
+  it("renders quick jump above the file tree without the obsolete Open Files side-panel section", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { query?: string }) => {
       if (op === "file.search") {
         return {
@@ -120,14 +120,12 @@ describe("MobileExplorerPanel", () => {
 
     const headings = screen.getAllByRole("heading", { level: 2 });
     expect(headings[0]).toHaveTextContent(/Quick Jump|快速跳转/i);
-    expect(headings[1]).toHaveTextContent(/Open Files|打开的文件/i);
-    expect(headings[2]).toHaveTextContent(/Workspace|工作区/i);
+    expect(headings[1]).toHaveTextContent(/Workspace|工作区/i);
+    expect(screen.queryByRole("heading", { level: 2, name: /Open Files|打开的文件/i })).toBeNull();
     expect(screen.queryByTestId("agent-instructions-section")).toBeNull();
 
-    expect(screen.getByRole("button", { name: "README.md" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "src/mobile-files-sheet.tsx" })).toHaveClass(
-      "workspace-open-editors__item--active"
-    );
+    expect(screen.queryByRole("button", { name: "README.md" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "src/mobile-files-sheet.tsx" })).toBeNull();
     const quickJumpSearch = screen.getByRole("searchbox", { name: /Quick Jump|快速跳转/i });
     expect(quickJumpSearch).toBeInTheDocument();
     expect(quickJumpSearch.closest("label")).toHaveClass("workspace-sidebar-control");
@@ -172,7 +170,7 @@ describe("MobileExplorerPanel", () => {
     expect(onSelectFile).toHaveBeenCalledWith("README.md");
   });
 
-  it("renders shared open editor controls on mobile and closing the active row exits editor focus", () => {
+  it("does not expose shared open editor controls from the mobile file side panel", () => {
     const onSelectFile = vi.fn();
     const store = createStore();
     store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
@@ -206,41 +204,17 @@ describe("MobileExplorerPanel", () => {
       </Provider>
     );
 
-    const heading = screen.getByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i });
-    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
-
-    const section = heading.closest("section") as HTMLElement;
-    expect(within(section).getByText("2")).toBeInTheDocument();
-
     expect(
-      within(section).getByRole("button", {
-        name: /Collapse Open Files|Expand Open Files|收起打开的文件|展开打开的文件/i,
-      })
-    ).toHaveAttribute("aria-expanded", "true");
-    expect(
-      within(section).getByRole("button", { name: /Close all|全部关闭/i })
-    ).toBeInTheDocument();
-    expect(within(section).getByRole("button", { name: "src/alpha.tsx" })).toHaveClass(
-      "workspace-open-editors__item--active"
-    );
-
-    const activeRow = within(section)
-      .getByRole("button", { name: "src/alpha.tsx" })
-      .closest(".workspace-open-editors__row") as HTMLElement;
-    fireEvent.click(
-      within(activeRow).getByRole("button", {
-        name: /Close src\/alpha\.tsx|关闭 src\/alpha\.tsx/i,
-      })
-    );
-
-    expect(within(section).getByRole("button", { name: "src/beta.tsx" })).not.toHaveClass(
-      "workspace-open-editors__item--active"
-    );
-    expect(within(section).queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
-    expect(heading).toHaveTextContent(/Open Files|打开的文件/i);
-    expect(within(section).getByText("1")).toBeInTheDocument();
-    expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual(["src/beta.tsx"]);
-    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+      screen.queryByRole("heading", { level: 2, name: /(Open Files|打开的文件)/i })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "src/beta.tsx" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Close all|全部关闭/i })).toBeNull();
+    expect(Object.keys(store.get(openFilesAtomFamily("ws-test")))).toEqual([
+      "src/alpha.tsx",
+      "src/beta.tsx",
+    ]);
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/alpha.tsx");
     expect(onSelectFile).not.toHaveBeenCalled();
   });
 

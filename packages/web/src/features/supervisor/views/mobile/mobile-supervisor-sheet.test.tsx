@@ -1,3 +1,4 @@
+import type { Supervisor, SupervisorTargetMemory } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
@@ -47,7 +48,9 @@ describe("MobileSupervisorSheet", () => {
     ...overrides,
   });
 
-  const createSupervisor = () => ({
+  type TestSupervisor = Supervisor & { currentTargetMemory: SupervisorTargetMemory };
+
+  const createSupervisor = (): TestSupervisor => ({
     id: "sup-1",
     sessionId: "sess-1",
     workspaceId: "ws-1",
@@ -58,21 +61,32 @@ describe("MobileSupervisorSheet", () => {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     currentTargetMemory: {
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage" as const,
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage" as const,
-          title: "Verify the refactor",
-          objective: "Confirm the refactor still behaves correctly",
-          deliverable: "A passing focused verification run",
-          acceptanceCriteria: ["Focused verification passes"],
-          status: "in_progress" as const,
-        },
-      ],
-      activeItemId: "stage-1",
+      planTree: {
+        id: "plan-root",
+        title: "Supervisor target",
+        objective: "Complete the supervised target",
+        deliverable: "Completed target",
+        acceptanceCriteria: ["Target objective is complete"],
+        status: "in_progress" as const,
+        taskType: "generic" as const,
+        children: [
+          {
+            id: "stage-1",
+            title: "Verify the refactor",
+            objective: "Confirm the refactor still behaves correctly",
+            deliverable: "A passing focused verification run",
+            acceptanceCriteria: ["Focused verification passes"],
+            status: "in_progress" as const,
+            taskType: "coding" as const,
+            children: [],
+          },
+        ],
+      },
+      activeNodeId: "stage-1",
+      maxDepth: 6,
+      planRevision: 0,
       progressSummary: "Validation in progress",
       stalledCount: 0,
       updatedAt: 1,
@@ -91,6 +105,10 @@ describe("MobileSupervisorSheet", () => {
     updatedAt: 1,
   });
 
+  const supervisorMap = (supervisor: Supervisor = createSupervisor()) =>
+    new Map<string, Supervisor>([["sess-1", supervisor]]);
+  const emptySupervisorMap = () => new Map<string, Supervisor>();
+
   beforeEach(() => {
     originalMatchMedia = window.matchMedia;
     setMatchMediaMock(
@@ -108,7 +126,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorsAtom, supervisorMap());
 
     render(
       <Provider store={store}>
@@ -119,16 +137,15 @@ describe("MobileSupervisorSheet", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
-    expect(screen.getByText("Runtime Status")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("Idle")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Runtime Status", level: 3 })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Status", level: 3 })).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
-    expect(screen.getByText("Progress List")).toBeInTheDocument();
-    expect(screen.getByText("Reduce mobile regression bugs")).toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "Target Details" })).toBeInTheDocument();
+    expect(screen.queryByText("Mind Map")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Reduce mobile regression bugs").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Edit Supervisor" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
     expect(document.querySelector(".mobile-supervisor-sheet__actions")).toBeNull();
@@ -136,7 +153,7 @@ describe("MobileSupervisorSheet", () => {
     expect(
       document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
     ).not.toBeNull();
-    expect(screen.getByText("Verify the refactor")).toBeInTheDocument();
+    expect(screen.getAllByText("Verify the refactor").length).toBeGreaterThan(0);
   });
 
   it("shows runtime status and the error reason in the mobile details flow", () => {
@@ -147,26 +164,29 @@ describe("MobileSupervisorSheet", () => {
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
     store.set(
       supervisorsAtom,
-      new Map([
-        [
-          "sess-1",
+      supervisorMap({
+        ...createSupervisor(),
+        state: "error" as const,
+        errorReason: "Evaluator process exited unexpectedly.",
+        recentTargetCycles: [
           {
-            ...createSupervisor(),
-            state: "error" as const,
-            errorReason: "Evaluator process exited unexpectedly.",
-            recentTargetCycles: [
-              {
-                cycleId: "target-cycle-2",
-                targetId: "tgt-1",
-                startedAt: 3,
-                completedAt: 4,
-                result: "error" as const,
-                errorReason: "Model call timed out after 600 seconds.",
-              },
-            ],
+            cycleId: "target-cycle-2",
+            targetId: "tgt-1",
+            startedAt: 3,
+            completedAt: 4,
+            result: "error" as const,
+            errorReason: "Model call timed out after 600 seconds.",
+          },
+          {
+            cycleId: "target-cycle-1",
+            targetId: "tgt-1",
+            startedAt: 1,
+            completedAt: 2,
+            result: "continue" as const,
+            reason: "Need to finish the validation step.",
           },
         ],
-      ])
+      })
     );
 
     render(
@@ -175,15 +195,16 @@ describe("MobileSupervisorSheet", () => {
       </Provider>
     );
 
-    expect(screen.getByText("Runtime Status")).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("Error")).toBeInTheDocument();
     expect(screen.getByText("Error reason")).toBeInTheDocument();
     expect(screen.getByText("Model call timed out after 600 seconds.")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Runtime Status", level: 3 })
-    ).not.toBeInTheDocument();
-    expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
+    expect(document.querySelector(".supervisor-details-section--error")).not.toBeNull();
+    expect(document.querySelector(".supervisor-summary-card .supervisor-error")).toBeNull();
     expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Status", level: 3 })).not.toBeInTheDocument();
+    expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
   });
 
   it("renders the enable form directly when supervisor is not enabled", async () => {
@@ -192,7 +213,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(supervisorsAtom, new Map());
+    store.set(supervisorsAtom, emptySupervisorMap());
 
     render(
       <Provider store={store}>
@@ -239,7 +260,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorsAtom, supervisorMap());
     store.set(supervisorDialogAtom, createDialogState());
 
     render(
@@ -252,12 +273,13 @@ describe("MobileSupervisorSheet", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
-    expect(screen.getByText("Progress List")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "Target Details" })).toBeInTheDocument();
     expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Active item")).not.toBeInTheDocument();
-    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getAllByText("Current task").length).toBeGreaterThan(0);
+    expect(screen.queryByText("In progress")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
 
@@ -277,7 +299,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map());
+    store.set(supervisorsAtom, emptySupervisorMap());
 
     render(
       <Provider store={store}>
@@ -296,7 +318,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map());
+    store.set(supervisorsAtom, emptySupervisorMap());
 
     render(
       <Provider store={store}>
@@ -323,7 +345,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map());
+    store.set(supervisorsAtom, emptySupervisorMap());
 
     render(
       <Provider store={store}>
@@ -343,7 +365,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorsAtom, supervisorMap());
 
     render(
       <Provider store={store}>
@@ -371,7 +393,7 @@ describe("MobileSupervisorSheet", () => {
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+    store.set(supervisorsAtom, supervisorMap());
 
     render(
       <Provider store={store}>

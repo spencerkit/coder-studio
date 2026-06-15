@@ -4,7 +4,6 @@
 
 import type { Result, ServerToClient, Session, Workspace } from "@coder-studio/core";
 import {
-  createEmptyWorkspaceExtensionStateView,
   decodeTerminalOutputFrame,
   TERMINAL_BINARY_HEADER_SIZE,
   TERMINAL_BINARY_OUTPUT_VERSION,
@@ -373,25 +372,6 @@ describe("WsHub", () => {
     });
   });
 
-  it("broadcasts workspace extension state updates on the workspace extension topic", () => {
-    const socket = createMockSocket();
-    hub.handleConnection(socket as never, createMockRequest());
-    subscribeToAllTopics(socket);
-
-    const state = createEmptyWorkspaceExtensionStateView("workspace-42", { now: () => 1234 });
-    eventBus.emit({
-      type: "workspace.extension_state.changed",
-      workspaceId: "workspace-42",
-      state,
-    } as never);
-
-    expect(getLastSentEvent(socket)).toMatchObject({
-      kind: "event",
-      topic: Topics.workspaceExtensionState("workspace-42"),
-      data: state,
-    });
-  });
-
   it("should translate terminal.created events to the terminal created topic and payload", () => {
     const socket = createMockSocket();
     hub.handleConnection(socket as never, createMockRequest());
@@ -615,78 +595,6 @@ describe("WsHub", () => {
             status: "resynced",
             topics: ["workspace.ws1.meta", "workspace.ws1.session.s1.state"],
           },
-        }),
-      ])
-    );
-  });
-
-  it("re-emits current workspace extension state on resync for subscribed topics", () => {
-    hub.destroy();
-    const workspace: Workspace = {
-      id: "ws1",
-      path: "/tmp/ws1",
-      targetRuntime: "native",
-      openedAt: 1,
-      lastActiveAt: 1,
-      uiState: { leftPanelWidth: 320, bottomPanelHeight: 240, focusMode: false },
-    };
-    const state = {
-      ...createEmptyWorkspaceExtensionStateView("ws1", { now: () => 1234 }),
-      statusPills: [
-        {
-          key: "ci",
-          label: "CI running",
-          state: "running" as const,
-          updatedAt: 1234,
-        },
-      ],
-    };
-    const getExtensionState = vi.fn(() => state);
-    const resyncContext = {
-      ...mockCommandContext,
-      workspaceMgr: {
-        list: vi.fn().mockReturnValue([workspace]),
-      } as unknown as WorkspaceManager,
-      sessionMgr: {
-        getForWorkspace: vi.fn().mockReturnValue([]),
-      } as unknown as SessionManager,
-      workspaceExtensionStateService: {
-        get: getExtensionState,
-      },
-    } as CommandContext;
-    hub = createHub(eventBus, resyncContext);
-
-    const socket = createMockSocket();
-    hub.handleConnection(socket as never, createMockRequest());
-    const messageHandler = getMessageHandler(socket);
-    socket.send.mockClear();
-
-    messageHandler?.(
-      Buffer.from(
-        JSON.stringify({
-          kind: "subscribe",
-          topics: [Topics.workspaceExtensionState("ws1")],
-        })
-      )
-    );
-    messageHandler?.(
-      Buffer.from(
-        JSON.stringify({
-          kind: "resync",
-          lastSeen: {
-            [Topics.workspaceExtensionState("ws1")]: 4,
-          },
-        })
-      )
-    );
-
-    expect(getExtensionState).toHaveBeenCalledWith("ws1");
-    expect(parseSentEvents(socket)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "event",
-          topic: Topics.workspaceExtensionState("ws1"),
-          data: state,
         }),
       ])
     );

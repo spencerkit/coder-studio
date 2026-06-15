@@ -4,11 +4,11 @@
 
 # Coder Studio
 
-**一站式 vibe coding 编程工作台。**
+**自部署的 AI Coding 工作台。**
 
-Coder Studio 把代码编辑器、Git、终端、AI coding agent、会话审查、消息提醒、工作复盘和 Skills 放进同一个浏览器工作区。
+Coder Studio 把 Claude Code、Codex、终端、文件、Git diff 审查、Supervisor 监督循环、工作分析和 Skills 放进同一个浏览器 workspace，并运行在你自己的机器上。
 
-它帮助你在桌面、平板和手机之间保持 Agent 上下文、任务进度和后续动作可见，让 vibe coding 不再散落在一堆窗口和工具里。
+当纯终端里的 AI coding 开始变得分散时，可以用它在桌面端启动 Agent 任务，在会话旁审查改动和 diff，监督长任务进度，并从平板或手机重新打开同一个工作区继续查看。
 
 支持 Claude Code、Codex、Gemini CLI、Cursor Agent、OpenCode，以及 Aider 这类 CLI coding agent。
 
@@ -17,15 +17,26 @@ Coder Studio 把代码编辑器、Git、终端、AI coding agent、会话审查�
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.0.0-green.svg)](https://nodejs.org/)
 [![GitHub Stars](https://img.shields.io/github/stars/spencerkit/coder-studio?style=social)](https://github.com/spencerkit/coder-studio/stargazers)
 
-[查看工作区](docs/help/assets/screenshot-desktop-workspace-full.png) · [快速开始](#快速开始) · [GitHub Star](https://github.com/spencerkit/coder-studio)
+[观看 Demo](docs/assets/demo.mp4) · [快速开始](#快速开始) · [中文帮助中心](docs/help/README.md) · [GitHub Star](https://github.com/spencerkit/coder-studio)
 
-[English](README.md) | [文档](docs/help/quick-start.md)
+[English](README.md) | [安全与隐私](docs/help/security-and-privacy.md) | [当前限制](docs/help/known-limitations.md)
 
 </div>
 
 [![工作区预览](docs/help/assets/screenshot-desktop-workspace-full.png)](docs/help/assets/screenshot-desktop-workspace-full.png)
 
 <div align="center">预览这个为 Agent 运行、改动审查、Supervisor 监督和跨设备切换而设计的完整工作区布局。</div>
+
+## 5 分钟可以试到什么
+
+1. 使用 `npm install -g @spencer-kit/coder-studio` 安装。
+2. 使用 `coder-studio open` 启动。
+3. 打开一个本地代码仓库。
+4. 创建 Agent 会话。首次试跑建议选择 Claude 或 Codex。
+5. 让 Agent 做一个小改动，然后在 Git diff 里审查结果。
+6. 用平板或手机重新打开同一个 workspace 查看进度。
+
+Coder Studio 不是云 IDE，不是 VS Code 替代品，也不是 AI 模型提供方。它是围绕你已经在使用的 AI coding agent 和本地开发工具搭建的自部署工作台。
 
 ## 为什么选择 Coder Studio？
 
@@ -136,17 +147,14 @@ coder-studio open
 
 | 资源 | 描述 |
 |------|------|
-| [快速开始](docs/help/quick-start.md) | 从安装到第一个工作区 |
-| [功能总览](docs/help/app-overview.md) | 核心概念和功能 |
-| [Agent CLI 配置](docs/help/providers.md) | 安装和连接 coding agent CLI |
-| [桌面端指南](docs/help/desktop-guide.md) | PC 界面和快捷键 |
-| [移动端与远程访问指南](docs/help/mobile-guide.md) | 手机/平板使用、局域网访问、Tailscale/ngrok/Cloudflare Tunnel |
-| [工作分析](docs/help/work-analysis.md) | 复盘工作区活动、Agent 会话和改进机会 |
-| [常用工作流](docs/help/workflows.md) | 任务式教程 |
-| [故障排除](docs/help/troubleshooting.md) | 常见问题和修复 |
-| [CLI 参考](docs/help/cli.md) | 命令行选项 |
-| [GitHub Wiki 源文件](docs/wiki/README.md) | Wiki 源页面与发布流程 |
-| [AI Coding 术语](docs/wiki/AI-Coding-Terms.md) | Vibe coding、agentic harness、eval harness，以及 Coder Studio 的定位 |
+| [快速开始](docs/help/quick-start.md) | 安装、启动和打开第一个 workspace |
+| [第一次 Agent 运行](docs/help/first-agent-run.md) | 创建推荐的首次 Provider 会话、查看输出并审查 Git diff |
+| [Provider 配置](docs/help/providers.md) | 安装和验证 coding agent CLI |
+| [移动端与远程访问](docs/help/mobile-guide.md) | 局域网、Tailscale、ngrok、Cloudflare Tunnel 和手机/平板使用 |
+| [安全与隐私](docs/help/security-and-privacy.md) | 本地运行模型、Provider 边界和远程访问风险 |
+| [当前限制](docs/help/known-limitations.md) | 当前要求、边界和适用场景 |
+| [故障排除](docs/help/troubleshooting.md) | 首次运行、Provider、端口、认证和服务恢复 |
+| [English Wiki](docs/wiki/README.md) | 英文 Wiki 源页面 |
 
 ---
 

@@ -17,6 +17,7 @@ import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
   desktopSidebarViewAtom,
+  editorViewVisibleAtomFamily,
   focusModeAtom,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
@@ -79,6 +80,7 @@ export function useWorkspaceScreenModel() {
   const workspaces = useAtomValue(orderedWorkspacesAtom);
   const gitState = useAtomValue(gitStateAtomFamily(workspaceId));
   const activeFilePath = useAtomValue(activeFilePathAtomFamily(workspaceId));
+  const editorViewVisible = useAtomValue(editorViewVisibleAtomFamily(workspaceId));
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
   const focusMode = useAtomValue(focusModeAtom);
   const terminalPanelVisible = useAtomValue(terminalPanelVisibleAtom);
@@ -339,6 +341,7 @@ export function useWorkspaceScreenModel() {
 
   const mainAreaMode: WorkspaceMainAreaMode =
     activeFilePath ||
+    editorViewVisible ||
     diffPreview?.kind === "commit-file-list" ||
     diffPreview?.kind === "commit-file-diff"
       ? "editor"

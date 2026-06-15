@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { CommandResultError } from "../../../../ws/client";
-import { openFilesAtomFamily } from "../../atoms";
+import { openEditorPathsAtomFamily, openFilesAtomFamily } from "../../atoms";
 import { SEARCH_PANEL_DEBOUNCE_MS, useSearchPanelState } from "./search-panel-state";
 
 describe("useSearchPanelState", () => {
@@ -41,6 +41,7 @@ describe("useSearchPanelState", () => {
         isDirty: false,
       },
     });
+    store.set(openEditorPathsAtomFamily("ws-test"), ["src/open-b.ts", "src/open-a.ts"]);
 
     const wrapper = ({ children }: { children: ReactNode }) => (
       <Provider store={store}>{children}</Provider>
@@ -108,6 +109,53 @@ describe("useSearchPanelState", () => {
         maxFiles: 50,
         maxMatchesPerFile: 20,
       },
+      undefined
+    );
+  });
+
+  it("uses global open editor paths instead of shared cache entries for open-editor searches", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      sessionId: "session-1",
+      files: [],
+      totalMatchCount: 0,
+      totalFileCount: 0,
+      hasMoreFiles: false,
+      truncatedMatchFileCount: 0,
+      skippedBinaryFileCount: 0,
+      skippedLargeFileCount: 0,
+    } satisfies SearchSessionStartResult);
+    const { store, wrapper } = createWrapper(sendCommand);
+    store.set(openFilesAtomFamily("ws-test"), {
+      ...store.get(openFilesAtomFamily("ws-test")),
+      "src/panel-only.ts": {
+        kind: "text",
+        path: "src/panel-only.ts",
+        content: "panel",
+        savedContent: "panel",
+        baseHash: "hash-panel",
+        isDirty: false,
+      },
+    });
+    store.set(openEditorPathsAtomFamily("ws-test"), ["src/open-a.ts"]);
+
+    const { result } = renderHook(() => useSearchPanelState("ws-test"), { wrapper });
+
+    await act(async () => {
+      result.current.update((current) => ({
+        ...current,
+        query: "needle",
+        onlyOpenEditors: true,
+      }));
+    });
+
+    await flushSearchDebounce();
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "file.searchSession.start",
+      expect.objectContaining({
+        onlyOpenEditors: true,
+        openEditorPaths: ["src/open-a.ts"],
+      }),
       undefined
     );
   });

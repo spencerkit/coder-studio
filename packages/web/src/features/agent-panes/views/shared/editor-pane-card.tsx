@@ -1,19 +1,28 @@
 import { useAtomValue } from "jotai";
 import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
 import type { DragEvent, FC } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmDialog, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
+  isWorkspacePathDragPayload,
+  WORKSPACE_PATH_DRAG_END_EVENT,
+  WORKSPACE_PATH_DRAG_START_EVENT,
+  type WorkspacePathDragPayload,
 } from "../../../../lib/workspace-path-drag";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import {
   CodeEditorDesktopHeaderActions,
   CodeEditorHost,
 } from "../../../code-editor/views/shared/code-editor-host";
-import { PanelHeader } from "../../../shared/components/panel-header";
+import {
+  CodeEditorTabsHeader,
+  getFileName,
+  getFullWorkspaceFilePath,
+} from "../../../code-editor/views/shared/code-editor-tabs-header";
+import { mergeOpenEditorPaths } from "../../../workspace/actions/open-editor-state";
 import { openFilesAtomFamily } from "../../../workspace/atoms";
 import type { PaneDropPlacement } from "../../actions/pane-drag-types";
 import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
@@ -21,6 +30,7 @@ import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";
 import {
   editorPaneActiveFilePathAtomFamily,
   editorPaneModeAtomFamily,
+  editorPaneOpenEditorPathsAtomFamily,
   editorPanePendingNavigationAtomFamily,
   getEditorPaneStateKey,
 } from "../../atoms/editor-panes";
@@ -30,8 +40,7 @@ function getEditorPaneTitle(path: string | null, fallbackTitle: string): string 
     return fallbackTitle;
   }
 
-  const segments = path.split("/");
-  return segments[segments.length - 1] || path;
+  return getFileName(path);
 }
 
 interface EditorPaneCardProps {
@@ -60,16 +69,22 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const t = useTranslation();
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
+  const [workspacePathDragPayload, setWorkspacePathDragPayload] =
+    useState<WorkspacePathDragPayload | null>(null);
   const editorPaneStateKey = getEditorPaneStateKey(workspaceId, paneId);
   const activeFilePathAtom = editorPaneActiveFilePathAtomFamily(editorPaneStateKey);
   const editorModeAtom = editorPaneModeAtomFamily(editorPaneStateKey);
+  const openEditorPathsAtom = editorPaneOpenEditorPathsAtomFamily(editorPaneStateKey);
   const pendingNavigationAtom = editorPanePendingNavigationAtomFamily(editorPaneStateKey);
   const activeFilePath = useAtomValue(activeFilePathAtom);
+  const paneOpenEditorPaths = useAtomValue(openEditorPathsAtom);
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const editorState = useCodeEditorActions({
     activeFilePathAtom,
     editorModeAtom,
+    openEditorPathsAtom,
     pendingNavigationAtom,
+    persistEditorUiState: false,
   });
   const supportsPaneDrag = usePaneDragEnabled();
   const canDragPane = supportsPaneDrag && Boolean(onPaneDragStart);
@@ -77,13 +92,46 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const activeOpenFile = activeFilePath ? openFiles[activeFilePath] : undefined;
   const isDirtyTextFile = activeOpenFile?.kind === "text" && activeOpenFile.isDirty === true;
   const dragOverlayPlacement = dragState?.isActiveDropTarget ? dragState.hoverPlacement : null;
-  const dirtyIndicator = isDirtyTextFile ? (
-    <span
-      className="dirty-indicator editor-pane-card__dirty-indicator"
-      aria-label={t("code_editor.unsaved_changes")}
-      title={t("code_editor.unsaved_changes")}
-    />
-  ) : null;
+  const editorStateOpenEditorPaths = Array.isArray(editorState.openEditorPaths)
+    ? editorState.openEditorPaths
+    : [];
+  const headerOpenEditorPaths = mergeOpenEditorPaths(
+    paneOpenEditorPaths,
+    editorStateOpenEditorPaths,
+    activeFilePath ? [activeFilePath] : undefined
+  );
+  const headerOpenFiles =
+    editorState.openFiles && Object.keys(editorState.openFiles).length > 0
+      ? editorState.openFiles
+      : openFiles;
+  const workspaceRootPath = editorState.workspace?.path;
+  const activeFullPath =
+    activeOpenFile?.displayPath ??
+    (activeFilePath ? getFullWorkspaceFilePath(workspaceRootPath, activeFilePath) : title);
+  const dirtyStatusLabel = isDirtyTextFile ? t("code_editor.modified_unsaved_changes") : null;
+  const shouldRenderFileDropOverlay =
+    isFileDropTarget ||
+    (workspacePathDragPayload?.workspaceId === workspaceId &&
+      workspacePathDragPayload.kind === "file");
+
+  useEffect(() => {
+    const handleWorkspacePathDragStart = (event: Event) => {
+      const payload = event instanceof CustomEvent ? event.detail : null;
+      setWorkspacePathDragPayload(isWorkspacePathDragPayload(payload) ? payload : null);
+    };
+    const handleWorkspacePathDragEnd = () => {
+      setWorkspacePathDragPayload(null);
+      setIsFileDropTarget(false);
+    };
+
+    window.addEventListener(WORKSPACE_PATH_DRAG_START_EVENT, handleWorkspacePathDragStart);
+    window.addEventListener(WORKSPACE_PATH_DRAG_END_EVENT, handleWorkspacePathDragEnd);
+    return () => {
+      window.removeEventListener(WORKSPACE_PATH_DRAG_START_EVENT, handleWorkspacePathDragStart);
+      window.removeEventListener(WORKSPACE_PATH_DRAG_END_EVENT, handleWorkspacePathDragEnd);
+    };
+  }, []);
+
   const requestClosePane = () => {
     if (isDirtyTextFile) {
       setCloseConfirmOpen(true);
@@ -96,7 +144,7 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
     setCloseConfirmOpen(false);
     onClosePane(paneId);
   };
-  const handleWorkspaceFileDragOver = (event: DragEvent<HTMLDivElement>) => {
+  const handleWorkspaceFileDragEnter = (event: DragEvent<HTMLDivElement>) => {
     if (!onOpenFile || !hasWorkspacePathDragType(event.dataTransfer)) {
       return;
     }
@@ -106,7 +154,12 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
     event.dataTransfer.dropEffect = "copy";
     setIsFileDropTarget(true);
   };
-  const handleWorkspaceFileDragLeave = () => {
+  const handleWorkspaceFileDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
     setIsFileDropTarget(false);
   };
   const handleWorkspaceFileDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -131,13 +184,20 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
       className={`session-card agent-pane editor-pane-card${dragState?.isDragging ? " editor-pane-card--dragging" : ""}${dragState?.isActiveDropTarget || isFileDropTarget ? " editor-pane-card--drop-target" : ""}`}
       data-pane-id={paneId}
       data-testid={`editor-pane-${paneId}`}
+      onDragEnterCapture={handleWorkspaceFileDragEnter}
       onDragLeaveCapture={handleWorkspaceFileDragLeave}
-      onDragOverCapture={handleWorkspaceFileDragOver}
+      onDragOverCapture={handleWorkspaceFileDragEnter}
       onDropCapture={handleWorkspaceFileDrop}
     >
-      {isFileDropTarget ? (
-        <div className="pane-drop-overlay pane-drop-overlay--draft">
-          <div className="pane-drop-overlay__center">{t("agent_panes.open_in_editor")}</div>
+      {shouldRenderFileDropOverlay ? (
+        <div
+          className={`pane-drop-overlay pane-drop-overlay--draft editor-pane-card__file-drop-overlay${
+            isFileDropTarget ? "" : " editor-pane-card__file-drop-overlay--hidden"
+          }`}
+        >
+          {isFileDropTarget ? (
+            <div className="pane-drop-overlay__center">{t("agent_panes.open_in_editor")}</div>
+          ) : null}
         </div>
       ) : dragOverlayPlacement ? (
         <div className={`pane-drop-overlay pane-drop-overlay--${dragOverlayPlacement}`}>
@@ -147,12 +207,19 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
         </div>
       ) : null}
 
-      <PanelHeader
-        title={title}
-        meta={dirtyIndicator}
-        metaPlacement="inline"
-        actions={
-          <>
+      <CodeEditorTabsHeader
+        activeFilePath={activeFilePath}
+        activeFullPath={activeFullPath}
+        className="editor-surface__header--pane"
+        dirtyStatusLabel={dirtyStatusLabel}
+        emptyLabel={t("agent_panes.file_editor")}
+        onActivateOpenFile={editorState.activateOpenFile}
+        onCloseOpenFilePath={editorState.closeOpenFilePath}
+        openEditorPaths={headerOpenEditorPaths}
+        openFiles={headerOpenFiles}
+        workspaceRootPath={workspaceRootPath}
+        tabbarActions={
+          <div className="session-header-actions editor-pane-card__header-actions">
             {canDragPane ? (
               <Tooltip content={t("agent_panes.drag_pane")}>
                 <IconButton
@@ -168,13 +235,12 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
                       return;
                     }
 
-                    onPaneDragStart?.({ paneId });
+                    onPaneDragStart?.({ paneId, title });
                   }}
                   size="sm"
                 />
               </Tooltip>
             ) : null}
-            <CodeEditorDesktopHeaderActions state={editorState} showCloseAction={false} />
             <Tooltip content={t("agent_panes.split_horizontal")}>
               <IconButton
                 aria-label={t("agent_panes.split_horizontal")}
@@ -205,8 +271,9 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
                 size="sm"
               />
             </Tooltip>
-          </>
+          </div>
         }
+        pathActions={<CodeEditorDesktopHeaderActions state={editorState} showCloseAction={false} />}
       />
 
       <div className="editor-pane-card__body">

@@ -11,6 +11,24 @@ vi.mock("../../../agent-panes/actions/use-provider-launcher", () => ({
   useProviderLauncher: (...args: unknown[]) => mockUseProviderLauncher(...args),
 }));
 
+function createProvider(id: string, displayName: string, badge = displayName) {
+  return {
+    id,
+    displayName,
+    badge,
+    kind: "built_in" as const,
+    capability: "full" as const,
+    capabilities: [
+      { key: "interactive_session" as const, supported: true, label: "Interactive session" },
+    ],
+    requiredCommands: [id],
+  };
+}
+
+function createDefaultProviders() {
+  return [createProvider("claude", "Claude"), createProvider("codex", "Codex")];
+}
+
 describe("MobileAgentSheet", () => {
   it("renders semantic icons for create-session and provider launch actions", () => {
     const store = createStore();
@@ -40,6 +58,7 @@ describe("MobileAgentSheet", () => {
           installJob: null,
         },
       },
+      providers: createDefaultProviders(),
       launch: vi.fn(),
     });
 
@@ -89,6 +108,101 @@ describe("MobileAgentSheet", () => {
     expect(screen.getByRole("button", { name: "Codex" })).toBeInTheDocument();
   });
 
+  it("renders every provider returned by the launcher in create mode", () => {
+    const store = createStore();
+    const launch = vi.fn();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+
+    mockUseProviderLauncher.mockReturnValue({
+      providers: [
+        createProvider("claude", "Claude Code", "Claude"),
+        createProvider("codex", "Codex"),
+        createProvider("gemini", "Gemini CLI", "Gemini"),
+        createProvider("cursor", "Cursor Agent", "Cursor"),
+        createProvider("opencode", "OpenCode"),
+      ],
+      states: {
+        claude: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+        codex: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+        gemini: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+        cursor: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+        opencode: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
+      },
+      launch,
+    });
+
+    render(
+      <Provider store={store}>
+        <MobileAgentSheet
+          activeSessionId={null}
+          activeWorkspaceId="ws-1"
+          defaultMode="create"
+          sessions={[]}
+          onClose={vi.fn()}
+          onCloseSession={vi.fn().mockResolvedValue(undefined)}
+          onSelectSession={vi.fn()}
+          onSessionCreated={vi.fn()}
+        />
+      </Provider>
+    );
+
+    expect(screen.getByRole("button", { name: "Claude" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Codex" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gemini" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cursor" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "OpenCode" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Gemini" }));
+
+    expect(launch).toHaveBeenCalledWith("gemini");
+  });
+
   it("shows inline provider guidance and a diagnostics affordance only when launch help is needed", () => {
     const store = createStore();
     store.set(localeAtom, "en");
@@ -118,6 +232,7 @@ describe("MobileAgentSheet", () => {
           installJob: null,
         },
       },
+      providers: createDefaultProviders(),
       launch: vi.fn(),
     });
 
@@ -160,6 +275,7 @@ describe("MobileAgentSheet", () => {
           installJob: null,
         },
       },
+      providers: createDefaultProviders(),
       launch: vi.fn(),
     });
 
@@ -221,6 +337,7 @@ describe("MobileAgentSheet", () => {
           installJob: null,
         },
       },
+      providers: createDefaultProviders(),
       launch: vi.fn(),
     });
 
@@ -282,6 +399,7 @@ describe("MobileAgentSheet", () => {
           installJob: null,
         },
       },
+      providers: createDefaultProviders(),
       launch: vi.fn(),
     });
 
@@ -333,6 +451,7 @@ describe("MobileAgentSheet", () => {
           installJob: null,
         },
       },
+      providers: createDefaultProviders(),
       launch: vi.fn(),
     });
 

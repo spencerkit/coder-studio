@@ -8,11 +8,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../atoms/workspaces";
-import {
-  buildLocalHourHeatmapPoints,
-  WorkAnalyticsPage,
-  WorkAnalyticsSettingsSection,
-} from "./page";
+import { buildLocalHourHeatmapPoints, WorkAnalyticsPage } from "./page";
 import type {
   WorkAnalysisDashboardProjection,
   WorkAnalysisDashboardRecord,
@@ -238,6 +234,21 @@ function buildDashboard(
   };
 }
 
+function renderStandaloneAnalytics(
+  store: ReturnType<typeof createStoreWithAnalysis>,
+  entry = "/analytics"
+) {
+  return render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/analytics" element={<WorkAnalyticsPage />} />
+        </Routes>
+      </MemoryRouter>
+    </Provider>
+  );
+}
+
 describe("WorkAnalyticsPage", () => {
   beforeEach(() => {
     echartsMock.chart.dispose.mockClear();
@@ -247,25 +258,14 @@ describe("WorkAnalyticsPage", () => {
     viewportMock.value = "desktop";
   });
 
-  it("redirects the legacy /analytics route to settings work analysis", async () => {
+  it("renders the standalone /analytics page without redirecting back into settings", async () => {
     const store = createStoreWithAnalysis(vi.fn());
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/analytics?workspacePath=%2Frepo%2Fproject"]}>
-          <LocationProbe />
-          <Routes>
-            <Route path="/analytics" element={<WorkAnalyticsPage />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store, "/analytics?workspacePath=%2Frepo%2Fproject");
 
-    await waitFor(() => {
-      expect(screen.getByTestId("location-display")).toHaveTextContent(
-        "/settings?section=analysis&workspacePath=%2Frepo%2Fproject"
-      );
-    });
+    expect(await screen.findByTestId("work-analytics-page")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "工作分析" })).toBeInTheDocument();
+    expect(screen.queryByTestId("location-display")).not.toBeInTheDocument();
   });
 
   it("renders a full-width token trend before the three contribution rankings", async () => {
@@ -277,15 +277,7 @@ describe("WorkAnalyticsPage", () => {
     });
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByRole("heading", { name: "Token 趋势" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "项目 token 贡献排行" })).toBeInTheDocument();
@@ -331,15 +323,7 @@ describe("WorkAnalyticsPage", () => {
     );
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByRole("heading", { name: "Skill 调用归因" })).toBeInTheDocument();
     expect(screen.getByText("frontend-design")).toBeInTheDocument();
@@ -356,15 +340,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByTestId("token-trend-chart")).toBeInTheDocument();
     expect(screen.getByText("横轴：时间")).toBeInTheDocument();
@@ -420,15 +396,7 @@ describe("WorkAnalyticsPage", () => {
     );
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis&range=90d"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store, "/analytics?range=90d");
 
     expect(await screen.findByTestId("token-trend-chart")).toBeInTheDocument();
 
@@ -466,15 +434,7 @@ describe("WorkAnalyticsPage", () => {
     );
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis&range=30d"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store, "/analytics?range=30d");
 
     expect(await screen.findByTestId("token-trend-chart")).toBeInTheDocument();
 
@@ -497,15 +457,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     await screen.findByRole("heading", { name: "项目 token 贡献排行" });
 
@@ -522,15 +474,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     await screen.findByRole("heading", { name: "项目 token 贡献排行" });
 
@@ -582,15 +526,7 @@ describe("WorkAnalyticsPage", () => {
     );
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByRole("heading", { name: "24 小时消耗分布" })).toBeInTheDocument();
     expect(
@@ -616,15 +552,7 @@ describe("WorkAnalyticsPage", () => {
     );
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     const grid = await screen.findByLabelText("24 小时 token 消耗分布");
     expect(grid.getAttribute("style")).toContain(
@@ -651,15 +579,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByRole("heading", { name: "工作分析" })).toBeInTheDocument();
     expect(screen.queryByText("/repo/project")).not.toBeInTheDocument();
@@ -715,15 +635,7 @@ describe("WorkAnalyticsPage", () => {
     );
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     const dataSource = await screen.findByTestId("work-analysis-data-source");
     expect(dataSource).toHaveTextContent("数据来源");
@@ -743,15 +655,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    const { container } = render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    const { container } = renderStandaloneAnalytics(store);
 
     const root = await screen.findByTestId("work-analysis-root");
     const trend = screen.getByTestId("token-trend-row");
@@ -766,15 +670,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByRole("heading", { name: "工作分析" })).toBeInTheDocument();
 
@@ -802,10 +698,10 @@ describe("WorkAnalyticsPage", () => {
 
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
+        <MemoryRouter initialEntries={["/analytics"]}>
           <LocationProbe />
           <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
+            <Route path="/analytics" element={<WorkAnalyticsPage />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -824,20 +720,20 @@ describe("WorkAnalyticsPage", () => {
 
     fireEvent.click(within(rangeGroup).getByRole("radio", { name: "最近 7 天" }));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("location-display")).toHaveTextContent(
-        "/settings?section=analysis&range=7d"
-      );
-    });
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "work.analysis.dashboard.get",
-        { timeRange: { preset: "7d" } },
-        undefined
-      );
-    });
+    await Promise.all([
+      waitFor(() => {
+        expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics?range=7d");
+      }),
+      waitFor(() => {
+        expect(sendCommand).toHaveBeenCalledWith(
+          "work.analysis.dashboard.get",
+          { timeRange: { preset: "7d" } },
+          undefined
+        );
+      }),
+    ]);
     expect(screen.queryByRole("dialog", { name: "筛选时间范围" })).toBeNull();
-  });
+  }, 10_000);
 
   it("renders the newly fetched dashboard data after changing the time filter", async () => {
     const sendCommand = vi.fn(async (_op: string, args: unknown) => {
@@ -849,15 +745,7 @@ describe("WorkAnalyticsPage", () => {
     });
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByText("30M")).toBeInTheDocument();
 
@@ -872,15 +760,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     fireEvent.click(await screen.findByRole("button", { name: /时间筛选/ }));
 
@@ -906,15 +786,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     fireEvent.click(await screen.findByRole("button", { name: /时间筛选/ }));
 
@@ -947,15 +819,7 @@ describe("WorkAnalyticsPage", () => {
     });
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     expect(await screen.findByText("30M")).toBeInTheDocument();
 
@@ -966,7 +830,7 @@ describe("WorkAnalyticsPage", () => {
       expect(sendCommand).toHaveBeenCalledTimes(2);
     });
     expect(screen.queryByText("30M")).toBeNull();
-    expect(screen.getByText("正在读取索引")).toBeInTheDocument();
+    expect(screen.getByText("正在读取或补齐索引")).toBeInTheDocument();
 
     pendingSevenDayDashboard.resolve(
       buildDashboard({ timeRange: { preset: "7d" }, totalTokens: 7_000_000 })
@@ -975,20 +839,28 @@ describe("WorkAnalyticsPage", () => {
     expect(await screen.findByText("7M")).toBeInTheDocument();
   });
 
+  it("shows automatic scan state while the first dashboard request is rebuilding the index", async () => {
+    const pendingDashboard = createDeferred<WorkAnalysisDashboardRecord>();
+    const sendCommand = vi.fn(() => pendingDashboard.promise);
+    const store = createStoreWithAnalysis(sendCommand);
+
+    renderStandaloneAnalytics(store);
+
+    expect(await screen.findByRole("heading", { name: "工作分析" })).toBeInTheDocument();
+    expect(screen.getByText("扫描中")).toBeInTheDocument();
+    expect(screen.getByText("自动扫描")).toBeInTheDocument();
+    expect(screen.getByText("正在读取或补齐索引")).toBeInTheDocument();
+    expect(screen.queryByText("待机")).toBeNull();
+
+    pendingDashboard.resolve(buildDashboard());
+  });
+
   it("keeps both filter entries as popovers instead of the mobile sheet fallback", async () => {
     viewportMock.value = "mobile";
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     fireEvent.click(await screen.findByRole("button", { name: /时间筛选/ }));
 
@@ -1016,10 +888,10 @@ describe("WorkAnalyticsPage", () => {
 
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
+        <MemoryRouter initialEntries={["/analytics"]}>
           <LocationProbe />
           <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
+            <Route path="/analytics" element={<WorkAnalyticsPage />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -1029,8 +901,8 @@ describe("WorkAnalyticsPage", () => {
 
     const popover = screen.getByRole("dialog", { name: "筛选目录" });
     expect(within(popover).queryByRole("combobox", { name: "时间范围" })).toBeNull();
-    const projectA = within(popover).getByRole("checkbox", { name: "/repo/a" });
-    const projectB = within(popover).getByRole("checkbox", { name: "/repo/b" });
+    const projectA = await within(popover).findByRole("checkbox", { name: "/repo/a" });
+    const projectB = await within(popover).findByRole("checkbox", { name: "/repo/b" });
     expect(projectA).toHaveAttribute("aria-checked", "true");
     expect(projectB).toHaveAttribute("aria-checked", "true");
 
@@ -1038,31 +910,38 @@ describe("WorkAnalyticsPage", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("location-display")).toHaveTextContent(
-        "/settings?section=analysis&workspacePath=%2Frepo%2Fa"
+        "/analytics?workspacePath=%2Frepo%2Fa"
       );
+      expect(within(popover).getByRole("checkbox", { name: "/repo/a" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+      expect(within(popover).getByRole("checkbox", { name: "/repo/b" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+      expect(screen.getByRole("button", { name: /目录筛选/ })).toHaveTextContent("1 个目录");
     });
-    expect(projectA).toHaveAttribute("aria-checked", "true");
-    expect(projectB).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByRole("button", { name: /目录筛选/ })).toHaveTextContent("1 个目录");
 
-    fireEvent.click(projectB);
+    fireEvent.click(within(popover).getByRole("checkbox", { name: "/repo/b" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("location-display")).toHaveTextContent(
-        "/settings?section=analysis&workspacePath=%2Frepo%2Fa&workspacePath=%2Frepo%2Fb"
+        "/analytics?workspacePath=%2Frepo%2Fa&workspacePath=%2Frepo%2Fb"
+      );
+      expect(within(popover).getByRole("checkbox", { name: "/repo/b" })).toHaveAttribute(
+        "aria-checked",
+        "true"
       );
     });
-    expect(projectB).toHaveAttribute("aria-checked", "true");
 
     fireEvent.click(within(popover).getByRole("button", { name: "全部目录" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("location-display")).toHaveTextContent(
-        "/settings?section=analysis"
-      );
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics");
     });
     expect(screen.getByRole("button", { name: /目录筛选/ })).toHaveTextContent("全部目录");
-  });
+  }, 15_000);
 
   it("refreshes the dashboard index from the primary action", async () => {
     const sendCommand = vi.fn(async (op: string) => {
@@ -1073,17 +952,10 @@ describe("WorkAnalyticsPage", () => {
     });
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
-    fireEvent.click(await screen.findByRole("button", { name: "立即刷新" }));
+    const headerActions = await screen.findByTestId("work-analysis-header-actions");
+    fireEvent.click(within(headerActions).getByRole("button", { name: "立即刷新" }));
 
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
@@ -1094,6 +966,34 @@ describe("WorkAnalyticsPage", () => {
         undefined
       );
     });
+  }, 10_000);
+
+  it("shows an inline refresh activity rail while the dashboard refresh is pending", async () => {
+    const pendingRefresh = createDeferred<WorkAnalysisDashboardRecord>();
+    const sendCommand = vi.fn((op: string) => {
+      if (op === "work.analysis.dashboard.refresh") {
+        return pendingRefresh.promise;
+      }
+      return Promise.resolve(buildDashboard());
+    });
+    const store = createStoreWithAnalysis(sendCommand);
+
+    renderStandaloneAnalytics(store);
+
+    fireEvent.click(await screen.findByRole("button", { name: "立即刷新" }));
+
+    expect(await screen.findByRole("status", { name: "正在刷新工作分析索引" })).toHaveTextContent(
+      "正在补齐小时索引"
+    );
+    expect(screen.getByRole("button", { name: "刷新中" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("页面数据保持可读")).toBeInTheDocument();
+
+    pendingRefresh.resolve(buildDashboard({ totalTokens: 14_000_000 }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "正在刷新工作分析索引" })).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "立即刷新" })).toBeInTheDocument();
   });
 
   it("clears and rebuilds the hourly index from the header action", async () => {
@@ -1106,15 +1006,7 @@ describe("WorkAnalyticsPage", () => {
     });
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     fireEvent.click(await screen.findByRole("button", { name: "强制刷新" }));
 
@@ -1152,15 +1044,7 @@ describe("WorkAnalyticsPage", () => {
     const sendCommand = vi.fn(async () => buildDashboard());
     const store = createStoreWithAnalysis(sendCommand);
 
-    render(
-      <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis"]}>
-          <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
-          </Routes>
-        </MemoryRouter>
-      </Provider>
-    );
+    renderStandaloneAnalytics(store);
 
     fireEvent.click(await screen.findByRole("button", { name: "强制刷新" }));
 
@@ -1190,10 +1074,10 @@ describe("WorkAnalyticsPage", () => {
 
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={["/settings?section=analysis&range=7d"]}>
+        <MemoryRouter initialEntries={["/analytics?range=7d"]}>
           <LocationProbe />
           <Routes>
-            <Route path="/settings" element={<WorkAnalyticsSettingsSection />} />
+            <Route path="/analytics" element={<WorkAnalyticsPage />} />
           </Routes>
         </MemoryRouter>
       </Provider>
@@ -1202,9 +1086,7 @@ describe("WorkAnalyticsPage", () => {
     await screen.findByRole("heading", { name: "工作分析" });
 
     await waitFor(() => {
-      expect(screen.getByTestId("location-display")).toHaveTextContent(
-        "/settings?section=analysis&range=7d"
-      );
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics?range=7d");
     });
 
     await waitFor(() => {

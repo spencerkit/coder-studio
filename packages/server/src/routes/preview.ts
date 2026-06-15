@@ -27,8 +27,19 @@ interface PreviewSessionUpdateBody {
 
 type WorkspaceLookup = { path: string } | null | undefined;
 
-function getPreviewContentSecurityPolicy(): string {
-  return "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'none'; base-uri 'none'; form-action 'none'";
+function getPreviewContentSecurityPolicy(allowScripts: boolean): string {
+  const scriptPolicy = allowScripts
+    ? "script-src 'self' 'unsafe-inline'; script-src-attr 'unsafe-inline'"
+    : "script-src 'none'";
+
+  return `default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; ${scriptPolicy}; base-uri 'none'; form-action 'none'`;
+}
+
+function getEffectivePreviewAllowScripts(session: {
+  kind: PreviewKind;
+  allowScripts: boolean;
+}): boolean {
+  return session.kind === "html" && session.allowScripts;
 }
 
 function resolvePreviewAssetWorkspacePath(entryPath: string, rawPath: string): string {
@@ -133,12 +144,13 @@ export function registerPreviewRoutes(
         sessionId: session.id,
         workspaceRootPath: workspace.path,
       });
-      const contentSecurityPolicy = getPreviewContentSecurityPolicy();
+      const allowScripts = getEffectivePreviewAllowScripts(session);
+      const contentSecurityPolicy = getPreviewContentSecurityPolicy(allowScripts);
 
       const response = reply
         .header("Content-Type", "text/html; charset=utf-8")
         .header("Cache-Control", "no-store")
-        .header("X-Preview-Allow-Scripts", String(session.allowScripts));
+        .header("X-Preview-Allow-Scripts", String(allowScripts));
 
       if (contentSecurityPolicy) {
         response.header("Content-Security-Policy", contentSecurityPolicy);

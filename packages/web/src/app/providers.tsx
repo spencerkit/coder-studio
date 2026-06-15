@@ -85,8 +85,6 @@ import {
   gitBranchListAtomFamily,
   gitStateAtomFamily,
   loadedDirsAtomFamily,
-  normalizeWorkspaceExtensionStateView,
-  workspaceExtensionStateAtomFamily,
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
@@ -218,10 +216,6 @@ function resetServerProjectedState(store: Store): void {
     });
     store.set(fileTreeStaleAtomFamily(workspaceId), false);
     store.set(editorRefreshTokenAtomFamily(workspaceId), 0);
-    store.set(
-      workspaceExtensionStateAtomFamily(workspaceId),
-      normalizeWorkspaceExtensionStateView(workspaceId, {})
-    );
   }
 
   for (const terminalId of terminalIds) {
@@ -1364,14 +1358,6 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
 
     // workspace.{id}.git.state - git state changed notification
     if (subtopic === "git.state") {
-      return;
-    }
-
-    if (subtopic === "extension.state") {
-      store.set(
-        workspaceExtensionStateAtomFamily(workspaceId),
-        normalizeWorkspaceExtensionStateView(workspaceId, payload)
-      );
       return;
     }
 

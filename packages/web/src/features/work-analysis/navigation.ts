@@ -48,7 +48,6 @@ export function parseWorkAnalyticsSearch(search: string): WorkAnalyticsRouteStat
 
 export function buildWorkAnalyticsPath(state: Partial<WorkAnalyticsRouteState> = {}) {
   const params = new URLSearchParams();
-  params.set("section", "analysis");
 
   if (state.tab && state.tab !== "overview") {
     params.set("tab", state.tab);
@@ -72,5 +71,5 @@ export function buildWorkAnalyticsPath(state: Partial<WorkAnalyticsRouteState> =
   }
 
   const suffix = params.toString();
-  return suffix ? `/settings?${suffix}` : "/settings?section=analysis";
+  return suffix ? `/analytics?${suffix}` : "/analytics";
 }

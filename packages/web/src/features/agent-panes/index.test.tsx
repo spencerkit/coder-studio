@@ -13,6 +13,8 @@ import type { PaneDragSourceSnapshot } from "./actions/use-pane-drag-controller"
 import {
   activeEditorPaneIdAtomFamily,
   editorPaneActiveFilePathAtomFamily,
+  editorPaneOpenEditorPathsAtomFamily,
+  editorPanePendingNavigationAtomFamily,
   focusedEditorPaneIdAtomFamily,
 } from "./atoms/editor-panes";
 import { LEGACY_PANE_LAYOUT_STORAGE_KEY_PREFIX, paneLayoutAtomFamily } from "./atoms/pane-layout";
@@ -179,6 +181,7 @@ const mockEditorPaneCard = vi.fn(
     dragState,
     onClosePane,
     onPaneDragStart,
+    onOpenFile,
   }: {
     paneId: string;
     workspaceId: string;
@@ -188,6 +191,7 @@ const mockEditorPaneCard = vi.fn(
       hoverPlacement: PaneDropIntent["placement"] | null;
     };
     onClosePane: (paneId: string) => void;
+    onOpenFile?: (paneId: string, path: string) => void;
     onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
     onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   }) => (
@@ -205,6 +209,11 @@ const mockEditorPaneCard = vi.fn(
       <button type="button" onClick={() => onClosePane(paneId)}>
         close-editor-{paneId}
       </button>
+      {onOpenFile ? (
+        <button type="button" onClick={() => onOpenFile(paneId, "src/app.tsx")}>
+          open-file-{paneId}
+        </button>
+      ) : null}
     </div>
   )
 );
@@ -258,6 +267,7 @@ vi.mock("./views/shared/editor-pane-card", () => ({
       hoverPlacement: PaneDropIntent["placement"] | null;
     };
     onClosePane: (paneId: string) => void;
+    onOpenFile?: (paneId: string, path: string) => void;
     onPaneDragStart?: (source: PaneDragSourceSnapshot) => void;
     onSplitPane: (paneId: string, direction: "horizontal" | "vertical") => void;
   }) => mockEditorPaneCard(props),
@@ -1916,6 +1926,48 @@ describe("AgentPanes", () => {
     expect(store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "right")))).toBe(
       "src/app.tsx"
     );
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
+  });
+
+  it("opens dropped files in an existing editor pane without activating the global editor", async () => {
+    const { store } = createAgentPaneStore({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    store.set(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "root")), "src/a.ts");
+    store.set(editorPaneOpenEditorPathsAtomFamily(editorPaneStateKey("ws-1", "root")), [
+      "src/a.ts",
+    ]);
+
+    render(
+      <Provider store={store}>
+        <AgentPanes hydrateSessions={false} />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "open-file-root" }));
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+    expect(store.get(activeEditorPaneIdAtomFamily("ws-1"))).toBe("root");
+    expect(store.get(focusedEditorPaneIdAtomFamily("ws-1"))).toBe("root");
+    expect(store.get(editorPaneActiveFilePathAtomFamily(editorPaneStateKey("ws-1", "root")))).toBe(
+      "src/app.tsx"
+    );
+    expect(
+      store.get(editorPaneOpenEditorPathsAtomFamily(editorPaneStateKey("ws-1", "root")))
+    ).toEqual(["src/a.ts", "src/app.tsx"]);
+    expect(
+      store.get(editorPanePendingNavigationAtomFamily(editorPaneStateKey("ws-1", "root")))
+    ).toMatchObject({
+      path: "src/app.tsx",
+      source: "file-tree",
+      workspaceId: "ws-1",
+    });
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBeNull();
   });
 

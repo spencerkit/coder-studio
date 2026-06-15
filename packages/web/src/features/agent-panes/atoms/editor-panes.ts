@@ -13,6 +13,8 @@ export function getEditorPaneStateKey(workspaceId: string, paneId: string): stri
 
 export const editorPaneActiveFilePathAtomFamily = atomFamily(() => atom<string | null>(null));
 
+export const editorPaneOpenEditorPathsAtomFamily = atomFamily(() => atom<string[]>([]));
+
 export const editorPaneModeAtomFamily = atomFamily(() => atom<WorkspaceEditorMode>("preview"));
 
 export const editorPanePendingNavigationAtomFamily = atomFamily(() =>

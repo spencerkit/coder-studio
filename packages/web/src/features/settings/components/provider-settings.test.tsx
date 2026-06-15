@@ -3,6 +3,7 @@ import { createStore, Provider } from "jotai";
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ActivationStatus, activationStatusAtom } from "../../../atoms/activation";
 import { localeAtom } from "../../../atoms/app-ui";
 import {
   type ConnectionStatus,
@@ -50,10 +51,12 @@ vi.mock("./config-editor", () => ({
 
 function createConnectedStore(
   sendCommand: ReturnType<typeof vi.fn>,
-  connectionStatus: ConnectionStatus = "connected"
+  connectionStatus: ConnectionStatus = "connected",
+  activationStatus: ActivationStatus = "active"
 ) {
   const store = createStore();
   store.set(connectionStatusAtom, connectionStatus);
+  store.set(activationStatusAtom, activationStatus);
   store.set(localeAtom, "zh");
   store.set(wsClientAtom, {
     sendCommand,
@@ -73,6 +76,7 @@ function createDeferred<T>() {
 function renderHarness({
   isMobile = false,
   connectionStatus = "connected" as ConnectionStatus,
+  activationStatus = "active" as ActivationStatus,
   sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
     if (op === "settings.previewCommand") {
       const request = args as { providerId: string; config: { additionalArgs?: string[] } };
@@ -157,7 +161,7 @@ function renderHarness({
     );
   }
 
-  const store = createConnectedStore(sendCommand, connectionStatus);
+  const store = createConnectedStore(sendCommand, connectionStatus, activationStatus);
 
   return {
     store,
@@ -295,6 +299,56 @@ describe("ProviderSettings desktop", () => {
     });
 
     expect(screen.queryByText("claude --verbose")).not.toBeInTheDocument();
+  });
+
+  it("waits for activation before loading provider runtime and preview data", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "settings.previewCommand") {
+        const request = args as { providerId: string; config: { additionalArgs?: string[] } };
+        return {
+          preview: [request.providerId, ...(request.config.additionalArgs ?? [])].join(" "),
+        };
+      }
+      if (op === "provider.runtimeStatus") {
+        return { providers: {} };
+      }
+      if (op === "settings.readConfigFile") {
+        return {
+          configPath: "/tmp/config.json",
+          content: "{}",
+          exists: true,
+        };
+      }
+      return {};
+    });
+    const { store } = renderHarness({ activationStatus: "idle", sendCommand });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "settings.previewCommand",
+      expect.anything(),
+      undefined
+    );
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.previewCommand",
+        {
+          providerId: "claude",
+          config: { additionalArgs: ["--verbose"] },
+        },
+        undefined
+      );
+    });
   });
 
   it("waits for websocket connection before loading command previews", async () => {

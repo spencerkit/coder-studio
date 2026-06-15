@@ -2,7 +2,7 @@
   "name": "@spencer-kit/coder-studio",
   "version": "0.5.1",
   "type": "module",
-  "description": "Deploy once, code everywhere. Browser-based AI coding workspace for Claude Code and Codex.",
+  "description": "Self-hosted browser workspace for AI coding agents, review, supervision, and cross-device continuation.",
   "main": "./src/index.ts",
   "bin": {
     "coder-studio": "./src/bin.ts"
@@ -67,7 +67,18 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "keywords": ["cli", "coder-studio", "agent", "development", "tools"],
+  "keywords": [
+    "ai-coding",
+    "ai-agent",
+    "agent-workspace",
+    "browser-ide",
+    "claude-code",
+    "codex",
+    "self-hosted",
+    "cross-device",
+    "terminal",
+    "git"
+  ],
   "author": "Coder Studio",
   "license": "MIT",
   "repository": {

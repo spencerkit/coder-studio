@@ -121,7 +121,7 @@ fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n");
 
 ### 创建会话
 
-当没有文件处于编辑状态时，中央区域显示 Agent 面板。点击创建会话按钮，选择 Provider（Claude 或 Codex）即可启动。
+当没有文件处于编辑状态时，中央区域显示 Agent 面板。点击创建会话按钮，选择已检测到的 Provider 即可启动。首次试跑建议选择 Claude 或 Codex。
 
 ### 切换会话
 

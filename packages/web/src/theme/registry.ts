@@ -1,3 +1,4 @@
+import { LSP_SEMANTIC_TOKEN_TYPES } from "@coder-studio/core";
 import {
   BASE_ICON_THEME,
   createIconTheme,
@@ -65,6 +66,123 @@ export interface AppThemeDefinition {
   terminalTheme: TerminalThemeDefinition;
   monaco: MonacoThemeDefinition;
   iconTheme: IconThemeDefinition;
+}
+
+type MonacoTokenRule = MonacoThemeDefinition["rules"][number];
+type MonacoSemanticToken = (typeof LSP_SEMANTIC_TOKEN_TYPES)[number];
+type MonacoSyntaxRole =
+  | "comment"
+  | "decorator"
+  | "function"
+  | "keyword"
+  | "namespace"
+  | "number"
+  | "operator"
+  | "property"
+  | "regexp"
+  | "string"
+  | "type"
+  | "variable";
+
+interface MonacoSyntaxPalette extends Record<MonacoSyntaxRole, string> {}
+
+const MONACO_SYNTAX_ROLE_BY_TOKEN = {
+  namespace: "namespace",
+  type: "type",
+  class: "type",
+  enum: "type",
+  interface: "type",
+  struct: "type",
+  typeParameter: "type",
+  parameter: "variable",
+  variable: "variable",
+  property: "property",
+  enumMember: "property",
+  event: "function",
+  function: "function",
+  method: "function",
+  macro: "function",
+  keyword: "keyword",
+  modifier: "keyword",
+  comment: "comment",
+  string: "string",
+  number: "number",
+  regexp: "regexp",
+  operator: "operator",
+  decorator: "decorator",
+} satisfies Record<MonacoSemanticToken, MonacoSyntaxRole>;
+
+const MONACO_LEXICAL_TOKENS = ["comment", "string", "keyword"] as const;
+
+function findMonacoRuleForeground(
+  rules: MonacoThemeDefinition["rules"],
+  token: string
+): string | undefined {
+  return rules.find((rule) => rule.token === token)?.foreground;
+}
+
+function formatMonacoRuleColor(color: string, referenceColor: string | undefined): string {
+  return referenceColor?.startsWith("#") ? color : color.replace(/^#/, "");
+}
+
+function createMonacoSyntaxPalette(theme: AppThemeDefinition): MonacoSyntaxPalette {
+  const colorFormatReference =
+    findMonacoRuleForeground(theme.monaco.rules, "keyword") ??
+    findMonacoRuleForeground(theme.monaco.rules, "string") ??
+    findMonacoRuleForeground(theme.monaco.rules, "comment");
+  const tokenColor = (color: string) => formatMonacoRuleColor(color, colorFormatReference);
+
+  return {
+    comment:
+      findMonacoRuleForeground(theme.monaco.rules, "comment") ??
+      tokenColor(theme.terminalTheme.brightBlack),
+    string:
+      findMonacoRuleForeground(theme.monaco.rules, "string") ??
+      tokenColor(theme.terminalTheme.green),
+    keyword:
+      findMonacoRuleForeground(theme.monaco.rules, "keyword") ??
+      tokenColor(theme.terminalTheme.blue),
+    decorator: tokenColor(theme.terminalTheme.magenta),
+    function: tokenColor(theme.terminalTheme.blue),
+    namespace: tokenColor(theme.terminalTheme.cyan),
+    number: tokenColor(theme.terminalTheme.yellow),
+    operator: tokenColor(theme.terminalTheme.brightBlack),
+    property: tokenColor(theme.terminalTheme.cyan),
+    regexp: tokenColor(theme.terminalTheme.red),
+    type: tokenColor(theme.terminalTheme.magenta),
+    variable: tokenColor(theme.terminalTheme.white),
+  };
+}
+
+function createMonacoSyntaxRules(
+  palette: MonacoSyntaxPalette,
+  existingRules: MonacoThemeDefinition["rules"]
+): ReadonlyArray<MonacoTokenRule> {
+  const existingRulesByToken = new Map(existingRules.map((rule) => [rule.token, rule]));
+  const syntaxTokens = [...new Set([...MONACO_LEXICAL_TOKENS, ...LSP_SEMANTIC_TOKEN_TYPES])];
+  const syntaxTokenRules = syntaxTokens.map((token) => {
+    const existingRule = existingRulesByToken.get(token);
+    const role = MONACO_SYNTAX_ROLE_BY_TOKEN[token as MonacoSemanticToken];
+
+    return {
+      ...existingRule,
+      token,
+      foreground: palette[role],
+    };
+  });
+  const extraRules = existingRules.filter((rule) => !syntaxTokens.includes(rule.token));
+
+  return [...syntaxTokenRules, ...extraRules];
+}
+
+function withSemanticMonacoRules(theme: AppThemeDefinition): AppThemeDefinition {
+  return {
+    ...theme,
+    monaco: {
+      ...theme.monaco,
+      rules: createMonacoSyntaxRules(createMonacoSyntaxPalette(theme), theme.monaco.rules),
+    },
+  };
 }
 
 const mintDarkTerminal: TerminalThemeDefinition = {
@@ -625,7 +743,7 @@ const SEASONAL_THEME_CONFIGS: ReadonlyArray<SeasonalThemeConfig> = [
   },
 ] as const;
 
-const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
+const BASE_THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
   {
     id: "mint-dark",
     family: "mint",
@@ -1298,6 +1416,8 @@ const THEMES_REGISTRY: ReadonlyArray<AppThemeDefinition> = [
   },
   ...SEASONAL_THEME_CONFIGS.map((config) => createSeasonalThemeDefinition(config)),
 ];
+
+const THEMES_REGISTRY = BASE_THEMES_REGISTRY.map((theme) => withSemanticMonacoRules(theme));
 
 registerIconThemes(THEMES_REGISTRY);
 

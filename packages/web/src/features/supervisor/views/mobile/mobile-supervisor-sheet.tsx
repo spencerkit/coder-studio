@@ -5,7 +5,6 @@ import { useTranslation } from "../../../../lib/i18n";
 import {
   formatScheduledAtInput,
   type ObjectiveDialogEvaluatorProviderId,
-  type ObjectiveDialogMode,
   useObjectiveDialogState,
 } from "../../actions/use-objective-dialog-state";
 import { useSupervisorDetails } from "../../actions/use-supervisor-details";

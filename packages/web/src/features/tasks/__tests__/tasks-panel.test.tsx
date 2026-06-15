@@ -72,9 +72,7 @@ describe("TasksPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("Verify")).toBeInTheDocument();
-    expect(
-      screen.getByText("pnpm changeset:validate && pnpm ci:lint && pnpm ci:test && pnpm ci:build")
-    ).toBeInTheDocument();
+    expect(screen.getByText("pnpm ci:verify")).toBeInTheDocument();
     expect(screen.getByText("Not run")).toBeInTheDocument();
   });
 

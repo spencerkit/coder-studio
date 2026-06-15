@@ -32,11 +32,10 @@ export function TaskCommandSidePanel({ workspaceId, onClose }: TaskCommandSidePa
   }
 
   return (
-    <aside className="terminal-command-side-panel" aria-label={t("terminal.commands")}>
+    <aside className="terminal-command-side-panel" aria-label={t("tasks.kicker")}>
       <div className="terminal-command-side-panel__header">
         <div className="terminal-command-side-panel__heading">
           <span className="terminal-kicker">{t("tasks.kicker")}</span>
-          <h2 className="terminal-command-side-panel__title">{t("terminal.commands")}</h2>
         </div>
         <Tooltip content={t("action.close")}>
           <IconButton

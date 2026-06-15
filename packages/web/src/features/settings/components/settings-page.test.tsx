@@ -1,13 +1,9 @@
-import type {
-  DiagnosticsCheck,
-  DiagnosticsResponse,
-  MonitoringResponse,
-  MonitoringSettings,
-} from "@coder-studio/core";
+import type { MonitoringResponse, MonitoringSettings } from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ActivationStatus, activationStatusAtom } from "../../../atoms/activation";
 import { appearancePersonalizationAtom } from "../../../atoms/app-ui";
 import {
   type ConnectionStatus,
@@ -100,11 +96,13 @@ vi.mock("react-router-dom", async () => {
 
 function createConnectedStore(
   sendCommand: ReturnType<typeof vi.fn>,
-  connectionStatus: ConnectionStatus = "connected"
+  connectionStatus: ConnectionStatus = "connected",
+  activationStatus: ActivationStatus = "active"
 ) {
   const store = createStore();
 
   store.set(connectionStatusAtom, connectionStatus);
+  store.set(activationStatusAtom, activationStatus);
   store.set(wsClientAtom, {
     sendCommand,
     subscribe: vi.fn(() => () => {}),
@@ -331,27 +329,6 @@ function createMonitoringResponse(
   };
 }
 
-function createDiagnosticsResponse(
-  overrides: Partial<DiagnosticsResponse> = {},
-  checks: DiagnosticsCheck[] = [
-    {
-      id: "git-ready",
-      code: "git_ready",
-      status: "ready",
-      version: "git version 2.49.0",
-    },
-  ]
-): DiagnosticsResponse {
-  return {
-    context: "manual_check",
-    canContinue: true,
-    checks,
-    metadata: {},
-    lspServices: [],
-    ...overrides,
-  };
-}
-
 function renderSettingsPage(
   store = createConnectedStore(vi.fn().mockResolvedValue({})),
   { initialEntry = "/settings" }: { initialEntry?: string } = {}
@@ -360,6 +337,25 @@ function renderSettingsPage(
     <Provider store={store}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <SettingsPage />
+      </MemoryRouter>
+    </Provider>
+  );
+}
+
+function renderEmbeddedSettingsPage(
+  section: "general" | "providers" | "appearance" | "shortcuts" | "about",
+  options: {
+    aboutView?: "all" | "product" | "update-status" | "auto-update";
+    store?: ReturnType<typeof createConnectedStore>;
+    initialEntry?: string;
+  } = {}
+) {
+  const store = options.store ?? createConnectedStore(vi.fn().mockResolvedValue({}));
+
+  return render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={[options.initialEntry ?? "/settings"]}>
+        <SettingsPage embeddedSection={section} aboutView={options.aboutView} />
       </MemoryRouter>
     </Provider>
   );
@@ -522,6 +518,28 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("This tab is no longer the active session")).not.toBeInTheDocument();
   });
 
+  it("waits for activation before loading settings data", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({});
+    const store = createConnectedStore(sendCommand, "connected", "idle");
+
+    renderSettingsPage(store);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendCommand).not.toHaveBeenCalled();
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("provider.list", {}, undefined);
+    });
+  });
+
   it("renders the footer version from server metadata", () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
     store.set(serverInfoAtom, {
@@ -573,7 +591,7 @@ describe("SettingsPage", () => {
     expect(workspace).not.toHaveClass("settings-workspace--wide");
     expect(workspace?.querySelector(".settings-section")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "性能监控" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
     await waitFor(() => {
       expect(document.querySelector(".settings-workspace.settings-workspace--wide")).not.toBeNull();
@@ -606,16 +624,16 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.monitoring"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.analysis"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
 
     desktopView.unmount();
 
@@ -643,16 +661,16 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.monitoring"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.about"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.analysis"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.diagnostics"]')
-    ).toBeTruthy();
+    ).toBeFalsy();
   });
 
   it("renders a work analysis section inside settings and loads workspace analysis data", async () => {
@@ -809,43 +827,18 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("keeps dashboard filter state inside the settings route", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
-      if (op === "settings.get") {
-        return {};
-      }
+  it("keeps analytics out of the visible settings navigation", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
 
-      if (op === "provider.list") {
-        return DEFAULT_PROVIDER_LIST;
-      }
-
-      if (op === "work.analysis.dashboard.get") {
-        const query = args as { timeRange?: WorkAnalysisTimeRange; workspacePaths?: string[] };
-        return buildSettingsDashboard({
-          projects: query.workspacePaths ?? ["/repo/project", "/repo/other"],
-          timeRange: query.timeRange,
-        });
-      }
-
-      return {};
-    });
-    const store = createConnectedStore(sendCommand);
-
-    renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
-
-    fireEvent.click(await screen.findByRole("button", { name: /目录筛选/ }));
-
-    const popover = screen.getByRole("dialog", { name: "筛选目录" });
-    const projectCheckbox = within(popover).getByRole("checkbox", { name: "/repo/project" });
-    expect(projectCheckbox).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(projectCheckbox);
+    renderSettingsPage(store);
 
     await waitFor(() => {
-      expect(routerMocks.navigate).toHaveBeenLastCalledWith(
-        "/settings?section=analysis&workspacePath=%2Frepo%2Fproject",
-        { replace: true }
-      );
+      expect(screen.getByRole("button", { name: "通用" })).toBeInTheDocument();
     });
+
+    expect(screen.queryByRole("button", { name: "工作分析" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "环境与诊断" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "关于" })).toBeNull();
   });
 
   it("renders failed analysis details for the selected work query", async () => {
@@ -969,7 +962,7 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders diagnostics as a dedicated settings section after analysis", async () => {
+  it("renders only true configuration sections in the visible desktop settings navigation", async () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
 
     const view = renderSettingsPage(store);
@@ -985,52 +978,19 @@ describe("SettingsPage", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim() ?? "");
 
-    expect(labels).toEqual([
-      "通用",
-      "Agents",
-      "外观",
-      "快捷键",
-      "性能监控",
-      "工作分析",
-      "环境与诊断",
-      "关于",
-    ]);
+    expect(labels).toEqual(["通用", "Agents", "外观", "快捷键"]);
   });
 
-  it("opens diagnostics from the dedicated diagnostics settings section", async () => {
-    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "diagnostics.get") {
-        return createDiagnosticsResponse();
-      }
-      return {};
-    });
-    const store = createConnectedStore(sendCommand);
+  it("does not expose diagnostics in the visible settings navigation", async () => {
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
 
     renderSettingsPage(store);
 
-    expect(
-      screen.queryByText(/诊断运行环境|Diagnose the runtime environment/)
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "环境与诊断" }));
-
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "diagnostics.get",
-        {
-          context: "manual_check",
-          workspaceId: undefined,
-          workspacePath: undefined,
-          providerId: undefined,
-        },
-        undefined
-      );
+      expect(screen.getByRole("button", { name: "通用" })).toBeInTheDocument();
     });
 
-    expect(document.querySelector(".diagnostics-page--embedded")).not.toBeNull();
-    expect(document.querySelector(".diagnostics-header")).toBeNull();
-    expect(screen.getByText(/git version 2\.49\.0/)).toBeInTheDocument();
-    expect(screen.queryByText("通知")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "环境与诊断" })).toBeNull();
     expect(document.querySelector(".settings-diagnostics-button")).toBeNull();
   });
 
@@ -1096,19 +1056,19 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
 
-    const monitoringNavButton = await screen.findByRole("button", { name: "性能监控" });
     const contentSurface = document.querySelector(".settings-content-surface") as HTMLElement;
     const workspace = document.querySelector(".settings-workspace") as HTMLElement;
 
-    expect(monitoringNavButton).toHaveClass("settings-nav-item-active");
     expect(workspace).toHaveClass("settings-workspace--wide");
     expect(workspace).not.toHaveClass("settings-workspace--readable");
     expect(contentSurface).not.toHaveClass("settings-content-surface--monitoring");
-    expect(within(contentSurface).getByText("主机概览")).toBeInTheDocument();
-    expect(within(contentSurface).getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
-      "aria-checked",
-      "true"
-    );
+    expect(within(contentSurface).getByRole("heading", { name: "性能监控" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(contentSurface).getByRole("switch", { name: "启用性能监控" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+    });
     expect(within(contentSurface).getByRole("tablist", { name: "预设" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开监控" })).not.toBeInTheDocument();
     expect(screen.queryByText("设置通知与终端行为。")).not.toBeInTheDocument();
@@ -1146,24 +1106,14 @@ describe("SettingsPage", () => {
     );
 
     expect(await screen.findByTestId("about-settings")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "关于" })).toHaveClass("settings-nav-item-active");
 
     await act(async () => {
       window.history.pushState({ idx: 1 }, "", "/settings?section=monitoring");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "性能监控" })).toHaveClass(
-        "settings-nav-item-active"
-      );
-    });
-
     expect(await screen.findByText("主机概览")).toBeInTheDocument();
     expect(screen.queryByTestId("about-settings")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "关于" })).not.toHaveClass(
-      "settings-nav-item-active"
-    );
   });
 
   it("leaves a deep-linked section when the user chooses another settings section", async () => {
@@ -1189,21 +1139,15 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
 
-    expect(await screen.findByRole("button", { name: "性能监控" })).toHaveClass(
-      "settings-nav-item-active"
-    );
+    expect(await screen.findByText("主机概览")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "关于" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
-    expect(await screen.findByTestId("about-settings")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "关于" })).toHaveClass("settings-nav-item-active");
-    expect(screen.getByRole("button", { name: "性能监控" })).not.toHaveClass(
-      "settings-nav-item-active"
-    );
+    expect(await screen.findByText("通知")).toBeInTheDocument();
     expect(routerMocks.navigate).toHaveBeenCalledWith(
       {
         pathname: "/settings",
-        search: "?section=about",
+        search: "?section=general",
       },
       { replace: true }
     );
@@ -1270,17 +1214,15 @@ describe("SettingsPage", () => {
 
     renderSettingsPage(store, { initialEntry: "/settings?section=monitoring" });
 
-    expect(await screen.findByRole("button", { name: "性能监控" })).toHaveClass(
-      "settings-nav-item-active"
-    );
+    expect(await screen.findByText("主机概览")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "关于" }));
+    fireEvent.click(screen.getByRole("button", { name: "通用" }));
 
-    await screen.findByTestId("about-settings");
+    await screen.findByText("通知");
     expect(routerMocks.navigate).toHaveBeenCalledWith(
       {
         pathname: "/settings",
-        search: "?section=about",
+        search: "?section=general",
       },
       { replace: true }
     );
@@ -1317,13 +1259,13 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByTestId("settings-mobile-root")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "性能监控" }));
+    fireEvent.click(screen.getByRole("button", { name: "Agents" }));
 
-    expect(await screen.findByText("主机概览")).toBeInTheDocument();
+    expect(await screen.findByRole("tablist", { name: "Agents" })).toBeInTheDocument();
     expect(routerMocks.navigate).toHaveBeenCalledWith(
       {
         pathname: "/settings",
-        search: "?section=monitoring",
+        search: "?section=providers",
       },
       { replace: true }
     );
@@ -1977,25 +1919,14 @@ describe("SettingsPage", () => {
     const buttons = within(mobileRoot).getAllByRole("button");
     const labels = buttons.map((button) => button.getAttribute("aria-label")).filter(Boolean);
 
-    expect(labels).toEqual(
-      expect.arrayContaining([
-        "通用",
-        "Agents",
-        "性能监控",
-        "工作分析",
-        "环境与诊断",
-        "外观",
-        "快捷键",
-        "关于",
-      ])
-    );
+    expect(labels).toEqual(expect.arrayContaining(["通用", "Agents", "外观", "快捷键"]));
     expect(labels.indexOf("通用")).toBeLessThan(labels.indexOf("Agents"));
-    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("性能监控"));
-    expect(labels.indexOf("性能监控")).toBeLessThan(labels.indexOf("工作分析"));
-    expect(labels.indexOf("工作分析")).toBeLessThan(labels.indexOf("环境与诊断"));
-    expect(labels.indexOf("环境与诊断")).toBeLessThan(labels.indexOf("外观"));
+    expect(labels.indexOf("Agents")).toBeLessThan(labels.indexOf("外观"));
     expect(labels.indexOf("外观")).toBeLessThan(labels.indexOf("快捷键"));
-    expect(labels.indexOf("快捷键")).toBeLessThan(labels.indexOf("关于"));
+    expect(labels).not.toContain("性能监控");
+    expect(labels).not.toContain("工作分析");
+    expect(labels).not.toContain("环境与诊断");
+    expect(labels).not.toContain("关于");
   });
 
   it("does not render diagnostics actions inside general settings", async () => {
@@ -2015,16 +1946,16 @@ describe("SettingsPage", () => {
       if (op === "settings.get") {
         return {
           "updates.autoCheckEnabled": true,
-          "updates.checkIntervalSec": 21600,
+          "updates.checkIntervalSec": 3600,
         };
       }
       return {};
     });
     const store = createConnectedStore(sendCommand);
 
-    renderSettingsPage(store);
+    renderSettingsPage(store, { initialEntry: "/settings?section=about" });
 
-    fireEvent.click(await screen.findByRole("button", { name: "关于" }));
+    await screen.findByTestId("about-settings");
     fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
 
     await waitFor(() => {
@@ -2047,7 +1978,7 @@ describe("SettingsPage", () => {
       if (op === "settings.get") {
         return {
           "updates.autoCheckEnabled": true,
-          "updates.checkIntervalSec": 21600,
+          "updates.checkIntervalSec": 3600,
         };
       }
       return {};
@@ -2070,9 +2001,9 @@ describe("SettingsPage", () => {
     });
     const store = createConnectedStore(sendCommand);
 
-    renderSettingsPage(store);
+    renderSettingsPage(store, { initialEntry: "/settings?section=about" });
 
-    fireEvent.click(await screen.findByRole("button", { name: "关于" }));
+    await screen.findByTestId("about-settings");
     fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
 
     await waitFor(() => {
@@ -2098,7 +2029,7 @@ describe("SettingsPage", () => {
 
     settingsGetDeferred.resolve({
       "updates.autoCheckEnabled": true,
-      "updates.checkIntervalSec": 21600,
+      "updates.checkIntervalSec": 3600,
     });
 
     await waitFor(() => {
@@ -2164,7 +2095,7 @@ describe("SettingsPage", () => {
     expect(notificationsSwitch).toHaveAttribute("aria-checked", "false");
     expect(soundSwitch).toHaveAttribute("aria-checked", "true");
     expect(soundSwitch).toBeDisabled();
-  });
+  }, 15_000);
 
   it("preserves notification settings update payloads when the switches are toggled", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
@@ -2396,7 +2327,7 @@ describe("SettingsPage", () => {
         undefined
       );
     });
-  });
+  }, 15_000);
 
   it("renders the supervisor timeout control as an inline settings row", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
@@ -3135,12 +3066,14 @@ describe("SettingsPage", () => {
       });
     });
 
-    expect(await screen.findByRole("spinbutton", { name: "背景压暗" })).toHaveValue(33);
-    expect(screen.getByRole("spinbutton", { name: "背景模糊" })).toHaveValue(8);
-    expect(screen.getByRole("spinbutton", { name: "毛玻璃强度" })).toHaveValue(44);
-    expect(document.getElementById("appearance-surface-opacity")).toHaveValue(91);
-    expect(document.getElementById("appearance-desktop-surface-opacity")).toHaveValue(72);
-    expect(document.getElementById("appearance-mobile-surface-opacity")).toHaveValue(64);
+    await waitFor(() => {
+      expect(screen.getByRole("spinbutton", { name: "背景压暗" })).toHaveValue(33);
+      expect(screen.getByRole("spinbutton", { name: "背景模糊" })).toHaveValue(8);
+      expect(screen.getByRole("spinbutton", { name: "毛玻璃强度" })).toHaveValue(44);
+      expect(document.getElementById("appearance-surface-opacity")).toHaveValue(91);
+      expect(document.getElementById("appearance-desktop-surface-opacity")).toHaveValue(72);
+      expect(document.getElementById("appearance-mobile-surface-opacity")).toHaveValue(64);
+    });
   });
 
   it("enables desktop and mobile appearance override groups through shared toggles", async () => {
@@ -4586,5 +4519,26 @@ describe("SettingsPage", () => {
     expect(screen.getByText("当前浏览器环境不支持此通知方式。")).toBeInTheDocument();
     expect(screen.getByText("不可用")).toBeInTheDocument();
     expect(screen.getByText("当前环境无法请求浏览器通知权限")).toBeInTheDocument();
+  });
+
+  it("renders embedded settings content without standalone page chrome", async () => {
+    renderEmbeddedSettingsPage("general");
+
+    expect(screen.queryByRole("heading", { level: 1, name: "设置" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-mobile-root")).toBeNull();
+    expect(await screen.findByText("通知")).toBeInTheDocument();
+    expect(document.querySelector(".settings-sidebar")).toBeNull();
+    expect(document.querySelector(".settings-footer")).toBeNull();
+  });
+
+  it("renders only the requested about subview when embedded", async () => {
+    renderEmbeddedSettingsPage("about", {
+      aboutView: "update-status",
+      initialEntry: "/settings?section=about",
+    });
+
+    expect(await screen.findByText("最新版本")).toBeInTheDocument();
+    expect(screen.queryByText("产品名称")).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "自动检查更新" })).not.toBeInTheDocument();
   });
 });

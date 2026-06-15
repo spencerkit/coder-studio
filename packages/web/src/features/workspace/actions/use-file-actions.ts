@@ -18,11 +18,7 @@ import {
   applyRootTreeRefresh,
   collectRefreshTargets,
 } from "./file-tree-refresh";
-import {
-  mergeOpenEditorPaths,
-  removeOpenEditorPaths,
-  rewriteOpenEditorPaths,
-} from "./open-editor-state";
+import { normalizeOpenEditorPaths, rewriteOpenEditorPaths } from "./open-editor-state";
 import { useOpenWorkspaceFile } from "./use-open-workspace-file";
 import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
@@ -69,6 +65,8 @@ interface UseFileActionsArgs {
   onSelectFile?: (path: string) => void;
 }
 
+const FILE_DELETE_TIMEOUT_MS = 180_000;
+
 function isReadTreeResult(value: unknown): value is ReadTreeResult {
   if (!value || typeof value !== "object") {
     return false;
@@ -87,6 +85,65 @@ function rewriteDescendantPath(path: string, fromPath: string, toPath: string): 
   }
 
   return path;
+}
+
+function isSameOrDescendantPath(path: string, targetPath: string): boolean {
+  return path === targetPath || path.startsWith(`${targetPath}/`);
+}
+
+function removeDeletedEditorPaths(paths: Iterable<string>, deletedPath: string): string[] {
+  return normalizeOpenEditorPaths(Array.from(paths)).filter(
+    (path) => !isSameOrDescendantPath(path, deletedPath)
+  );
+}
+
+function removeDeletedOpenFiles(
+  openFiles: Record<string, OpenFile>,
+  deletedPath: string
+): Record<string, OpenFile> {
+  let changed = false;
+  const nextEntries = Object.entries(openFiles).filter(([path]) => {
+    const shouldKeep = !isSameOrDescendantPath(path, deletedPath);
+    changed = changed || !shouldKeep;
+    return shouldKeep;
+  });
+
+  return changed ? Object.fromEntries(nextEntries) : openFiles;
+}
+
+function removeDeletedTreeEntries(
+  previousTree: Map<string, FileNode[]> | null,
+  deletedPath: string
+): Map<string, FileNode[]> | null {
+  if (!previousTree) {
+    return previousTree;
+  }
+
+  const lastSlashIndex = deletedPath.lastIndexOf("/");
+  const parentPath = lastSlashIndex === -1 ? "." : deletedPath.slice(0, lastSlashIndex);
+  const nextTree = new Map<string, FileNode[]>();
+
+  for (const [path, nodes] of previousTree) {
+    if (isSameOrDescendantPath(path, deletedPath)) {
+      continue;
+    }
+
+    if (path === parentPath) {
+      nextTree.set(
+        path,
+        nodes.filter((node) => node.path !== deletedPath)
+      );
+      continue;
+    }
+
+    nextTree.set(path, nodes);
+  }
+
+  return nextTree;
+}
+
+function removeDeletedDirPaths(paths: Set<string>, deletedPath: string): Set<string> {
+  return new Set([...paths].filter((path) => !isSameOrDescendantPath(path, deletedPath)));
 }
 
 function rewriteOpenFiles(
@@ -162,6 +219,8 @@ export function useFileActions({
   const [createDialog, setCreateDialog] = useState<CreateDialogState | null>(null);
   const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDeleteState | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const deleteInFlightRef = useRef(false);
   const lastRefreshTokenRef = useRef(refreshToken);
   const lastCreateRequestRef = useRef(0);
 
@@ -495,7 +554,7 @@ export function useFileActions({
       ? rewriteDescendantPath(activeFilePath, renameDialog.fromPath, toPath)
       : activeFilePath;
     const nextOpenEditorPaths = rewriteOpenEditorPaths(
-      mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles)),
+      openEditorPaths,
       renameDialog.fromPath,
       toPath
     );
@@ -525,58 +584,78 @@ export function useFileActions({
   ]);
 
   const cancelDelete = useCallback(() => {
+    if (deleteInFlightRef.current) {
+      return;
+    }
+
     setPendingDelete(null);
   }, []);
 
   const confirmDelete = useCallback(async () => {
-    if (!pendingDelete) {
+    if (!pendingDelete || deleteInFlightRef.current) {
       return;
     }
 
-    const result = await dispatch("file.delete", {
-      workspaceId,
-      path: pendingDelete.path,
-    });
-
-    if (!result.ok) {
-      setPendingDelete((current) =>
-        current
-          ? {
-              ...current,
-              error: result.error?.message ?? t("file.delete_failed"),
-            }
-          : current
+    deleteInFlightRef.current = true;
+    setIsDeleting(true);
+    try {
+      const result = await dispatch(
+        "file.delete",
+        {
+          workspaceId,
+          path: pendingDelete.path,
+        },
+        {
+          timeoutMs: FILE_DELETE_TIMEOUT_MS,
+        }
       );
-      return;
-    }
 
-    const nextActiveFilePath = activeFilePath === pendingDelete.path ? null : activeFilePath;
-    const nextOpenEditorPaths = removeOpenEditorPaths(
-      mergeOpenEditorPaths(openEditorPaths, Object.keys(openFiles)),
-      [pendingDelete.path]
-    );
-
-    if (activeFilePath !== nextActiveFilePath) {
-      setActiveFilePath(nextActiveFilePath);
-    }
-
-    setOpenEditorPaths(nextOpenEditorPaths);
-
-    setOpenFiles((prev) => {
-      if (!(pendingDelete.path in prev)) {
-        return prev;
+      if (!result.ok) {
+        setPendingDelete((current) =>
+          current
+            ? {
+                ...current,
+                error: result.error?.message ?? t("file.delete_failed"),
+              }
+            : current
+        );
+        return;
       }
 
-      const next = { ...prev };
-      delete next[pendingDelete.path];
-      return next;
-    });
-    void persistUiState({
-      openEditorPaths: nextOpenEditorPaths,
-      activeEditorPath: nextActiveFilePath,
-    });
-    await loadFileTree();
-    setPendingDelete(null);
+      const nextActiveFilePath =
+        activeFilePath && isSameOrDescendantPath(activeFilePath, pendingDelete.path)
+          ? null
+          : activeFilePath;
+      const nextOpenEditorPaths = removeDeletedEditorPaths(openEditorPaths, pendingDelete.path);
+      const nextOpenFiles = removeDeletedOpenFiles(openFiles, pendingDelete.path);
+      const nextTree = removeDeletedTreeEntries(fileTree, pendingDelete.path);
+      const nextLoadedDirs = removeDeletedDirPaths(loadedDirs, pendingDelete.path);
+      const nextExpandedDirs = expandedDirs
+        ? removeDeletedDirPaths(expandedDirs, pendingDelete.path)
+        : null;
+
+      if (activeFilePath !== nextActiveFilePath) {
+        setActiveFilePath(nextActiveFilePath);
+      }
+
+      setOpenEditorPaths(nextOpenEditorPaths);
+      setOpenFiles(nextOpenFiles);
+      setFileTree(nextTree);
+      setLoadedDirs(nextLoadedDirs);
+      if (expandedDirs && nextExpandedDirs && !setsEqual(expandedDirs, nextExpandedDirs)) {
+        setExpandedDirs(nextExpandedDirs);
+        void persistUiState({ fileTreeExpandedDirs: collectRefreshTargets(nextExpandedDirs) });
+      }
+      void persistUiState({
+        openEditorPaths: nextOpenEditorPaths,
+        activeEditorPath: nextActiveFilePath,
+      });
+      setPendingDelete(null);
+      void loadFileTree();
+    } finally {
+      deleteInFlightRef.current = false;
+      setIsDeleting(false);
+    }
   }, [
     pendingDelete,
     dispatch,
@@ -584,8 +663,14 @@ export function useFileActions({
     activeFilePath,
     openEditorPaths,
     openFiles,
+    fileTree,
+    loadedDirs,
+    expandedDirs,
     persistUiState,
     setActiveFilePath,
+    setFileTree,
+    setLoadedDirs,
+    setExpandedDirs,
     setOpenEditorPaths,
     setOpenFiles,
     loadFileTree,
@@ -642,6 +727,7 @@ export function useFileActions({
     fileTree,
     isLoading,
     isLoadingDir,
+    isDeleting,
     renameDialog,
     pendingDelete,
     cancelDelete,

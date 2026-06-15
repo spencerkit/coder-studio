@@ -281,8 +281,6 @@ async function longPressTerminalRowBlankRightSide(page: Page, rowIndex: number):
 }
 
 async function setMobileCopyOnSelect(page: Page, enabled: boolean): Promise<void> {
-  await page.goto("/settings");
-  await expect(page.locator(".settings-page")).toBeVisible({ timeout: 15000 });
   await openSettingsSection(page, "general");
 
   const toggle = page.getByRole("switch", {

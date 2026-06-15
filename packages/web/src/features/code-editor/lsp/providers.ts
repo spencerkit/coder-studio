@@ -22,6 +22,7 @@ export interface LspModelMetadata {
 
 export interface LspProviderRegistryDeps {
   lookupModelMetadata: (model: monaco.editor.ITextModel) => LspModelMetadata | undefined;
+  ensureLocationModel?: (input: { meta: LspModelMetadata; location: LspLocation }) => Promise<void>;
   requestDefinition: (input: {
     meta: LspModelMetadata;
     line: number;
@@ -179,6 +180,17 @@ export function createLspProviderRegistry(deps: LspProviderRegistryDeps) {
 
       if (!result || result.length === 0) {
         continue;
+      }
+
+      if (deps.ensureLocationModel) {
+        await Promise.all(
+          result.map((location) =>
+            deps.ensureLocationModel?.({
+              meta,
+              location,
+            })
+          )
+        );
       }
 
       return result.map((location) => ({

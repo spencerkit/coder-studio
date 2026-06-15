@@ -20,21 +20,32 @@ describe("SupervisorCard", () => {
     maxSupervisionCount: 0,
     completedSupervisionCount: 0,
     currentTargetMemory: {
+      schemaVersion: 2,
       targetId: "tgt-1",
-      decompositionGenerated: true,
-      decompositionMode: "stage",
-      items: [
-        {
-          id: "stage-1",
-          kind: "stage",
-          title: "Verify the refactor",
-          objective: "Confirm the refactor still behaves correctly",
-          deliverable: "A passing focused verification run",
-          acceptanceCriteria: ["Focused verification passes"],
-          status: "in_progress",
-        },
-      ],
-      activeItemId: "stage-1",
+      planTree: {
+        id: "plan-root",
+        title: "Supervisor target",
+        objective: "Complete the supervised target",
+        deliverable: "Completed target",
+        acceptanceCriteria: ["Target objective is complete"],
+        status: "in_progress",
+        taskType: "generic",
+        children: [
+          {
+            id: "stage-1",
+            title: "Verify the refactor",
+            objective: "Confirm the refactor still behaves correctly",
+            deliverable: "A passing focused verification run",
+            acceptanceCriteria: ["Focused verification passes"],
+            status: "in_progress",
+            taskType: "coding",
+            children: [],
+          },
+        ],
+      },
+      activeNodeId: "stage-1",
+      maxDepth: 6,
+      planRevision: 0,
       progressSummary: "Validation in progress",
       stalledCount: 0,
       updatedAt: 1,
@@ -136,6 +147,14 @@ describe("SupervisorCard", () => {
     expect(screen.queryByText("Validation in progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-progress-track")).not.toBeInTheDocument();
+    expect(document.querySelector(".supervisor-card")).toHaveAttribute(
+      "data-supervisor-state",
+      "idle"
+    );
+    expect(document.querySelector(".supervisor-strip-row")).toHaveAttribute(
+      "data-supervisor-state",
+      "idle"
+    );
     fireEvent.click(screen.getByRole("button", { name: "Trigger Evaluation" }));
     expect(sendCommand).toHaveBeenCalledWith("supervisor.trigger", { id: "sup-1" }, undefined);
   });
@@ -158,13 +177,14 @@ describe("SupervisorCard", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
-    expect(screen.getByText("Progress List")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "Target Details" })).toBeInTheDocument();
     expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Active item")).not.toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
-    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Current task").length).toBeGreaterThan(0);
+    expect(screen.queryByText("In progress")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Supervisor" }));
 

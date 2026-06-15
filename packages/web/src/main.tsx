@@ -10,6 +10,7 @@ import App from "./app";
 import { AppProviders } from "./app/providers";
 
 import "@xterm/xterm/css/xterm.css";
+import "@xyflow/react/dist/style.css";
 
 // Import fonts
 import "./styles/fonts.css";

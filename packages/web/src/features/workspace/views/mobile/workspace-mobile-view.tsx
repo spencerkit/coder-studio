@@ -1,6 +1,5 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   lastViewedTargetAtom,
   pendingFocusSessionAtom,
@@ -73,7 +72,6 @@ export function WorkspaceMobileView() {
   const lastPersistedSessionIdRef = useRef<string | null>(null);
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const t = useTranslation();
-  const navigate = useNavigate();
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
   const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
   const setVisibleMobileSessionId = useSetAtom(visibleMobileSessionIdAtom);
@@ -119,7 +117,9 @@ export function WorkspaceMobileView() {
 
   const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
   const preferredGlobalSessionId =
-    lastViewedTarget?.workspaceId === workspace?.id ? (lastViewedTarget.sessionId ?? null) : null;
+    lastViewedTarget && lastViewedTarget.workspaceId === workspace?.id
+      ? (lastViewedTarget.sessionId ?? null)
+      : null;
 
   useEffect(() => {
     if (!workspace) {
@@ -402,13 +402,9 @@ export function WorkspaceMobileView() {
       data-motion-mode={motionMode}
     >
       <MobileTopBar
-        activeWorkspace={workspace}
+        activeWorkspace={workspace ?? null}
         drawerOpen={drawerOpen}
         fullscreenController={fullscreenController}
-        onOpenSettings={() => {
-          setAgentSheetOpen(false);
-          navigate("/settings");
-        }}
         onToggleDrawer={() => {
           setAgentSheetOpen(false);
           setDrawerOpen((value) => !value);

@@ -98,13 +98,13 @@ coder-studio identify --json
 
 ### coder-studio capabilities
 
-输出面向 Agent 的自动化能力清单，包括命令名、CLI 用法、权限需求、风险等级和示例。
+输出面向 Agent 的只读自动化命令清单，包括命令名、CLI 用法、权限需求、风险等级和示例。
 
 ```bash
 coder-studio capabilities --json
 ```
 
-Agent 应优先使用 JSON 输出做能力发现；如果某项能力不存在，说明当前版本还没有提供对应自动化入口。
+Agent 应优先使用 JSON 输出做能力发现；当前版本只返回工作区、会话、终端和 Git 读取命令，不包含浏览器驱动命令。
 
 ### Agent 自动化只读命令
 
@@ -130,6 +130,8 @@ coder-studio git diff --workspace ws_123 --path src/a.ts --staged --json
 
 这些命令当前只做读取，不会修改工作区、会话、终端或 Git 状态。Agent 应先运行 `coder-studio capabilities --json`，再根据返回的能力清单选择命令。
 
+如果你要做浏览器可见变更的验证，`capabilities` 只负责把可用的读取命令列出来；真正的浏览器检查仍然需要在浏览器里直接看结果，或者借助项目自己的 E2E / Playwright 流程。
+
 ### coder-studio help
 
 显示完整的帮助信息，包括所有命令和选项。
@@ -153,7 +155,7 @@ coder-studio open    # 启动并打开浏览器（最常用）
 coder-studio status  # 随时检查服务状态
 coder-studio logs    # 出问题时查看日志
 coder-studio identify --json      # Agent 发现当前运行上下文
-coder-studio capabilities --json  # Agent 发现可用自动化能力
+coder-studio capabilities --json  # Agent 查看可用只读验证命令
 coder-studio git status --workspace ws_123 --json  # Agent 读取 Git 状态
 coder-studio stop    # 停止服务
 ```

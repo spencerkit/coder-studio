@@ -51,12 +51,22 @@ vi.mock("../shared/file-tree-panel", () => ({
 }));
 
 describe("ExplorerPanel", () => {
-  it("renders only file-related sections without a runtime Explorer panel header", () => {
+  it("renders the workspace section without the obsolete Open Files side-panel section", () => {
     const onOpenFileCreate = vi.fn();
     const onOpenFolderCreate = vi.fn();
     const store = createStore();
     store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
-    store.set(openFilesAtomFamily("ws-test"), {});
+    store.set(activeFilePathAtomFamily("ws-test"), "src/alpha.tsx");
+    store.set(openFilesAtomFamily("ws-test"), {
+      "src/alpha.tsx": {
+        kind: "text",
+        path: "src/alpha.tsx",
+        content: "export const alpha = 1;\n",
+        savedContent: "export const alpha = 1;\n",
+        baseHash: "base-alpha",
+        isDirty: false,
+      },
+    });
 
     const { container } = render(
       <Provider store={store}>
@@ -83,10 +93,11 @@ describe("ExplorerPanel", () => {
 
     expect(screen.queryByText("Explorer")).toBeNull();
     expect(stackedBody).not.toBeNull();
-    expect(sections[0]).toHaveTextContent(/Open Files/);
-    expect(sections[1]).toHaveTextContent(/Workspace/);
+    expect(screen.queryByRole("heading", { level: 2, name: /Open Files|打开的文件/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
+    expect(sections[0]).toHaveTextContent(/Workspace/);
     expect(screen.queryByTestId("agent-instructions-section")).toBeNull();
-    expect(sections).toHaveLength(2);
+    expect(sections).toHaveLength(1);
     expect(stackedBody?.querySelector(".panel-header")).toBeNull();
 
     const workspaceSection = screen
@@ -103,39 +114,6 @@ describe("ExplorerPanel", () => {
       expect.objectContaining({
         collapseVersion: 1,
       })
-    );
-  });
-
-  it("renders the active open editor with the shared selected row contract", () => {
-    const store = createStore();
-    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
-    store.set(activeFilePathAtomFamily("ws-test"), "src/alpha.tsx");
-    store.set(openFilesAtomFamily("ws-test"), {
-      "src/alpha.tsx": {
-        kind: "text",
-        path: "src/alpha.tsx",
-        content: "export const alpha = 1;\n",
-        savedContent: "export const alpha = 1;\n",
-        baseHash: "base-alpha",
-        isDirty: false,
-      },
-    });
-
-    render(
-      <Provider store={store}>
-        <ExplorerPanel
-          workspaceId="ws-test"
-          createRequest={null}
-          onCreateRequestConsumed={vi.fn()}
-          onOpenFileCreate={vi.fn()}
-          onOpenFolderCreate={vi.fn()}
-        />
-      </Provider>
-    );
-
-    expect(screen.getByRole("button", { name: "src/alpha.tsx" })).toHaveClass(
-      "workspace-sidebar-row",
-      "workspace-sidebar-row--selected"
     );
   });
 

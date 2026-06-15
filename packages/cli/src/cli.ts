@@ -9,7 +9,7 @@ import { type CliConfig, readCliConfig, writeCliConfig } from "./config-store.js
 import { readLogExcerpt } from "./log-excerpt.js";
 import { assertSupportedNodeVersion } from "./node-version.js";
 import { getCliVersion } from "./package-manifest.js";
-import { parseArgs } from "./parse-args.js";
+import { type CliArgs, parseArgs } from "./parse-args.js";
 import { startManagedServer } from "./pm2-control.js";
 import { confirmYesNo, isInteractiveSession } from "./prompts.js";
 import { getServerStatus, type ServerStatus, stopRunningServer } from "./server-control.js";
@@ -79,11 +79,13 @@ COMMANDS:
   logs     Show the managed server logs
   help     Show this help message
   identify      Print Coder Studio agent runtime context
-  capabilities  Print agent-facing automation capabilities
+  capabilities  Print read-only validation commands for agents
   workspace     Read workspace automation data
   session       Read session automation data
   terminal      Read terminal automation data
   git           Read git automation data
+  ui            Dispatch UI actions to the active Coder Studio workspace
+  memory        Read and write workspace memory
   version  Show version
 
 OPTIONS:
@@ -114,6 +116,14 @@ EXAMPLES:
   coder-studio terminal read --terminal term_123 --bytes 4096 --json
   coder-studio git status --workspace ws_123 --json
   coder-studio git diff --workspace ws_123 --path src/a.ts --json
+  coder-studio ui open-file --workspace ws_123 --path src/a.ts --line 12 --json
+  coder-studio ui close-file --workspace ws_123 --path src/a.ts --json
+  coder-studio ui open-url --workspace ws_123 --url http://127.0.0.1:5173 --json
+  coder-studio ui close-url --workspace ws_123 --url http://127.0.0.1:5173 --json
+  coder-studio ui show-panel --workspace ws_123 --panel terminal --json
+  coder-studio memory list --workspace ws_123 --json
+  coder-studio memory search architecture --workspace ws_123 --json
+  coder-studio memory add --workspace ws_123 --type decision --content "This repo uses pnpm." --tag tooling --json
   coder-studio stop
   coder-studio config --host 0.0.0.0 --port 8080
 `);
@@ -179,6 +189,66 @@ function printCommandResult(result: unknown, options: { json?: boolean } = {}): 
   }
 
   console.log(JSON.stringify(result, null, 2));
+}
+
+function buildUiActionIntent(args: CliArgs): Record<string, unknown> {
+  const workspace = args.workspaceId !== undefined ? { workspaceId: args.workspaceId } : {};
+
+  switch (args.uiCommand) {
+    case "open-file":
+      return {
+        type: "editor.openFile",
+        ...workspace,
+        path: args.path!,
+        ...(args.line !== undefined ? { line: args.line } : {}),
+        ...(args.column !== undefined ? { column: args.column } : {}),
+      };
+    case "close-file":
+      return {
+        type: "editor.closeFile",
+        ...workspace,
+        path: args.path!,
+      };
+    case "open-url":
+      return {
+        type: "browser.openUrl",
+        ...workspace,
+        url: args.url!,
+      };
+    case "close-url":
+      return {
+        type: "browser.closeUrl",
+        ...workspace,
+        url: args.url!,
+      };
+    case "show-panel":
+      return {
+        type: "panel.show",
+        ...workspace,
+        panel: args.panel!,
+      };
+    case "focus-workspace":
+      return {
+        type: "workspace.focus",
+        workspaceId: args.workspaceId!,
+      };
+    case "run-command":
+      return {
+        type: "command.run",
+        commandId: args.uiCommandId!,
+      };
+    default:
+      throw new Error("Missing ui subcommand");
+  }
+}
+
+function resolveMemoryWorkspaceId(args: CliArgs): string {
+  const workspaceId = args.workspaceId ?? process.env.CODER_STUDIO_WORKSPACE_ID;
+  if (!workspaceId) {
+    throw new Error("Missing workspace value");
+  }
+
+  return workspaceId;
 }
 
 function formatAuthBlocks(blocks: Awaited<ReturnType<typeof listAuthBlocks>>): string {
@@ -416,6 +486,120 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       { json: args.json }
     );
     return;
+  }
+
+  if (args.command === "ui") {
+    printCommandResult(
+      await callCoderStudioCommand({
+        apiUrl: args.apiUrl,
+        op: "uiAction.dispatch",
+        args: {
+          ...(args.workspaceId !== undefined ? { workspaceId: args.workspaceId } : {}),
+          intent: buildUiActionIntent(args),
+          source: { kind: "agent" },
+        },
+      }),
+      { json: args.json }
+    );
+    return;
+  }
+
+  if (args.command === "memory") {
+    const workspaceId = resolveMemoryWorkspaceId(args);
+
+    if (args.memoryCommand === "list") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "memory.list",
+          args: {
+            workspaceId,
+            ...(args.query !== undefined ? { query: args.query } : {}),
+            ...(args.memoryType !== undefined ? { type: args.memoryType } : {}),
+            ...(args.tags?.[0] !== undefined ? { tag: args.tags[0] } : {}),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.memoryCommand === "search") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "memory.search",
+          args: {
+            workspaceId,
+            query: args.query!,
+            ...(args.memoryType !== undefined ? { type: args.memoryType } : {}),
+            ...(args.tags?.[0] !== undefined ? { tag: args.tags[0] } : {}),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.memoryCommand === "get") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "memory.get",
+          args: { workspaceId, id: args.memoryId! },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.memoryCommand === "add") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "memory.create",
+          args: {
+            workspaceId,
+            type: args.memoryType!,
+            content: args.content!,
+            ...(args.tags !== undefined ? { tags: args.tags } : {}),
+            ...(args.skillSlug !== undefined ? { sourceHint: { skillSlug: args.skillSlug } } : {}),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.memoryCommand === "update") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "memory.update",
+          args: {
+            workspaceId,
+            id: args.memoryId!,
+            ...(args.memoryType !== undefined ? { type: args.memoryType } : {}),
+            ...(args.content !== undefined ? { content: args.content } : {}),
+            ...(args.tags !== undefined ? { tags: args.tags } : {}),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.memoryCommand === "delete") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "memory.delete",
+          args: { workspaceId, id: args.memoryId! },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
   }
 
   if (args.command === "auth") {

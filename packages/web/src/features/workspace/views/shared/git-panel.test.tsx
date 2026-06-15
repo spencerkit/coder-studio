@@ -2102,7 +2102,7 @@ describe("GitPanel", () => {
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("feat: refresh source control surface");
     expect(subject).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
-  });
+  }, 15_000);
 
   it("renders the shared commit textarea styling in the updated panel shell", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {

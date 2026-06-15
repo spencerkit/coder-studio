@@ -1,18 +1,22 @@
-import type {
-  AgentSkillTargetEntry,
-  SkillInstallJobSnapshot,
-  SkillLibraryEntry,
-  SkillMountRelation,
+import {
+  type AgentSkillTargetEntry,
+  type SkillInstallJobSnapshot,
+  type SkillLibraryEntry,
+  type SkillMountRelation,
+  type SkillRecommendationEntry,
+  type SkillVersionCheckEntry,
+  Topics,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { dispatchCommandAtom } from "../../../atoms/connection";
+import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { skillsPanelStateAtomFamily } from "../atoms/skills";
 
 export interface SkillSearchResultItem {
   slug: string;
   displayName: string;
   description?: string;
+  version?: string;
   installed: boolean;
   installedVersion?: string;
   mountedProviderIds: string[];
@@ -24,6 +28,16 @@ export interface SkillLibraryListItem extends SkillLibraryEntry {
   errorCount: number;
 }
 
+export interface SkillInfoItem {
+  slug: string;
+  displayName: string;
+  description?: string;
+  version?: string;
+  installed: boolean;
+  libraryEntry?: SkillLibraryEntry;
+  mounts: SkillMountRelation[];
+}
+
 interface SkillsHealthScanResult {
   targets: Array<AgentSkillTargetEntry & { mountedSkillCount: number }>;
   mounts: SkillMountRelation[];
@@ -31,9 +45,15 @@ interface SkillsHealthScanResult {
 
 export function useSkillsPanel(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
+  const wsClient = useAtomValue(wsClientAtom);
   const [panelState, setPanelState] = useAtom(skillsPanelStateAtomFamily(workspaceId));
   const [searchResults, setSearchResults] = useState<SkillSearchResultItem[]>([]);
+  const [recommendations, setRecommendations] = useState<SkillRecommendationEntry[]>([]);
   const [library, setLibrary] = useState<SkillLibraryListItem[]>([]);
+  const [skillInfoBySlug, setSkillInfoBySlug] = useState<Record<string, SkillInfoItem>>({});
+  const [versionChecksBySlug, setVersionChecksBySlug] = useState<
+    Record<string, SkillVersionCheckEntry>
+  >({});
   const [targets, setTargets] = useState<
     Array<AgentSkillTargetEntry & { mountedSkillCount: number }>
   >([]);
@@ -41,7 +61,9 @@ export function useSkillsPanel(workspaceId: string) {
     {}
   );
   const [loadingSearch, setLoadingSearch] = useState(false);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [checkingVersions, setCheckingVersions] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const refreshLibrary = useCallback(async () => {
@@ -77,6 +99,51 @@ export function useSkillsPanel(workspaceId: string) {
     [dispatch, setPanelState]
   );
 
+  const refreshRecommendations = useCallback(async () => {
+    setLoadingRecommendations(true);
+    const result = await dispatch<SkillRecommendationEntry[]>("skills.recommend", { workspaceId });
+    setLoadingRecommendations(false);
+    if (!result.ok || !result.data) {
+      setErrorMessage(result.error?.message ?? "Failed to load skill recommendations");
+      return;
+    }
+
+    setRecommendations(result.data);
+    setErrorMessage(null);
+  }, [dispatch, workspaceId]);
+
+  const checkSkillVersions = useCallback(async () => {
+    setCheckingVersions(true);
+    const result = await dispatch<SkillVersionCheckEntry[]>("skills.versions.check", {});
+    setCheckingVersions(false);
+    if (!result.ok || !result.data) {
+      setErrorMessage(result.error?.message ?? "Failed to check skill versions");
+      return false;
+    }
+
+    setVersionChecksBySlug(Object.fromEntries(result.data.map((entry) => [entry.slug, entry])));
+    setErrorMessage(null);
+    return true;
+  }, [dispatch]);
+
+  const loadSkillInfo = useCallback(
+    async (slug: string) => {
+      const result = await dispatch<SkillInfoItem>("skills.info", { slug });
+      if (!result.ok || !result.data) {
+        setErrorMessage(result.error?.message ?? "Failed to load skill details");
+        return null;
+      }
+
+      setSkillInfoBySlug((current) => ({
+        ...current,
+        [slug]: result.data!,
+      }));
+      setErrorMessage(null);
+      return result.data;
+    },
+    [dispatch]
+  );
+
   const refreshHealth = useCallback(async () => {
     const result = await dispatch<SkillsHealthScanResult>("skills.health.scan", {});
     if (!result.ok || !result.data) {
@@ -105,6 +172,16 @@ export function useSkillsPanel(workspaceId: string) {
   }, [refreshHealth, refreshLibrary]);
 
   useEffect(() => {
+    if (!wsClient || typeof wsClient.subscribe !== "function") {
+      return;
+    }
+
+    return wsClient.subscribe([Topics.skillLibraryChanged], () => {
+      void refreshHealth();
+    });
+  }, [refreshHealth, wsClient]);
+
+  useEffect(() => {
     const jobIds = Object.entries(panelState.installJobIdBySlug);
     if (jobIds.length === 0) {
       return;
@@ -131,8 +208,10 @@ export function useSkillsPanel(workspaceId: string) {
             if (panelState.resolvedQuery) {
               void runSearch(panelState.resolvedQuery);
             }
+            void refreshRecommendations();
             void refreshLibrary();
             void refreshHealth();
+            void checkSkillVersions();
           }
         })
       );
@@ -148,7 +227,9 @@ export function useSkillsPanel(workspaceId: string) {
     panelState.resolvedQuery,
     refreshHealth,
     refreshLibrary,
+    refreshRecommendations,
     runSearch,
+    checkSkillVersions,
     setPanelState,
   ]);
 
@@ -173,65 +254,90 @@ export function useSkillsPanel(workspaceId: string) {
     [dispatch, setPanelState]
   );
 
-  const mountSkill = useCallback(
-    async (providerId: string, skillSlug: string) => {
-      const result = await dispatch<SkillMountRelation>("skills.mount", {
-        providerId,
-        skillSlug,
-        enabled: true,
-      });
-      if (!result.ok) {
-        setErrorMessage(result.error?.message ?? "Failed to mount skill");
-        return false;
+  const setSkillMountEnabled = useCallback(
+    async (skillSlug: string, providerIds: string[], enabled: boolean) => {
+      if (providerIds.length === 0) {
+        return true;
       }
-      setErrorMessage(null);
+
+      const failures: string[] = [];
+
+      for (const providerId of providerIds) {
+        const result = enabled
+          ? await dispatch<SkillMountRelation>("skills.mount", {
+              providerId,
+              skillSlug,
+              enabled: true,
+            })
+          : await dispatch("skills.unmount", {
+              providerId,
+              skillSlug,
+            });
+
+        if (!result.ok) {
+          failures.push(result.error?.message ?? "Failed to update skill mount state");
+        }
+      }
+
       if (panelState.resolvedQuery) {
         await runSearch(panelState.resolvedQuery);
       }
       await refreshHealth();
+
+      if (failures.length > 0) {
+        setErrorMessage(failures[0] ?? "Failed to update skill mount state");
+        return false;
+      }
+
+      setErrorMessage(null);
       return true;
     },
     [dispatch, panelState.resolvedQuery, refreshHealth, runSearch]
   );
 
-  const unmountSkill = useCallback(
-    async (providerId: string, skillSlug: string) => {
-      const result = await dispatch("skills.unmount", {
-        providerId,
-        skillSlug,
-      });
-      if (!result.ok) {
-        setErrorMessage(result.error?.message ?? "Failed to unmount skill");
-        return false;
+  const setBuiltinMountEnabled = useCallback(
+    async (skillSlug: string, providerIds: string[], enabled: boolean) => {
+      if (providerIds.length === 0) {
+        return true;
       }
-      setErrorMessage(null);
-      if (panelState.resolvedQuery) {
-        await runSearch(panelState.resolvedQuery);
-      }
-      await refreshHealth();
-      return true;
-    },
-    [dispatch, panelState.resolvedQuery, refreshHealth, runSearch]
-  );
 
-  const repairSkill = useCallback(
-    async (providerId: string, skillSlug: string) => {
-      const result = await dispatch<SkillMountRelation>("skills.repair", {
-        providerId,
-        skillSlug,
-      });
-      if (!result.ok) {
-        setErrorMessage(result.error?.message ?? "Failed to repair skill mount");
-        return false;
+      const failures: string[] = [];
+
+      for (const providerId of providerIds) {
+        const result = await dispatch("skills.builtin.setMountEnabled", {
+          providerId,
+          skillSlug,
+          enabled,
+        });
+        if (!result.ok) {
+          failures.push(result.error?.message ?? "Failed to update built-in skill mount setting");
+        }
+        if (!enabled) {
+          const unmountResult = await dispatch("skills.unmount", {
+            providerId,
+            skillSlug,
+          });
+          if (!unmountResult.ok) {
+            failures.push(unmountResult.error?.message ?? "Failed to unmount built-in skill");
+          }
+        }
       }
-      setErrorMessage(null);
+
       if (panelState.resolvedQuery) {
         await runSearch(panelState.resolvedQuery);
       }
       await refreshHealth();
+      await refreshRecommendations();
+
+      if (failures.length > 0) {
+        setErrorMessage(failures[0] ?? "Failed to update built-in skill mount setting");
+        return false;
+      }
+
+      setErrorMessage(null);
       return true;
     },
-    [dispatch, panelState.resolvedQuery, refreshHealth, runSearch]
+    [dispatch, panelState.resolvedQuery, refreshHealth, refreshRecommendations, runSearch]
   );
 
   const uninstallSkill = useCallback(
@@ -247,9 +353,38 @@ export function useSkillsPanel(workspaceId: string) {
       }
       await refreshLibrary();
       await refreshHealth();
+      await refreshRecommendations();
       return true;
     },
-    [dispatch, panelState.resolvedQuery, refreshHealth, refreshLibrary, runSearch]
+    [
+      dispatch,
+      panelState.resolvedQuery,
+      refreshHealth,
+      refreshLibrary,
+      refreshRecommendations,
+      runSearch,
+    ]
+  );
+
+  const updateSkill = useCallback(
+    async (slug: string) => {
+      const result = await dispatch<SkillInstallJobSnapshot>("skills.update.start", { slug });
+      if (!result.ok || !result.data) {
+        setErrorMessage(result.error?.message ?? "Failed to update skill");
+        return false;
+      }
+
+      setPanelState((current) => ({
+        ...current,
+        installJobIdBySlug: {
+          ...current.installJobIdBySlug,
+          [slug]: result.data!.jobId,
+        },
+      }));
+      setErrorMessage(null);
+      return true;
+    },
+    [dispatch, setPanelState]
   );
 
   const installingSkillSlugs = useMemo(
@@ -259,21 +394,29 @@ export function useSkillsPanel(workspaceId: string) {
 
   return {
     errorMessage,
+    checkSkillVersions,
+    checkingVersions,
     installSkill,
     installingSkillSlugs,
     library,
+    loadSkillInfo,
     loadingLibrary,
+    loadingRecommendations,
     loadingSearch,
-    mountSkill,
     mountsBySkillSlug,
     panelState,
     refreshHealth,
-    repairSkill,
+    refreshRecommendations,
+    setSkillMountEnabled,
+    setBuiltinMountEnabled,
+    recommendations,
     runSearch,
     searchResults,
     setPanelState,
     targets,
+    skillInfoBySlug,
     uninstallSkill,
-    unmountSkill,
+    updateSkill,
+    versionChecksBySlug,
   };
 }

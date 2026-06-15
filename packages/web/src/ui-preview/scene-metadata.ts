@@ -382,6 +382,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".supervisor-dialog" },
   },
   {
+    id: "supervisor-details-tree-review",
+    title: "Supervisor Details Target Review",
+    category: "modal",
+    source: "showcase",
+    description:
+      "Desktop supervisor target details dialog with a React Flow + ELK zoomable mind map and active-path emphasis.",
+    devices: ["desktop"],
+    themes: allThemeIds(),
+    locales: ["zh", "en"],
+    capture: { selector: ".supervisor-dialog--details" },
+  },
+  {
     id: "readme-desktop-hero",
     title: "README / Desktop Hero",
     category: "page",

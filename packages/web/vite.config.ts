@@ -45,6 +45,14 @@ export default defineConfig(({ command, isPreview }) => {
         "/api": {
           target: backendHttpTarget,
         },
+        "/api/dev-proxy": {
+          target: backendHttpTarget,
+        },
+        "/dev-browser/session": {
+          target: backendHttpTarget,
+          ws: true,
+          changeOrigin: true,
+        },
       },
     },
     build: {
@@ -78,6 +86,8 @@ export default defineConfig(({ command, isPreview }) => {
     test: {
       environment: "jsdom",
       globals: true,
+      // Avoid worker starvation when the Vite build test runs alongside large jsdom suites.
+      maxWorkers: 4,
       env: {
         NODE_ENV: "test",
       },

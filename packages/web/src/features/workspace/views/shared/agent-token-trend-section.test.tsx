@@ -77,8 +77,6 @@ describe("AgentTokenTrendSection", () => {
 
     fireEvent.click(moreDataButton);
 
-    expect(navigateMock).toHaveBeenCalledWith(
-      "/settings?section=analysis&workspacePath=%2Frepo%2Fproject"
-    );
+    expect(navigateMock).toHaveBeenCalledWith("/analytics?workspacePath=%2Frepo%2Fproject");
   });
 });

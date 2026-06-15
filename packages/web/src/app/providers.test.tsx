@@ -17,7 +17,6 @@ import {
   activeFilePathAtomFamily,
   fileTreeStaleAtomFamily,
   openEditorPathsAtomFamily,
-  workspaceExtensionStateAtomFamily,
 } from "../features/workspace/atoms";
 import { resetAppProvidersSingletonsForTests, routeEventToAtom } from "./providers";
 
@@ -105,62 +104,6 @@ describe("routeEventToAtom", () => {
     routeEventToAtom("update.state.changed", state, store);
 
     expect(store.get(updateStateAtom)).toEqual(state);
-  });
-
-  it("hydrates workspace extension state from namespaced workspace extension topics", () => {
-    const store = createStore();
-
-    routeEventToAtom(
-      "workspace.ws-1.extension.state",
-      {
-        workspaceId: "payload-workspace-id-is-not-authoritative",
-        statusPills: [
-          {
-            key: "ci",
-            label: "CI running",
-            state: "running",
-            detail: "unit tests",
-            updatedAt: 100,
-          },
-        ],
-        progress: [
-          {
-            key: "tests",
-            label: "Tests",
-            value: 6,
-            max: 10,
-            detail: "6/10",
-            updatedAt: 101,
-          },
-        ],
-        logs: [
-          {
-            key: "ci",
-            level: "info",
-            message: "Unit tests started",
-            timestamp: 102,
-          },
-        ],
-        quickActions: [
-          {
-            id: "rerun-tests",
-            label: "Rerun tests",
-            command: "extension.quickAction.run",
-          },
-        ],
-        updatedAt: 103,
-      },
-      store
-    );
-
-    expect(store.get(workspaceExtensionStateAtomFamily("ws-1"))).toMatchObject({
-      workspaceId: "ws-1",
-      statusPills: [{ key: "ci", label: "CI running", state: "running" }],
-      progress: [{ key: "tests", label: "Tests", value: 6, max: 10 }],
-      logs: [{ key: "ci", level: "info", message: "Unit tests started" }],
-      quickActions: [{ id: "rerun-tests", label: "Rerun tests" }],
-      updatedAt: 103,
-    });
   });
 
   it("appends brand-new workspace meta events to workspace order without reordering existing entries", () => {

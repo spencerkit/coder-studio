@@ -26,6 +26,36 @@
 
 不建议直接把 Coder Studio 端口暴露到公网。至少先启用密码，并优先使用 Tailscale、ngrok 或 Cloudflare Tunnel 这类反向隧道/VPN 方案。
 
+## 移动端适合什么
+
+移动端的主要价值是延续桌面端已经启动的工作流：
+
+- 查看 Agent 是否仍在运行
+- 阅读终端输出和状态变化
+- 浏览文件和 Git diff
+- 检查 Supervisor 进度
+- 在离开电脑后决定是否需要介入
+
+移动端不应该被理解成完整替代桌面端的主力编码环境。第一次安装、Provider 配置、大规模文件编辑和复杂 Git 操作建议先在桌面端完成。
+
+## 访问本机开发服务
+
+如果项目里启动了只能在电脑本机访问的开发服务，例如 `http://localhost:8000` 或 `http://127.0.0.1:5173`，手机浏览器通常不能直接打开这个地址。Coder Studio 的内置 Browser 可以为这类 loopback HTTP 服务创建一个受控代理入口，让你在 Coder Studio 页面内部查看页面。
+
+使用方式：
+
+1. 在项目终端里启动你的开发服务。
+2. 在 Coder Studio 编辑器 header 点击 **Browser**，打开浏览器标签。
+3. 输入本机开发服务地址，例如 `http://localhost:8000`。
+4. 点击打开后，页面会在内置 Browser iframe 中加载，HTML、CSS、JS、图片等同源资源会通过 Coder Studio 的代理转发。
+
+限制：
+
+- v1 仅支持 HTTP/HTTPS 页面和资源请求，不支持 WebSocket。
+- Vite、Next.js 等开发服务器的 HMR/WebSocket 连接会失败；需要刷新页面查看代码变更。
+- 该入口只在 Coder Studio 内置 Browser 中工作，不会把 `localhost:8000` 变成任意外部浏览器都能访问的公开地址。
+- 仅用于访问本机 loopback 开发服务，不是通用公网代理。
+
 ## 局域网访问
 
 局域网访问适合手机和电脑在同一 Wi-Fi 下的情况。
@@ -210,6 +240,10 @@ https://coder.example.com -> http://localhost:<端口>
 
 - 该工作区的所有终端
 - 新建终端的入口
+
+### 查看本机开发服务
+
+在编辑器 header 点击 Browser 按钮，输入电脑上的 loopback 服务地址，例如 `http://localhost:8000`。页面会在内置 Browser 中通过 Coder Studio 代理加载。WebSocket/HMR 暂不支持，代码变更后需要手动刷新。
 
 ### Supervisor 与通知
 

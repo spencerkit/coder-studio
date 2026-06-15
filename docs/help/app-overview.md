@@ -27,7 +27,7 @@ Coder Studio 是一款**本地优先**的 AI 编码工作台。它将 AI Agent�
 
 会话是你在某个 Provider 下的一次 Agent 运行。每个会话：
 
-- 对应一个 AI 编码 Agent（Claude 或 Codex）
+- 对应一个 AI 编码 Agent Provider
 - 拥有独立的终端输出
 - 可以独立启动、停止和恢复
 
@@ -35,10 +35,13 @@ Coder Studio 是一款**本地优先**的 AI 编码工作台。它将 AI Agent�
 
 ### Provider
 
-Provider 是 AI Agent 的运行环境。当前支持两种：
+Provider 是 AI Agent 的运行环境。当前内置支持：
 
-- **Claude**：Anthropic 的 Claude Code CLI
+- **Claude Code**：Anthropic 的 Claude Code CLI
 - **Codex**：OpenAI 的 Codex CLI
+- **Gemini CLI**：Google 的 Gemini CLI
+- **Cursor Agent**：Cursor 的 agent CLI
+- **OpenCode**：OpenCode CLI
 
 Provider 需要在本地独立安装。Coder Studio 会在启动会话时调用相应的 Provider CLI。
 
@@ -51,13 +54,13 @@ Provider 需要在本地独立安装。Coder Studio 会在启动会话时调用�
 
 ### Skills（技能）
 
-技能是分发给 Agent 的本地说明文件，用来教 Agent 在特定场景下如何行动。Coder Studio 会内置一组第一方技能，并在服务启动时同步到支持技能挂载的 Provider。
+技能是分发给 Agent 的本地说明文件，用来教 Agent 在特定场景下如何行动。Coder Studio 支持安装、管理和挂载技能，也保留内置技能同步机制；当前默认不预装第一方内置技能。
 
-内置技能的 MVP 重点是：
+与技能和 Agent 自动化相关的基础 CLI 能力包括：
 
 - 让 Agent 通过 `coder-studio identify --json` 识别当前 workspace、session 和 provider
-- 让 Agent 通过 `coder-studio capabilities --json` 发现可用自动化命令
-- 在任务结束前提醒 Agent 检查 Git 变更、测试结果和残余风险
+- 让 Agent 通过 `coder-studio capabilities --json` 查看可用的只读验证命令清单
+- 让 Agent 读取终端输出、Git 状态和指定文件 diff，辅助最终检查
 
 ### Settings（设置）
 
@@ -86,7 +89,7 @@ Coder Studio 使用响应式界面，同一服务同时支持：
 ## 常见问题
 
 **Q：一个工作区可以有多个会话吗？**
-可以。你可以在同一工作区内同时运行 Claude 和 Codex 会话。
+可以。你可以在同一工作区内同时运行多个 Provider 会话。
 
 **Q：可以打开多个项目吗？**
 可以。通过顶栏的工作区标签切换，每个工作区独立管理自己的会话、文件和终端。

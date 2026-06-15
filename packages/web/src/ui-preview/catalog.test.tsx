@@ -461,7 +461,12 @@ describe("UI preview catalog", () => {
       await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
     ).toBeInTheDocument();
     expect(await screen.findByTestId("editor-pane-left")).toBeInTheDocument();
-    expect(screen.getAllByText("packages/web/src/app.tsx").length).toBeGreaterThan(0);
+    expect(screen.getByRole("tab", { name: /app\.tsx/i })).toBeInTheDocument();
+    expect(
+      document.querySelector(
+        '.code-editor-path[title="/home/spencer/workspace/coder-studio/packages/web/src/app.tsx"]'
+      )
+    ).toBeTruthy();
     const toolbar = screen.getByRole("toolbar", { name: "Editor actions" });
     expect(toolbar).toBeInTheDocument();
     expect(within(toolbar).getByRole("button", { name: /Diff|差异/i })).toBeInTheDocument();

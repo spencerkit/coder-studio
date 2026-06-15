@@ -8,15 +8,18 @@ import type {
   WorkspaceHistoryEntry,
   WorktreeInfo,
 } from "@coder-studio/core";
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { useSetAtom } from "jotai";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { ConfirmDialog, EmptyState, Notice, Sheet, ThemedIcon } from "../../components/ui";
 import { SessionCard } from "../../features/agent-panes/views/shared/session-card";
 import { CommandPalette } from "../../features/command-palette";
 import { ToastContainer } from "../../features/notifications";
+import { supervisorDetailsAtom } from "../../features/supervisor/atoms";
 import { MobileSupervisorBadge } from "../../features/supervisor/views/mobile/mobile-supervisor-badge";
 import { MobileSupervisorSheet } from "../../features/supervisor/views/mobile/mobile-supervisor-sheet";
 import { ObjectiveDialog } from "../../features/supervisor/views/shared/objective-dialog";
 import { SupervisorCard } from "../../features/supervisor/views/shared/supervisor-card";
+import { SupervisorDetailsDialog } from "../../features/supervisor/views/shared/supervisor-details-dialog";
 import { TerminalPanel } from "../../features/terminal-panel";
 import { TopBar } from "../../features/topbar";
 import { WorkspaceDesktopView } from "../../features/workspace/views/desktop/workspace-desktop-view";
@@ -31,7 +34,8 @@ import { WorkspaceLaunchModal } from "../../features/workspace/views/shared/work
 import { WorkspaceStatusBar } from "../../features/workspace/views/shared/workspace-status-bar";
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
 import { useTranslation } from "../../lib/i18n";
-import type { UiPreviewSceneDefinition } from "../catalog";
+import type { UiPreviewSceneContext, UiPreviewSceneDefinition } from "../catalog";
+import type { UiPreviewSeed } from "../preview-store";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
 
 const workspace: Workspace = {
@@ -79,39 +83,52 @@ const supervisor: Supervisor = {
   maxSupervisionCount: 0,
   completedSupervisionCount: 0,
   currentTargetMemory: {
+    schemaVersion: 2,
     targetId: "target-preview-1",
-    decompositionGenerated: true,
-    decompositionMode: "stage",
-    items: [
-      {
-        id: "stage-1",
-        kind: "stage",
-        title: "Audit compact strip density",
-        objective: "Review density regressions in the compact strip",
-        deliverable: "A verified density audit",
-        acceptanceCriteria: ["Density issues are identified"],
-        status: "done",
-      },
-      {
-        id: "stage-2",
-        kind: "stage",
-        title: "Move memory into expandable detail",
-        objective: "Expose target memory without bloating the strip",
-        deliverable: "A compact card with explicit decomposition detail",
-        acceptanceCriteria: ["Decomposition is visible without expanding layout noise"],
-        status: "in_progress",
-      },
-      {
-        id: "stage-3",
-        kind: "stage",
-        title: "Validate preview coverage across themes",
-        objective: "Ensure preview coverage is representative",
-        deliverable: "A validated preview pass",
-        acceptanceCriteria: ["Preview coverage is confirmed"],
-        status: "pending",
-      },
-    ],
-    activeItemId: "stage-2",
+    planTree: {
+      id: "plan-preview-1",
+      title: "Supervisor target",
+      objective: "Complete the supervised target",
+      deliverable: "Completed target",
+      acceptanceCriteria: ["Target objective is complete"],
+      status: "in_progress",
+      taskType: "generic",
+      children: [
+        {
+          id: "stage-1",
+          title: "Audit compact strip density",
+          objective: "Review density regressions in the compact strip",
+          deliverable: "A verified density audit",
+          acceptanceCriteria: ["Density issues are identified"],
+          status: "done",
+          taskType: "design",
+          children: [],
+        },
+        {
+          id: "stage-2",
+          title: "Move memory into expandable detail",
+          objective: "Expose target memory without bloating the strip",
+          deliverable: "A compact card with explicit decomposition detail",
+          acceptanceCriteria: ["Decomposition is visible without expanding layout noise"],
+          status: "in_progress",
+          taskType: "coding",
+          children: [],
+        },
+        {
+          id: "stage-3",
+          title: "Validate preview coverage across themes",
+          objective: "Ensure preview coverage is representative",
+          deliverable: "A validated preview pass",
+          acceptanceCriteria: ["Preview coverage is confirmed"],
+          status: "pending",
+          taskType: "coding",
+          children: [],
+        },
+      ],
+    },
+    activeNodeId: "stage-2",
+    maxDepth: 6,
+    planRevision: 0,
     progressSummary: "Compact strip restored; preview coverage still under review.",
     stalledCount: 0,
     updatedAt: 1,
@@ -130,7 +147,129 @@ const supervisor: Supervisor = {
   updatedAt: 1,
 };
 
-const worktrees: WorktreeInfo[] = [
+const supervisorDetailsTreePreview: Supervisor = {
+  ...supervisor,
+  id: "sup-preview-tree",
+  sessionId: "session-preview-tree",
+  state: "evaluating",
+  objective: "Refine the supervisor details React Flow mind map",
+  maxSupervisionCount: 4,
+  completedSupervisionCount: 2,
+  currentTargetMemory: {
+    schemaVersion: 2,
+    targetId: "target-preview-tree",
+    planTree: {
+      id: "root",
+      title: "Refine supervisor details mind map",
+      objective: "Present the whole plan as a clear React Flow + ELK mind map",
+      deliverable: "A readable expandable React Flow mind map",
+      acceptanceCriteria: [
+        "The root goal is clear",
+        "The active path stays visible",
+        "Users can zoom, expand, and collapse branches",
+      ],
+      status: "in_progress",
+      taskType: "generic",
+      children: [
+        {
+          id: "audit",
+          title: "Audit the current structure",
+          objective: "Confirm the hierarchy matches the plan",
+          deliverable: "A checked mind map layout",
+          acceptanceCriteria: ["Mind map hierarchy is explicit"],
+          status: "done",
+          taskType: "design",
+          children: [
+            {
+              id: "audit-leaf",
+              title: "Keep the active node readable",
+              objective: "Make sure the current step stands out inside the map",
+              deliverable: "A clearly highlighted active leaf",
+              acceptanceCriteria: ["Active leaf is emphasized"],
+              status: "in_progress",
+              taskType: "coding",
+              children: [],
+              execution: {
+                executable: true,
+                guidance: "Show the current node without forcing every branch open.",
+              },
+            },
+            {
+              id: "audit-note",
+              title: "Document collapse behavior",
+              objective: "Spell out how inactive branches stay hidden by default",
+              deliverable: "A clear note on collapse rules",
+              acceptanceCriteria: ["Collapsed branches remain compact"],
+              status: "pending",
+              taskType: "writing",
+              children: [],
+            },
+          ],
+        },
+        {
+          id: "ship",
+          title: "Ship the refined mind map UI",
+          objective: "Confirm the branch toggle surface is stable",
+          deliverable: "A shippable mind map presentation",
+          acceptanceCriteria: ["Branch toggles work", "Collapsed sections stay readable"],
+          status: "in_progress",
+          taskType: "coding",
+          children: [
+            {
+              id: "ship-explore",
+              title: "Explore alternate branches",
+              objective: "Inspect non-active branches when needed",
+              deliverable: "A manually expanded branch",
+              acceptanceCriteria: ["Other branches can be opened"],
+              status: "pending",
+              taskType: "research",
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+    activeNodeId: "audit-leaf",
+    maxDepth: 6,
+    planRevision: 2,
+    progressSummary:
+      "The active branch is visible; inactive branches remain collapsed until expanded.",
+    stalledCount: 0,
+    updatedAt: 1,
+  },
+  recentTargetCycles: [
+    {
+      cycleId: "target-cycle-preview-tree-1",
+      targetId: "target-preview-tree",
+      startedAt: 1,
+      completedAt: 2,
+      result: "continue",
+      reason: "Keep the mind map expandable, but leave inactive branches collapsed by default.",
+    },
+  ],
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+function SupervisorDetailsTreePreview() {
+  const setDetails = useSetAtom(supervisorDetailsAtom);
+
+  useEffect(() => {
+    setDetails({
+      open: true,
+      sessionId: supervisorDetailsTreePreview.sessionId,
+    });
+  }, [setDetails]);
+
+  return (
+    <SupervisorDetailsDialog
+      workspaceId={workspace.id}
+      sessionId={supervisorDetailsTreePreview.sessionId}
+    />
+  );
+}
+
+const worktrees: [WorktreeInfo, ...WorktreeInfo[]] = [
   {
     name: "feature/e2e-ui",
     path: "/home/spencer/workspace/coder-studio-feature-e2e-ui",
@@ -338,39 +477,52 @@ const readmeSupervisor: Supervisor = {
   maxSupervisionCount: 0,
   completedSupervisionCount: 3,
   currentTargetMemory: {
+    schemaVersion: 2,
     targetId: "target-readme-refresh",
-    decompositionGenerated: true,
-    decompositionMode: "stage",
-    items: [
-      {
-        id: "stage-1",
-        kind: "stage",
-        title: "Capture a desktop hero with active session context",
-        objective: "Show an active desktop coding flow",
-        deliverable: "A readable hero screenshot",
-        acceptanceCriteria: ["Hero capture is readable"],
-        status: "done",
-      },
-      {
-        id: "stage-2",
-        kind: "stage",
-        title: "Capture a focused git review scene for README",
-        objective: "Highlight review context clearly",
-        deliverable: "A focused review screenshot",
-        acceptanceCriteria: ["Diff emphasis is readable"],
-        status: "in_progress",
-      },
-      {
-        id: "stage-3",
-        kind: "stage",
-        title: "Capture a mobile progress check with supervisor status",
-        objective: "Show mobile progress visibility",
-        deliverable: "A mobile supervisor progress screenshot",
-        acceptanceCriteria: ["Mobile supervisor state is legible"],
-        status: "pending",
-      },
-    ],
-    activeItemId: "stage-2",
+    planTree: {
+      id: "plan-readme-refresh",
+      title: "Supervisor target",
+      objective: "Complete the supervised target",
+      deliverable: "Completed target",
+      acceptanceCriteria: ["Target objective is complete"],
+      status: "in_progress",
+      taskType: "generic",
+      children: [
+        {
+          id: "stage-1",
+          title: "Capture a desktop hero with active session context",
+          objective: "Show an active desktop coding flow",
+          deliverable: "A readable hero screenshot",
+          acceptanceCriteria: ["Hero capture is readable"],
+          status: "done",
+          taskType: "design",
+          children: [],
+        },
+        {
+          id: "stage-2",
+          title: "Capture a focused git review scene for README",
+          objective: "Highlight review context clearly",
+          deliverable: "A focused review screenshot",
+          acceptanceCriteria: ["Diff emphasis is readable"],
+          status: "in_progress",
+          taskType: "design",
+          children: [],
+        },
+        {
+          id: "stage-3",
+          title: "Capture a mobile progress check with supervisor status",
+          objective: "Show mobile progress visibility",
+          deliverable: "A mobile supervisor progress screenshot",
+          acceptanceCriteria: ["Mobile supervisor state is legible"],
+          status: "pending",
+          taskType: "design",
+          children: [],
+        },
+      ],
+    },
+    activeNodeId: "stage-2",
+    maxDepth: 6,
+    planRevision: 0,
     progressSummary: "Hero scene locked. Review capture is being polished for README readability.",
     stalledCount: 0,
     updatedAt: 4,
@@ -395,39 +547,52 @@ const readmeMobileSupervisor: Supervisor = {
   sessionId: "session-readme-mobile",
   state: "idle",
   currentTargetMemory: {
+    schemaVersion: 2,
     targetId: "target-readme-refresh",
-    decompositionGenerated: true,
-    decompositionMode: "stage",
-    items: [
-      {
-        id: "stage-1",
-        kind: "stage",
-        title: "Capture a desktop hero with active session context",
-        objective: "Show an active desktop coding flow",
-        deliverable: "A readable hero screenshot",
-        acceptanceCriteria: ["Hero capture is readable"],
-        status: "done",
-      },
-      {
-        id: "stage-2",
-        kind: "stage",
-        title: "Capture a focused git review scene for README",
-        objective: "Highlight review context clearly",
-        deliverable: "A focused review screenshot",
-        acceptanceCriteria: ["Diff emphasis is readable"],
-        status: "done",
-      },
-      {
-        id: "stage-3",
-        kind: "stage",
-        title: "Capture a mobile progress check with supervisor status",
-        objective: "Show mobile progress visibility",
-        deliverable: "A mobile supervisor progress screenshot",
-        acceptanceCriteria: ["Mobile supervisor state is legible"],
-        status: "in_progress",
-      },
-    ],
-    activeItemId: "stage-3",
+    planTree: {
+      id: "plan-readme-refresh-mobile",
+      title: "Supervisor target",
+      objective: "Complete the supervised target",
+      deliverable: "Completed target",
+      acceptanceCriteria: ["Target objective is complete"],
+      status: "in_progress",
+      taskType: "generic",
+      children: [
+        {
+          id: "stage-1",
+          title: "Capture a desktop hero with active session context",
+          objective: "Show an active desktop coding flow",
+          deliverable: "A readable hero screenshot",
+          acceptanceCriteria: ["Hero capture is readable"],
+          status: "done",
+          taskType: "design",
+          children: [],
+        },
+        {
+          id: "stage-2",
+          title: "Capture a focused git review scene for README",
+          objective: "Highlight review context clearly",
+          deliverable: "A focused review screenshot",
+          acceptanceCriteria: ["Diff emphasis is readable"],
+          status: "done",
+          taskType: "design",
+          children: [],
+        },
+        {
+          id: "stage-3",
+          title: "Capture a mobile progress check with supervisor status",
+          objective: "Show mobile progress visibility",
+          deliverable: "A mobile supervisor progress screenshot",
+          acceptanceCriteria: ["Mobile supervisor state is legible"],
+          status: "in_progress",
+          taskType: "design",
+          children: [],
+        },
+      ],
+    },
+    activeNodeId: "stage-3",
+    maxDepth: 6,
+    planRevision: 0,
     progressSummary:
       "Desktop captures are ready. Mobile continuity shot is the last remaining asset.",
     stalledCount: 0,
@@ -488,11 +653,7 @@ function createReadmeWorkspaceFileTree() {
   };
 }
 
-function buildReadmeDesktopHeroSeed(context: {
-  theme: string;
-  locale: "zh" | "en";
-  device: "desktop" | "mobile";
-}) {
+function buildReadmeDesktopHeroSeed(context: UiPreviewSceneContext): UiPreviewSeed {
   const fileTreeByPath = createReadmeWorkspaceFileTree();
 
   return {
@@ -517,7 +678,6 @@ function buildReadmeDesktopHeroSeed(context: {
             sessionId: "session-readme-hero",
           },
         ],
-        sessionId: "session-readme-hero",
       },
     },
     fileTreeByWorkspaceId: {
@@ -661,11 +821,7 @@ function buildReadmeDesktopHeroSeed(context: {
   };
 }
 
-function buildReadmeDesktopReviewSeed(context: {
-  theme: string;
-  locale: "zh" | "en";
-  device: "desktop" | "mobile";
-}) {
+function buildReadmeDesktopReviewSeed(context: UiPreviewSceneContext): UiPreviewSeed {
   const fileTreeByPath = createReadmeWorkspaceFileTree();
 
   return {
@@ -781,12 +937,7 @@ function ReadmeMobileProgressWorkspace() {
       className="mobile-shell mobile-shell--stacked mobile-shell--motion-reduced"
       data-testid="mobile-shell"
     >
-      <MobileTopBar
-        activeWorkspace={workspace}
-        drawerOpen={false}
-        onOpenSettings={() => {}}
-        onToggleDrawer={() => {}}
-      />
+      <MobileTopBar activeWorkspace={workspace} drawerOpen={false} onToggleDrawer={() => {}} />
       <main className="mobile-shell__viewport">
         <div className="mobile-shell__content" style={{ gap: "12px", paddingBottom: "144px" }}>
           <section className="mobile-shell__agent-stage" style={{ flex: "0 0 420px" }}>
@@ -818,11 +969,7 @@ function ReadmeMobileProgressWorkspace() {
   );
 }
 
-function buildReadmeMobileProgressSeed(context: {
-  theme: string;
-  locale: "zh" | "en";
-  device: "desktop" | "mobile";
-}) {
+function buildReadmeMobileProgressSeed(context: UiPreviewSceneContext): UiPreviewSeed {
   const mobileWorkspace = {
     ...workspace,
     uiState: {
@@ -961,12 +1108,7 @@ function FooterUpdateRailPreviewShell({
       className={`${className} mobile-shell mobile-shell--stacked mobile-shell--motion-reduced`}
       data-testid="mobile-shell"
     >
-      <MobileTopBar
-        activeWorkspace={workspace}
-        drawerOpen={false}
-        onOpenSettings={() => {}}
-        onToggleDrawer={() => {}}
-      />
+      <MobileTopBar activeWorkspace={workspace} drawerOpen={false} onToggleDrawer={() => {}} />
       <main className="mobile-shell__viewport">
         <div className="mobile-shell__content" style={{ paddingBottom: "144px" }} />
       </main>
@@ -1362,6 +1504,16 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           <ObjectiveDialog workspaceId={workspace.id} sessionId="session-preview-1" />
         ),
     }),
+    scene("supervisor-details-tree-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => ({
+        ...context,
+        supervisorBySessionId: {
+          "session-preview-tree": supervisorDetailsTreePreview,
+        },
+      }),
+      render: () => <SupervisorDetailsTreePreview />,
+    }),
     scene("mobile-workspace-drawer", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => ({
@@ -1521,7 +1673,6 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
           return (
             <Sheet
               title="Terminal"
-              kicker={null}
               fullscreen
               bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen"
               contentClassName="mobile-sheet--terminal"

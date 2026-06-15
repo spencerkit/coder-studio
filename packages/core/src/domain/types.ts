@@ -65,15 +65,41 @@ export interface WorkspacePaneSplit {
 
 export type WorkspacePaneNode = WorkspacePaneLeaf | WorkspacePaneSplit;
 
+export interface WorkspaceFileEditorTab {
+  kind: "file";
+  path: string;
+}
+
+export type DevBrowserDevicePreset = "desktop" | "iphone-14" | "pixel-7" | "custom";
+export type DevBrowserOrientation = "portrait" | "landscape";
+export type DevBrowserUserAgentMode = "desktop" | "mobile";
+
+export interface WorkspaceBrowserEditorTab {
+  kind: "browser";
+  id: string;
+  url: string | null;
+  devicePreset: DevBrowserDevicePreset;
+  viewportWidth: number | null;
+  viewportHeight: number | null;
+  orientation: DevBrowserOrientation;
+  userAgentMode: DevBrowserUserAgentMode;
+}
+
+export type WorkspaceEditorTab = WorkspaceFileEditorTab | WorkspaceBrowserEditorTab;
+
 export interface UiState {
   leftPanelWidth: number;
   bottomPanelHeight: number;
   focusMode: boolean;
+  editorViewVisible?: boolean;
   activeSessionId?: string;
   paneLayout?: WorkspacePaneNode;
   fileTreeExpandedDirs?: string[];
   openEditorPaths?: string[];
   activeEditorPath?: string | null;
+  openEditorTabs?: WorkspaceEditorTab[];
+  activeEditorTab?: WorkspaceEditorTab | null;
+  devBrowserTargetUrl?: string | null;
   agentInstructionsExpanded?: boolean;
 }
 

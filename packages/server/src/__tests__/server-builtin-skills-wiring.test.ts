@@ -1,5 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,7 +36,7 @@ describe("server built-in skills wiring", () => {
     vi.resetModules();
   });
 
-  it("syncs built-in skills and wires automation audit log on startup", async () => {
+  it("materializes and auto-mounts default built-in skills on startup", async () => {
     tempDir = mkdtempSync(join(tmpdir(), "coder-studio-server-builtin-skills-"));
     process.env.HOME = join(tempDir, "home");
     process.env.USERPROFILE = join(tempDir, "home");
@@ -55,20 +54,65 @@ describe("server built-in skills wiring", () => {
     expect(ctx.builtinSkillSyncMgr).toBeDefined();
     expect(ctx.automationAuditLog).toBeDefined();
     expect(ctx.stateRoot).toBe(join(tempDir, "state-root"));
-    expect(ctx.skillLibraryRepo?.get("coder-studio-automation")).toMatchObject({
-      source: "builtin",
-      builtin: { defaultEnabled: true, autoMount: true },
-    });
+    expect(ctx.skillLibraryRepo?.list().filter((entry) => entry.source === "builtin")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: "coder-studio-open",
+          source: "builtin",
+          installState: "installed",
+          builtin: { defaultEnabled: true, autoMount: true },
+        }),
+        expect.objectContaining({
+          slug: "coder-studio-memory",
+          source: "builtin",
+          installState: "installed",
+          builtin: { defaultEnabled: true, autoMount: true },
+        }),
+      ])
+    );
+    expect(ctx.skillLibraryRepo?.list().filter((entry) => entry.source === "builtin")).toHaveLength(
+      2
+    );
 
-    const skillPath = join(
+    const builtinRoot = join(tempDir, "state-root", "state", "skills", "builtin");
+    const builtinOpenSkillPath = join(builtinRoot, "coder-studio-open", "SKILL.md");
+    expect(existsSync(builtinOpenSkillPath)).toBe(true);
+    expect(readFileSync(builtinOpenSkillPath, "utf8")).toContain("coder-studio ui open-file");
+    expect(readFileSync(builtinOpenSkillPath, "utf8")).toContain("coder-studio ui open-url");
+    expect(readFileSync(builtinOpenSkillPath, "utf8")).toContain("coder-studio ui close-file");
+    expect(readFileSync(builtinOpenSkillPath, "utf8")).toContain("coder-studio ui close-url");
+
+    const builtinMemorySkillPath = join(builtinRoot, "coder-studio-memory", "SKILL.md");
+    expect(existsSync(builtinMemorySkillPath)).toBe(true);
+    expect(readFileSync(builtinMemorySkillPath, "utf8")).toContain("coder-studio memory list");
+    expect(readFileSync(builtinMemorySkillPath, "utf8")).toContain("coder-studio memory search");
+    expect(readFileSync(builtinMemorySkillPath, "utf8")).toContain("coder-studio memory add");
+
+    const homeOpenSkillPath = join(
       tempDir,
       "home",
       ".agents",
       "skills",
-      "coder-studio-automation",
+      "coder-studio-open",
       "SKILL.md"
     );
-    expect(existsSync(skillPath)).toBe(true);
-    await expect(readFile(skillPath, "utf8")).resolves.toContain("coder-studio identify --json");
+    expect(existsSync(homeOpenSkillPath)).toBe(true);
+    expect(readFileSync(homeOpenSkillPath, "utf8")).toContain("coder-studio ui open-file");
+    expect(readFileSync(homeOpenSkillPath, "utf8")).toContain("coder-studio ui open-url");
+    expect(readFileSync(homeOpenSkillPath, "utf8")).toContain("coder-studio ui close-file");
+    expect(readFileSync(homeOpenSkillPath, "utf8")).toContain("coder-studio ui close-url");
+
+    const homeMemorySkillPath = join(
+      tempDir,
+      "home",
+      ".agents",
+      "skills",
+      "coder-studio-memory",
+      "SKILL.md"
+    );
+    expect(existsSync(homeMemorySkillPath)).toBe(true);
+    expect(readFileSync(homeMemorySkillPath, "utf8")).toContain("coder-studio memory list");
+    expect(readFileSync(homeMemorySkillPath, "utf8")).toContain("coder-studio memory search");
+    expect(readFileSync(homeMemorySkillPath, "utf8")).toContain("coder-studio memory add");
   }, 20_000);
 });

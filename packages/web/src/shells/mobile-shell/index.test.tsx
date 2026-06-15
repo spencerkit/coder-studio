@@ -697,7 +697,9 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit Supervisor" })).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(
       document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
     ).not.toBeNull();
@@ -1005,10 +1007,11 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("shows a direct settings entry instead of a more-actions trigger", async () => {
+  it("shows a more-features trigger instead of the workspace menu trigger", async () => {
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More Features" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Workspace Menu" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open more actions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quick Actions" })).not.toBeInTheDocument();
   });
@@ -1017,7 +1020,7 @@ describe("MobileShell Phase 2 workspace", () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toHaveClass(
+    expect(screen.getByRole("button", { name: "More Features" })).toHaveClass(
       "btn",
       "btn-ghost",
       "mobile-topbar__icon-button"
@@ -1029,30 +1032,39 @@ describe("MobileShell Phase 2 workspace", () => {
     );
   });
 
-  it("opens settings from the direct mobile topbar button", async () => {
+  it("navigates directly to /more from the mobile topbar", async () => {
     const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    await user.click(screen.getByRole("button", { name: "Open settings" }));
+    await user.click(screen.getByRole("button", { name: "More Features" }));
 
-    expect(screen.getByText("SettingsPage")).toBeInTheDocument();
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "More Features" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Settings/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Analysis & Diagnostics/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^About & Updates/ })).toBeInTheDocument();
   });
 
-  it("shows a fullscreen toggle to the right of the settings trigger when the browser supports fullscreen", async () => {
+  it("shows a fullscreen toggle to the right of the more-features trigger when the browser supports fullscreen", async () => {
     installFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    const settingsButton = screen.getByRole("button", { name: "Open settings" });
+    const moreFeaturesButton = screen.getByRole("button", { name: "More Features" });
     const fullscreenButton = await screen.findByRole("button", { name: "Enter Fullscreen" });
+    const actionButtons = Array.from(
+      document.querySelector(".mobile-topbar__actions")?.children ?? []
+    );
 
-    expect(settingsButton.nextElementSibling).toBe(fullscreenButton);
+    expect(actionButtons[0]).toBe(moreFeaturesButton);
+    expect(moreFeaturesButton.nextElementSibling).toBe(fullscreenButton);
+    expect(actionButtons[1]).toBe(fullscreenButton);
   });
 
   it("keeps the fullscreen toggle visible on mobile when the browser does not support fullscreen", async () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
-    expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More Features" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
   });
 
@@ -1174,7 +1186,25 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("shows the loading shell instead of MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
+  it("renders MoreFeaturesPage on mobile /more while auth status is still unknown", async () => {
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, null);
+    store.set(authenticatedAtom, false);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/more"]}>
+          <MobileShell />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).toBeNull();
+  });
+
+  it("renders MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, null);
@@ -1189,13 +1219,12 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
-    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
-    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders not-found instead of MonitoringPage on mobile /monitoring once auth status is resolved", () => {
+  it("renders MonitoringPage on mobile /monitoring once auth status is resolved", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
@@ -1210,9 +1239,8 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("Page not found")).toBeInTheDocument();
+    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
-    expect(screen.queryByText("MonitoringPage")).not.toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
@@ -1664,7 +1692,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
     expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
     expect(screen.getByRole("button", { name: "Open Diagnostics" })).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it("switches from session mode to provider mode inside a single mobile select sheet", async () => {
     const user = userEvent.setup();

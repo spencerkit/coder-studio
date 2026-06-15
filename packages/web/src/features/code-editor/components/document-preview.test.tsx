@@ -24,6 +24,7 @@ describe("DocumentPreview", () => {
       <DocumentPreview
         title="README.md"
         src="/api/preview/session/session-1/README.md?rev=1"
+        allowScripts={true}
         isLoading={false}
         error={null}
         onRetry={onRetry}
@@ -34,8 +35,23 @@ describe("DocumentPreview", () => {
       "src",
       "/api/preview/session/session-1/README.md?rev=1"
     );
+    expect(screen.getByTitle("README.md preview")).toHaveAttribute("sandbox", "allow-scripts");
 
     fireEvent.error(screen.getByTitle("README.md preview"));
     expect(screen.getByText("Preview unavailable")).toBeInTheDocument();
+  });
+
+  it("keeps the iframe sandbox empty when scripts are not allowed", () => {
+    render(
+      <DocumentPreview
+        title="README.md"
+        src="/api/preview/session/session-1/README.md?rev=1"
+        allowScripts={false}
+        isLoading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByTitle("README.md preview")).toHaveAttribute("sandbox", "");
   });
 });

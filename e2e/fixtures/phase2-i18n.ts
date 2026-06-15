@@ -1,7 +1,7 @@
-import { type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { type E2ELocaleCode, translateForE2E } from "./i18n.js";
 
-type SettingsSection = "general" | "appearance" | "providers" | "shortcuts" | "analysis";
+type SettingsSection = "general" | "appearance" | "providers" | "shortcuts";
 type ProviderSettingLabel =
   | "base"
   | "config_file"
@@ -15,7 +15,6 @@ const SETTINGS_SECTION_KEYS: Record<SettingsSection, Parameters<typeof translate
   general: "settings.general",
   appearance: "settings.appearance",
   providers: "settings.providers",
-  analysis: "settings.analysis.title",
   shortcuts: "settings.shortcuts.title",
 };
 
@@ -69,13 +68,49 @@ export function settingsSectionPattern(section: SettingsSection): RegExp {
 export async function openSettingsSection(
   page: Page,
   section: SettingsSection,
-  locale?: E2ELocaleCode
+  _locale?: E2ELocaleCode
 ): Promise<void> {
-  await page
-    .getByRole("button", {
-      name: locale ? settingsSectionLabel(section, locale) : settingsSectionPattern(section),
-    })
-    .click();
+  await openSettingsPage(page, section);
+}
+
+export async function openSettingsPage(page: Page, section?: SettingsSection): Promise<void> {
+  const reenterButton = page.getByRole("button", {
+    name: localizedPattern("auth.session_gate_reenter"),
+  });
+  const targetUrl = section ? `/more/settings/${section}` : "/more/settings/general";
+  const settingsRoot = page.locator(
+    ".more-features-page .settings-content, .settings-page, .settings-container"
+  );
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+    const visibleState = await Promise.race<"settings" | "gate">([
+      settingsRoot.waitFor({ state: "visible", timeout: 10000 }).then(() => "settings" as const),
+      reenterButton.waitFor({ state: "visible", timeout: 10000 }).then(() => "gate" as const),
+    ]).catch(() => null);
+
+    if (visibleState === "gate" || page.url().includes("/session-gate")) {
+      await clickVisibleElement(reenterButton);
+      await page.waitForURL(/\/$/, { timeout: 10000 }).catch(() => {});
+      continue;
+    }
+
+    await expect(settingsRoot).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    if (
+      (await reenterButton.isVisible().catch(() => false)) ||
+      page.url().includes("/session-gate")
+    ) {
+      await clickVisibleElement(reenterButton);
+      await page.waitForURL(/\/$/, { timeout: 10000 }).catch(() => {});
+      continue;
+    }
+
+    return;
+  }
+
+  await expect(settingsRoot).toBeVisible();
 }
 
 export function providerSettingLabel(
@@ -106,4 +141,15 @@ export function configFileLabel(label: ConfigFileLabel, locale: E2ELocaleCode = 
 
 export function configFilePattern(label: ConfigFileLabel): RegExp {
   return localizedPattern(CONFIG_FILE_KEYS[label]);
+}
+
+export async function clickVisibleElement(locator: Locator): Promise<void> {
+  await expect(locator).toBeVisible();
+  await locator.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) {
+      throw new Error("Expected clickable HTMLElement");
+    }
+
+    element.click();
+  });
 }

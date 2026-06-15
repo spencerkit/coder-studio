@@ -89,6 +89,7 @@ export class AgentInstructionsGenerator {
         env: { ...process.env, ...command.env },
         windowsHide: true,
         timeoutMs: AGENT_INSTRUCTIONS_GENERATION_TIMEOUT_MS,
+        prompt,
       });
       const replyText = extractAgentInstructionsReplyText(provider.id, stdout);
       const content = parseGeneratedAgentInstructionsPayload(replyText);

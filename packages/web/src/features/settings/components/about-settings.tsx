@@ -49,12 +49,15 @@ function getStatusTone(
 
 const UPDATE_INTERVALS = [3600, 21600, 43200, 86400] as const;
 
+export type AboutSettingsView = "all" | "product" | "update-status" | "auto-update";
+
 interface AboutSettingsProps {
   autoCheckEnabled: boolean;
   checkIntervalSec: number;
   onAutoCheckEnabledChange: (value: boolean) => void;
   onCheckIntervalChange: (value: number) => void;
   locale: "zh" | "en";
+  view?: AboutSettingsView;
 }
 
 export function AboutSettings({
@@ -63,6 +66,7 @@ export function AboutSettings({
   onAutoCheckEnabledChange,
   onCheckIntervalChange,
   locale,
+  view = "all",
 }: AboutSettingsProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
@@ -76,6 +80,9 @@ export function AboutSettings({
   const autoCheckLabelId = useId();
   const autoCheckDescId = useId();
   const checkIntervalLabelId = useId();
+  const showProduct = view === "all" || view === "product";
+  const showUpdateStatus = view === "all" || view === "update-status";
+  const showAutoUpdate = view === "all" || view === "auto-update";
 
   const statusLabel = useMemo(() => {
     if (!updateState) {
@@ -181,147 +188,153 @@ export function AboutSettings({
 
   return (
     <div className="settings-section" data-testid="about-settings">
-      <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.about.title")}</h3>
-        <p className="settings-group-desc">{t("settings.about.description")}</p>
+      {showProduct ? (
+        <div className="settings-group">
+          <h3 className="settings-group-title">{t("settings.about.title")}</h3>
+          <p className="settings-group-desc">{t("settings.about.description")}</p>
 
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.product_name")}</span>
-          <span className="settings-info-value">Coder Studio</span>
-        </div>
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.current_version")}</span>
-          <span className="settings-info-value">v{serverInfo?.version ?? "0.0.0"}</span>
-        </div>
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
-          <span className="settings-info-value">{serverInfo?.serverInstanceId ?? "-"}</span>
-        </div>
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.install_support")}</span>
-          <span className="settings-info-value">
-            {updateState?.supported
-              ? t("settings.about.install_supported")
-              : (updateState?.unsupportedReason ?? t("settings.about.install_unsupported"))}
-          </span>
-        </div>
-      </div>
-
-      <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.about.update_group")}</h3>
-        <p className="settings-group-desc">{t("settings.about.update_group_hint")}</p>
-
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.latest_version")}</span>
-          <span className="settings-info-value">
-            {updateState?.latestVersion ? `v${updateState.latestVersion}` : "-"}
-          </span>
-        </div>
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.last_checked")}</span>
-          <span className="settings-info-value">
-            {formatTime(
-              updateState?.lastCheckedAt ?? null,
-              locale,
-              t("settings.about.availability_unknown")
-            )}
-          </span>
-        </div>
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.availability")}</span>
-          <span className="settings-info-value">{availabilityLabel}</span>
-        </div>
-        <div className="settings-info-row">
-          <span className="settings-info-label">{t("settings.about.update_status")}</span>
-          <span className="settings-info-value settings-info-value--with-dot">
-            <StatusDot tone={getStatusTone(updateState)} size="sm" />
-            <span>{statusLabel}</span>
-          </span>
-        </div>
-
-        {updateState?.errorSummary ? (
-          <Notice
-            tone={updateState.updateStatus === "manual_required" ? "warning" : "error"}
-            title={t("settings.about.error_summary")}
-            message={updateState.errorSummary}
-          />
-        ) : null}
-
-        {updateState?.manualCommand ? (
-          <Notice
-            tone="warning"
-            title={t("settings.about.manual_command")}
-            message={updateState.manualCommand}
-          />
-        ) : null}
-
-        <div className="settings-actions-row settings-actions-row--end">
-          <Button
-            onClick={() => {
-              void handleCheck();
-            }}
-            disabled={
-              loading !== null ||
-              updateState?.updateStatus === "checking" ||
-              updateState?.updateStatus === "installing" ||
-              updateState?.updateStatus === "restarting"
-            }
-          >
-            {loading === "check" ? t("settings.about.checking") : t("settings.about.check_now")}
-          </Button>
-          <Button
-            onClick={() => {
-              void handlePrepareInstall();
-            }}
-            disabled={
-              loading !== null ||
-              !updateState?.supported ||
-              updateState?.availability !== "update_available" ||
-              updateState.updateStatus === "checking" ||
-              updateState.updateStatus === "installing" ||
-              updateState.updateStatus === "restarting" ||
-              Boolean(updateState.manualCommand)
-            }
-          >
-            {loading === "install" || loading === "prepare"
-              ? t("settings.about.installing")
-              : t("settings.about.update_now")}
-          </Button>
-        </div>
-      </div>
-
-      <div className="settings-group">
-        <div className="settings-toggle-row">
-          <div className="settings-toggle-info">
-            <span className="settings-toggle-label" id={autoCheckLabelId}>
-              {t("settings.about.auto_check_enabled")}
-            </span>
-            <span className="settings-toggle-desc" id={autoCheckDescId}>
-              {t("settings.about.auto_check_enabled_hint")}
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.product_name")}</span>
+            <span className="settings-info-value">Coder Studio</span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.current_version")}</span>
+            <span className="settings-info-value">v{serverInfo?.version ?? "0.0.0"}</span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
+            <span className="settings-info-value">{serverInfo?.serverInstanceId ?? "-"}</span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.install_support")}</span>
+            <span className="settings-info-value">
+              {updateState?.supported
+                ? t("settings.about.install_supported")
+                : (updateState?.unsupportedReason ?? t("settings.about.install_unsupported"))}
             </span>
           </div>
-          <Switch
-            aria-describedby={autoCheckDescId}
-            aria-labelledby={autoCheckLabelId}
-            checked={autoCheckEnabled}
-            className="settings-toggle"
-            onCheckedChange={onAutoCheckEnabledChange}
-          />
         </div>
+      ) : null}
 
-        <div className="settings-info-row">
-          <span className="settings-info-label" id={checkIntervalLabelId}>
-            {t("settings.about.check_interval")}
-          </span>
-          <SegmentedControl
-            aria-labelledby={checkIntervalLabelId}
-            onChange={(nextValue) => onCheckIntervalChange(Number(nextValue))}
-            options={intervalOptions}
-            size="sm"
-            value={String(checkIntervalSec)}
-          />
+      {showUpdateStatus ? (
+        <div className="settings-group">
+          <h3 className="settings-group-title">{t("settings.about.update_group")}</h3>
+          <p className="settings-group-desc">{t("settings.about.update_group_hint")}</p>
+
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.latest_version")}</span>
+            <span className="settings-info-value">
+              {updateState?.latestVersion ? `v${updateState.latestVersion}` : "-"}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.last_checked")}</span>
+            <span className="settings-info-value">
+              {formatTime(
+                updateState?.lastCheckedAt ?? null,
+                locale,
+                t("settings.about.availability_unknown")
+              )}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.availability")}</span>
+            <span className="settings-info-value">{availabilityLabel}</span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.update_status")}</span>
+            <span className="settings-info-value settings-info-value--with-dot">
+              <StatusDot tone={getStatusTone(updateState)} size="sm" />
+              <span>{statusLabel}</span>
+            </span>
+          </div>
+
+          {updateState?.errorSummary ? (
+            <Notice
+              tone={updateState.updateStatus === "manual_required" ? "warning" : "error"}
+              title={t("settings.about.error_summary")}
+              message={updateState.errorSummary}
+            />
+          ) : null}
+
+          {updateState?.manualCommand ? (
+            <Notice
+              tone="warning"
+              title={t("settings.about.manual_command")}
+              message={updateState.manualCommand}
+            />
+          ) : null}
+
+          <div className="settings-actions-row settings-actions-row--end">
+            <Button
+              onClick={() => {
+                void handleCheck();
+              }}
+              disabled={
+                loading !== null ||
+                updateState?.updateStatus === "checking" ||
+                updateState?.updateStatus === "installing" ||
+                updateState?.updateStatus === "restarting"
+              }
+            >
+              {loading === "check" ? t("settings.about.checking") : t("settings.about.check_now")}
+            </Button>
+            <Button
+              onClick={() => {
+                void handlePrepareInstall();
+              }}
+              disabled={
+                loading !== null ||
+                !updateState?.supported ||
+                updateState?.availability !== "update_available" ||
+                updateState.updateStatus === "checking" ||
+                updateState.updateStatus === "installing" ||
+                updateState.updateStatus === "restarting" ||
+                Boolean(updateState.manualCommand)
+              }
+            >
+              {loading === "install" || loading === "prepare"
+                ? t("settings.about.installing")
+                : t("settings.about.update_now")}
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {showAutoUpdate ? (
+        <div className="settings-group">
+          <div className="settings-toggle-row">
+            <div className="settings-toggle-info">
+              <span className="settings-toggle-label" id={autoCheckLabelId}>
+                {t("settings.about.auto_check_enabled")}
+              </span>
+              <span className="settings-toggle-desc" id={autoCheckDescId}>
+                {t("settings.about.auto_check_enabled_hint")}
+              </span>
+            </div>
+            <Switch
+              aria-describedby={autoCheckDescId}
+              aria-labelledby={autoCheckLabelId}
+              checked={autoCheckEnabled}
+              className="settings-toggle"
+              onCheckedChange={onAutoCheckEnabledChange}
+            />
+          </div>
+
+          <div className="settings-info-row">
+            <span className="settings-info-label" id={checkIntervalLabelId}>
+              {t("settings.about.check_interval")}
+            </span>
+            <SegmentedControl
+              aria-labelledby={checkIntervalLabelId}
+              onChange={(nextValue) => onCheckIntervalChange(Number(nextValue))}
+              options={intervalOptions}
+              size="sm"
+              value={String(checkIntervalSec)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {confirmState ? (
         <ConfirmDialog

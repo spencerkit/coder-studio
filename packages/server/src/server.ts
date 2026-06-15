@@ -27,7 +27,6 @@ import {
   resolveConfiguredStateDir,
   type ServerConfigInput,
 } from "./config.js";
-import { WorkspaceExtensionStateService } from "./extension-state/workspace-extension-state-service.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
 import { LspManager } from "./lsp/manager.js";
 import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
@@ -42,7 +41,10 @@ import { runCommandAsString } from "./provider-runtime/command-runner.js";
 import { buildCustomProviderDefinition } from "./provider-runtime/custom-provider.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { ProviderInstallManager } from "./provider-runtime/install-manager.js";
-import type { RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
+import {
+  buildProviderRuntimeStatus,
+  type RuntimeStatusDeps,
+} from "./provider-runtime/runtime-status.js";
 import { SessionManager } from "./session/manager.js";
 import { SessionAnalysisRunner } from "./session-analysis/runner.js";
 import { SessionAnalysisService } from "./session-analysis/service.js";
@@ -56,6 +58,7 @@ import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-rep
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
 import { CustomProviderRepo } from "./storage/repositories/custom-provider-repo.js";
+import { MemoryRepo } from "./storage/repositories/memory-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
 import { SessionAnalysisRepo } from "./storage/repositories/session-analysis-repo.js";
 import { SessionMetadataRepo } from "./storage/repositories/session-metadata-repo.js";
@@ -68,7 +71,6 @@ import { SupervisorRepo } from "./storage/repositories/supervisor-repo.js";
 import { TerminalRepo } from "./storage/repositories/terminal-repo.js";
 import { UpdateStateRepo } from "./storage/repositories/update-state-repo.js";
 import { WorkAnalysisRepo } from "./storage/repositories/work-analysis-repo.js";
-import { WorkspaceExtensionStateRepo } from "./storage/repositories/workspace-extension-state-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { SupervisorManager } from "./supervisor/manager.js";
 import * as targetStore from "./supervisor/target-store.js";
@@ -192,6 +194,20 @@ export async function createServer(
   const providerConfigRepo = new ProviderConfigRepo({
     filePath: join(stateRoot, "state", "provider-configs.json"),
   });
+  const customProviderRepo = new CustomProviderRepo({
+    filePath: join(stateRoot, "state", "custom-providers.json"),
+  });
+  let activeProviderRegistry = [
+    ...providerRegistry,
+    ...customProviderRepo.list().map((config) => buildCustomProviderDefinition(config)),
+  ];
+  const providerMockOverrides = createE2EProviderMockOverrides();
+  const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
+    ? {
+        commandExists: providerMockOverrides.commandExists,
+        runCommand: providerMockOverrides.runCommand,
+      }
+    : {};
   const skillLibraryRepo = new SkillLibraryRepo({
     filePath: join(stateRoot, "state", "skills", "library-index.json"),
     localSkillRoots: resolveDefaultLocalSkillRoots(),
@@ -204,31 +220,32 @@ export async function createServer(
   });
   const skillsHubClient = new SkillsHubClient({ runCommand: runCommandAsString });
   const skillLibraryRoot = join(stateRoot, "state", "skills", "library");
-  const skillInstallMgr = new SkillInstallManager({
-    skillsHubClient,
-    skillLibraryRepo,
-    libraryRoot: skillLibraryRoot,
-  });
   const skillMountMgr = new SkillMountManager({
     getProviderRegistry: () => activeProviderRegistry,
     skillLibraryRepo,
     skillMountRepo,
   });
+  const skillInstallMgr = new SkillInstallManager({
+    skillsHubClient,
+    skillLibraryRepo,
+    libraryRoot: skillLibraryRoot,
+    skillMountMgr,
+    getInstalledSkillTargetProviderIds: async () => {
+      const runtimeStatus = await buildProviderRuntimeStatus(
+        activeProviderRegistry,
+        providerRuntimeDeps
+      );
+      return Object.values(runtimeStatus.providers)
+        .filter((provider) => provider.available && provider.supportsSkillsMount)
+        .map((provider) => provider.providerId);
+    },
+  });
   const skillHealthMgr = new SkillHealthManager({
     getProviderRegistry: () => activeProviderRegistry,
     skillLibraryRepo,
   });
-  const customProviderRepo = new CustomProviderRepo({
-    filePath: join(stateRoot, "state", "custom-providers.json"),
-  });
   const workspaceRepo = new WorkspaceRepo({
     filePath: join(stateRoot, "state", "workspaces.json"),
-  });
-  const workspaceExtensionStateService = new WorkspaceExtensionStateService({
-    repo: new WorkspaceExtensionStateRepo({
-      workspaceRepo,
-    }),
-    eventBus,
   });
   const sessionMetadataRepo = new SessionMetadataRepo({
     workspaceRepo,
@@ -240,12 +257,11 @@ export async function createServer(
     filePath: join(stateRoot, "state", "work-analysis.sqlite"),
     legacyJsonFilePath: join(stateRoot, "state", "work-analysis.json"),
   });
-  let activeProviderRegistry = [
-    ...providerRegistry,
-    ...customProviderRepo.list().map((config) => buildCustomProviderDefinition(config)),
-  ];
   const automationAuditLog = new AutomationAuditLog({
     filePath: join(stateRoot, "state", "automation-audit.jsonl"),
+  });
+  const memoryRepo = new MemoryRepo({
+    rootDir: join(stateRoot, "state", "memory", "workspaces"),
   });
   const builtinSkillSyncMgr = new BuiltinSkillSyncManager({
     builtinRoot: join(stateRoot, "state", "skills", "builtin"),
@@ -324,6 +340,7 @@ export async function createServer(
       taskMgr.clearWorkspace(workspaceId);
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
+      memoryRepo.removeWorkspace(workspaceId);
 
       for (const session of persistedSessions) {
         sessionRepo.delete(session.id);
@@ -372,13 +389,6 @@ export async function createServer(
 
   wsHub.setLogger(app.log);
   workspaceMgr.setLogger(app.log);
-  const providerMockOverrides = createE2EProviderMockOverrides();
-  const providerRuntimeDeps: RuntimeStatusDeps = providerMockOverrides
-    ? {
-        commandExists: providerMockOverrides.commandExists,
-        runCommand: providerMockOverrides.runCommand,
-      }
-    : {};
   agentInstructionPublisher = new AgentInstructionsPublisher({
     workspaceMgr,
     getProviderRegistry: () => activeProviderRegistry,
@@ -525,7 +535,7 @@ export async function createServer(
     skillMountRepo,
     builtinSkillSyncMgr,
     automationAuditLog,
-    workspaceExtensionStateService,
+    memoryRepo,
     stateRoot,
     agentInstructionPublisher,
   };

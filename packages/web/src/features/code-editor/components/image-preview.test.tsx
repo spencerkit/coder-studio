@@ -16,6 +16,42 @@ function renderWithLocale(ui: ReactElement) {
   return render(ui, { wrapper: LocaleProvider });
 }
 
+function loadPreviewImage({
+  canvasHeight = 400,
+  canvasWidth = 500,
+  naturalHeight = 800,
+  naturalWidth = 1000,
+}: {
+  canvasHeight?: number;
+  canvasWidth?: number;
+  naturalHeight?: number;
+  naturalWidth?: number;
+} = {}) {
+  const canvas = document.querySelector(".image-preview-canvas") as HTMLDivElement;
+  const image = screen.getByRole("img", { name: "Preview asset" }) as HTMLImageElement;
+
+  Object.defineProperty(canvas, "clientWidth", {
+    configurable: true,
+    value: canvasWidth,
+  });
+  Object.defineProperty(canvas, "clientHeight", {
+    configurable: true,
+    value: canvasHeight,
+  });
+  Object.defineProperty(image, "naturalWidth", {
+    configurable: true,
+    value: naturalWidth,
+  });
+  Object.defineProperty(image, "naturalHeight", {
+    configurable: true,
+    value: naturalHeight,
+  });
+
+  fireEvent.load(image);
+
+  return { canvas, image };
+}
+
 describe("ImagePreview", () => {
   it("preserves the migrated empty-state fallback when image loading fails", () => {
     renderWithLocale(
@@ -194,11 +230,9 @@ describe("ImagePreview", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Actual size" }));
+    const { canvas, image } = loadPreviewImage();
 
-    const canvas = document.querySelector(".image-preview-canvas") as HTMLElement;
-    canvas.scrollLeft = 80;
-    canvas.scrollTop = 40;
+    fireEvent.click(screen.getByRole("button", { name: "Actual size" }));
 
     fireEvent.pointerDown(canvas, {
       button: 0,
@@ -214,8 +248,7 @@ describe("ImagePreview", () => {
       pointerType: "mouse",
     });
 
-    expect(canvas.scrollLeft).toBe(130);
-    expect(canvas.scrollTop).toBe(80);
+    expect(image.style.transform).toBe("translate3d(-50px, -40px, 0)");
 
     fireEvent.pointerUp(canvas, {
       clientX: 150,
@@ -237,11 +270,9 @@ describe("ImagePreview", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Actual size" }));
+    const { canvas, image } = loadPreviewImage();
 
-    const canvas = document.querySelector(".image-preview-canvas") as HTMLElement;
-    canvas.scrollLeft = 80;
-    canvas.scrollTop = 40;
+    fireEvent.click(screen.getByRole("button", { name: "Actual size" }));
 
     fireEvent.pointerDown(canvas, {
       clientX: 100,
@@ -256,8 +287,7 @@ describe("ImagePreview", () => {
       pointerType: "touch",
     });
 
-    expect(canvas.scrollLeft).toBe(50);
-    expect(canvas.scrollTop).toBe(70);
+    expect(image.style.transform).toBe("translate3d(30px, -30px, 0)");
     expect(canvas).toHaveClass("image-preview-canvas--dragging");
 
     fireEvent.pointerCancel(canvas, {
@@ -278,9 +308,7 @@ describe("ImagePreview", () => {
       />
     );
 
-    const canvas = document.querySelector(".image-preview-canvas") as HTMLElement;
-    canvas.scrollLeft = 80;
-    canvas.scrollTop = 40;
+    const { canvas, image } = loadPreviewImage();
 
     fireEvent.pointerDown(canvas, {
       button: 0,
@@ -296,8 +324,7 @@ describe("ImagePreview", () => {
       pointerType: "mouse",
     });
 
-    expect(canvas.scrollLeft).toBe(80);
-    expect(canvas.scrollTop).toBe(40);
+    expect(image.style.transform).toBe("");
     expect(canvas).not.toHaveClass("image-preview-canvas--dragging");
   });
 });

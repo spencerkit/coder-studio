@@ -15,6 +15,7 @@ describe("/api/preview/session", () => {
     root = join(tmpdir(), `preview-route-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     await mkdir(join(root, "examples", "demo"), { recursive: true });
     await writeFile(join(root, "examples", "demo", "style.css"), "body { color: red; }");
+    await writeFile(join(root, "examples", "demo", "app.js"), "window.previewApp = true;");
     await writeFile(
       join(root, "examples", "demo", "pixel.png"),
       Buffer.from(
@@ -67,16 +68,56 @@ describe("/api/preview/session", () => {
       id,
       entryPath: "examples/demo/index.html",
       kind: "html",
+      allowScripts: true,
       revision: 1,
     });
     expect(entryRes.statusCode).toBe(200);
     expect(entryRes.headers["content-type"]).toContain("text/html");
-    expect(entryRes.headers["content-security-policy"]).toContain("script-src 'none'");
-    expect(entryRes.headers["x-preview-allow-scripts"]).toBe("false");
+    expect(entryRes.headers["content-security-policy"]).toContain(
+      "script-src 'self' 'unsafe-inline'"
+    );
+    expect(entryRes.headers["content-security-policy"]).toContain(
+      "script-src-attr 'unsafe-inline'"
+    );
+    expect(entryRes.headers["x-preview-allow-scripts"]).toBe("true");
     expect(entryRes.body).toContain("demo");
     expect(assetRes.statusCode).toBe(200);
     expect(assetRes.headers["content-type"]).toContain("text/css");
     expect(assetRes.body).toContain("color: red");
+  });
+
+  it("allows same-origin and inline scripts by default while leaving remote scripts blocked by CSP", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/preview/session",
+      payload: {
+        workspaceId: "ws-1",
+        entryPath: "examples/demo/index.html",
+        kind: "html",
+        content:
+          '<!doctype html><html><body><script src="./app.js"></script><script src="https://example.com/app.js"></script><script>window.inlineRan = true;</script><button onclick="window.clicked = true">Run</button></body></html>',
+      },
+    });
+
+    const { id, previewUrl } = createRes.json();
+    const scriptUrl = `/api/preview/session/${id}/examples/demo/app.js`;
+    const entryRes = await app.inject({ method: "GET", url: previewUrl });
+    const scriptRes = await app.inject({ method: "GET", url: scriptUrl });
+
+    expect(entryRes.statusCode).toBe(200);
+    expect(entryRes.headers["x-preview-allow-scripts"]).toBe("true");
+    expect(entryRes.headers["content-security-policy"]).toContain(
+      "script-src 'self' 'unsafe-inline'"
+    );
+    expect(entryRes.headers["content-security-policy"]).toContain(
+      "script-src-attr 'unsafe-inline'"
+    );
+    expect(entryRes.body).toContain(`src="${scriptUrl}"`);
+    expect(entryRes.body).toContain('src="https://example.com/app.js"');
+    expect(entryRes.body).toContain("<script>window.inlineRan = true;</script>");
+    expect(entryRes.body).toContain('onclick="window.clicked = true"');
+    expect(scriptRes.statusCode).toBe(200);
+    expect(scriptRes.body).toContain("window.previewApp = true;");
   });
 
   it("rewrites local HTML image sources through the preview asset route", async () => {
@@ -222,6 +263,48 @@ describe("/api/preview/session", () => {
 
     expect(entryRes.statusCode).toBe(200);
     expect(entryRes.body).toContain("<h1>Guide</h1>");
+    expect(entryRes.headers["x-preview-allow-scripts"]).toBe("false");
+    expect(entryRes.headers["content-security-policy"]).toContain("script-src 'none'");
+  });
+
+  it("keeps markdown script execution disabled even when API callers request it", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/preview/session",
+      payload: {
+        workspaceId: "ws-1",
+        entryPath: "docs/guide/intro.md",
+        kind: "markdown",
+        content: '# Guide\n\n<script src="./app.js"></script>',
+        allowScripts: true,
+      },
+    });
+
+    const { id, previewUrl } = createRes.json();
+    const createdSessionRes = await app.inject({
+      method: "GET",
+      url: `/api/preview/session/${id}`,
+    });
+    const updatedRes = await app.inject({
+      method: "PUT",
+      url: `/api/preview/session/${id}`,
+      payload: { allowScripts: true },
+    });
+    const updatedSessionRes = await app.inject({
+      method: "GET",
+      url: `/api/preview/session/${id}`,
+    });
+    const entryRes = await app.inject({
+      method: "GET",
+      url: previewUrl,
+    });
+
+    expect(createdSessionRes.json()).toMatchObject({ kind: "markdown", allowScripts: false });
+    expect(updatedRes.statusCode).toBe(200);
+    expect(updatedSessionRes.json()).toMatchObject({ kind: "markdown", allowScripts: false });
+    expect(entryRes.statusCode).toBe(200);
+    expect(entryRes.headers["x-preview-allow-scripts"]).toBe("false");
+    expect(entryRes.headers["content-security-policy"]).toContain("script-src 'none'");
   });
 
   it("returns 404 when a relative asset is missing", async () => {

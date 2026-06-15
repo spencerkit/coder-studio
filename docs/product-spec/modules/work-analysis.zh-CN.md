@@ -51,10 +51,11 @@
 系统响应：
 - 页面创建 work analysis controller，并从 URL query 解析时间范围和目录筛选。
 - 控制器加载 dashboard 后渲染状态条、KPI、token 趋势、贡献排行、任务/工具/skill 归因和小时热力图。
+- 没有可用或足够新的小时索引时，服务自动补齐索引后返回 dashboard。
 - 没有 dashboard 时展示空态，并提供立即刷新按钮。
 
 状态与边界：
-- Loading：首次读取索引时显示读取提示。
+- Loading：首次读取或补齐索引时显示扫描中提示。
 - Empty：没有索引或数据时显示“暂无工作分析索引”。
 - Warning：scanState error 或 dashboard quality warnings 以 Notice 展示。
 - URL sync：筛选条件变化后写回路由 query。
@@ -62,8 +63,9 @@
 验收标准：
 - Given 当前没有 dashboard 数据
 - When 用户打开 Work Analysis 页面
-- Then 页面显示空态
-- And 提供立即刷新操作
+- Then 页面显示自动扫描中的状态
+- And 索引补齐后展示 dashboard
+- And 仍提供立即刷新操作
 
 代码索引：
 - `packages/web/src/features/work-analysis/page.tsx`

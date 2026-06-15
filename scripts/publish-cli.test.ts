@@ -93,6 +93,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(join(cliDir, "dist", "web", "dev-browser-sw.js"), "self.skipWaiting();\n");
     await writeFile(
       join(cliDir, "package.json"),
       JSON.stringify({
@@ -139,6 +140,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(join(cliDir, "dist", "web", "dev-browser-sw.js"), "self.skipWaiting();\n");
     await writeFile(
       join(cliDir, "package.json"),
       JSON.stringify({
@@ -177,6 +179,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(join(cliDir, "dist", "web", "dev-browser-sw.js"), "self.skipWaiting();\n");
     await writeFile(
       join(cliDir, "package.json"),
       JSON.stringify({
@@ -207,6 +210,46 @@ describe("publish-cli", () => {
     await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow(
       "@coder-studio/core dependency must not be published with the CLI bundle"
     );
+  });
+
+  it("requires the dev browser service worker in the published web assets", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
+    const cliDir = join(dir, "packages", "cli");
+
+    await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "web"), { recursive: true });
+    await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(
+      join(cliDir, "package.json"),
+      JSON.stringify({
+        name: "@spencer-kit/coder-studio",
+        version: "1.2.3",
+        bin: { "coder-studio": "./src/bin.ts" },
+        files: ["dist"],
+        publishConfig: {
+          bin: { "coder-studio": "./dist/bin.js" },
+          exports: {
+            ".": {
+              import: "./dist/esm/index.mjs",
+            },
+          },
+        },
+        exports: {
+          ".": {
+            import: "./src/index.ts",
+          },
+        },
+        dependencies: {
+          "@xterm/addon-serialize": "^0.14.0",
+        },
+      })
+    );
+
+    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow("dist/web/dev-browser-sw.js");
   });
 
   it("rejects a real publish from a dirty worktree unless explicitly allowed", async () => {

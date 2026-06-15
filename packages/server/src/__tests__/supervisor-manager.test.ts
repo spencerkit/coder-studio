@@ -5,6 +5,7 @@ import type {
   Supervisor,
   SupervisorCycle,
   SupervisorCycleTargetRecord,
+  SupervisorPlanNode,
   SupervisorTargetMemory,
 } from "@coder-studio/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -127,6 +128,223 @@ function applySupervisorPatch(current: Supervisor, patch: SupervisorUpdatePatch)
   };
 }
 
+type ReadyCheckEvaluation = Extract<SupervisorEvaluationResult, { mode: "ready_check" }>;
+type DecomposeChildEvaluation = Extract<SupervisorEvaluationResult, { mode: "decompose_child" }>;
+type ExecutableTaskEvaluation = Extract<SupervisorEvaluationResult, { mode: "executable_task" }>;
+type ContinueEvaluation = Extract<
+  SupervisorEvaluationResult,
+  { mode: "evaluate"; status: "continue" }
+>;
+
+type DecomposeEvaluation = Extract<SupervisorEvaluationResult, { mode: "decompose" }>;
+
+function readyCheckEvaluation(overrides: Partial<ReadyCheckEvaluation> = {}): ReadyCheckEvaluation {
+  return {
+    mode: "ready_check",
+    nodeId: "stage-1",
+    taskType: "generic",
+    granularity: "ready",
+    reason: "Stage is executable",
+    ...overrides,
+  };
+}
+
+function executableTaskEvaluation(
+  overrides: Partial<ExecutableTaskEvaluation> = {}
+): ExecutableTaskEvaluation {
+  return {
+    mode: "executable_task",
+    nodeId: "stage-1",
+    guidance: "Run the focused parser test.",
+    ...overrides,
+  };
+}
+
+function continueEvaluation(overrides: Partial<ContinueEvaluation> = {}): ContinueEvaluation {
+  return {
+    mode: "evaluate",
+    status: "continue",
+    reason: "Need more work",
+    guidance: "Run the focused parser test.",
+    ...overrides,
+  };
+}
+
+function planNode(
+  overrides: Partial<SupervisorPlanNode> &
+    Pick<SupervisorPlanNode, "id" | "title" | "objective" | "deliverable">
+): SupervisorPlanNode {
+  return {
+    id: overrides.id,
+    title: overrides.title,
+    objective: overrides.objective,
+    deliverable: overrides.deliverable,
+    acceptanceCriteria: overrides.acceptanceCriteria ?? [`${overrides.title} is complete`],
+    status: overrides.status ?? "pending",
+    taskType: overrides.taskType ?? "generic",
+    children: overrides.children ?? [],
+    readyCheck: overrides.readyCheck,
+    execution: overrides.execution,
+  };
+}
+
+function stageNode(overrides: Partial<SupervisorPlanNode> = {}): SupervisorPlanNode {
+  return planNode({
+    id: "stage-1",
+    title: "Verify the fix",
+    objective: "Confirm the fix works",
+    deliverable: "A passing focused verification run",
+    acceptanceCriteria: ["Focused verification passes"],
+    status: "in_progress",
+    taskType: "generic",
+    children: [],
+    ...overrides,
+  });
+}
+
+function planRoot(children: SupervisorPlanNode[] = []): SupervisorPlanNode {
+  return planNode({
+    id: "plan-root",
+    title: "Supervisor target",
+    objective: "Complete the supervised target",
+    deliverable: "Completed target",
+    acceptanceCriteria: ["Target objective is complete"],
+    status:
+      children.length === 0
+        ? "pending"
+        : children.every((child) => child.status === "done")
+          ? "done"
+          : "in_progress",
+    taskType: "generic",
+    children,
+  });
+}
+
+function decomposeEvaluation(overrides: Partial<DecomposeEvaluation> = {}): DecomposeEvaluation {
+  return {
+    mode: "decompose",
+    children: [
+      stageNode({
+        title: "Inspect current behavior",
+        objective: "Understand the current implementation",
+        deliverable: "A verified behavior summary",
+        acceptanceCriteria: ["Behavior summary is captured"],
+      }),
+    ],
+    activeNodeId: "stage-1",
+    progressSummary: "Decomposition complete",
+    ...overrides,
+  };
+}
+
+function targetMemory(
+  targetId: string,
+  updatedAt: number,
+  overrides: Partial<SupervisorTargetMemory> = {}
+): SupervisorTargetMemory {
+  return {
+    schemaVersion: 2,
+    targetId,
+    planTree: planRoot([stageNode()]),
+    activeNodeId: "stage-1",
+    maxDepth: 6,
+    planRevision: 0,
+    progressSummary: "Verification in progress",
+    lastGuidance: "Run the focused parser test.",
+    stalledCount: 0,
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function emptyTargetMemory(targetId: string, updatedAt: number): SupervisorTargetMemory {
+  return {
+    schemaVersion: 2,
+    targetId,
+    planTree: planRoot(),
+    activeNodeId: undefined,
+    maxDepth: 6,
+    planRevision: 0,
+    stalledCount: 0,
+    updatedAt,
+  };
+}
+
+function mockPreparedEvaluation(
+  finalResult: Extract<SupervisorEvaluationResult, { mode: "evaluate" }>
+) {
+  return async (
+    _supervisor: Supervisor,
+    _context: SupervisorEvaluationContext,
+    options?: { signal?: AbortSignal; mode?: string }
+  ): Promise<SupervisorEvaluationResult> => {
+    switch (options?.mode) {
+      case "decompose":
+        return decomposeEvaluation();
+      case "ready_check":
+        return readyCheckEvaluation();
+      case "decompose_child":
+        return decomposeChildEvaluation();
+      case "executable_task":
+        return executableTaskEvaluation({
+          guidance:
+            ("guidance" in finalResult ? finalResult.guidance : undefined) ??
+            "Run the focused parser test.",
+        });
+      case "evaluate":
+      default:
+        return finalResult;
+    }
+  };
+}
+
+function decomposeChildEvaluation(
+  overrides: Partial<DecomposeChildEvaluation> = {}
+): DecomposeChildEvaluation {
+  return {
+    mode: "decompose_child",
+    parentNodeId: "stage-1",
+    children: [
+      planNode({
+        id: "stage-1-1",
+        title: "Run focused verification",
+        objective: "Confirm the current stage with focused verification",
+        deliverable: "A passing focused verification run",
+        acceptanceCriteria: ["Focused verification passes"],
+        status: "in_progress",
+        taskType: "generic",
+        children: [],
+      }),
+    ],
+    ...overrides,
+  };
+}
+
+function selectSupervisorEvalPayload(prompt: string | undefined): SupervisorEvaluationResult {
+  const text = prompt ?? "";
+  if (text.includes('"mode": "decompose"')) {
+    return decomposeEvaluation();
+  }
+  if (text.includes('"mode": "ready_check"')) {
+    return readyCheckEvaluation();
+  }
+  if (text.includes('"mode": "executable_task"')) {
+    return executableTaskEvaluation();
+  }
+  if (text.includes('"mode": "decompose_child"')) {
+    return decomposeChildEvaluation();
+  }
+  return continueEvaluation();
+}
+
+function buildSupervisorEvalNodeCommand(payload: SupervisorEvaluationResult) {
+  return {
+    argv: ["node", "-e", `process.stdout.write(${JSON.stringify(JSON.stringify(payload))})`],
+    cwd: process.cwd(),
+    env: {},
+  };
+}
+
 function createManagerDeps() {
   const supervisors = new Map<string, Supervisor>();
   const targetMetaById = new Map<string, SupervisorTargetMeta>();
@@ -138,33 +356,15 @@ function createManagerDeps() {
     error: vi.fn(),
   };
 
-  const codexBuildSupervisorEvalCommand = vi.fn(() => ({
-    argv: [
-      "node",
-      "-e",
-      `process.stdout.write(${JSON.stringify(
-        JSON.stringify({
-          mode: "evaluate",
-          status: "continue",
-          reason: "Need more work",
-          guidance: "Run the focused parser test.",
-        })
-      )})`,
-    ],
-    cwd: process.cwd(),
-    env: {},
-  }));
-  const cloneMemory = (memory: SupervisorTargetMemory): SupervisorTargetMemory => ({
-    ...memory,
-    items: memory.items.map((item) => ({
-      ...item,
-      acceptanceCriteria: [...item.acceptanceCriteria],
-    })),
-  });
-  const cloneCycleRecord = (record: SupervisorCycleTargetRecord): SupervisorCycleTargetRecord => ({
-    ...record,
-    itemUpdates: record.itemUpdates?.map((item) => ({ ...item })),
-  });
+  const codexBuildSupervisorEvalCommand = vi.fn((...args: unknown[]) =>
+    buildSupervisorEvalNodeCommand(
+      selectSupervisorEvalPayload((args[2] as { prompt?: string } | undefined)?.prompt)
+    )
+  );
+  const cloneMemory = (memory: SupervisorTargetMemory): SupervisorTargetMemory =>
+    structuredClone(memory);
+  const cloneCycleRecord = (record: SupervisorCycleTargetRecord): SupervisorCycleTargetRecord =>
+    structuredClone(record);
   const cloneMeta = (meta: SupervisorTargetMeta): SupervisorTargetMeta => ({ ...meta });
   const persistedSupervisor = (supervisor: Supervisor): Supervisor => ({
     ...supervisor,
@@ -188,27 +388,8 @@ function createManagerDeps() {
     supersededBy: null,
     completedAt: null,
   });
-  const buildTargetMemory = (targetId: string, createdAt: number): SupervisorTargetMemory => ({
-    targetId,
-    decompositionGenerated: true,
-    decompositionMode: "stage",
-    items: [
-      {
-        id: "stage-1",
-        kind: "stage",
-        title: "Verify the fix",
-        objective: "Confirm the fix works",
-        deliverable: "A passing focused verification run",
-        acceptanceCriteria: ["Focused verification passes"],
-        status: "in_progress",
-      },
-    ],
-    activeItemId: "stage-1",
-    progressSummary: "Verification in progress",
-    lastGuidance: "Run the focused parser test.",
-    stalledCount: 0,
-    updatedAt: createdAt,
-  });
+  const buildTargetMemory = (targetId: string, createdAt: number): SupervisorTargetMemory =>
+    targetMemory(targetId, createdAt);
   const getTargetCycles = (targetId: string, limit = 20): SupervisorCycleTargetRecord[] =>
     [...(targetCyclesById.get(targetId) ?? [])].slice(-limit).reverse().map(cloneCycleRecord);
 
@@ -645,6 +826,9 @@ describe("SupervisorManager cycle triggers", () => {
       objective: "Ship the fix",
       evaluatorProviderId: "codex",
     });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation(continueEvaluation())
+    );
 
     const cycle = await manager.triggerEvaluation(supervisor.id);
 
@@ -674,6 +858,9 @@ describe("SupervisorManager cycle triggers", () => {
       objective: "Ship the fix",
       evaluatorProviderId: "codex",
     });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation(continueEvaluation())
+    );
 
     await getManagerInternals().runEvaluation(supervisor.id);
 
@@ -692,40 +879,34 @@ describe("SupervisorManager cycle triggers", () => {
     });
     const managerInternals = getManagerInternals();
 
-    deps.targetStore.loadTargetMemory.mockResolvedValueOnce({
-      targetId: supervisor.targetId,
-      decompositionGenerated: false,
-      items: [],
-      stalledCount: 0,
-      updatedAt: 1,
-    });
+    deps.targetStore.loadTargetMemory.mockResolvedValueOnce(
+      emptyTargetMemory(supervisor.targetId, 1)
+    );
 
     const evaluateSpy = vi.spyOn(managerInternals.evaluator, "evaluate");
     evaluateSpy
       .mockResolvedValueOnce({
         mode: "decompose",
-        decompositionMode: "stage",
-        items: [
-          {
-            id: "stage-1",
-            kind: "stage",
+        children: [
+          stageNode({
             title: "Inspect current behavior",
             objective: "Understand the current implementation",
             deliverable: "A verified behavior summary",
             acceptanceCriteria: ["Behavior summary is captured"],
-            status: "in_progress",
-          },
+          }),
         ],
-        activeItemId: "stage-1",
+        activeNodeId: "stage-1",
         progressSummary: "Decomposition complete",
       })
+      .mockResolvedValueOnce(readyCheckEvaluation())
+      .mockResolvedValueOnce(executableTaskEvaluation())
       .mockResolvedValueOnce({
         mode: "evaluate",
         status: "continue",
         reason: "Need more work",
         guidance: "Run the focused parser test.",
-        activeItemId: "stage-1",
-        itemUpdates: [{ id: "stage-1", status: "in_progress" }],
+        activeNodeId: "stage-1",
+        nodeUpdates: [{ id: "stage-1", status: "in_progress" }],
       });
 
     const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
@@ -736,8 +917,9 @@ describe("SupervisorManager cycle triggers", () => {
       expect.anything(),
       expect.objectContaining({
         targetMemory: expect.objectContaining({
-          decompositionGenerated: false,
-          items: [],
+          planTree: expect.objectContaining({
+            children: [],
+          }),
         }),
       }),
       expect.objectContaining({ mode: "decompose" })
@@ -747,14 +929,51 @@ describe("SupervisorManager cycle triggers", () => {
       expect.anything(),
       expect.objectContaining({
         targetMemory: expect.objectContaining({
-          decompositionGenerated: true,
-          decompositionMode: "stage",
-          items: [
-            expect.objectContaining({
-              id: "stage-1",
-              title: "Inspect current behavior",
-            }),
-          ],
+          activeNodeId: "stage-1",
+          planTree: expect.objectContaining({
+            children: [
+              expect.objectContaining({
+                id: "stage-1",
+                title: "Inspect current behavior",
+              }),
+            ],
+          }),
+        }),
+      }),
+      expect.objectContaining({ mode: "ready_check" })
+    );
+    expect(evaluateSpy).toHaveBeenNthCalledWith(
+      3,
+      expect.anything(),
+      expect.objectContaining({
+        targetMemory: expect.objectContaining({
+          activeNodeId: "stage-1",
+          planTree: expect.objectContaining({
+            children: [
+              expect.objectContaining({
+                id: "stage-1",
+                title: "Inspect current behavior",
+              }),
+            ],
+          }),
+        }),
+      }),
+      expect.objectContaining({ mode: "executable_task" })
+    );
+    expect(evaluateSpy).toHaveBeenNthCalledWith(
+      4,
+      expect.anything(),
+      expect.objectContaining({
+        targetMemory: expect.objectContaining({
+          activeNodeId: "stage-1",
+          planTree: expect.objectContaining({
+            children: [
+              expect.objectContaining({
+                id: "stage-1",
+                title: "Inspect current behavior",
+              }),
+            ],
+          }),
         }),
       }),
       expect.objectContaining({ mode: "evaluate" })
@@ -763,14 +982,15 @@ describe("SupervisorManager cycle triggers", () => {
       expect.any(String),
       supervisor.targetId,
       expect.objectContaining({
-        decompositionGenerated: true,
-        decompositionMode: "stage",
-        items: [
-          expect.objectContaining({
-            id: "stage-1",
-            title: "Inspect current behavior",
-          }),
-        ],
+        activeNodeId: "stage-1",
+        planTree: expect.objectContaining({
+          children: [
+            expect.objectContaining({
+              id: "stage-1",
+              title: "Inspect current behavior",
+            }),
+          ],
+        }),
       })
     );
   });
@@ -784,11 +1004,14 @@ describe("SupervisorManager cycle triggers", () => {
       maxSupervisionCount: 0,
     });
 
-    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      status: "stop",
-      stopReason: "objective_complete",
-      reason: "[objective complete]",
-    });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "stop",
+        stopReason: "objective_complete",
+        reason: "[objective complete]",
+      })
+    );
 
     const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
@@ -807,11 +1030,15 @@ describe("SupervisorManager cycle triggers", () => {
       maxSupervisionCount: 1,
     });
 
-    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      status: "stop",
-      stopReason: "objective_complete",
-      reason: "done",
-    });
+    const evaluateSpy = vi.spyOn(getManagerInternals().evaluator, "evaluate");
+    evaluateSpy.mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "stop",
+        stopReason: "objective_complete",
+        reason: "done",
+      })
+    );
 
     await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
@@ -833,11 +1060,14 @@ describe("SupervisorManager cycle triggers", () => {
       })
     );
 
-    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      status: "continue",
-      reason: "keep going",
-      guidance: "do the next step",
-    });
+    evaluateSpy.mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "continue",
+        reason: "keep going",
+        guidance: "do the next step",
+      })
+    );
 
     const nextCycle = await getManagerInternals().runEvaluation(updated.id, "turn_completed");
     expect(nextCycle?.status).toBe("injected");
@@ -958,11 +1188,14 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
     });
 
-    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      status: "stop",
-      stopReason: "supervisor_uncertain",
-      reason: "I cannot determine the next step safely",
-    });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "stop",
+        stopReason: "supervisor_uncertain",
+        reason: "I cannot determine the next step safely",
+      })
+    );
 
     await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
@@ -1257,13 +1490,19 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
     });
 
-    vi.spyOn(getManagerInternals().evaluator, "evaluate")
-      .mockRejectedValueOnce({ code: "supervisor_eval_timeout", message: "timed out" })
-      .mockResolvedValueOnce({
+    let shouldTimeout = true;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(async (...args) => {
+      if (shouldTimeout) {
+        shouldTimeout = false;
+        throw { code: "supervisor_eval_timeout", message: "timed out" };
+      }
+      return mockPreparedEvaluation({
+        mode: "evaluate",
         status: "continue",
         reason: "Run tests",
         guidance: "Run tests",
-      });
+      })(...args);
+    });
 
     const pending = getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
     await vi.advanceTimersByTimeAsync(1000);
@@ -1298,16 +1537,22 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
     });
 
-    vi.spyOn(getManagerInternals().evaluator, "evaluate")
-      .mockRejectedValueOnce({
-        code: "supervisor_eval_failed",
-        message: "spawn failed",
-      })
-      .mockResolvedValueOnce({
+    let shouldFail = true;
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(async (...args) => {
+      if (shouldFail) {
+        shouldFail = false;
+        throw {
+          code: "supervisor_eval_failed",
+          message: "spawn failed",
+        };
+      }
+      return mockPreparedEvaluation({
+        mode: "evaluate",
         status: "continue",
         reason: "Run tests",
         guidance: "Run tests",
-      });
+      })(...args);
+    });
 
     const finished = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
 
@@ -1323,6 +1568,9 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
       maxSupervisionCount: 1,
     });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation(continueEvaluation())
+    );
 
     const first = await getManagerInternals().runEvaluation(supervisor.id, "turn_completed");
     expect(first?.status).toBe("injected");
@@ -1342,14 +1590,29 @@ describe("SupervisorManager cycle triggers", () => {
       maxSupervisionCount: 1,
     });
     const managerInternals = getManagerInternals();
+    let blockEvaluate = true;
+    let evaluateStarted = false;
 
-    const evaluate = vi.spyOn(managerInternals.evaluator, "evaluate").mockImplementation(
+    vi.spyOn(managerInternals.evaluator, "evaluate").mockImplementation(
       async (
         _supervisor: Supervisor,
         _context: SupervisorEvaluationContext,
-        options?: { signal?: AbortSignal }
-      ) =>
-        await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
+        options?: { signal?: AbortSignal; mode?: string }
+      ) => {
+        if (options?.mode === "ready_check") {
+          return readyCheckEvaluation();
+        }
+        if (options?.mode === "executable_task") {
+          return executableTaskEvaluation({ guidance: "Run tests" });
+        }
+        if (options?.mode !== "evaluate") {
+          return decomposeEvaluation();
+        }
+        evaluateStarted = true;
+        if (!blockEvaluate) {
+          return continueEvaluation({ reason: "Run tests", guidance: "Run tests" });
+        }
+        return await new Promise<SupervisorEvaluationResult>((_resolve, reject) => {
           const signal = options?.signal;
           const abort = () =>
             reject({
@@ -1367,12 +1630,13 @@ describe("SupervisorManager cycle triggers", () => {
           }
 
           signal.addEventListener("abort", abort, { once: true });
-        })
+        });
+      }
     );
 
     await manager.triggerEvaluation(supervisor.id);
     await waitFor(() => {
-      expect(evaluate).toHaveBeenCalledTimes(1);
+      expect(evaluateStarted).toBe(true);
     });
 
     await manager.pause(supervisor.id);
@@ -1387,13 +1651,8 @@ describe("SupervisorManager cycle triggers", () => {
 
     expect(manager.get(supervisor.id)?.completedSupervisionCount).toBe(0);
 
+    blockEvaluate = false;
     await manager.resume(supervisor.id);
-    evaluate.mockResolvedValueOnce({
-      status: "continue",
-      reason: "Run tests",
-      guidance: "Run tests",
-    });
-
     const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
 
     expect(finished?.status).toBe("injected");
@@ -1409,6 +1668,9 @@ describe("SupervisorManager cycle triggers", () => {
       evaluatorProviderId: "codex",
       scheduledAt: Date.now() - 1_000,
     });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation(continueEvaluation())
+    );
 
     const finished = await getManagerInternals().runEvaluation(supervisor.id, "scheduled");
 
@@ -1426,7 +1688,9 @@ describe("SupervisorManager cycle triggers", () => {
     });
 
     const managerInternals = getManagerInternals();
-    const evaluate = vi.spyOn(managerInternals.evaluator, "evaluate");
+    const evaluate = vi
+      .spyOn(managerInternals.evaluator, "evaluate")
+      .mockImplementation(mockPreparedEvaluation(continueEvaluation()));
 
     const first = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
     const second = await managerInternals.runEvaluation(supervisor.id, "scheduled");
@@ -1435,7 +1699,7 @@ describe("SupervisorManager cycle triggers", () => {
     expect(second).toBeNull();
     expect(manager.get(supervisor.id)?.scheduledAt).toBeUndefined();
     expect(manager.get(supervisor.id)?.recentTargetCycles).toHaveLength(1);
-    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(evaluate).toHaveBeenCalledTimes(3);
   });
 
   it("retries a due scheduled run until the session becomes runnable", async () => {
@@ -1444,11 +1708,14 @@ describe("SupervisorManager cycle triggers", () => {
     vi.mocked(deps.sessionMgr.get).mockImplementation((sessionId: string) =>
       createSessionRecord(sessionId, { state: sessionState })
     );
-    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockResolvedValueOnce({
-      status: "continue",
-      reason: "Run tests",
-      guidance: "Run tests",
-    });
+    vi.spyOn(getManagerInternals().evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "continue",
+        reason: "Run tests",
+        guidance: "Run tests",
+      })
+    );
 
     const supervisor = await manager.create({
       sessionId: "sess-scheduled-retry",
@@ -1481,11 +1748,14 @@ describe("SupervisorManager cycle triggers", () => {
     });
     const managerInternals = getManagerInternals();
 
-    vi.spyOn(managerInternals.evaluator, "evaluate").mockResolvedValueOnce({
-      status: "continue",
-      reason: "Run the focused parser test.",
-      guidance: "Run the focused parser test.",
-    });
+    vi.spyOn(managerInternals.evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "continue",
+        reason: "Run the focused parser test.",
+        guidance: "Run the focused parser test.",
+      })
+    );
     vi.spyOn(managerInternals.injector, "inject").mockResolvedValueOnce({
       injected: true,
       text: "[Supervisor] Run the focused parser test.",
@@ -1842,7 +2112,7 @@ describe("SupervisorManager cycle triggers", () => {
         })
     );
 
-    const cycle = await manager.triggerEvaluation(supervisor.id);
+    await manager.triggerEvaluation(supervisor.id);
     await waitFor(() => {
       expect(evaluate).toHaveBeenCalledTimes(1);
     });
@@ -1879,11 +2149,14 @@ describe("SupervisorManager cycle triggers", () => {
       return updated;
     });
 
-    vi.spyOn(managerInternals.evaluator, "evaluate").mockResolvedValueOnce({
-      status: "continue",
-      reason: "Run tests",
-      guidance: "Run tests",
-    });
+    vi.spyOn(managerInternals.evaluator, "evaluate").mockImplementation(
+      mockPreparedEvaluation({
+        mode: "evaluate",
+        status: "continue",
+        reason: "Run tests",
+        guidance: "Run tests",
+      })
+    );
 
     const finished = await managerInternals.runEvaluation(supervisor.id, "turn_completed");
 

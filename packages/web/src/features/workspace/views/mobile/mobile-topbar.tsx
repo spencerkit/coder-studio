@@ -1,5 +1,6 @@
 import type { Workspace } from "@coder-studio/core";
 import { Menu } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { IconButton, ThemedIcon } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { formatWorkspaceLabel } from "../../../notifications/format";
@@ -10,7 +11,6 @@ interface MobileTopBarProps {
   activeWorkspace: Workspace | null;
   drawerOpen: boolean;
   fullscreenController?: WorkspaceFullscreenController;
-  onOpenSettings: () => void;
   onToggleDrawer: () => void;
 }
 
@@ -18,10 +18,10 @@ export function MobileTopBar({
   activeWorkspace,
   drawerOpen,
   fullscreenController,
-  onOpenSettings,
   onToggleDrawer,
 }: MobileTopBarProps) {
   const t = useTranslation();
+  const navigate = useNavigate();
   const workspaceLabel =
     formatWorkspaceLabel(activeWorkspace) || t("mobile.workspace_drawer.select_title");
 
@@ -44,10 +44,10 @@ export function MobileTopBar({
 
       <div className="mobile-topbar__actions">
         <IconButton
-          aria-label={t("mobile.topbar.open_settings")}
+          aria-label={t("more.title")}
           className="mobile-topbar__icon-button"
-          icon={<ThemedIcon semantic="nav.settings" size={18} />}
-          onClick={onOpenSettings}
+          icon={<ThemedIcon semantic="nav.workspaceMenu" size={18} />}
+          onClick={() => navigate("/more")}
         />
         <WorkspaceFullscreenButton
           controller={fullscreenController}

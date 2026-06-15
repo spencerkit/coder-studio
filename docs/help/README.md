@@ -2,9 +2,12 @@
 
 ## 我是第一次使用
 
-1. [快速开始](quick-start.md) — 安装、启动、第一次使用
-2. [Provider 配置](providers.md) — 安装 Claude / Codex CLI
-3. [排障指南](troubleshooting.md) — 遇到问题先看这里
+1. [快速开始](quick-start.md) — 安装、启动、打开第一个 workspace
+2. [第一次 Agent 运行](first-agent-run.md) — 创建推荐的首次 Provider 会话并审查 Git diff
+3. [Provider 配置](providers.md) — 安装和验证 coding agent CLI
+4. [排障指南](troubleshooting.md) — 遇到问题先看这里
+5. [安全与隐私](security-and-privacy.md) — 本地运行模型、Provider 边界和远程访问风险
+6. [当前限制](known-limitations.md) — 了解当前要求和边界
 
 ## 我主要在电脑上使用
 

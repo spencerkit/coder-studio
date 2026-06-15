@@ -3,14 +3,22 @@ import { dirname, join } from "node:path";
 import type {
   Supervisor,
   SupervisorCycleTargetRecord,
-  SupervisorDecompositionMode,
+  SupervisorGranularity,
+  SupervisorPlanNode,
+  SupervisorPlanNodeReadyCheck,
+  SupervisorPlanNodeStatus,
   SupervisorState,
   SupervisorStopReason,
   SupervisorTargetMemory,
-  SupervisorWorkItem,
-  SupervisorWorkItemKind,
-  SupervisorWorkItemStatus,
+  SupervisorTaskType,
 } from "@coder-studio/core";
+import { DEFAULT_SUPERVISOR_PLAN_MAX_DEPTH } from "@coder-studio/core";
+import {
+  clonePlanTreeWithRoot,
+  createPlanRoot,
+  createPlanRootId,
+  findNodePath,
+} from "./plan-tree.js";
 
 export type PersistedSupervisor = Omit<Supervisor, "currentTargetMemory" | "recentTargetCycles">;
 
@@ -104,12 +112,35 @@ function readNonEmptyString(value: unknown): string | undefined {
   return next ? next : undefined;
 }
 
-function readStatus(value: unknown): SupervisorWorkItemStatus {
-  return value === "in_progress" || value === "done" || value === "pending" ? value : "pending";
+function readTaskType(value: unknown): SupervisorTaskType {
+  return value === "coding" ||
+    value === "writing" ||
+    value === "research" ||
+    value === "design" ||
+    value === "generic"
+    ? value
+    : "generic";
 }
 
-function readDecompositionMode(value: unknown): SupervisorDecompositionMode | undefined {
-  return value === "stage" || value === "subtarget" ? value : undefined;
+function readPlanNodeStatus(value: unknown): SupervisorPlanNodeStatus {
+  return value === "in_progress" || value === "done" || value === "pending" || value === "blocked"
+    ? value
+    : "pending";
+}
+
+function readGranularity(value: unknown): SupervisorGranularity | undefined {
+  return value === "too_large" || value === "ready" || value === "too_small" ? value : undefined;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const values = value.flatMap<string>((entry) => {
+    const text = readNonEmptyString(entry);
+    return text ? [text] : [];
+  });
+  return values.length > 0 ? values : undefined;
 }
 
 function readNonNegativeInteger(value: unknown, fallback: number): number {
@@ -153,84 +184,111 @@ function readSupervisorStopReason(value: unknown): SupervisorStopReason | undefi
     : undefined;
 }
 
-function fallbackAcceptanceCriteria(title: string): string[] {
-  return [`${title} is complete`];
+function normalizeReadyCheck(raw: unknown): SupervisorPlanNodeReadyCheck | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+  const granularity = readGranularity(raw.granularity);
+  const reason = readNonEmptyString(raw.reason);
+  if (!granularity || !reason) {
+    return undefined;
+  }
+  const confidence =
+    raw.confidence === "low" || raw.confidence === "medium" || raw.confidence === "high"
+      ? raw.confidence
+      : undefined;
+  return {
+    granularity,
+    reason,
+    recommendedUnit: readNonEmptyString(raw.recommendedUnit),
+    qualityRisk: readNonEmptyString(raw.qualityRisk),
+    missingInputs: readStringArray(raw.missingInputs),
+    confidence,
+    checkedAt: readTimestamp(raw.checkedAt, 0),
+  };
 }
 
-function normalizeItem(
-  value: unknown,
-  fallbackKind?: SupervisorWorkItemKind
-): SupervisorWorkItem | null {
-  if (!isRecord(value)) {
+function normalizePlanNode(
+  raw: unknown,
+  fallback: { id: string; title: string }
+): SupervisorPlanNode | null {
+  if (!isRecord(raw)) {
     return null;
   }
-
-  const id = readNonEmptyString(value.id);
-  const title = readNonEmptyString(value.title);
-  if (!id || !title) {
-    return null;
-  }
-
-  const kind = readDecompositionMode(value.kind) ?? fallbackKind ?? "stage";
-  const objective = readNonEmptyString(value.objective) ?? title;
-  const deliverable = readNonEmptyString(value.deliverable) ?? `${title} completed`;
-  const acceptanceCriteria = Array.isArray(value.acceptanceCriteria)
-    ? value.acceptanceCriteria.flatMap<string>((entry) => {
-        const next = readNonEmptyString(entry);
-        return next ? [next] : [];
+  const id = readNonEmptyString(raw.id) ?? fallback.id;
+  const title = readNonEmptyString(raw.title) ?? fallback.title;
+  const acceptanceCriteria = readStringArray(raw.acceptanceCriteria) ?? [`${title} is complete`];
+  const children = Array.isArray(raw.children)
+    ? raw.children.flatMap<SupervisorPlanNode>((child, index) => {
+        const normalized = normalizePlanNode(child, {
+          id: `${id}-${index + 1}`,
+          title: `Child ${index + 1}`,
+        });
+        return normalized ? [normalized] : [];
       })
     : [];
 
   return {
     id,
-    kind,
     title,
-    objective,
-    deliverable,
-    acceptanceCriteria:
-      acceptanceCriteria.length > 0 ? acceptanceCriteria : fallbackAcceptanceCriteria(title),
-    status: readStatus(value.status),
+    objective: readNonEmptyString(raw.objective) ?? title,
+    deliverable: readNonEmptyString(raw.deliverable) ?? `${title} completed`,
+    acceptanceCriteria,
+    status: readPlanNodeStatus(raw.status),
+    taskType: readTaskType(raw.taskType),
+    children,
+    readyCheck: normalizeReadyCheck(raw.readyCheck),
+    execution: isRecord(raw.execution)
+      ? {
+          executable: raw.execution.executable === true,
+          guidance: readNonEmptyString(raw.execution.guidance),
+          lastInjectedAt: readOptionalTimestamp(raw.execution.lastInjectedAt),
+        }
+      : undefined,
   };
 }
 
-function normalizeLegacyPlanItems(plan: unknown): SupervisorWorkItem[] {
-  if (!Array.isArray(plan)) {
-    return [];
-  }
-
-  return plan.flatMap<SupervisorWorkItem>((value) => {
-    const item = normalizeItem(
-      isRecord(value)
-        ? {
-            id: value.id,
-            kind: "stage",
-            title: value.title,
-            objective: value.title,
-            deliverable: `${readNonEmptyString(value.title) ?? "Legacy step"} completed`,
-            acceptanceCriteria: fallbackAcceptanceCriteria(
-              readNonEmptyString(value.title) ?? "Legacy step"
-            ),
-            status: value.status,
-          }
-        : value,
-      "stage"
-    );
-
-    return item ? [item] : [];
-  });
+function remapPlanTreeRoot(planTree: SupervisorPlanNode): SupervisorPlanNode {
+  return clonePlanTreeWithRoot(planTree);
 }
 
-function resolveActiveItemId(items: SupervisorWorkItem[], candidate: unknown): string | undefined {
+function normalizePlanTreeIdentity(planTree: SupervisorPlanNode): SupervisorPlanNode {
+  if (!planTree.id.endsWith("-root")) {
+    return planTree;
+  }
+
+  return remapPlanTreeRoot(planTree);
+}
+
+function resolveActiveNodeId(planTree: SupervisorPlanNode, candidate: unknown): string | undefined {
   const next = readNonEmptyString(candidate);
-  if (next && items.some((item) => item.id === next)) {
+  if (next && next !== planTree.id && findNodePath(planTree, next)) {
     return next;
   }
 
-  return (
-    items.find((item) => item.status === "in_progress")?.id ??
-    items.find((item) => item.status === "pending")?.id ??
-    items[0]?.id
-  );
+  return findFirstRunnableNodeId(planTree, true);
+}
+
+function findFirstRunnableNodeId(node: SupervisorPlanNode, isRoot = false): string | undefined {
+  if (
+    !isRoot &&
+    node.children.length === 0 &&
+    node.status !== "done" &&
+    node.status !== "blocked"
+  ) {
+    return node.id;
+  }
+
+  for (const child of node.children) {
+    if (child.status === "done" || child.status === "blocked") {
+      continue;
+    }
+    const childId = findFirstRunnableNodeId(child);
+    if (childId) {
+      return childId;
+    }
+  }
+  return undefined;
 }
 
 function normalizeTargetMemory(raw: unknown, targetId: string): SupervisorTargetMemory {
@@ -239,27 +297,22 @@ function normalizeTargetMemory(raw: unknown, targetId: string): SupervisorTarget
   }
 
   const updatedAt = readTimestamp(raw.updatedAt, 0);
-  const declaredMode = readDecompositionMode(raw.decompositionMode);
-
-  let items = Array.isArray(raw.items)
-    ? raw.items.flatMap<SupervisorWorkItem>((value) => {
-        const item = normalizeItem(value, declaredMode);
-        return item ? [item] : [];
-      })
-    : [];
-  let decompositionMode = declaredMode ?? items[0]?.kind;
-
-  if (items.length === 0) {
-    items = normalizeLegacyPlanItems(raw.plan);
-    decompositionMode = items.length > 0 ? "stage" : undefined;
-  }
+  const targetIdValue = readNonEmptyString(raw.targetId) ?? targetId;
+  const normalizedTree =
+    normalizePlanNode(raw.planTree, {
+      id: createPlanRootId(),
+      title: "Supervisor target",
+    }) ?? createPlanRoot();
+  const planTree = normalizePlanTreeIdentity(normalizedTree);
+  const activeNodeId = resolveActiveNodeId(planTree, raw.activeNodeId);
 
   return {
-    targetId: readNonEmptyString(raw.targetId) ?? targetId,
-    decompositionGenerated: items.length > 0,
-    decompositionMode,
-    items,
-    activeItemId: resolveActiveItemId(items, raw.activeItemId ?? raw.activeStepId),
+    schemaVersion: 2,
+    targetId: targetIdValue,
+    planTree,
+    activeNodeId,
+    maxDepth: readNonNegativeInteger(raw.maxDepth, DEFAULT_SUPERVISOR_PLAN_MAX_DEPTH),
+    planRevision: readNonNegativeInteger(raw.planRevision, 0),
     progressSummary: readNonEmptyString(raw.progressSummary),
     lastGuidance: readNonEmptyString(raw.lastGuidance),
     stalledCount: readNonNegativeInteger(raw.stalledCount, 0),
@@ -401,11 +454,12 @@ function buildTargetMeta(input: {
 
 function buildTargetMemory(targetId: string, createdAt: number): SupervisorTargetMemory {
   return {
+    schemaVersion: 2,
     targetId,
-    decompositionGenerated: false,
-    decompositionMode: undefined,
-    items: [],
-    activeItemId: undefined,
+    planTree: createPlanRoot(),
+    activeNodeId: undefined,
+    maxDepth: DEFAULT_SUPERVISOR_PLAN_MAX_DEPTH,
+    planRevision: 0,
     progressSummary: undefined,
     lastGuidance: undefined,
     stalledCount: 0,
@@ -672,9 +726,15 @@ export async function cloneTargetFiles(
     createdAt: input.createdAt,
     supervisor: input.supervisor,
   });
+  const planTree = remapPlanTreeRoot(sourceMemory.planTree);
   const nextMemory: SupervisorTargetMemory = {
     ...sourceMemory,
     targetId: input.targetId,
+    planTree,
+    activeNodeId:
+      sourceMemory.activeNodeId === sourceMemory.planTree.id
+        ? undefined
+        : sourceMemory.activeNodeId,
   };
   const nextCycles = sourceCycles
     .slice()

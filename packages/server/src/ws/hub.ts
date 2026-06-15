@@ -250,17 +250,6 @@ export class WsHub implements Broadcaster {
         client.sendEvent(workspaceTopic, workspace);
       }
 
-      const extensionStateTopic = Topics.workspaceExtensionState(workspace.id);
-      if (
-        client.subscribesTo(extensionStateTopic) &&
-        commandContext.workspaceExtensionStateService
-      ) {
-        client.sendEvent(
-          extensionStateTopic,
-          commandContext.workspaceExtensionStateService.get(workspace.id)
-        );
-      }
-
       const sessions = commandContext.sessionMgr.getForWorkspace(workspace.id);
       for (const session of sessions) {
         const sessionTopic = Topics.sessionState(workspace.id, session.id);
@@ -401,7 +390,6 @@ export class WsHub implements Broadcaster {
       "session.state.changed",
       "session.lifecycle",
       "workspace.meta.changed",
-      "workspace.extension_state.changed",
       "git.state.changed",
       "fs.dirty",
       "terminal.created",
@@ -465,11 +453,6 @@ export class WsHub implements Broadcaster {
       case "workspace.meta.changed":
         topic = Topics.workspaceMeta(event.workspaceId);
         data = event.patch;
-        break;
-
-      case "workspace.extension_state.changed":
-        topic = Topics.workspaceExtensionState(event.workspaceId);
-        data = event.state;
         break;
 
       case "git.state.changed":
