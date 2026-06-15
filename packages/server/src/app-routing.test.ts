@@ -294,6 +294,26 @@ describe("app routing", () => {
     expect(response.body).toContain("coder-studio-dev-browser-session");
   });
 
+  it("does not double-register dev-browser-sw.js when it exists in the web root", async () => {
+    writeFileSync(join(webRoot, "dev-browser-sw.js"), 'const MARKER = "bundled-dev-browser-sw";\n');
+
+    const instance = await createApp();
+
+    const getResponse = await instance.inject({
+      method: "GET",
+      url: "/dev-browser-sw.js",
+    });
+    expect(getResponse.statusCode).toBe(200);
+    expect(getResponse.headers["cache-control"]).toBe("no-cache, no-store, must-revalidate");
+    expect(getResponse.body).toContain("bundled-dev-browser-sw");
+
+    const headResponse = await instance.inject({
+      method: "HEAD",
+      url: "/dev-browser-sw.js",
+    });
+    expect(headResponse.statusCode).toBe(200);
+  });
+
   it("serves the dev browser service worker without a configured web root", async () => {
     const instance = await createApp(false, {}, { webRoot: null });
 
