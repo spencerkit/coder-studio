@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+### Patch Changes
+
+- [#80](https://github.com/spencerkit/coder-studio/pull/80) [`c62bdc4`](https://github.com/spencerkit/coder-studio/commit/c62bdc450b83caf094ef68ef5486286541f47b9f) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix server startup failure when bundled web assets include `dev-browser-sw.js` by excluding the service worker from static file glob registration.
+
 ## 0.5.2
 
 ### Patch Changes
