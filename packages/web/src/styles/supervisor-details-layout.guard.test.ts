@@ -50,10 +50,16 @@ function getRuleBlockAfter(anchor: string, selector: string): string {
 
 describe("supervisor details layout styles", () => {
   it("stretches the plan column and mind map viewport to match the details rail", () => {
-    expect(getCombinedRuleBlock(".supervisor-details-layout")).toContain("align-items: stretch");
-    expect(getCombinedRuleBlock(".supervisor-details-main")).toContain("height: 100%");
-    expect(getCombinedRuleBlock(".supervisor-details-section--plan")).toContain("height: 100%");
+    expect(getCombinedRuleBlock(".supervisor-details")).toContain("display: flex");
+    expect(getCombinedRuleBlock(".supervisor-details")).toContain("flex-direction: column");
+    expect(getCombinedRuleBlock(".supervisor-details")).toContain("height: 100%");
+    expect(getCombinedRuleBlock(".supervisor-details")).toContain("flex: 1 1 auto");
+    expect(getCombinedRuleBlock(".supervisor-details-section--plan")).toContain(
+      "min-height: clamp(380px, 52vh, 560px)"
+    );
     expect(getCombinedRuleBlock(".supervisor-details-surface--plan")).toContain("height: 100%");
+    expect(getCombinedRuleBlock(".supervisor-details-surface--plan")).toContain("display: flex");
+    expect(getCombinedRuleBlock(".supervisor-details-surface--plan")).toContain("flex: 1 1 auto");
     expect(getCombinedRuleBlock(".supervisor-mind-map-flow")).toContain("display: flex");
     expect(getCombinedRuleBlock(".supervisor-mind-map-flow")).toContain("flex: 1 1 auto");
     expect(getCombinedRuleBlock(".supervisor-mind-map-flow__viewport")).toContain(

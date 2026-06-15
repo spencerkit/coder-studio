@@ -38,8 +38,12 @@ type WorkspaceUiStatePatch = Omit<Partial<Workspace["uiState"]>, "paneLayout"> &
 };
 
 function stripLegacyDevBrowserTargetUrl(
-  uiState: Workspace["uiState"]
-): Omit<Workspace["uiState"], "devBrowserTargetUrl"> {
+  uiState: Workspace["uiState"] | null | undefined
+): Partial<Omit<Workspace["uiState"], "devBrowserTargetUrl">> {
+  if (!uiState || typeof uiState !== "object") {
+    return {};
+  }
+
   const { devBrowserTargetUrl: _legacyBrowserTargetUrl, ...restUiState } = uiState;
   return restUiState;
 }

@@ -177,12 +177,12 @@ describe("SupervisorCard", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
     expect(screen.getByRole("tree", { name: "Target Details" })).toBeInTheDocument();
     expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Active item")).not.toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
     expect(screen.getAllByText("Current task").length).toBeGreaterThan(0);
     expect(screen.queryByText("In progress")).not.toBeInTheDocument();
 

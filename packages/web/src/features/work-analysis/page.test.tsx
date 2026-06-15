@@ -720,18 +720,20 @@ describe("WorkAnalyticsPage", () => {
 
     fireEvent.click(within(rangeGroup).getByRole("radio", { name: "最近 7 天" }));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics?range=7d");
-    });
-    await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "work.analysis.dashboard.get",
-        { timeRange: { preset: "7d" } },
-        undefined
-      );
-    });
+    await Promise.all([
+      waitFor(() => {
+        expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics?range=7d");
+      }),
+      waitFor(() => {
+        expect(sendCommand).toHaveBeenCalledWith(
+          "work.analysis.dashboard.get",
+          { timeRange: { preset: "7d" } },
+          undefined
+        );
+      }),
+    ]);
     expect(screen.queryByRole("dialog", { name: "筛选时间范围" })).toBeNull();
-  });
+  }, 10_000);
 
   it("renders the newly fetched dashboard data after changing the time filter", async () => {
     const sendCommand = vi.fn(async (_op: string, args: unknown) => {

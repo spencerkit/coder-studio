@@ -697,7 +697,9 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(
       await screen.findByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit Supervisor" })).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
     expect(
       document.querySelector(".mobile-supervisor-sheet.mobile-sheet--fullscreen")
     ).not.toBeNull();

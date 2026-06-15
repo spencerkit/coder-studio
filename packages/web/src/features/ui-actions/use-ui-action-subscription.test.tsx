@@ -88,6 +88,20 @@ function browserTab(id: string, url: string | null): WorkspaceBrowserEditorTab {
 }
 
 describe("useUiActionSubscription", () => {
+  it("skips subscription when the ws client mock does not implement subscribe", () => {
+    const store = createStore();
+    store.set(workspacesAtom, { "ws-1": createWorkspace("ws-1") } as never);
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+
+    expect(() =>
+      render(
+        <Provider store={store}>
+          <Harness workspaceId="ws-1" />
+        </Provider>
+      )
+    ).not.toThrow();
+  });
+
   it("subscribes to the workspace UI action topic and unsubscribes on unmount", () => {
     const { subscribe, unsubscribe, unmount } = setupHarness();
 

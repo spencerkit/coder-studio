@@ -810,7 +810,7 @@ export function registerDevBrowserRoutes(
     }
     return existingHandleProtocols
       ? existingHandleProtocols(protocols, rawRequest)
-      : protocols.values().next().value;
+      : (protocols.values().next().value ?? false);
   };
 
   app.post("/api/dev-proxy/session", async (request, reply) => {

@@ -37,6 +37,69 @@ function browserTab(id: string, url: string | null) {
 }
 
 describe("useWorkspaceUiStatePersistence", () => {
+  it("persists ui state when the workspace record is missing uiState", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (_op: string, payload: unknown) => {
+      const { workspaceId, uiState } = payload as {
+        workspaceId: string;
+        uiState: Record<string, unknown>;
+      };
+
+      return {
+        ...store.get(workspacesAtom)[workspaceId],
+        uiState,
+      };
+    });
+
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+      },
+    } as never);
+    store.set(leftPanelWidthAtomFamily("ws-test"), 280);
+    store.set(bottomPanelHeightAtomFamily("ws-test"), 220);
+    store.set(focusModeAtomFamily("ws-test"), true);
+    store.set(editorViewVisibleAtomFamily("ws-test"), false);
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "root",
+      type: "leaf",
+      leafKind: "editor",
+    });
+
+    const { result } = renderHook(() => useWorkspaceUiStatePersistence("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.persistUiState({ activeSessionId: "sess-1" });
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      {
+        workspaceId: "ws-test",
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 220,
+          focusMode: true,
+          editorViewVisible: false,
+          paneLayout: {
+            id: "root",
+            type: "leaf",
+            leafKind: "editor",
+          },
+          activeSessionId: "sess-1",
+        },
+      },
+      undefined
+    );
+  });
+
   it("persists the normalized pane layout atom instead of stale workspace uiState data", async () => {
     const sendCommand = vi.fn().mockImplementation(async (_op: string, payload: unknown) => {
       const { workspaceId, uiState } = payload as {

@@ -75,6 +75,13 @@ export function buildProxyWebSocketRequestOptions(headers: IncomingHttpHeaders):
 };
 export function buildProxyWebSocketRequestOptions(
   headers: IncomingHttpHeaders,
+  options: { userAgent?: string }
+): {
+  headers: Record<string, string>;
+  protocols?: string[];
+};
+export function buildProxyWebSocketRequestOptions(
+  headers: IncomingHttpHeaders,
   options: { userAgent?: string } = {}
 ): {
   headers: Record<string, string>;

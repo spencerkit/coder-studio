@@ -137,12 +137,12 @@ describe("MobileSupervisorSheet", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
     expect(screen.getByText("Status")).toBeInTheDocument();
     expect(screen.getByText("Idle")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Status", level: 3 })).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
     expect(screen.getByRole("tree", { name: "Target Details" })).toBeInTheDocument();
     expect(screen.queryByText("Mind Map")).not.toBeInTheDocument();
     expect(screen.getAllByText("Reduce mobile regression bugs").length).toBeGreaterThan(0);
@@ -201,8 +201,8 @@ describe("MobileSupervisorSheet", () => {
     expect(screen.getByText("Model call timed out after 600 seconds.")).toBeInTheDocument();
     expect(document.querySelector(".supervisor-details-section--error")).not.toBeNull();
     expect(document.querySelector(".supervisor-summary-card .supervisor-error")).toBeNull();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
-    expect(screen.getByText("Need to finish the validation step.")).toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
+    expect(screen.queryByText("Need to finish the validation step.")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Status", level: 3 })).not.toBeInTheDocument();
     expect(document.querySelector(".supervisor-details-surface--runtime")).toBeNull();
   });
@@ -273,8 +273,8 @@ describe("MobileSupervisorSheet", () => {
     expect(
       screen.getByRole("heading", { name: "Supervisor Details", level: 2 })
     ).toBeInTheDocument();
-    expect(screen.getByText("Basic Info")).toBeInTheDocument();
-    expect(screen.getByText("Target cycle reasoning")).toBeInTheDocument();
+    expect(screen.queryByText("Basic Info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target cycle reasoning")).not.toBeInTheDocument();
     expect(screen.getByRole("tree", { name: "Target Details" })).toBeInTheDocument();
     expect(screen.queryByText("Target progress")).not.toBeInTheDocument();
     expect(screen.queryByText("Active item")).not.toBeInTheDocument();

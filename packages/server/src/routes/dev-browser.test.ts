@@ -611,6 +611,48 @@ console.log(React, App, lazy);`)
     await waitForClose(socket);
   });
 
+  it("falls back to the first browser websocket protocol when the upstream target does not override it", async () => {
+    const created = await createSession();
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("proxy app listen failed");
+    }
+
+    const socket = await new Promise<WsWebSocket>((resolve, reject) => {
+      const ws = new ClientWebSocket(
+        `ws://127.0.0.1:${address.port}${created.browserProxyBase}/ws`,
+        ["json", "superjson"]
+      );
+
+      ws.once("open", () => {
+        try {
+          expect(ws.protocol).toBe("json");
+          resolve(ws);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      ws.once("error", reject);
+      ws.once("close", (code, reason) =>
+        reject(new Error(`socket closed before open: ${code} ${reason.toString()}`))
+      );
+      ws.once("unexpected-response", (_request, response) =>
+        reject(new Error(`unexpected response: ${response.statusCode}`))
+      );
+    });
+
+    const messagePromise = waitForMessage(socket);
+    socket.send("hello over first-protocol proxy");
+    await expect(messagePromise).resolves.toEqual({
+      data: Buffer.from("hello over first-protocol proxy"),
+      isBinary: false,
+    });
+
+    socket.close();
+    await waitForClose(socket);
+  });
+
   it("bounds buffered browser frames while the upstream websocket is still connecting", async () => {
     const pendingSockets = new Set<NetSocket>();
     const stalledServer = createNetServer((socket) => {

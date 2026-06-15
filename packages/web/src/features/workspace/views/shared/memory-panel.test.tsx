@@ -9,10 +9,8 @@ import { MemoryPanel } from "./memory-panel";
 const baseMemoryEntry: WorkspaceMemoryEntry = {
   id: "mem-1",
   workspaceId: "ws-1",
-  type: "decision",
-  title: "Use pnpm",
+  type: "project",
   content: "Package scripts should run through pnpm.",
-  tags: ["tooling", "workflow"],
   source: { kind: "user" },
   createdAt: 1000,
   updatedAt: 2000,
@@ -42,10 +40,8 @@ describe("MemoryPanel", () => {
           {
             ...baseMemoryEntry,
             id: "mem-2",
-            type: "workflow",
-            title: "Release checklist",
+            type: "note",
             content: "Run targeted tests before handoff.",
-            tags: ["release"],
           },
         ];
       }
@@ -55,28 +51,31 @@ describe("MemoryPanel", () => {
 
     renderMemoryPanel(sendCommand);
 
-    expect(await screen.findByRole("heading", { name: "Project Memory" })).toBeInTheDocument();
-    expect(screen.getByText("2 active")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All memories" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Decision" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Workflow" })).toBeInTheDocument();
-    await screen.findByRole("button", { name: /Use pnpm/i });
+    expect(await screen.findByText("Project Memory")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Memory" })).toBeInTheDocument();
+    expect(screen.getByText("2 active entries")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Note" })).toBeInTheDocument();
+    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Project" });
     expect(sendCommand).toHaveBeenCalledWith("memory.list", { workspaceId: "ws-1" }, undefined);
     expect(screen.getByText("Package scripts should run through pnpm.")).toBeInTheDocument();
-    expect(screen.getByText("tooling")).toBeInTheDocument();
-    expect(screen.getByText("workflow")).toBeInTheDocument();
+    expect(screen.getByText("project")).toBeInTheDocument();
+    expect(screen.getByText("note")).toBeInTheDocument();
     expect(screen.queryByText("Selected Memory")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save memory" })).toBeNull();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search memory" }), {
-      target: { value: "release" },
+      target: { value: "targeted tests" },
     });
 
-    expect(screen.getByRole("button", { name: /Release checklist/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Use pnpm/i })).toBeNull();
     expect(
-      sendCommand.mock.calls.filter(([op]) => op === "memory.search" || op === "memory.list")
-    ).toHaveLength(1);
+      screen.getByRole("button", { name: "Run targeted tests before handoff. Note" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Package scripts should run through pnpm. Project" })
+    ).toBeNull();
+    expect(sendCommand.mock.calls.filter(([op]) => op === "memory.list")).toHaveLength(1);
   });
 
   it("creates and deletes memory entries without issuing inline update commands", async () => {
@@ -92,7 +91,6 @@ describe("MemoryPanel", () => {
             ...baseMemoryEntry,
             ...(args as Partial<WorkspaceMemoryEntry>),
             id: "mem-2",
-            tags: ["architecture"],
             source: { kind: "user" },
             createdAt: 3000,
             updatedAt: 3000,
@@ -114,21 +112,15 @@ describe("MemoryPanel", () => {
 
     renderMemoryPanel(sendCommand);
 
-    await screen.findByRole("button", { name: /Use pnpm/i });
+    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Project" });
     expect(screen.queryByRole("button", { name: "Save memory" })).toBeNull();
     expect(screen.queryByText("Selected Memory")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "New memory" }));
 
-    const createDialog = await screen.findByRole("dialog", { name: "New memory" });
-    fireEvent.change(within(createDialog).getByLabelText("Title"), {
-      target: { value: "Memory scope" },
-    });
+    const createDialog = await screen.findByRole("dialog", { name: "Create memory" });
     fireEvent.change(within(createDialog).getByLabelText("Content"), {
       target: { value: "Workspace memory is stored per workspace." },
-    });
-    fireEvent.change(within(createDialog).getByLabelText("Tags"), {
-      target: { value: "architecture" },
     });
     fireEvent.click(within(createDialog).getByRole("button", { name: "Save memory" }));
 
@@ -137,26 +129,31 @@ describe("MemoryPanel", () => {
         "memory.create",
         {
           workspaceId: "ws-1",
-          type: "project_fact",
-          title: "Memory scope",
+          type: "project",
           content: "Workspace memory is stored per workspace.",
-          tags: ["architecture"],
         },
         undefined
       );
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "New memory" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "Create memory" })).toBeNull();
     });
 
-    expect(await screen.findByRole("button", { name: /Memory scope/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "Workspace memory is stored per workspace. Project",
+      })
+    ).toBeInTheDocument();
     expect(sendCommand.mock.calls.some(([op]) => op === "memory.update")).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: /Memory scope/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete memory" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Delete memory Workspace memory is stored per workspace\./i,
+      })
+    );
 
-    const deleteDialog = await screen.findByRole("dialog", { name: "Delete memory" });
+    const deleteDialog = await screen.findByRole("dialog", { name: "Delete memory?" });
     fireEvent.click(within(deleteDialog).getByRole("button", { name: "Delete memory" }));
 
     await waitFor(() => {
@@ -179,14 +176,24 @@ describe("MemoryPanel", () => {
 
     renderMemoryPanel(sendCommand);
 
-    expect(await screen.findByRole("button", { name: /Use pnpm/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "Package scripts should run through pnpm. Project",
+      })
+    ).toBeInTheDocument();
     expect(screen.queryByText("Selected Memory")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Use pnpm/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete memory" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Delete memory Package scripts should run through pnpm\./i,
+      })
+    );
 
-    const deleteDialog = await screen.findByRole("dialog", { name: "Delete memory" });
-    expect(within(deleteDialog).getByText("Use pnpm")).toBeInTheDocument();
+    const deleteDialog = await screen.findByRole("dialog", { name: "Delete memory?" });
+    expect(screen.getByRole("list", { name: "Memory entries" })).toBeInTheDocument();
+    expect(
+      within(deleteDialog).getByText(/Package scripts should run through pnpm\./i)
+    ).toBeInTheDocument();
   });
 
   it("shows command failures as a panel notice", async () => {

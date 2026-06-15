@@ -13,7 +13,8 @@ export default defineProject({
   test: {
     environment: "jsdom",
     globals: true,
-    // Avoid worker starvation when the Vite build test runs alongside large jsdom suites.
+    // Run web test files sequentially so the Vite build test cannot starve jsdom suites.
+    fileParallelism: false,
     maxWorkers: 4,
     env: {
       NODE_ENV: "test",

@@ -252,7 +252,7 @@ export function useUiActionSubscription(workspaceId: string): void {
   ]);
 
   useEffect(() => {
-    if (!wsClient) {
+    if (!wsClient || typeof wsClient.subscribe !== "function") {
       return;
     }
 
