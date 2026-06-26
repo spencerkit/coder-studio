@@ -11010,7 +11010,7 @@ body.is-resizing-floating-editor--nesw * {
   position: absolute;
   pointer-events: none;
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: var(--component-mix-border-default-62pct-transparent);
 }
 
 .pane-layout-horizontal-divider::after {
@@ -11026,12 +11026,12 @@ body.is-resizing-floating-editor--nesw * {
   right: 0;
   top: 50%;
   height: 1px;
-  background: transparent;
+  background: var(--component-mix-border-default-78pct-status-info-fg-22pct);
   transform: translateY(-50%);
 }
 
 .pane-layout-divider:hover::after {
-  background: transparent;
+  background: var(--component-mix-border-focus-58pct-transparent);
 }
 
 .pane-layout-divider:hover {

@@ -129,9 +129,9 @@ Aider 不属于当前内置 Provider 列表。它适合通过 preset/custom-prov
 
 自定义 Provider 主要是交互式命令集成，不一定支持内置 Provider 的 supervisor、idle detection、Agent instructions 或自动安装能力。
 
-## 在设置页中配置 Provider
+## 通过 More > Settings > Providers 配置 Provider
 
-进入设置 → Providers 页面，你可以针对每个 Provider 配置 `additionalArgs`。
+从工作区顶栏进入 **More / 更多 > Settings > Providers**，对应路由为 `/more/settings/providers`。在这里你可以针对每个 Provider 配置 `additionalArgs`。
 
 ### additionalArgs 是什么
 
@@ -147,7 +147,7 @@ Aider 不属于当前内置 Provider 列表。它适合通过 preset/custom-prov
 
 ### 修改后如何验证
 
-保存设置后，设置页面会显示 **Command Preview**，你可以看到最终有效的完整命令。
+保存设置后，Providers 区域会显示 **Command Preview**，你可以看到最终有效的完整命令。
 
 ## 常见问题
 

@@ -4,7 +4,7 @@
 
 ## 1. 目标
 
-验证移动端 Dock / Sheet / Drawer 工作区体验和移动端终端输入能力。
+验证移动端工作区主区、Sheet / Drawer、状态栏和移动端终端输入能力。
 
 ## 2. 验收清单
 
@@ -12,10 +12,10 @@
 | --- | --- | --- | --- |
 | MOBILE-001 | 移动 shell 渲染 | `APP-004` | 组件测试 / e2e |
 | MOBILE-002 | 移动工作区整体渲染 | `WSM-001` | 组件测试 / e2e |
-| MOBILE-003 | Mobile Dock 切换 | `WSM-003` | 组件测试 / 手工 |
+| MOBILE-003 | 移动端当前会话主区与状态栏 | `WSM-003` | 组件测试 / 手工 |
 | MOBILE-004 | Agent Sheet | `WSM-004` | 组件测试 |
 | MOBILE-005 | Files Sheet | `WSM-005` | 组件测试 |
-| MOBILE-006 | Workspace Drawer | `WSM-006` | 组件测试 |
+| MOBILE-006 | Workspace Drawer | `WSM-008` | 组件测试 |
 | MOBILE-007 | Mobile Terminal soft keys | `TERM-009` | 组件测试 / 手工 |
 | MOBILE-008 | Mobile long press copy line | `TERM-010` | 单测 / 手工 |
 | MOBILE-009 | Mobile Supervisor Sheet | `SUP-008` | 组件测试 |

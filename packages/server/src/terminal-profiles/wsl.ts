@@ -1,5 +1,22 @@
 import path from "node:path";
 
+export function decodeWindowsConsoleOutput(buffer: Buffer): string {
+  if (buffer.length === 0) {
+    return "";
+  }
+
+  if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return buffer.toString("utf16le", 2);
+  }
+
+  const nullBytes = buffer.reduce((count, byte) => count + (byte === 0 ? 1 : 0), 0);
+  if (nullBytes > 0) {
+    return buffer.toString("utf16le");
+  }
+
+  return buffer.toString("utf8");
+}
+
 export function toWslPath(windowsPath: string): string | null {
   const parsed = path.win32.parse(windowsPath);
   if (!parsed.root || !/^[A-Za-z]:\\$/.test(parsed.root)) {

@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync as fsExistsSync } from "node:fs";
 import path from "node:path";
 import type { TerminalProfile } from "@coder-studio/core";
@@ -7,7 +8,7 @@ import {
   getCommandLookupExecutable,
 } from "../provider-runtime/command-check.js";
 import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
-import { formatWslLabel } from "./wsl.js";
+import { decodeWindowsConsoleOutput, formatWslLabel } from "./wsl.js";
 
 export interface DetectedTerminalProfile extends TerminalProfile {
   source: "detected";
@@ -200,17 +201,45 @@ function pushIfUnique(
 }
 
 async function listWslDistros(runCommand?: CommandRunner): Promise<string[]> {
-  const runner = runCommand ?? runCommandAsString;
-
   try {
-    const { stdout } = await runner("wsl.exe", ["-l", "-q"], { windowsHide: true });
-    return stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    const stdout = runCommand
+      ? (await runCommand("wsl.exe", ["-l", "-q"], { windowsHide: true })).stdout
+      : await runWslListStdout();
+    return parseWslDistroLines(stdout);
   } catch {
     return [];
   }
+}
+
+function parseWslDistroLines(stdout: string): string[] {
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function runWslListStdout(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("wsl.exe", ["-l", "-q"], {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdoutChunks: Buffer[] = [];
+
+    child.stdout?.on("data", (chunk: string | Buffer) => {
+      stdoutChunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`wsl.exe exited with code ${code ?? "unknown"}`));
+        return;
+      }
+
+      resolve(decodeWindowsConsoleOutput(Buffer.concat(stdoutChunks)));
+    });
+  });
 }
 
 async function resolveWindowsCommandPath(

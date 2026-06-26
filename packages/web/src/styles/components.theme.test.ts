@@ -1482,7 +1482,9 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(paneDividerBaseRules).toContain("z-index: var(--z-inline)");
     expect(paneDividerBaseRules).not.toContain("z-index: var(--z-inline-raised)");
     expect(paneDividerBaseRules).toContain("background: transparent");
-    expect(paneDividerLineRules).toContain("background: transparent");
+    expect(paneDividerLineRules).toContain(
+      "background: var(--component-mix-border-default-62pct-transparent)"
+    );
     expect(paneDividerLineRules).toContain("border-radius: var(--radius-pill)");
     expect(paneDividerHoverRules).toContain("background: transparent");
     expect(paneDividerHorizontalRules).toContain("width: 10px");

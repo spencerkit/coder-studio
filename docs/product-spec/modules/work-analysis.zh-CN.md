@@ -31,7 +31,7 @@
 | WA-006 | log collector 和 source adapters | Internal | `packages/server/src/work-analysis/log-sources` | `work-analysis-log-collector.test.ts`、`work-analysis-log-sources-file-adapters.test.ts` |
 | WA-007 | task classifier | Internal | `work-analysis/classification` | `work-analysis-task-classifier.test.ts` |
 | WA-008 | efficiency/retry metrics | Internal | `work-analysis/metrics` | `work-analysis-efficiency-metrics.test.ts`、`work-analysis-retry-metrics.test.ts` |
-| WA-009 | optimize/exporters | Internal | `work-analysis/optimize`、`exporters` | `work-analysis-efficiency-and-optimize.test.ts` |
+| WA-009 | optimize findings | Internal | `packages/server/src/work-analysis/optimize` | `work-analysis-efficiency-and-optimize.test.ts` |
 
 ## 4. 模块级验收线索
 
@@ -262,4 +262,4 @@
 
 ## 6. 未确认项
 
-- 导出功能是否有稳定 UI 入口需在第二轮确认。
+- WA-004 与 WA-005 覆盖了当前真实用户入口；其余分析能力主要作为服务层与 dashboard 投影能力存在。

@@ -17,12 +17,12 @@
 
 ## 我主要在手机上使用
 
-- [移动端与远程访问指南](mobile-guide.md) — 手机端界面、局域网访问、Tailscale/ngrok/Cloudflare Tunnel
+- [移动端与远程访问指南](mobile-guide.md) — 手机端当前布局、局域网访问、Tailscale/ngrok/Cloudflare Tunnel
 
 ## 我想了解产品结构
 
 - [App 功能总览](app-overview.md) — 核心概念与能力说明
-- [工作分析](work-analysis.md) — 多工作区、多时间范围的基础分析与深入分析
+- [工作分析](work-analysis.md) — 当前 dashboard 式工作分析、目录/时间筛选与刷新机制
 
 ---
 
