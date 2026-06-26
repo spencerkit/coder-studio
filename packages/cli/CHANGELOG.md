@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5
+
+### Patch Changes
+
+- [#82](https://github.com/spencerkit/coder-studio/pull/82) [`54ddf11`](https://github.com/spencerkit/coder-studio/commit/54ddf1157c2c7b86b1996d68fcbe2a40a9ccb958) Thanks [@pallyoung](https://github.com/pallyoung)! - Refresh workspace and runtime flows with canvas support, terminal profile improvements, skill management updates, and follow-up Windows and UI fixes.
+
 ## 0.5.4
 
 ### Patch Changes
