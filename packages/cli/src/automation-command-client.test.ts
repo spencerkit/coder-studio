@@ -64,6 +64,7 @@ describe("automation command client", () => {
   beforeEach(() => {
     socketInstances.length = 0;
     vi.stubEnv("CODER_STUDIO_API_URL", "");
+    vi.stubEnv("CODER_STUDIO_SESSION_TOKEN", "");
     getServerStatus.mockResolvedValue({
       status: "running",
       pid: 1,

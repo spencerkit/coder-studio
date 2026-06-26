@@ -2,4 +2,4 @@
 "@spencer-kit/coder-studio": patch
 ---
 
-Stabilize the web test suite and fix workspace UI and dev-browser regressions.
+Refresh workspace and runtime flows with canvas support, terminal profile improvements, skill management updates, and follow-up Windows and UI fixes.
