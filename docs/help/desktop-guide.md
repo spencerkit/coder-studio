@@ -98,7 +98,7 @@
 
 高级设置键 `git.autofetchPeriodSec` 控制活动工作区的周期性远程 fetch，默认值是 `180` 秒；设为 `0` 会关闭周期性 fetch，但不会影响打开工作区时的自动 fetch，也不会影响手动点击 **Fetch**。
 
-当前设置页还没有这个高级键的图形化入口。如需手动调整，可以直接编辑本地状态目录里的 `settings.json`。默认路径通常是 `~/.coder-studio/data/state/settings.json`；如果你通过 `coder-studio config --state-dir ...` 改过状态目录，请使用你自己的路径。
+当前 `/more/settings/*` 相关页面还没有这个高级键的图形化入口。如需手动调整，可以直接编辑本地状态目录里的 `settings.json`。默认路径通常是 `~/.coder-studio/data/state/settings.json`；如果你通过 `coder-studio config --state-dir ...` 改过状态目录，请使用你自己的路径。
 
 ```bash
 node -e '

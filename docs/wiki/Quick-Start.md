@@ -33,7 +33,7 @@ After Coder Studio opens, continue with [First Agent Run](First-Agent-Run.md) to
 
 ## Open A Project
 
-1. Click the workspace picker.
+1. On the welcome screen, click **Open Workspace**.
 2. Select your project folder.
 3. Wait for the file tree, Git panel, and terminal area to load.
 

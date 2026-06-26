@@ -111,9 +111,9 @@ The same workspace URL works across all devices — interface adapts automatical
 
 ![Desktop Workspace](docs/help/assets/screenshot-pc.png)
 
-**Mobile Interface**
+**Phone Layout**
 
-![Mobile Workspace](docs/help/assets/screenshot-mobile.png)
+The current phone layout is not a bottom dock UI. It uses a top bar for workspace, files, terminal, and more actions, a main active-session stage, fullscreen sheets for files and terminal, and a bottom status bar.
 
 ---
 
@@ -200,7 +200,7 @@ pnpm dev
 
 ### Development Docs
 
-- [PRD](docs/PRD.zh-CN.md)
+- [Product Spec Index (zh-CN)](docs/product-spec/README.zh-CN.md)
 - [Design Spec](docs/superpowers/specs/2026-04-13-coder-studio-design.md)
 - [More Docs](docs/)
 

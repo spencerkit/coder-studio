@@ -111,9 +111,9 @@ coder-studio open
 
 ![桌面端工作区](docs/help/assets/screenshot-pc.png)
 
-**移动端界面**
+**手机端布局**
 
-![移动端工作区](docs/help/assets/screenshot-mobile.png)
+当前手机端不是底部 Dock 导航，而是顶部栏、当前会话主区、文件/终端全屏 Sheet，以及底部状态栏的组合。
 
 ---
 
@@ -201,7 +201,7 @@ pnpm dev
 
 ### 开发文档
 
-- [PRD](docs/PRD.zh-CN.md)
+- [产品规格索引](docs/product-spec/README.zh-CN.md)
 - [设计规范](docs/superpowers/specs/2026-04-13-coder-studio-design.md)
 - [更多文档](docs/)
 

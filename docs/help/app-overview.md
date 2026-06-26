@@ -21,7 +21,7 @@ Coder Studio 是一款**本地优先**的 AI 编码工作台。它将 AI Agent�
 - 独立的终端会话
 - Git 状态信息
 
-你可以同时打开多个工作区，通过顶栏的工作区标签切换。
+你可以同时打开多个工作区。桌面端通过顶栏标签切换，移动端通过工作区抽屉切换。
 
 ### Session（会话）
 
@@ -62,21 +62,20 @@ Provider 需要在本地独立安装。Coder Studio 会在启动会话时调用�
 - 让 Agent 通过 `coder-studio capabilities --json` 查看可用的只读验证命令清单
 - 让 Agent 读取终端输出、Git 状态和指定文件 diff，辅助最终检查
 
-### Settings（设置）
+### More（更多）
 
-设置页面提供以下配置：
+桌面端和移动端都通过顶栏的 **More / 更多** 按钮进入统一的 `/more` 页面。当前没有顶级 `/settings` 路由。`/more` 当前分为三组内容：
 
-- **General**：通知开关、语言设置
-- **Providers**：查看和配置每个 Provider 的启动参数
-- **Appearance**：主题切换、终端渲染方式
-- **Shortcuts**：查看和自定义快捷键
+- **Settings**：`General`、`Providers`、`Terminal`、`Appearance`、`Shortcuts`
+- **Analysis**：`Work Analysis`、`Monitoring`、`Diagnostics`
+- **About**：`Product`、`Update Status`、`Auto Update`
 
 ## 桌面端 vs 移动端
 
 Coder Studio 使用响应式界面，同一服务同时支持：
 
-- **桌面端**：多面板布局、快捷键、专注模式（[桌面端使用指南](desktop-guide.md)）
-- **移动端**：底部 Dock 导航、全屏面板（[移动端使用指南](mobile-guide.md)）
+- **桌面端**：多面板布局、快捷键、专注模式和顶栏快速操作（[桌面端使用指南](desktop-guide.md)）
+- **移动端**：顶部栏、当前会话主区、Sheet/Drawer 和底部状态栏（[移动端使用指南](mobile-guide.md)）
 
 ## 适合的使用场景
 
@@ -92,4 +91,4 @@ Coder Studio 使用响应式界面，同一服务同时支持：
 可以。你可以在同一工作区内同时运行多个 Provider 会话。
 
 **Q：可以打开多个项目吗？**
-可以。通过顶栏的工作区标签切换，每个工作区独立管理自己的会话、文件和终端。
+可以。桌面端通过顶栏标签切换，移动端通过工作区抽屉切换；每个工作区独立管理自己的会话、文件和终端。

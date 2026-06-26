@@ -2,6 +2,11 @@
 
 本文档定义 Coder Studio 的产品功能规格体系。它不是 PRD，也不是历史设计记录，而是面向开发、测试和后续 AI agent 的功能事实与验收契约。
 
+## 0. 当前代码基线入口
+
+- 当前产品总览见 [current-baseline.zh-CN.md](./current-baseline.zh-CN.md)。
+- 当模块文档与总览存在冲突时，以总览中的当前代码基线描述为准，直到对应模块完成同步。
+
 ## 1. 文档目标
 
 Product Spec 只回答四类问题：
@@ -40,6 +45,7 @@ Product Spec 不承担以下职责：
 ```text
 docs/product-spec/
   README.zh-CN.md
+  current-baseline.zh-CN.md
 
   modules/
     app-shell.zh-CN.md
@@ -103,10 +109,10 @@ docs/product-spec/
 | --- | --- | --- |
 | App Shell | 启动、路由壳层、连接态、桌面/移动壳层选择 | `packages/web/src/app`、`packages/web/src/shells` |
 | Auth | 登录、会话门禁、认证状态 | `packages/web/src/features/auth`、`packages/server/src/auth` |
-| Welcome | 欢迎页、打开工作区入口、设置入口 | `packages/web/src/features/welcome` |
+| Welcome | 欢迎页、打开工作区入口、两步首屏引导 | `packages/web/src/features/welcome` |
 | Workspace | 工作区总入口、active workspace、加载/错误/空态 | `packages/web/src/features/workspace`、`packages/server/src/commands/workspace.ts` |
 | Workspace Desktop | 桌面工作区布局、侧栏、主区、底部终端 | `packages/web/src/features/workspace/views/desktop` |
-| Workspace Mobile | 移动端 Dock、Sheet、Drawer、移动端工作区状态 | `packages/web/src/features/workspace/views/mobile` |
+| Workspace Mobile | 移动端工作区主区、Sheet、Drawer、顶部栏和底部状态栏 | `packages/web/src/features/workspace/views/mobile` |
 | Workspace Tabs / Layout | workspace tab、布局持久化、focus/fullscreen、最后查看目标 | `packages/web/src/features/workspace/actions/use-workspace-ui-state-persistence.ts`、`packages/web/src/features/workspace/actions/use-workspace-layout-actions.ts` |
 | Agent Sessions | Agent 会话创建、运行态、历史、metadata | `packages/web/src/features/agent-panes`、`packages/server/src/commands/session.ts` |
 | Agent Panes | Agent pane 布局、pane card、draft launcher、pane navigation | `packages/web/src/features/agent-panes` |
@@ -119,10 +125,10 @@ docs/product-spec/
 | Git | Git 状态、Diff、commit、branch、push/pull | `packages/web/src/features/workspace/actions/use-git-actions.ts`、`packages/server/src/commands/git.ts` |
 | Worktrees | Worktree 列表、详情、管理入口 | `packages/web/src/features/workspace/views/shared/worktree-*`、`packages/server/src/commands/worktree.ts` |
 | Terminal | shell terminal、agent terminal、多终端、恢复、上传 | `packages/web/src/features/terminal-panel`、`packages/server/src/terminal` |
-| Settings | 设置页、provider 设置、外观、快捷键、监控设置、关于 | `packages/web/src/features/settings`、`packages/server/src/commands/settings.ts` |
+| Settings | `/more` 下的设置、分析、关于入口，以及 settings 读写与嵌入式设置分区 | `packages/web/src/features/more`、`packages/web/src/features/settings`、`packages/server/src/commands/settings.ts` |
 | Diagnostics | 系统依赖、诊断页、安装流程 | `packages/web/src/features/diagnostics`、`packages/server/src/commands/diagnostics.ts` |
 | Monitoring | 运行监控、指标展示、监控设置 | `packages/web/src/features/monitoring`、`packages/server/src/monitoring` |
-| Work Analysis | 工作分析、时间范围、归因、趋势、导出 | `packages/web/src/features/work-analysis`、`packages/server/src/work-analysis` |
+| Work Analysis | 工作分析、时间范围、归因、趋势与仪表盘刷新/重建 | `packages/web/src/features/work-analysis`、`packages/server/src/work-analysis` |
 | Skills | skills 面板、挂载目录、归因和管理 | `packages/web/src/features/workspace/actions/use-skills-panel.ts`、`packages/server/src/skills` |
 | Updates | 更新检查、更新提示、footer update rail | `packages/web/src/features/updates`、`packages/server/src/update` |
 | Notifications | Toast、系统通知、会话完成通知 | `packages/web/src/features/notifications`、`packages/web/src/components/ui/toast` |
