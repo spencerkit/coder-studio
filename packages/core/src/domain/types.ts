@@ -68,6 +68,7 @@ export type WorkspacePaneNode = WorkspacePaneLeaf | WorkspacePaneSplit;
 export interface WorkspaceFileEditorTab {
   kind: "file";
   path: string;
+  pinned?: boolean;
 }
 
 export type DevBrowserDevicePreset = "desktop" | "iphone-14" | "pixel-7" | "custom";
@@ -85,13 +86,26 @@ export interface WorkspaceBrowserEditorTab {
   userAgentMode: DevBrowserUserAgentMode;
 }
 
-export type WorkspaceEditorTab = WorkspaceFileEditorTab | WorkspaceBrowserEditorTab;
+export interface WorkspaceCanvasEditorTab {
+  kind: "canvas";
+  id: string;
+  title: string;
+  sourcePath: string;
+  artifactType?: "architecture_canvas" | "report_canvas";
+  canvasId?: string;
+}
+
+export type WorkspaceEditorTab =
+  | WorkspaceFileEditorTab
+  | WorkspaceBrowserEditorTab
+  | WorkspaceCanvasEditorTab;
 
 export interface UiState {
   leftPanelWidth: number;
   bottomPanelHeight: number;
   focusMode: boolean;
   editorViewVisible?: boolean;
+  editorPinned?: boolean;
   activeSessionId?: string;
   paneLayout?: WorkspacePaneNode;
   fileTreeExpandedDirs?: string[];
@@ -720,12 +734,20 @@ export interface ProviderConfig {
   [key: string]: unknown;
 }
 
+const TERMINAL_CONTROL_SEQUENCE_FOR_SESSION_TITLE_PATTERN =
+  /\x1b\[[0-9;?<>]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[\s\S]*?\x1b\\|\x1b[@-_]|<\d+(?:;\d+)*[Mm]/g;
+
+function stripTerminalControlSequences(raw: string): string {
+  return raw.replace(TERMINAL_CONTROL_SEQUENCE_FOR_SESSION_TITLE_PATTERN, "").replace(/\x1b/g, "");
+}
+
 /**
  * Derive a compact session title from a raw input buffer (the bytes a user
  * just submitted to the agent terminal). Returns undefined when the buffer
  * contains nothing meaningful after trimming.
  *
  * Rules:
+ *   - Strip terminal control/escape sequences (including SGR mouse reports).
  *   - Collapse all whitespace (including newlines) into single spaces.
  *   - Trim leading/trailing whitespace.
  *   - Truncate to SESSION_TITLE_MAX_LENGTH; if clipped, the final character is
@@ -733,7 +755,7 @@ export interface ProviderConfig {
  *     SESSION_TITLE_MAX_LENGTH.
  */
 export function normalizeSessionTitleInput(raw: string): string | undefined {
-  const normalized = raw.replace(/\s+/g, " ").trim();
+  const normalized = stripTerminalControlSequences(raw).replace(/\s+/g, " ").trim();
   return normalized || undefined;
 }
 

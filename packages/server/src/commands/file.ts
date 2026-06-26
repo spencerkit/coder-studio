@@ -18,45 +18,51 @@ import {
   previewSearchSessionFile,
 } from "../fs/search-replace.js";
 import { readTree, searchFiles } from "../fs/tree.js";
-import { registerCommand } from "../ws/dispatch.js";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
 
 // file.readTree
-registerCommand(
+registerRuntimeCommand(
   "file.readTree",
   z.object({
     workspaceId: z.string(),
     subPath: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    return readTree(workspace.path, args.subPath);
+      return readTree(workspace.path, args.subPath);
+    },
   }
 );
 
 // file.search
-registerCommand(
+registerRuntimeCommand(
   "file.search",
   z.object({
     workspaceId: z.string(),
     query: z.string(),
     limit: z.number().int().positive().max(50).optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    return searchFiles(workspace.path, args.query, args.limit ?? 10);
+      return searchFiles(workspace.path, args.query, args.limit ?? 10);
+    },
   }
 );
 
 // file.searchContent
-registerCommand(
+registerRuntimeCommand(
   "file.searchContent",
   z.object({
     workspaceId: z.string(),
@@ -64,39 +70,45 @@ registerCommand(
     maxFiles: z.number().int().positive().max(100),
     maxMatchesPerFile: z.number().int().positive().max(100),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    return searchFileContents(workspace.path, {
-      query: args.query,
-      maxFiles: args.maxFiles,
-      maxMatchesPerFile: args.maxMatchesPerFile,
-    });
+      return searchFileContents(workspace.path, {
+        query: args.query,
+        maxFiles: args.maxFiles,
+        maxMatchesPerFile: args.maxMatchesPerFile,
+      });
+    },
   }
 );
 
 // file.read
-registerCommand(
+registerRuntimeCommand(
   "file.read",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    return readWorkspaceFile(args.workspaceId, workspace.path, args.path);
+      return readWorkspaceFile(args.workspaceId, workspace.path, args.path);
+    },
   }
 );
 
 // file.searchSession.start
-registerCommand(
+registerRuntimeCommand(
   "file.searchSession.start",
   z.object({
     workspaceId: z.string(),
@@ -115,58 +127,64 @@ registerCommand(
     maxFiles: z.number().int().positive().max(100),
     maxMatchesPerFile: z.number().int().positive().max(100),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const result = await createSearchSession(workspace.path, {
-      query: args.query,
-      replace: args.replace,
-      isRegex: args.isRegex,
-      matchCase: args.matchCase,
-      matchWholeWord: args.matchWholeWord,
-      preserveCase: args.preserveCase,
-      includeGlobs: args.includeGlobs,
-      excludeGlobs: args.excludeGlobs,
-      useIgnoreFiles: args.useIgnoreFiles,
-      useExcludeSettings: args.useExcludeSettings,
-      onlyOpenEditors: args.onlyOpenEditors,
-      openEditorPaths: args.openEditorPaths,
-      maxFiles: args.maxFiles,
-      maxMatchesPerFile: args.maxMatchesPerFile,
-    });
+      const result = await createSearchSession(workspace.path, {
+        query: args.query,
+        replace: args.replace,
+        isRegex: args.isRegex,
+        matchCase: args.matchCase,
+        matchWholeWord: args.matchWholeWord,
+        preserveCase: args.preserveCase,
+        includeGlobs: args.includeGlobs,
+        excludeGlobs: args.excludeGlobs,
+        useIgnoreFiles: args.useIgnoreFiles,
+        useExcludeSettings: args.useExcludeSettings,
+        onlyOpenEditors: args.onlyOpenEditors,
+        openEditorPaths: args.openEditorPaths,
+        maxFiles: args.maxFiles,
+        maxMatchesPerFile: args.maxMatchesPerFile,
+      });
 
-    return result.result;
+      return result.result;
+    },
   }
 );
 
 // file.searchSession.previewFile
-registerCommand(
+registerRuntimeCommand(
   "file.searchSession.previewFile",
   z.object({
     workspaceId: z.string(),
     sessionId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const result = await previewSearchSessionFile(workspace.path, args.sessionId, args.path);
-    if (!result) {
-      throw { code: "stale_session", message: "Search session is stale or missing" };
-    }
+      const result = await previewSearchSessionFile(workspace.path, args.sessionId, args.path);
+      if (!result) {
+        throw { code: "stale_session", message: "Search session is stale or missing" };
+      }
 
-    return result;
+      return result;
+    },
   }
 );
 
 // file.searchSession.apply
-registerCommand(
+registerRuntimeCommand(
   "file.searchSession.apply",
   z.object({
     workspaceId: z.string(),
@@ -177,120 +195,135 @@ registerCommand(
       z.object({ kind: z.literal("match"), path: z.string(), matchId: z.string() }),
     ]),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const result = await applySearchSession(workspace.path, args.sessionId, args.scope);
-    if (result.status === "ok" || result.status === "partial") {
-      ctx.eventBus.emit({
-        type: "fs.dirty",
-        workspaceId: args.workspaceId,
-        reason: "file_content",
-      });
-    }
+      const result = await applySearchSession(workspace.path, args.sessionId, args.scope);
+      if (result.status === "ok" || result.status === "partial") {
+        ctx.eventBus.emit({
+          type: "fs.dirty",
+          workspaceId: args.workspaceId,
+          reason: "file_content",
+        });
+      }
 
-    return result;
+      return result;
+    },
   }
 );
 
 // file.create
-registerCommand(
+registerRuntimeCommand(
   "file.create",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    await createFile(workspace.path, args.path);
-    ctx.eventBus.emit({
-      type: "fs.dirty",
-      workspaceId: args.workspaceId,
-      reason: "fs_change",
-    });
-    return { ok: true };
+      await createFile(workspace.path, args.path);
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "fs_change",
+      });
+      return { ok: true };
+    },
   }
 );
 
 // file.mkdir
-registerCommand(
+registerRuntimeCommand(
   "file.mkdir",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    await createDirectory(workspace.path, args.path);
-    ctx.eventBus.emit({
-      type: "fs.dirty",
-      workspaceId: args.workspaceId,
-      reason: "fs_change",
-    });
-    return { ok: true };
+      await createDirectory(workspace.path, args.path);
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "fs_change",
+      });
+      return { ok: true };
+    },
   }
 );
 
 // file.delete
-registerCommand(
+registerRuntimeCommand(
   "file.delete",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    await deleteEntry(workspace.path, args.path);
-    ctx.eventBus.emit({
-      type: "fs.dirty",
-      workspaceId: args.workspaceId,
-      reason: "fs_change",
-    });
-    return { ok: true };
+      await deleteEntry(workspace.path, args.path);
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "fs_change",
+      });
+      return { ok: true };
+    },
   }
 );
 
 // file.rename
-registerCommand(
+registerRuntimeCommand(
   "file.rename",
   z.object({
     workspaceId: z.string(),
     fromPath: z.string(),
     toPath: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    await renameEntry(workspace.path, args.fromPath, args.toPath);
-    ctx.eventBus.emit({
-      type: "fs.dirty",
-      workspaceId: args.workspaceId,
-      reason: "fs_change",
-    });
-    return { ok: true };
+      await renameEntry(workspace.path, args.fromPath, args.toPath);
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "fs_change",
+      });
+      return { ok: true };
+    },
   }
 );
 
 // file.write
-registerCommand(
+registerRuntimeCommand(
   "file.write",
   z.object({
     workspaceId: z.string(),
@@ -298,18 +331,26 @@ registerCommand(
     content: z.string(),
     baseHash: z.string().optional(), // For conflict detection
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const result = await writeWorkspaceFile(workspace.path, args.path, args.content, args.baseHash);
-    ctx.eventBus.emit({
-      type: "fs.dirty",
-      workspaceId: args.workspaceId,
-      reason: "file_content",
-    });
-    return result;
+      const result = await writeWorkspaceFile(
+        workspace.path,
+        args.path,
+        args.content,
+        args.baseHash
+      );
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "file_content",
+      });
+      return result;
+    },
   }
 );

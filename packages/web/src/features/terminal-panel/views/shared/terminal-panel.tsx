@@ -2,7 +2,6 @@ import { useAtom, useStore } from "jotai";
 import { ChevronDown, Command, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import {
-  Button,
   EmptyState,
   IconButton,
   Popover,
@@ -16,6 +15,7 @@ import { TaskCommandSidePanel } from "../../../tasks";
 import { useTerminalActions } from "../../actions/use-terminal-actions";
 import { terminalCommandSidePanelOpenAtomFamily, terminalMetaAtomFamily } from "../../atoms";
 import { formatTerminalTitle } from "../../components/title-format";
+import { TerminalProfileCreateButton } from "./terminal-profile-create-button";
 import { TerminalSelectorItem } from "./terminal-selector-item";
 import { XtermHost } from "./xterm-host";
 
@@ -46,11 +46,14 @@ export function TerminalPanel({
     activeTerminalId,
     activeTerminalMeta,
     activeWorkspaceId,
+    defaultProfile,
     handleCloseTerminal,
     handleCreateTerminal,
     handleSwitchTerminal,
     hasTerminals,
     terminalIds,
+    terminalProfiles,
+    terminalProfilesLoading,
   } = useTerminalActions();
   const activeTerminalIndex = activeTerminalId ? terminalIds.indexOf(activeTerminalId) : 0;
   const activeTerminalTitle = formatTerminalTitle(
@@ -187,15 +190,14 @@ export function TerminalPanel({
 
             {isMobileFullscreen ? (
               <div className="terminal-toolbar-actions">
-                <Tooltip content={t("action.open")}>
-                  <IconButton
-                    className="panel-toolbar-btn"
-                    aria-label={t("terminal.new_terminal")}
-                    icon={<ThemedIcon semantic="terminal.action.new" size={14} />}
-                    onClick={handleCreateTerminal}
-                    size="sm"
-                  />
-                </Tooltip>
+                <TerminalProfileCreateButton
+                  defaultProfile={defaultProfile}
+                  loading={terminalProfilesLoading}
+                  mobile
+                  profiles={terminalProfiles}
+                  variant="toolbar"
+                  onCreateTerminal={handleCreateTerminal}
+                />
               </div>
             ) : null}
           </div>
@@ -254,14 +256,12 @@ export function TerminalPanel({
                           </button>
                         </Popover>
                       ) : (
-                        <button
-                          type="button"
-                          className="terminal-selector-btn"
+                        <div
+                          className="terminal-selector-btn terminal-selector-btn--static"
                           aria-label={activeTerminalTitle}
                         >
                           <span>{activeTerminalTitle}</span>
-                          <ChevronDown size={12} />
-                        </button>
+                        </div>
                       )}
                     </div>
                   ) : null}
@@ -289,15 +289,13 @@ export function TerminalPanel({
               )}
 
               <div className="terminal-toolbar-actions">
-                <Tooltip content={t("action.open")}>
-                  <IconButton
-                    className="panel-toolbar-btn"
-                    aria-label={t("terminal.new_terminal")}
-                    icon={<ThemedIcon semantic="terminal.action.new" size={14} />}
-                    onClick={handleCreateTerminal}
-                    size="sm"
-                  />
-                </Tooltip>
+                <TerminalProfileCreateButton
+                  defaultProfile={defaultProfile}
+                  loading={terminalProfilesLoading}
+                  profiles={terminalProfiles}
+                  variant="toolbar"
+                  onCreateTerminal={handleCreateTerminal}
+                />
                 {!isMobileFullscreen ? (
                   <Tooltip
                     content={
@@ -332,14 +330,14 @@ export function TerminalPanel({
           {!hasTerminals ? (
             <EmptyState
               action={
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleCreateTerminal}
-                  leadingIcon={<ThemedIcon semantic="terminal.action.new" size={14} />}
-                >
-                  {t("terminal.new_terminal")}
-                </Button>
+                <TerminalProfileCreateButton
+                  defaultProfile={defaultProfile}
+                  loading={terminalProfilesLoading}
+                  mobile={isMobileFullscreen}
+                  profiles={terminalProfiles}
+                  variant="empty-state"
+                  onCreateTerminal={handleCreateTerminal}
+                />
               }
               className="bottom-terminal-empty"
               description={<p className="bottom-terminal-empty-hint">{t("terminal.empty_hint")}</p>}

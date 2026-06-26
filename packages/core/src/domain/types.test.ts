@@ -15,6 +15,7 @@ import type {
   TaskRun,
   Terminal,
   TerminalKind,
+  WorkspaceCanvasEditorTab,
   WorkspaceHistoryEntry,
 } from "./types";
 import { deriveSessionTitle, normalizeSessionTitleInput, SESSION_TITLE_MAX_LENGTH } from "./types";
@@ -62,6 +63,12 @@ describe("normalizeSessionTitleInput", () => {
   it("returns undefined for whitespace-only input", () => {
     expect(normalizeSessionTitleInput("\n\t  ")).toBeUndefined();
   });
+
+  it("strips terminal escape sequences including SGR mouse reports", () => {
+    expect(normalizeSessionTitleInput("\x1b[<35;17;18M")).toBeUndefined();
+    expect(normalizeSessionTitleInput("<35;17;18M")).toBeUndefined();
+    expect(normalizeSessionTitleInput("\x1b[<35;17;18Mfix the build")).toBe("fix the build");
+  });
 });
 
 describe("SessionState", () => {
@@ -84,6 +91,19 @@ describe("WorkspaceHistoryEntry", () => {
       path: string;
       name: string;
       lastOpenedAt: number;
+    }>();
+  });
+});
+
+describe("WorkspaceCanvasEditorTab", () => {
+  it("is keyed by sourcePath with optional canvas compatibility metadata", () => {
+    expectTypeOf<WorkspaceCanvasEditorTab>().toEqualTypeOf<{
+      kind: "canvas";
+      id: string;
+      title: string;
+      sourcePath: string;
+      artifactType?: "architecture_canvas" | "report_canvas";
+      canvasId?: string;
     }>();
   });
 });

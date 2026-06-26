@@ -322,13 +322,17 @@ export function ConfigEditor({
             />
           )}
 
-          <MonacoHost
-            filePath={configPath}
-            content={content}
-            onContentChange={handleContentChange}
-            standalone
-            visible={visible}
-          />
+          <div
+            className={`config-card-editor-slot ${fillHeight ? "config-card-editor-slot--fill-height" : ""}`}
+          >
+            <MonacoHost
+              filePath={configPath}
+              content={content}
+              onContentChange={handleContentChange}
+              standalone
+              visible={visible}
+            />
+          </div>
 
           {/* Actions */}
           <div className="config-card-actions">

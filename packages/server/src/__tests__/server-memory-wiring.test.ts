@@ -51,7 +51,7 @@ describe("createServer memory wiring", () => {
     expect(result.ok).toBe(true);
     expect(result.data).toMatchObject({
       workspaceId: workspace.id,
-      type: "project",
+      type: "wiki",
       content: "Memory commands use the server-assembled MemoryRepo.",
     } satisfies Partial<WorkspaceMemoryEntry>);
     expect(ctx.memoryRepo?.list({ workspaceId: workspace.id })).toHaveLength(1);

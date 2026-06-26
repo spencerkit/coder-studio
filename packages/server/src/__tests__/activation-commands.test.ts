@@ -1,15 +1,21 @@
 import type { FastifyRequest } from "fastify";
 import { describe, expect, it, vi } from "vitest";
+import type { RequestAuthContext } from "../auth/plugin.js";
 import { ActivationManager } from "../ws/activation.js";
 import { type CommandContext, dispatch } from "../ws/dispatch.js";
 import type { Broadcaster } from "../ws/hub.js";
 import "../commands/activation.js";
+import "../commands/automation.js";
+import "../commands/canvas.js";
+import "../commands/memory.js";
 import "../commands/workspace.js";
+import "../commands/ui-actions.js";
 
-function createMockRequest(): FastifyRequest {
+function createMockRequest(authContext?: RequestAuthContext): FastifyRequest {
   return {
     ip: "127.0.0.1",
     headers: { "user-agent": "test-agent" },
+    ...(authContext ? { coderStudioAuthContext: authContext } : {}),
   } as unknown as FastifyRequest;
 }
 
@@ -22,7 +28,9 @@ function createBaseContext(overrides?: {
       list: vi.fn(() => [{ id: "workspace-1" }]),
     } as unknown as CommandContext["workspaceMgr"],
     sessionMgr: {} as never,
-    terminalMgr: {} as never,
+    terminalMgr: {
+      getRingBufferTail: vi.fn(() => Buffer.from("tail")),
+    } as unknown as CommandContext["terminalMgr"],
     eventBus: {} as never,
     broadcaster:
       overrides?.broadcaster ??
@@ -36,6 +44,59 @@ function createBaseContext(overrides?: {
     supervisorMgr: {} as never,
     autoFetch: {} as never,
     activationMgr: overrides?.activationMgr ?? new ActivationManager(),
+    memoryRepo: {
+      list: vi.fn(() => []),
+      get: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    } as never,
+    canvasService: {
+      list: vi.fn(async (workspaceId: string) =>
+        workspaceId === "workspace-1" ? [{ id: "canvas-1", workspaceId }] : []
+      ),
+    } as never,
+    workspaceMgr: {
+      list: vi.fn(() => [{ id: "workspace-1" }]),
+      get: vi.fn((workspaceId: string) =>
+        workspaceId === "workspace-1" ? { id: "workspace-1", path: "/repo" } : undefined
+      ),
+    } as unknown as CommandContext["workspaceMgr"],
+    sessionMgr: {
+      getForWorkspace: vi.fn((workspaceId: string) =>
+        workspaceId === "workspace-1"
+          ? [
+              {
+                id: "sess-1",
+                workspaceId: "workspace-1",
+                terminalId: "term-1",
+                providerId: "codex",
+                state: "running",
+                capability: "full",
+                startedAt: 1,
+                lastActiveAt: 1,
+              },
+            ]
+          : []
+      ),
+      get: vi.fn((sessionId: string) =>
+        sessionId === "sess-1"
+          ? {
+              id: "sess-1",
+              workspaceId: "workspace-1",
+              terminalId: "term-1",
+              providerId: "codex",
+              state: "running",
+              capability: "full",
+              startedAt: 1,
+              lastActiveAt: 1,
+            }
+          : undefined
+      ),
+      findSessionIdByTerminal: vi.fn((terminalId: string) =>
+        terminalId === "term-1" ? "sess-1" : undefined
+      ),
+    } as unknown as CommandContext["sessionMgr"],
   };
 }
 
@@ -263,5 +324,237 @@ describe("activation commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data).toEqual([{ id: "workspace-1" }]);
+  });
+
+  it("allows token-auth websocket commands within the scoped permission set without an active lease", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-1",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["session:read", "memory:read", "ui:command"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const memoryList = await dispatch(
+      {
+        kind: "command",
+        id: "token-memory-list",
+        op: "memory.list",
+        args: { workspaceId: "workspace-1" },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    const uiDispatch = await dispatch(
+      {
+        kind: "command",
+        id: "token-ui-dispatch",
+        op: "uiAction.dispatch",
+        args: {
+          workspaceId: "workspace-1",
+          intent: { type: "command.run", commandId: "quickOpen.open" },
+        },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(memoryList.ok).toBe(true);
+    expect(uiDispatch.ok).toBe(true);
+  });
+
+  it("rejects token-auth websocket commands outside the scoped permission set", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-2",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "token-workspace-list",
+        op: "workspace.list",
+        args: {},
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: "permission_denied",
+      message: "Token is not authorized for this command",
+    });
+  });
+
+  it("allows token-auth websocket canvas commands within the scoped permission set", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-canvas-1",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["memory:read"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "token-canvas-list",
+        op: "canvas.list",
+        args: { workspaceId: "workspace-1" },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual([{ id: "canvas-1", workspaceId: "workspace-1" }]);
+  });
+
+  it("rejects token-auth websocket commands that target another workspace", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-3",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["memory:read"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "token-memory-cross-workspace",
+        op: "memory.list",
+        args: { workspaceId: "workspace-2" },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: "permission_denied",
+      message: "Token is not authorized for the requested workspace",
+    });
+  });
+
+  it("rejects token-auth uiAction.dispatch when payload workspace ids conflict", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-ui-cross-workspace",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["ui:navigate"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "token-ui-cross-workspace",
+        op: "uiAction.dispatch",
+        args: {
+          workspaceId: "workspace-1",
+          intent: {
+            type: "editor.openFile",
+            workspaceId: "workspace-2",
+            path: "src/index.ts",
+          },
+        },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: "permission_denied",
+      message: "Token is not authorized for the requested workspace",
+    });
+  });
+
+  it("rejects token-auth websocket terminal reads for another session", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-4",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["terminal:read"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+    ctx.sessionMgr.findSessionIdByTerminal = vi.fn(() => "sess-other");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "token-terminal-cross-session",
+        op: "terminal.read",
+        args: { terminalId: "term-2" },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: "permission_denied",
+      message: "Token is not authorized for the requested session",
+    });
   });
 });

@@ -33,6 +33,7 @@ describe("server lsp runtime mode hydration", () => {
       port: 0,
     });
 
+    expect(server.__test__?.nativeRuntime).toBeDefined();
     expect(server.__test__?.commandContext.lspMgr.getRuntimeMode()).toBe("off");
   });
 });

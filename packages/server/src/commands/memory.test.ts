@@ -63,7 +63,7 @@ describe("memory commands", () => {
     const createdResult = await dispatch(
       command("memory.create", {
         workspaceId: "ws-1",
-        type: "project",
+        type: "wiki",
         content: "Keep durable context outside the Git workspace.",
         sourceHint: {
           kind: "skill",
@@ -79,7 +79,7 @@ describe("memory commands", () => {
     expect(created).toEqual({
       id: "mem_1779120000000_r1",
       workspaceId: "ws-1",
-      type: "project",
+      type: "wiki",
       content: "Keep durable context outside the Git workspace.",
       source: {
         kind: "skill",
@@ -101,12 +101,19 @@ describe("memory commands", () => {
     });
     expect(persistedRepo.get("ws-1", created.id)).toEqual(created);
 
+    const legacyTypeListResult = await dispatch(
+      command("memory.list", { workspaceId: "ws-1", type: "project" }),
+      ctx
+    );
+    expect(legacyTypeListResult.ok).toBe(true);
+    expect(legacyTypeListResult.data).toEqual([created]);
+
     const listResult = await dispatch(command("memory.list", { workspaceId: "ws-1" }), ctx);
     expect(listResult.ok).toBe(true);
     expect(listResult.data).toEqual([created]);
 
     const typeSearchResult = await dispatch(
-      command("memory.search", { workspaceId: "ws-1", query: "PROJECT" }),
+      command("memory.search", { workspaceId: "ws-1", query: "wiki" }),
       ctx
     );
     expect(typeSearchResult.ok).toBe(true);
@@ -223,7 +230,7 @@ describe("memory commands", () => {
     expect(searchResult.data).toEqual([]);
 
     now += 1000;
-    const createResult = await dispatch(
+    const projectCreateResult = await dispatch(
       command("memory.create", {
         workspaceId,
         type: "project",
@@ -231,13 +238,57 @@ describe("memory commands", () => {
       }),
       ctx
     );
-    expect(createResult.ok).toBe(true);
-    const created = createResult.data as WorkspaceMemoryEntry;
-    expect(created).toEqual({
+    expect(projectCreateResult.ok).toBe(true);
+    const projectCreated = projectCreateResult.data as WorkspaceMemoryEntry;
+    expect(projectCreated).toEqual({
       id: "mem_1779120001000_r1",
       workspaceId,
-      type: "project",
+      type: "wiki",
       content: "Persist only project-shaped memory records.",
+      source: { kind: "user" },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    now += 1000;
+    const bugfixCreateResult = await dispatch(
+      command("memory.create", {
+        workspaceId,
+        type: "bugfix",
+        status: "pending_verification",
+        content: "Persist only bugfix-shaped memory records.",
+      }),
+      ctx
+    );
+    expect(bugfixCreateResult.ok).toBe(true);
+    const bugfixCreated = bugfixCreateResult.data as WorkspaceMemoryEntry;
+    expect(bugfixCreated).toEqual({
+      id: "mem_1779120002000_r2",
+      workspaceId,
+      type: "issue",
+      status: "pending_verification",
+      content: "Persist only bugfix-shaped memory records.",
+      source: { kind: "user" },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    now += 1000;
+    const featureCreateResult = await dispatch(
+      command("memory.create", {
+        workspaceId,
+        type: "feature",
+        content: "Persist only feature-shaped memory records.",
+      }),
+      ctx
+    );
+    expect(featureCreateResult.ok).toBe(true);
+    const featureCreated = featureCreateResult.data as WorkspaceMemoryEntry;
+    expect(featureCreated).toEqual({
+      id: "mem_1779120003000_r3",
+      workspaceId,
+      type: "wiki",
+      content: "Persist only feature-shaped memory records.",
       source: { kind: "user" },
       createdAt: now,
       updatedAt: now,
@@ -247,17 +298,135 @@ describe("memory commands", () => {
       version: 1,
       workspaceId,
       entries: {
-        [created.id]: {
-          id: created.id,
+        [projectCreated.id]: {
+          id: projectCreated.id,
           workspaceId,
-          type: "project",
+          type: "wiki",
           content: "Persist only project-shaped memory records.",
           source: { kind: "user" },
-          createdAt: now,
-          updatedAt: now,
+          createdAt: projectCreated.createdAt,
+          updatedAt: projectCreated.updatedAt,
+        },
+        [bugfixCreated.id]: {
+          id: bugfixCreated.id,
+          workspaceId,
+          type: "issue",
+          status: "pending_verification",
+          content: "Persist only bugfix-shaped memory records.",
+          source: { kind: "user" },
+          createdAt: bugfixCreated.createdAt,
+          updatedAt: bugfixCreated.updatedAt,
+        },
+        [featureCreated.id]: {
+          id: featureCreated.id,
+          workspaceId,
+          type: "wiki",
+          content: "Persist only feature-shaped memory records.",
+          source: { kind: "user" },
+          createdAt: featureCreated.createdAt,
+          updatedAt: featureCreated.updatedAt,
         },
       },
     });
+  });
+
+  it("tracks memory statuses through create and update commands", async () => {
+    const issueCreateResult = await dispatch(
+      command("memory.create", {
+        workspaceId: "ws-1",
+        type: "issue",
+        content: "Fix broken command routing.",
+      }),
+      ctx
+    );
+
+    expect(issueCreateResult.ok).toBe(true);
+    const issue = issueCreateResult.data as WorkspaceMemoryEntry;
+    expect(issue).toMatchObject({
+      workspaceId: "ws-1",
+      type: "issue",
+      status: "not_started",
+      content: "Fix broken command routing.",
+    });
+
+    const wikiCreateResult = await dispatch(
+      command("memory.create", {
+        workspaceId: "ws-1",
+        type: "wiki",
+        status: "completed",
+        content: "Track command behavior in durable memory.",
+      }),
+      ctx
+    );
+
+    expect(wikiCreateResult.ok).toBe(true);
+    expect(wikiCreateResult.data).not.toHaveProperty("status");
+
+    now += 1000;
+    const completedUpdateResult = await dispatch(
+      command("memory.update", {
+        workspaceId: "ws-1",
+        id: issue.id,
+        status: "completed",
+      }),
+      ctx
+    );
+
+    expect(completedUpdateResult.ok).toBe(true);
+    expect(completedUpdateResult.data).toMatchObject({
+      id: issue.id,
+      type: "issue",
+      status: "completed",
+    });
+
+    now += 1000;
+    const noteUpdateResult = await dispatch(
+      command("memory.update", {
+        workspaceId: "ws-1",
+        id: issue.id,
+        type: "note",
+      }),
+      ctx
+    );
+
+    expect(noteUpdateResult.ok).toBe(true);
+    expect(noteUpdateResult.data).toMatchObject({
+      id: issue.id,
+      type: "note",
+    });
+    expect(noteUpdateResult.data).not.toHaveProperty("status");
+
+    now += 1000;
+    const issueResetResult = await dispatch(
+      command("memory.update", {
+        workspaceId: "ws-1",
+        id: issue.id,
+        type: "issue",
+      }),
+      ctx
+    );
+
+    expect(issueResetResult.ok).toBe(true);
+    expect(issueResetResult.data).toMatchObject({
+      id: issue.id,
+      type: "issue",
+      status: "not_started",
+    });
+  });
+
+  it("rejects invalid memory statuses during create validation", async () => {
+    const result = await dispatch(
+      command("memory.create", {
+        workspaceId: "ws-1",
+        type: "issue",
+        status: "open",
+        content: "Invalid status should not be accepted.",
+      }),
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
   });
 
   it("returns workspace_not_found before touching memory storage", async () => {
@@ -376,7 +545,7 @@ describe("memory commands", () => {
     const created = createdResult.data as WorkspaceMemoryEntry;
     expect(created).toMatchObject({
       workspaceId: "ws-1",
-      type: "project",
+      type: "wiki",
       content: "Keep project rules durable.",
     });
 

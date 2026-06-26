@@ -170,6 +170,224 @@ describe("settings commands", () => {
     expect(settingsRepo.get("appearance.mobileTerminalFontSize")).toBe(15);
   });
 
+  it("settings.update persists terminal profile settings into the file-backed settings store", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-profiles",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              defaultProfileId: "custom:ops",
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell",
+                  command: "/usr/bin/env",
+                  args: ["bash"],
+                  icon: "rocket",
+                },
+              ],
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("terminal.defaultProfileId")).toBe("custom:ops");
+    expect(settingsRepo.get("terminal.profiles")).toEqual([
+      {
+        id: "custom:ops",
+        label: "Ops Shell",
+        command: "/usr/bin/env",
+        args: ["bash"],
+        icon: "rocket",
+      },
+    ]);
+  });
+
+  it("settings.update clears terminal.defaultProfileId when it receives null", async () => {
+    settingsRepo.set("terminal.defaultProfileId", "custom:ops");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-default-clear",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              defaultProfileId: null,
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("terminal.defaultProfileId")).toBeUndefined();
+  });
+
+  it("settings.update trims terminal profile labels and commands before persisting", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-profiles-trimmed",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "  Ops Shell  ",
+                  command: "  /usr/bin/env  ",
+                  args: ["bash"],
+                },
+              ],
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(settingsRepo.get("terminal.profiles")).toEqual([
+      {
+        id: "custom:ops",
+        label: "Ops Shell",
+        command: "/usr/bin/env",
+        args: ["bash"],
+      },
+    ]);
+  });
+
+  it("settings.update rejects terminal profiles with invalid ids", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-profiles-invalid-id",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              profiles: [
+                {
+                  id: "ops",
+                  label: "Ops Shell",
+                  command: "/usr/bin/env",
+                  args: ["bash"],
+                },
+              ],
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("terminal.profiles")).toBeUndefined();
+  });
+
+  it("settings.update rejects duplicate terminal profile ids", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-profiles-duplicate-ids",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell",
+                  command: "/usr/bin/env",
+                  args: ["bash"],
+                },
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell Copy",
+                  command: "/bin/sh",
+                },
+              ],
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("terminal.profiles")).toBeUndefined();
+  });
+
+  it("settings.update rejects terminal profiles with whitespace-only labels", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-profiles-blank-label",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "   ",
+                  command: "/usr/bin/env",
+                  args: ["bash"],
+                },
+              ],
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("terminal.profiles")).toBeUndefined();
+  });
+
+  it("settings.update rejects terminal profiles with whitespace-only commands", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-terminal-profiles-blank-command",
+        op: "settings.update",
+        args: {
+          settings: {
+            terminal: {
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell",
+                  command: "   ",
+                  args: ["bash"],
+                },
+              ],
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("validation_error");
+    expect(settingsRepo.get("terminal.profiles")).toBeUndefined();
+  });
+
   it("settings.update persists lsp.mode into the file-backed settings store", async () => {
     const result = await dispatch(
       {

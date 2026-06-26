@@ -175,6 +175,266 @@ describe("ui action commands", () => {
     expect(result.data).toMatchObject({ topic: Topics.workspaceUiAction("ws-fallback") });
   });
 
+  it("hydrates and broadcasts canvas.open intents from a source path without caller metadata", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(4234);
+    const ctx = createContext({
+      workspaceMgr: {
+        get: vi.fn((workspaceId: string) =>
+          workspaceId === "ws-1" ? { id: "ws-1", path: "/workspace" } : undefined
+        ),
+      } as never,
+      canvasService: {
+        getCanvasData: vi.fn(async () => ({
+          canvasId: "canvas-1",
+          workspaceId: "ws-1",
+          sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+          title: "Runtime Flow",
+          kind: "architecture_canvas",
+          renderStatus: "ready",
+          lastError: null,
+          compiledDocument: {
+            kind: "architecture_canvas",
+            title: "Runtime Flow",
+            summary: "How requests move.",
+            sections: [],
+          },
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "ui-dispatch-open-canvas-1",
+        op: "uiAction.dispatch",
+        args: {
+          workspaceId: "ws-1",
+          intent: {
+            type: "canvas.open",
+            sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+          },
+          requestId: "req-open-canvas-1",
+          source: { kind: "agent", sessionId: "sess-1", providerId: "codex" },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      accepted: true,
+      requestId: "req-open-canvas-1",
+      topic: Topics.workspaceUiAction("ws-1"),
+    });
+    expect(ctx.broadcaster.broadcast).toHaveBeenCalledWith(Topics.workspaceUiAction("ws-1"), {
+      requestId: "req-open-canvas-1",
+      workspaceId: "ws-1",
+      intent: {
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      },
+      source: { kind: "agent", sessionId: "sess-1", providerId: "codex" },
+      dispatchedAt: 4234,
+    });
+
+    vi.useRealTimers();
+  });
+
+  it("resolves canvas.open metadata from canvasId compatibility input before broadcasting", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(4734);
+    const ctx = createContext({
+      workspaceMgr: {
+        get: vi.fn((workspaceId: string) =>
+          workspaceId === "ws-1" ? { id: "ws-1", path: "/workspace" } : undefined
+        ),
+      } as never,
+      canvasService: {
+        getRecord: vi.fn((workspaceId: string, canvasId: string) =>
+          workspaceId === "ws-1" && canvasId === "canvas_123"
+            ? {
+                id: "canvas_123",
+                workspaceId: "ws-1",
+                title: "Runtime Flow",
+                artifactType: "architecture_canvas",
+                sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+              }
+            : undefined
+        ),
+        getCanvasData: vi.fn(async () => ({
+          canvasId: "canvas_123",
+          workspaceId: "ws-1",
+          sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+          title: "Runtime Flow",
+          kind: "architecture_canvas",
+          renderStatus: "ready",
+          lastError: null,
+          compiledDocument: {
+            kind: "architecture_canvas",
+            title: "Runtime Flow",
+            summary: "How requests move.",
+            sections: [],
+          },
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "ui-dispatch-open-canvas-compat-1",
+        op: "uiAction.dispatch",
+        args: {
+          workspaceId: "ws-1",
+          intent: { type: "canvas.open", canvasId: "canvas_123" },
+          requestId: "req-open-canvas-compat-1",
+          source: { kind: "agent", sessionId: "sess-1", providerId: "codex" },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({
+      accepted: true,
+      requestId: "req-open-canvas-compat-1",
+      topic: Topics.workspaceUiAction("ws-1"),
+    });
+    expect(ctx.broadcaster.broadcast).toHaveBeenCalledWith(Topics.workspaceUiAction("ws-1"), {
+      requestId: "req-open-canvas-compat-1",
+      workspaceId: "ws-1",
+      intent: {
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas_123",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      },
+      source: { kind: "agent", sessionId: "sess-1", providerId: "codex" },
+      dispatchedAt: 4734,
+    });
+
+    vi.useRealTimers();
+  });
+
+  it("prefers canonical canvas metadata over client-supplied canvas.open metadata", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(5234);
+    const ctx = createContext({
+      workspaceMgr: {
+        get: vi.fn((workspaceId: string) =>
+          workspaceId === "ws-1" ? { id: "ws-1", path: "/workspace" } : undefined
+        ),
+      } as never,
+      canvasService: {
+        getRecord: vi.fn((workspaceId: string, canvasId: string) =>
+          workspaceId === "ws-1" && canvasId === "canvas-1"
+            ? {
+                id: "canvas-1",
+                workspaceId: "ws-1",
+                title: "Runtime Flow",
+                artifactType: "architecture_canvas",
+                sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+              }
+            : undefined
+        ),
+        getCanvasData: vi.fn(async () => ({
+          canvasId: "canvas-1",
+          workspaceId: "ws-1",
+          sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+          title: "Runtime Flow",
+          kind: "architecture_canvas",
+          renderStatus: "ready",
+          lastError: null,
+          compiledDocument: {
+            kind: "architecture_canvas",
+            title: "Runtime Flow",
+            summary: "How requests move.",
+            sections: [],
+          },
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "ui-dispatch-open-canvas-2",
+        op: "uiAction.dispatch",
+        args: {
+          workspaceId: "ws-1",
+          intent: {
+            type: "canvas.open",
+            canvasId: "canvas-1",
+            title: "Wrong Title",
+            artifactType: "report_canvas",
+            sourcePath: "docs/wrong.csc",
+          },
+          requestId: "req-open-canvas-2",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.broadcaster.broadcast).toHaveBeenCalledWith(Topics.workspaceUiAction("ws-1"), {
+      requestId: "req-open-canvas-2",
+      workspaceId: "ws-1",
+      intent: {
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      },
+      source: undefined,
+      dispatchedAt: 5234,
+    });
+
+    vi.useRealTimers();
+  });
+
+  it("rejects canvas.open when the canvas metadata cannot be resolved", async () => {
+    const ctx = createContext({
+      workspaceMgr: {
+        get: vi.fn((workspaceId: string) =>
+          workspaceId === "ws-1" ? { id: "ws-1", path: "/workspace" } : undefined
+        ),
+      } as never,
+      canvasService: {
+        getRecord: vi.fn(() => undefined),
+        getCanvasData: vi.fn(async () => {
+          throw { code: "canvas_not_found", message: "Canvas not found: missing-canvas" };
+        }),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "ui-dispatch-open-canvas-missing-1",
+        op: "uiAction.dispatch",
+        args: {
+          workspaceId: "ws-1",
+          intent: { type: "canvas.open", canvasId: "missing-canvas" },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "canvas_not_found",
+    });
+    expect(ctx.broadcaster.broadcast).not.toHaveBeenCalled();
+  });
   it("rejects unsafe UI action intents before broadcasting", async () => {
     const ctx = createContext();
 

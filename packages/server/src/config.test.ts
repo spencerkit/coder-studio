@@ -199,4 +199,73 @@ describe("parseServerConfig", () => {
 
     expect(config.uploadsDir).toBe("/explicit");
   });
+
+  it("builds proxy config from defaults when unset", () => {
+    delete process.env.PROXY_ENABLED;
+    delete process.env.PROXY_HOST;
+    delete process.env.PROXY_PORT;
+    delete process.env.PROXY_PUBLIC_ORIGIN;
+    delete process.env.PROXY_MAX_GRANT_TTL_MS;
+    delete process.env.PROXY_ALLOWED_HOSTS;
+    delete process.env.PROXY_ALLOWED_CIDRS;
+    delete process.env.PROXY_ALLOW_LOOPBACK;
+    delete process.env.HOST;
+    delete process.env.PORT;
+
+    const config = parseServerConfig();
+
+    expect(config.proxy).toEqual({
+      enabled: false,
+      host: "localhost",
+      port: 4174,
+      publicOrigin: undefined,
+      maxGrantTtlMs: 7 * 24 * 60 * 60 * 1000,
+      allowedHosts: [],
+      allowedCidrs: [],
+      allowLoopback: true,
+    });
+  });
+
+  it("prefers proxy host override and increments the main port by default", () => {
+    process.env.HOST = "env-host";
+    process.env.PORT = "9000";
+
+    const config = parseServerConfig({ host: "app-host", proxy: { host: "proxy-host" } });
+
+    expect(config.proxy.host).toBe("proxy-host");
+    expect(config.proxy.port).toBe(9001);
+  });
+
+  it("preserves explicit zero-valued ports for the app and proxy", () => {
+    process.env.PROXY_PORT = "8124";
+
+    const config = parseServerConfig({ port: 0, proxy: { port: 0 } });
+
+    expect(config.port).toBe(0);
+    expect(config.proxy.port).toBe(0);
+  });
+
+  it("reads proxy env settings and trims allowlists", () => {
+    process.env.PROXY_ENABLED = "true";
+    process.env.PROXY_HOST = "proxy.internal";
+    process.env.PROXY_PORT = "8123";
+    process.env.PROXY_PUBLIC_ORIGIN = "https://proxy.example.test";
+    process.env.PROXY_MAX_GRANT_TTL_MS = "60000";
+    process.env.PROXY_ALLOWED_HOSTS = " localhost, example.test ,, 127.0.0.1 ";
+    process.env.PROXY_ALLOWED_CIDRS = " 10.0.0.0/8,192.168.0.0/16 ,, ";
+    process.env.PROXY_ALLOW_LOOPBACK = "false";
+
+    const config = parseServerConfig();
+
+    expect(config.proxy).toEqual({
+      enabled: true,
+      host: "proxy.internal",
+      port: 8123,
+      publicOrigin: "https://proxy.example.test",
+      maxGrantTtlMs: 60000,
+      allowedHosts: ["localhost", "example.test", "127.0.0.1"],
+      allowedCidrs: ["10.0.0.0/8", "192.168.0.0/16"],
+      allowLoopback: false,
+    });
+  });
 });

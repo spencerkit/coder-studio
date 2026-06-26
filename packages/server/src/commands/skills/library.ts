@@ -38,7 +38,12 @@ export function registerSkillLibraryCommands(): void {
 
     const skillHubEntries = ctx.skillLibraryRepo
       .list()
-      .filter((entry) => entry.source === "skillhub" && entry.installState === "installed");
+      .filter(
+        (entry) =>
+          entry.source === "installed" &&
+          entry.origin === "skillhub" &&
+          entry.installState === "installed"
+      );
 
     return Promise.all(skillHubEntries.map((entry) => checkSkillHubVersion(entry, ctx)));
   });

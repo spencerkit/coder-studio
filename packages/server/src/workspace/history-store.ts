@@ -37,6 +37,19 @@ function buildEntry(path: string, lastOpenedAt: number): WorkspaceHistoryEntry {
   };
 }
 
+function persistHistory(
+  settingsRepo: SettingsRepo,
+  history: WorkspaceHistoryEntry[]
+): WorkspaceHistoryEntry[] {
+  if (history.length === 0) {
+    settingsRepo.delete(WORKSPACE_HISTORY_KEY);
+    return [];
+  }
+
+  settingsRepo.set(WORKSPACE_HISTORY_KEY, history);
+  return history;
+}
+
 export class WorkspaceHistoryStore {
   private readonly settingsRepo: SettingsRepo;
 
@@ -54,6 +67,16 @@ export class WorkspaceHistoryStore {
       .sort((left, right) => right.lastOpenedAt - left.lastOpenedAt)
       .slice(0, WORKSPACE_HISTORY_LIMIT);
 
-    this.settingsRepo.set(WORKSPACE_HISTORY_KEY, nextHistory);
+    persistHistory(this.settingsRepo, nextHistory);
+  }
+
+  remove(path: string): WorkspaceHistoryEntry[] {
+    const trimmedPath = path.trim();
+    const nextHistory = this.list().filter((entry) => entry.path !== trimmedPath);
+    return persistHistory(this.settingsRepo, nextHistory);
+  }
+
+  clear(): WorkspaceHistoryEntry[] {
+    return persistHistory(this.settingsRepo, []);
   }
 }

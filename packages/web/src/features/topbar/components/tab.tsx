@@ -2,13 +2,13 @@
  * Workspace Tab Component
  *
  * Individual workspace tab in the topbar.
- * Shows workspace name, status indicator, unread badge, and close button.
+ * Shows workspace name, session status mini map, and close button.
  */
 
 import type { Workspace } from "@coder-studio/core";
 import { X } from "lucide-react";
 import type { FC } from "react";
-import { Badge, IconButton, Tab, Tooltip } from "../../../components/ui";
+import { IconButton, Tab, Tooltip } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { useWorkspaceSessions } from "../../agent-panes/actions/use-workspace-sessions";
 import { formatWorkspaceLabel } from "../../notifications/format";
@@ -31,7 +31,6 @@ interface WorkspaceTabProps {
  * PRD §5.1.2:
  *   - Session mini map (one cell per pane, status-coded)
  *   - Tab text (truncated)
- *   - Unread badge (conditional, count display)
  *   - Close button (visible on hover)
  */
 export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => {
@@ -67,13 +66,12 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
             <span className="topbar-tab-name">{displayName}</span>
           </Tooltip>
           <WorkspaceSessionMiniMap cells={miniMapCells} columns={miniMapColumns} />
-          <Badge count={workspace.unreadCount ?? 0} max={9} />
         </span>
       </Tab>
       <IconButton
         className="topbar-close"
         aria-label={t("action.close_workspace")}
-        icon={<X size={14} />}
+        icon={<X size={12} />}
         onClick={handleClose}
         size="sm"
       />

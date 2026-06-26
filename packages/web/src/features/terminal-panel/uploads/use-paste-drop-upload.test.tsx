@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SKILL_PATH_DRAG_MIME } from "../../../lib/skill-path-drag";
 import { WORKSPACE_PATH_DRAG_MIME } from "../../../lib/workspace-path-drag";
 import { toastsAtom } from "../../notifications/atoms";
 import { usePasteDropUpload } from "./use-paste-drop-upload.js";
@@ -79,6 +80,52 @@ function fireWorkspacePathDrop(
       items: [],
       getData: (type: string) =>
         type === WORKSPACE_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.path,
+    },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function fireSkillPathDragOver(
+  target: HTMLElement,
+  payload: {
+    skillSlug: string;
+    path: string;
+    absolutePath: string;
+    kind: "file" | "dir";
+  }
+) {
+  const event = new Event("dragover", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      files: [],
+      types: [SKILL_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === SKILL_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.absolutePath,
+    },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function fireSkillPathDrop(
+  target: HTMLElement,
+  payload: {
+    skillSlug: string;
+    path: string;
+    absolutePath: string;
+    kind: "file" | "dir";
+  }
+) {
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      files: [],
+      types: [SKILL_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === SKILL_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.absolutePath,
     },
   });
   target.dispatchEvent(event);
@@ -749,6 +796,41 @@ describe("usePasteDropUpload", () => {
 
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(sendInput).toHaveBeenCalledWith("'src/app.tsx' ");
+    expect(result.current.busy).toBe(false);
+  });
+
+  it("prevents default for internal skill drags and inserts a quoted absolute path", async () => {
+    const store = createStore();
+    const { result } = renderHook(
+      () =>
+        usePasteDropUpload({
+          containerRef: { current: container },
+          workspaceId: "ws-1",
+          terminalId: "terminal-1",
+          sendTextToTerminal: sendInput,
+          enabled: true,
+        }),
+      { wrapper: makeWrapper(store) }
+    );
+
+    const payload = {
+      skillSlug: "my-review-skill",
+      path: "refs/guide.md",
+      absolutePath: "/root/.agents/skills/my-review-skill/refs/guide.md",
+      kind: "file" as const,
+    };
+
+    const dragOver = fireSkillPathDragOver(container, payload);
+    expect(dragOver.defaultPrevented).toBe(true);
+
+    await act(async () => {
+      const drop = fireSkillPathDrop(container, payload);
+      expect(drop.defaultPrevented).toBe(true);
+      await flushAsyncWork();
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(sendInput).toHaveBeenCalledWith("'/root/.agents/skills/my-review-skill/refs/guide.md' ");
     expect(result.current.busy).toBe(false);
   });
 

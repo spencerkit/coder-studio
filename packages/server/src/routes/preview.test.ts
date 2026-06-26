@@ -307,6 +307,53 @@ describe("/api/preview/session", () => {
     expect(entryRes.headers["content-security-policy"]).toContain("script-src 'none'");
   });
 
+  it("allows markdown preview scripts only when the document contains mermaid diagrams", async () => {
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/preview/session",
+      payload: {
+        workspaceId: "ws-1",
+        entryPath: "README.md",
+        kind: "markdown",
+        content: "```mermaid\ngraph TD\nA[README] --> B[Preview]\n```",
+      },
+    });
+
+    const { id, previewUrl } = createRes.json();
+    const entryRes = await app.inject({
+      method: "GET",
+      url: previewUrl,
+    });
+    const runtimeRes = await app.inject({
+      method: "GET",
+      url: "/api/preview/assets/mermaid.min.js",
+    });
+    const initRes = await app.inject({
+      method: "GET",
+      url: "/api/preview/assets/markdown-mermaid-init.js",
+    });
+
+    expect(entryRes.statusCode).toBe(200);
+    expect(entryRes.headers["x-preview-allow-scripts"]).toBe("true");
+    expect(entryRes.headers["content-security-policy"]).toContain("script-src 'self'");
+    expect(entryRes.headers["content-security-policy"]).not.toContain(
+      "script-src 'self' 'unsafe-inline'"
+    );
+    expect(entryRes.headers["content-security-policy"]).not.toContain("script-src-attr");
+    expect(entryRes.body).toContain('src="/api/preview/assets/mermaid.min.js"');
+    expect(entryRes.body).toContain('src="/api/preview/assets/markdown-mermaid-init.js"');
+    expect(entryRes.body).not.toContain(
+      `/api/preview/session/${id}/api/preview/assets/mermaid.min.js`
+    );
+    expect(entryRes.body).not.toContain(
+      `/api/preview/session/${id}/api/preview/assets/markdown-mermaid-init.js`
+    );
+    expect(runtimeRes.statusCode).toBe(200);
+    expect(runtimeRes.headers["content-type"]).toContain("javascript");
+    expect(initRes.statusCode).toBe(200);
+    expect(initRes.body).toContain("mermaid.initialize");
+  });
+
   it("returns 404 when a relative asset is missing", async () => {
     const createRes = await app.inject({
       method: "POST",

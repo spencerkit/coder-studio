@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./markdown-mermaid": {
+      "types": "./src/markdown-mermaid.ts",
+      "default": "./src/markdown-mermaid.ts"
+    },
     "./token-metric": {
       "types": "./src/token-metric.ts",
       "default": "./src/token-metric.ts"
@@ -21,6 +25,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./markdown-mermaid": {
+        "types": "./dist/markdown-mermaid.d.ts",
+        "import": "./dist/markdown-mermaid.js"
       },
       "./token-metric": {
         "types": "./dist/token-metric.d.ts",

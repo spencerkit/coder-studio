@@ -148,11 +148,14 @@ export function QuickOpen() {
 
           if (event.key === "Enter" && activeResult && workspaceId) {
             event.preventDefault();
-            void openWorkspaceFile({
-              workspaceId,
-              path: activeResult.path,
-              source: "manual",
-            });
+            void openWorkspaceFile(
+              {
+                workspaceId,
+                path: activeResult.path,
+                source: "manual",
+              },
+              { openTarget: "navigate" }
+            );
             setOpen(false);
           }
         }}
@@ -201,11 +204,14 @@ export function QuickOpen() {
                       return;
                     }
 
-                    void openWorkspaceFile({
-                      workspaceId,
-                      path: file.path,
-                      source: "manual",
-                    });
+                    void openWorkspaceFile(
+                      {
+                        workspaceId,
+                        path: file.path,
+                        source: "manual",
+                      },
+                      { openTarget: "navigate" }
+                    );
                     setOpen(false);
                   }}
                 >

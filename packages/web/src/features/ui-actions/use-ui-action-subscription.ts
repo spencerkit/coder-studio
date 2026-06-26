@@ -10,10 +10,12 @@ import {
 import { pushToastAtom } from "../notifications/atoms";
 import { useOpenWorkspaceFile } from "../workspace/actions/use-open-workspace-file";
 import { useSelectWorkspaceTarget } from "../workspace/actions/use-select-workspace-target";
+import { useWorkspaceUiStatePersistence } from "../workspace/actions/use-workspace-ui-state-persistence";
 import {
   activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   createWorkspaceBrowserEditorTab,
+  createWorkspaceCanvasEditorTab,
   editorViewVisibleAtomFamily,
   openEditorPathsAtomFamily,
   openEditorTabsAtomFamily,
@@ -57,6 +59,7 @@ export function useUiActionSubscription(workspaceId: string): void {
   const store = useStore();
   const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const { openWorkspaceFile } = useOpenWorkspaceFile(workspaceId);
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
 
   const registry = useMemo(() => {
     const nextRegistry = createUiActionRegistry();
@@ -106,7 +109,10 @@ export function useUiActionSubscription(workspaceId: string): void {
           .map((tab) => tab.path),
         ...(currentActivePath && currentActivePath !== targetPath ? [currentActivePath] : []),
       ].filter((path, index, paths) => paths.indexOf(path) === index);
-      const browserTab = nextTabs.find((tab) => tab.kind === "browser") ?? null;
+      const fallbackNonFileTab =
+        nextTabs.find((tab): tab is Exclude<WorkspaceEditorTab, { kind: "file" }> => {
+          return tab.kind === "browser" || tab.kind === "canvas";
+        }) ?? null;
       const nextActiveFilePath =
         currentActivePath === targetPath ? (remainingFilePaths[0] ?? null) : currentActivePath;
       const shouldReplaceActiveTab =
@@ -114,14 +120,14 @@ export function useUiActionSubscription(workspaceId: string): void {
       const nextActiveTab: WorkspaceEditorTab | null = shouldReplaceActiveTab
         ? remainingFilePaths[0]
           ? { kind: "file", path: remainingFilePaths[0] }
-          : browserTab
+          : fallbackNonFileTab
         : currentActiveTab;
 
       setOpenEditorPaths(nextOpenPaths);
       setOpenEditorTabs(nextTabs);
       setActiveFilePath(nextActiveFilePath);
       setActiveEditorTab(nextActiveTab);
-      setEditorViewVisible(remainingFilePaths.length > 0 || browserTab !== null);
+      setEditorViewVisible(remainingFilePaths.length > 0 || fallbackNonFileTab !== null);
     });
 
     nextRegistry.register("browser.openUrl", (event) => {
@@ -134,6 +140,46 @@ export function useUiActionSubscription(workspaceId: string): void {
       setEditorViewVisible(true);
       setOpenEditorTabs((current) => [...current, nextBrowserTab]);
       setActiveEditorTab(nextBrowserTab);
+    });
+
+    nextRegistry.register("canvas.open", (event) => {
+      if (event.intent.type !== "canvas.open") {
+        return;
+      }
+
+      const nextCanvasTab: WorkspaceEditorTab = createWorkspaceCanvasEditorTab({
+        sourcePath: event.intent.sourcePath,
+        title: event.intent.title,
+        artifactType: event.intent.artifactType,
+        ...(event.intent.canvasId
+          ? {
+              canvasId: event.intent.canvasId,
+              id: `canvas:${event.intent.canvasId}`,
+            }
+          : {}),
+      });
+
+      const currentTabs = store.get(openEditorTabsAtomFamily(workspaceId));
+      const existingIndex = currentTabs.findIndex(
+        (tab) =>
+          tab.kind === "canvas" &&
+          (tab.sourcePath === nextCanvasTab.sourcePath ||
+            (nextCanvasTab.canvasId !== undefined && tab.canvasId === nextCanvasTab.canvasId))
+      );
+      const nextTabs =
+        existingIndex === -1
+          ? [...currentTabs, nextCanvasTab]
+          : currentTabs.map((tab, index) => (index === existingIndex ? nextCanvasTab : tab));
+      const nextEditorState = {
+        editorViewVisible: true,
+        openEditorTabs: nextTabs,
+        activeEditorTab: nextCanvasTab,
+      };
+
+      setEditorViewVisible(nextEditorState.editorViewVisible);
+      setOpenEditorTabs(nextEditorState.openEditorTabs);
+      setActiveEditorTab(nextEditorState.activeEditorTab);
+      void persistUiState(nextEditorState);
     });
 
     nextRegistry.register("browser.closeUrl", (event) => {
@@ -170,10 +216,14 @@ export function useUiActionSubscription(workspaceId: string): void {
       const nextBrowserTabs = nextTabs.filter(
         (tab): tab is Extract<WorkspaceEditorTab, { kind: "browser" }> => tab.kind === "browser"
       );
+      const nextCanvasTabs = nextTabs.filter(
+        (tab): tab is Extract<WorkspaceEditorTab, { kind: "canvas" }> => tab.kind === "canvas"
+      );
       const fallbackFilePath = currentActivePath ?? currentOpenPaths[0] ?? null;
       const nextActiveTab =
         nextBrowserTabs[closedBrowserIndex] ??
         nextBrowserTabs[closedBrowserIndex - 1] ??
+        nextCanvasTabs[0] ??
         (fallbackFilePath ? ({ kind: "file", path: fallbackFilePath } as const) : null);
 
       setPendingDevBrowserUrl((current) => (current === targetUrl ? null : current));
@@ -234,6 +284,7 @@ export function useUiActionSubscription(workspaceId: string): void {
     return nextRegistry;
   }, [
     openWorkspaceFile,
+    persistUiState,
     selectWorkspaceTarget,
     setActiveEditorTab,
     setActiveFilePath,

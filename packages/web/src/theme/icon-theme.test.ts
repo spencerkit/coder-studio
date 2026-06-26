@@ -1,4 +1,4 @@
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle, Info, Terminal } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { BASE_ICON_THEME, getIconPresentation, ICON_SEMANTICS, THEME_IDS } from "./index";
 
@@ -117,6 +117,7 @@ describe("theme icon resolver", () => {
       const tones = new Set([
         getIconPresentation(themeId, "nav.settings.general").tone,
         getIconPresentation(themeId, "nav.settings.providers").tone,
+        getIconPresentation(themeId, "nav.settings.terminal").tone,
         getIconPresentation(themeId, "nav.settings.appearance").tone,
         getIconPresentation(themeId, "nav.settings.shortcuts").tone,
         getIconPresentation(themeId, "nav.settings.monitoring").tone,
@@ -146,6 +147,13 @@ describe("theme icon resolver", () => {
     for (const [semantic, expected] of semanticStatusExpectations) {
       expect(BASE_ICON_THEME.icons[semantic]).toEqual(expected);
     }
+  });
+
+  it("uses the terminal glyph for the terminal settings nav semantic", () => {
+    expect(BASE_ICON_THEME.icons["nav.settings.terminal"]).toEqual({
+      glyph: Terminal,
+      tone: "secondary",
+    });
   });
 
   it("applies the approved seasonal icon hierarchy without retheming semantic status icons", () => {

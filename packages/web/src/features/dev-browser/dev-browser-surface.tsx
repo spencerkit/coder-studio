@@ -1,3 +1,4 @@
+import { normalizeLocalhostUrl } from "@coder-studio/core";
 import { useAtom, useStore } from "jotai";
 import { RotateCw } from "lucide-react";
 import {
@@ -23,21 +24,7 @@ import {
   type WorkspaceBrowserEditorTab,
   type WorkspaceEditorTab,
 } from "../workspace/atoms";
-import {
-  createDevBrowserSession,
-  type DevBrowserSessionResponse,
-  deleteDevBrowserSession,
-} from "./api";
 import { currentDevBrowserUrlAtomFamily, pendingDevBrowserUrlAtomFamily } from "./atoms";
-
-function supportsDevBrowserServiceWorker(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.isSecureContext &&
-    typeof navigator !== "undefined" &&
-    navigator.serviceWorker !== undefined
-  );
-}
 
 interface DevBrowserSurfaceProps {
   browserTab: WorkspaceBrowserEditorTab;
@@ -66,11 +53,9 @@ const DEVICE_PRESETS: Record<
   { height: number | null; width: number | null; userAgentMode: DevBrowserUserAgentMode }
 > = {
   desktop: { width: null, height: null, userAgentMode: "desktop" },
-  "iphone-14": { width: 390, height: 844, userAgentMode: "mobile" },
-  "pixel-7": { width: 412, height: 915, userAgentMode: "mobile" },
+  "iphone-14": { width: 390, height: 844, userAgentMode: "desktop" },
+  "pixel-7": { width: 412, height: 915, userAgentMode: "desktop" },
 };
-const MOBILE_USER_AGENT =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 
 interface DeviceSettingsDraft {
   devicePreset: DevBrowserDevicePreset;
@@ -200,12 +185,34 @@ function resolveDeviceSettings(draft: DeviceSettingsDraft): ResolvedDeviceSettin
   };
 }
 
-function deriveUserAgent(userAgentMode: DevBrowserUserAgentMode): string | undefined {
-  if (userAgentMode === "mobile") {
-    return MOBILE_USER_AGENT;
+function normalizeBrowserUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
   }
 
-  return undefined;
+  const candidate = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`;
+
+  return normalizeLocalhostUrl(candidate);
+}
+
+function createAppliedBrowserTab(browserTab: WorkspaceBrowserEditorTab): WorkspaceBrowserEditorTab {
+  if (!browserTab.url) {
+    return browserTab;
+  }
+
+  try {
+    const normalizedUrl = normalizeBrowserUrl(browserTab.url);
+    return {
+      ...browserTab,
+      url: normalizedUrl || null,
+    };
+  } catch {
+    return {
+      ...browserTab,
+      url: null,
+    };
+  }
 }
 
 export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurfaceProps) {
@@ -217,16 +224,15 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
   const [draft, setDraft] = useState<DeviceSettingsDraft>(() =>
     createDraftFromBrowserTab(browserTab)
   );
-  const [appliedBrowserTab, setAppliedBrowserTab] = useState<WorkspaceBrowserEditorTab>(browserTab);
-  const [session, setSession] = useState<DevBrowserSessionResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [appliedBrowserTab, setAppliedBrowserTab] = useState<WorkspaceBrowserEditorTab>(() =>
+    createAppliedBrowserTab(browserTab)
+  );
   const [error, setError] = useState<string | null>(null);
   const [pendingUrl, setPendingUrl] = useAtom(pendingDevBrowserUrlAtomFamily(workspaceId));
   const [, setCurrentUrl] = useAtom(currentDevBrowserUrlAtomFamily(workspaceId));
-  const sessionRef = useRef<DevBrowserSessionResponse | null>(null);
   const autoOpenedUrlRef = useRef<string | null>(null);
+  const pendingOpenUrlRef = useRef<string | null>(null);
   const frameShellRef = useRef<HTMLDivElement | null>(null);
-  const serviceWorkerSupported = supportsDevBrowserServiceWorker();
   const [frameScale, setFrameScale] = useState(1);
 
   const resolvedDraft = useMemo(() => resolveDeviceSettings(draft), [draft]);
@@ -247,8 +253,19 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
   );
 
   useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
+    const serviceWorker = navigator.serviceWorker;
+    if (!serviceWorker?.getRegistrations) {
+      return;
+    }
+
+    void serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        if (registration.scope.includes("/dev-browser/")) {
+          void registration.unregister();
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!persistedTargetUrl || url.trim().length > 0) {
@@ -270,7 +287,7 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
   ]);
 
   useEffect(() => {
-    setAppliedBrowserTab(browserTab);
+    setAppliedBrowserTab(createAppliedBrowserTab(browserTab));
   }, [
     browserTab.devicePreset,
     browserTab.id,
@@ -283,19 +300,22 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
 
   useEffect(() => {
     return () => {
-      const activeSession = sessionRef.current;
       setCurrentUrl(null);
-      if (activeSession) {
-        void deleteDevBrowserSession(activeSession.id).catch(() => undefined);
-      }
     };
   }, [setCurrentUrl]);
 
   const openTargetUrl = useCallback(
     async (targetUrl: string, nextDeviceSettings: ResolvedDeviceSettings) => {
-      const nextUrl = targetUrl.trim();
-      if (loading || !nextUrl) {
-        return;
+      let nextUrl: string;
+      try {
+        nextUrl = normalizeBrowserUrl(targetUrl);
+      } catch {
+        setError("dev_browser_open_failed");
+        return false;
+      }
+
+      if (!nextUrl) {
+        return false;
       }
 
       const nextBrowserTab: WorkspaceBrowserEditorTab = {
@@ -313,32 +333,18 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
       );
       setUrl(nextUrl);
       autoOpenedUrlRef.current = nextUrl;
-      setLoading(true);
       setError(null);
-      const previousSession = sessionRef.current;
-      try {
-        const created = await createDevBrowserSession(nextUrl, {
-          userAgent: deriveUserAgent(nextDeviceSettings.userAgentMode),
-        });
-        setSession(created);
-        setCurrentUrl(created.displayUrl ?? `${created.targetOrigin}/`);
-        if (previousSession) {
-          void deleteDevBrowserSession(previousSession.id).catch(() => undefined);
-        }
-        setAppliedBrowserTab(nextBrowserTab);
-        store.set(openEditorTabsAtomFamily(workspaceId), nextOpenEditorTabs);
-        store.set(activeEditorTabAtomFamily(workspaceId), nextBrowserTab);
-        await persistUiState({
-          openEditorTabs: nextOpenEditorTabs,
-          activeEditorTab: nextBrowserTab,
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "dev_browser_open_failed");
-      } finally {
-        setLoading(false);
-      }
+      setCurrentUrl(nextUrl);
+      setAppliedBrowserTab(nextBrowserTab);
+      store.set(openEditorTabsAtomFamily(workspaceId), nextOpenEditorTabs);
+      store.set(activeEditorTabAtomFamily(workspaceId), nextBrowserTab);
+      const persisted = await persistUiState({
+        openEditorTabs: nextOpenEditorTabs,
+        activeEditorTab: nextBrowserTab,
+      });
+      return persisted;
     },
-    [appliedBrowserTab, loading, persistUiState, setCurrentUrl, store, workspaceId]
+    [appliedBrowserTab, persistUiState, setCurrentUrl, store, workspaceId]
   );
 
   const persistDeviceSettings = useCallback(
@@ -391,7 +397,14 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
       return;
     }
 
-    if (loading || session !== null || autoOpenedUrlRef.current === persistedTargetUrl) {
+    let normalizedPersistedTargetUrl: string;
+    try {
+      normalizedPersistedTargetUrl = normalizeBrowserUrl(persistedTargetUrl);
+    } catch {
+      return;
+    }
+
+    if (autoOpenedUrlRef.current === normalizedPersistedTargetUrl) {
       return;
     }
 
@@ -400,23 +413,38 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
       return;
     }
 
-    void openTargetUrl(persistedTargetUrl, persistedDeviceSettings);
-  }, [browserTab, loading, openTargetUrl, persistedTargetUrl, session]);
+    void openTargetUrl(normalizedPersistedTargetUrl, persistedDeviceSettings);
+  }, [browserTab, openTargetUrl, persistedTargetUrl]);
 
   useEffect(() => {
-    if (!pendingUrl || loading) {
+    if (!pendingUrl) {
+      pendingOpenUrlRef.current = null;
       return;
     }
 
-    setPendingUrl(null);
+    if (pendingOpenUrlRef.current === pendingUrl) {
+      return;
+    }
+
     if (!browserTab.url) {
       const persistedDeviceSettings = resolveDeviceSettings(createDraftFromBrowserTab(browserTab));
       if (!persistedDeviceSettings) {
         return;
       }
-      void openTargetUrl(pendingUrl, persistedDeviceSettings);
+      pendingOpenUrlRef.current = pendingUrl;
+      void openTargetUrl(pendingUrl, persistedDeviceSettings).then((opened) => {
+        if (opened) {
+          pendingOpenUrlRef.current = null;
+          setPendingUrl(null);
+          return;
+        }
+
+        if (pendingOpenUrlRef.current === pendingUrl) {
+          pendingOpenUrlRef.current = null;
+        }
+      });
     }
-  }, [browserTab, browserTab.url, loading, openTargetUrl, pendingUrl, setPendingUrl]);
+  }, [browserTab, browserTab.url, openTargetUrl, pendingUrl, setPendingUrl]);
 
   useEffect(() => {
     if (!hasFixedViewport || !frameShellRef.current) {
@@ -436,7 +464,7 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
     );
     const clampedScale = Number(Math.max(0, nextScale).toFixed(3));
     setFrameScale(clampedScale);
-  }, [hasFixedViewport, session, viewportHeight, viewportWidth]);
+  }, [hasFixedViewport, viewportHeight, viewportWidth]);
 
   const submitCurrentUrl = useCallback(
     async (targetUrl: string) => {
@@ -568,18 +596,16 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
         </div>
       </form>
 
-      {!serviceWorkerSupported ? (
-        <Notice tone="warning" message={t("dev_browser.unsupported")} />
-      ) : null}
       {error ? (
         <Notice
           tone="error"
           message={error === "dev_browser_invalid_viewport" ? t(error) : t("dev_browser.error")}
         />
       ) : null}
+      <Notice tone="info" message={t("dev_browser.embed_limitations")} />
 
       <div className="dev-browser-frame-shell" ref={frameShellRef}>
-        {session ? (
+        {appliedBrowserTab.url ? (
           hasFixedViewport ? (
             <div
               className="dev-browser-frame-viewport dev-browser-frame-viewport--device"
@@ -593,7 +619,7 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
               <iframe
                 className="dev-browser-frame"
                 title={t("dev_browser.title")}
-                src={session.browserUrl}
+                src={appliedBrowserTab.url}
                 sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
                 style={{
                   width: `${viewportWidth}px`,
@@ -609,7 +635,7 @@ export function DevBrowserSurface({ browserTab, workspaceId }: DevBrowserSurface
               <iframe
                 className="dev-browser-frame"
                 title={t("dev_browser.title")}
-                src={session.browserUrl}
+                src={appliedBrowserTab.url}
                 sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
               />
             </div>

@@ -37,6 +37,12 @@ export const MORE_CATEGORIES = {
         iconSemantic: "nav.settings.providers",
       },
       {
+        id: "terminal",
+        labelKey: "label.terminal",
+        hintKey: "more.section.settings.terminal_hint",
+        iconSemantic: "nav.settings.terminal",
+      },
+      {
         id: "appearance",
         labelKey: "settings.appearance",
         hintKey: "more.section.settings.appearance_hint",

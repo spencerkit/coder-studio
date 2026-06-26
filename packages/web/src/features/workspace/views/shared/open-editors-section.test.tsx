@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workspacesAtom } from "../../../../atoms/workspaces";
@@ -15,10 +15,12 @@ import {
   beginPendingEditorLoad,
 } from "../../../code-editor/actions/pending-editor-loads";
 import {
+  activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   type OpenFile,
   type OpenTextFile,
   openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
   openFilesAtomFamily,
 } from "../../atoms";
 import { OpenEditorsSection } from "./open-editors-section";
@@ -343,6 +345,39 @@ describe("OpenEditorsSection", () => {
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("README.md");
+  });
+
+  it("opens .csc open-editor clicks as source instead of canvas", async () => {
+    const { store } = renderSection(
+      {
+        ".coder-studio/canvases/auth-gate.csc": createFile(".coder-studio/canvases/auth-gate.csc"),
+        "README.md": createFile("README.md"),
+      },
+      "README.md"
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: ".coder-studio/canvases/auth-gate.csc" }));
+    });
+
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe(
+      ".coder-studio/canvases/auth-gate.csc"
+    );
+
+    await waitFor(() => {
+      expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+        {
+          kind: "file",
+          path: ".coder-studio/canvases/auth-gate.csc",
+          pinned: true,
+        },
+      ]);
+      expect(store.get(activeEditorTabAtomFamily("ws-test"))).toEqual({
+        kind: "file",
+        path: ".coder-studio/canvases/auth-gate.csc",
+        pinned: true,
+      });
+    });
   });
 
   it("writes workspace drag data for open editor rows", () => {

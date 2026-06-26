@@ -35,7 +35,8 @@ export function registerSkillQueryCommands(): void {
     "skills.recommend",
     z.object({
       workspaceId: z.string().trim().min(1),
-      limit: z.number().int().positive().max(10).optional(),
+      limit: z.number().int().positive().max(20).optional(),
+      offset: z.number().int().min(0).optional(),
     }),
     async (args, ctx) => {
       requireSkillsQuerySupport(ctx);
@@ -58,6 +59,7 @@ export function registerSkillQueryCommands(): void {
         search: (query) => ctx.skillsHubClient.search(query),
         isInstalled: (slug) => Boolean(ctx.skillLibraryRepo.get(slug)),
         limit: args.limit,
+        offset: args.offset,
       });
     }
   );

@@ -4,9 +4,7 @@
  * Builds the Fastify application with all routes and middleware
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import { IN_MEMORY_STATE_DIR } from "@coder-studio/core/state-paths";
 import compress from "@fastify/compress";
 import cors from "@fastify/cors";
@@ -21,12 +19,15 @@ import {
   registerAuthRoutes,
   registerAuthStatusRoute,
 } from "./auth/index.js";
+import type { SessionTokenRepo } from "./auth/session-token-repo.js";
+import type { CanvasService } from "./canvas/service.js";
 import type { ServerConfig } from "./config.js";
 import { PreviewSessionStore } from "./preview/session-store.js";
 import { registerAppearanceAssetsRoutes } from "./routes/appearance-assets.js";
-import { registerDevBrowserRoutes } from "./routes/dev-browser.js";
+import { registerCanvasRoutes } from "./routes/canvas.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
 import { registerPreviewRoutes } from "./routes/preview.js";
+import { registerSkillFileAssetRoutes } from "./routes/skill-file-asset.js";
 import { registerUploadsRoute } from "./routes/uploads.js";
 import {
   AppearanceAssetRepo,
@@ -34,6 +35,7 @@ import {
 } from "./storage/repositories/appearance-asset-repo.js";
 import type { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import type { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import type { SkillLibraryRepo } from "./storage/repositories/skill-library-repo.js";
 import { MAX_FILE_BYTES, MAX_FILES_PER_BATCH } from "./uploads/constants.js";
 import { isFrontendNavigationRequest } from "./web-ui-routing.js";
 import type { WorkspaceManager } from "./workspace/manager.js";
@@ -43,27 +45,14 @@ interface AppDeps {
   wsHub: WsHub;
   webRoot?: string;
   workspaceMgr: WorkspaceManager;
+  skillLibraryRepo: SkillLibraryRepo;
   config: ServerConfig;
   authSessionRepo: AuthSessionRepo;
   authLoginBlockRepo: AuthLoginBlockRepo;
+  sessionTokenRepo?: SessionTokenRepo;
   appearanceAssetRepo?: AppearanceAssetRepoType;
+  canvasService?: CanvasService;
   logger?: FastifyServerOptions["logger"];
-}
-
-const SERVER_SRC_DIR = dirname(fileURLToPath(import.meta.url));
-const DEV_BROWSER_SW_FALLBACK_PATH = resolve(SERVER_SRC_DIR, "../../web/public/dev-browser-sw.js");
-
-function resolveDevBrowserServiceWorkerPath(webRoot?: string): string | null {
-  const webRootPath = webRoot ? join(webRoot, "dev-browser-sw.js") : null;
-  if (webRootPath && existsSync(webRootPath)) {
-    return webRootPath;
-  }
-
-  if (existsSync(DEV_BROWSER_SW_FALLBACK_PATH)) {
-    return DEV_BROWSER_SW_FALLBACK_PATH;
-  }
-
-  return null;
 }
 
 /**
@@ -113,11 +102,12 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Phase 2: Configurable auth middleware
   app.addHook(
-    "onRequest",
+    "preValidation",
     createAuthGuard({
       config: deps.config,
       authSessionRepo: deps.authSessionRepo,
       authLoginBlockRepo: deps.authLoginBlockRepo,
+      sessionTokenRepo: deps.sessionTokenRepo,
     })
   );
 
@@ -177,13 +167,14 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   registerFileAssetRoutes(app, {
     workspaceMgr: deps.workspaceMgr,
   });
+  registerSkillFileAssetRoutes(app, {
+    skillLibraryRepo: deps.skillLibraryRepo,
+  });
 
   registerAppearanceAssetsRoutes(app, {
     uploadsDir: deps.config.uploadsDir,
     repo: appearanceAssetRepo,
   });
-
-  registerDevBrowserRoutes(app);
 
   const previewSessions = new PreviewSessionStore();
   registerPreviewRoutes(app, {
@@ -191,20 +182,16 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     previewSessions,
   });
 
+  if (deps.canvasService) {
+    registerCanvasRoutes(app, {
+      workspaceMgr: deps.workspaceMgr,
+      canvasService: deps.canvasService,
+    });
+  }
+
   registerUploadsRoute(app, {
     uploadsDir: deps.config.uploadsDir,
     workspaceMgr: deps.workspaceMgr,
-  });
-
-  app.get("/dev-browser-sw.js", async (_request, reply) => {
-    const scriptPath = resolveDevBrowserServiceWorkerPath(deps.webRoot);
-    if (!scriptPath) {
-      return reply.callNotFound();
-    }
-
-    const script = readFileSync(scriptPath, "utf8");
-    reply.header("Cache-Control", "no-cache, no-store, must-revalidate");
-    return reply.type("application/javascript; charset=utf-8").send(script);
   });
 
   // Static file serving (for web UI)
@@ -213,6 +200,7 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
       root: deps.webRoot,
       prefix: "/",
       wildcard: false,
+      // Keep the retired dev browser service worker unavailable so older registrations cannot refresh themselves.
       globIgnore: ["index.html", "assets/**", "dev-browser-sw.js"],
       maxAge: "1y",
       immutable: true,

@@ -40,8 +40,7 @@ export function PageHeader({
             onClick={onBack}
             aria-label={backAriaLabel ?? backLabel}
           >
-            <ArrowLeft size={16} />
-            <span>{backLabel}</span>
+            <ArrowLeft size={16} aria-hidden="true" />
           </button>
         ) : null}
         <div className="page-header__copy">

@@ -1,4 +1,6 @@
 import { registerBuiltinSkillCommands } from "./builtin.js";
+import { registerCustomSkillCommands } from "./custom.js";
+import { registerSkillFileCommands } from "./files.js";
 import { registerSkillHealthCommands } from "./health.js";
 import { registerSkillInstallCommands } from "./install.js";
 import { registerSkillLibraryCommands } from "./library.js";
@@ -14,6 +16,8 @@ export function registerSkillsCommands(): void {
 
   registered = true;
   registerSkillQueryCommands();
+  registerCustomSkillCommands();
+  registerSkillFileCommands();
   registerSkillLibraryCommands();
   registerSkillInstallCommands();
   registerSkillMountCommands();

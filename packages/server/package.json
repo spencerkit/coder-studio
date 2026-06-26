@@ -43,6 +43,7 @@
     "fastify": "^5.8.5",
     "ignore": "^7.0.0",
     "markdown-it": "^14.1.0",
+    "mermaid": "^11.15.0",
     "mime-types": "^2.1.35",
     "node-pty": "^1.1.0",
     "pino-pretty": "^13.1.3",

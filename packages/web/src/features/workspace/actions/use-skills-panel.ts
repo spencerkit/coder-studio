@@ -4,13 +4,16 @@ import {
   type SkillLibraryEntry,
   type SkillMountRelation,
   type SkillRecommendationEntry,
+  type SkillRecommendationPage,
   type SkillVersionCheckEntry,
   Topics,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue } from "jotai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { skillsPanelStateAtomFamily } from "../atoms/skills";
+
+const RECOMMENDATIONS_PAGE_SIZE = 20;
 
 export interface SkillSearchResultItem {
   slug: string;
@@ -43,6 +46,15 @@ interface SkillsHealthScanResult {
   mounts: SkillMountRelation[];
 }
 
+function appendUniqueRecommendations(
+  current: SkillRecommendationEntry[],
+  incoming: SkillRecommendationEntry[]
+) {
+  const seen = new Set(current.map((entry) => entry.slug));
+  const appended = incoming.filter((entry) => !seen.has(entry.slug));
+  return appended.length > 0 ? [...current, ...appended] : current;
+}
+
 export function useSkillsPanel(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
@@ -62,9 +74,13 @@ export function useSkillsPanel(workspaceId: string) {
   );
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [recommendationsHasMore, setRecommendationsHasMore] = useState(false);
+  const [loadingRecommendationPage, setLoadingRecommendationPage] = useState(false);
   const [loadingLibrary, setLoadingLibrary] = useState(false);
   const [checkingVersions, setCheckingVersions] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const recommendationCycleRef = useRef(0);
+  const recommendationPageLoadingRef = useRef(false);
 
   const refreshLibrary = useCallback(async () => {
     setLoadingLibrary(true);
@@ -100,17 +116,70 @@ export function useSkillsPanel(workspaceId: string) {
   );
 
   const refreshRecommendations = useCallback(async () => {
+    const cycle = recommendationCycleRef.current + 1;
+    recommendationCycleRef.current = cycle;
+    recommendationPageLoadingRef.current = false;
+    setLoadingRecommendationPage(false);
     setLoadingRecommendations(true);
-    const result = await dispatch<SkillRecommendationEntry[]>("skills.recommend", { workspaceId });
+    const result = await dispatch<SkillRecommendationPage>("skills.recommend", {
+      workspaceId,
+      limit: RECOMMENDATIONS_PAGE_SIZE,
+      offset: 0,
+    });
+    if (recommendationCycleRef.current !== cycle) {
+      return;
+    }
     setLoadingRecommendations(false);
     if (!result.ok || !result.data) {
       setErrorMessage(result.error?.message ?? "Failed to load skill recommendations");
       return;
     }
 
-    setRecommendations(result.data);
+    setRecommendations(result.data.entries);
+    setRecommendationsHasMore(result.data.hasMore);
     setErrorMessage(null);
   }, [dispatch, workspaceId]);
+
+  const loadMoreRecommendations = useCallback(async () => {
+    if (
+      loadingRecommendations ||
+      recommendationPageLoadingRef.current ||
+      panelState.recommendationsCollapsed ||
+      !recommendationsHasMore
+    ) {
+      return;
+    }
+
+    const cycle = recommendationCycleRef.current;
+    recommendationPageLoadingRef.current = true;
+    setLoadingRecommendationPage(true);
+    const result = await dispatch<SkillRecommendationPage>("skills.recommend", {
+      workspaceId,
+      limit: RECOMMENDATIONS_PAGE_SIZE,
+      offset: recommendations.length,
+    });
+    if (recommendationCycleRef.current !== cycle) {
+      return;
+    }
+    recommendationPageLoadingRef.current = false;
+    setLoadingRecommendationPage(false);
+
+    if (!result.ok || !result.data) {
+      setErrorMessage(result.error?.message ?? "Failed to load skill recommendations");
+      return;
+    }
+
+    setRecommendations((current) => appendUniqueRecommendations(current, result.data!.entries));
+    setRecommendationsHasMore(result.data.hasMore);
+    setErrorMessage(null);
+  }, [
+    dispatch,
+    loadingRecommendations,
+    panelState.recommendationsCollapsed,
+    recommendations.length,
+    recommendationsHasMore,
+    workspaceId,
+  ]);
 
   const checkSkillVersions = useCallback(async () => {
     setCheckingVersions(true);
@@ -252,6 +321,29 @@ export function useSkillsPanel(workspaceId: string) {
       return true;
     },
     [dispatch, setPanelState]
+  );
+
+  const createCustomSkill = useCallback(
+    async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return null;
+      }
+
+      const result = await dispatch<SkillLibraryEntry>("skills.custom.create", {
+        name: trimmed,
+      });
+      if (!result.ok || !result.data) {
+        setErrorMessage(result.error?.message ?? "Failed to create custom skill");
+        return null;
+      }
+
+      setErrorMessage(null);
+      await refreshLibrary();
+      await refreshHealth();
+      return result.data;
+    },
+    [dispatch, refreshHealth, refreshLibrary]
   );
 
   const setSkillMountEnabled = useCallback(
@@ -396,13 +488,16 @@ export function useSkillsPanel(workspaceId: string) {
     errorMessage,
     checkSkillVersions,
     checkingVersions,
+    createCustomSkill,
     installSkill,
     installingSkillSlugs,
     library,
     loadSkillInfo,
     loadingLibrary,
+    loadingRecommendationPage,
     loadingRecommendations,
     loadingSearch,
+    loadMoreRecommendations,
     mountsBySkillSlug,
     panelState,
     refreshHealth,
@@ -410,6 +505,7 @@ export function useSkillsPanel(workspaceId: string) {
     setSkillMountEnabled,
     setBuiltinMountEnabled,
     recommendations,
+    recommendationsHasMore,
     runSearch,
     searchResults,
     setPanelState,

@@ -1,11 +1,20 @@
 import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { FlipHorizontal, FlipVertical, GripVertical, X } from "lucide-react";
-import { type DragEvent, type FC, useRef, useState } from "react";
+import { type DragEvent, type FC, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Button, IconButton, StatusDot, Tag, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import {
+  getSkillPathDragPayload,
+  hasSkillPathDragType,
+  isSkillPathDragPayload,
+  SKILL_PATH_DRAG_END_EVENT,
+  SKILL_PATH_DRAG_START_EVENT,
+  type SkillPathDragPayload,
+  toSkillDragEditorPath,
+} from "../../../../lib/skill-path-drag";
 import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
@@ -35,6 +44,9 @@ interface DraftLauncherProps {
   onSplitPane?: (paneId: string, direction: "horizontal" | "vertical") => void;
 }
 
+const knownProviderMonogramClasses = new Set(["claude", "codex", "gemini", "cursor", "opencode"]);
+const fallbackProviderTones = ["accent", "info", "success", "warning"] as const;
+
 export const DraftLauncher: FC<DraftLauncherProps> = ({
   dragState,
   workspaceId,
@@ -51,6 +63,9 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
   const dispatch = useAtomValue(dispatchCommandAtom);
   const setSessions = useSetAtom(sessionsAtom);
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
+  const [skillPathDragPayload, setSkillPathDragPayload] = useState<SkillPathDragPayload | null>(
+    null
+  );
   const draftLauncherRef = useRef<HTMLDivElement | null>(null);
   const supportsPaneDrag = usePaneDragEnabled();
   const canDragPane = supportsPaneDrag && Boolean(paneId && onPaneDragStart);
@@ -76,9 +91,26 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
     }
   );
 
-  const renderProviderIcon = (title: string) => {
+  const getProviderFallbackToneClass = (providerId: string) => {
+    if (knownProviderMonogramClasses.has(providerId)) {
+      return "";
+    }
+
+    const toneIndex =
+      Array.from(providerId).reduce((sum, char) => sum + char.charCodeAt(0), 0) %
+      fallbackProviderTones.length;
+
+    return `agent-provider-card-monogram--tone-${fallbackProviderTones[toneIndex]}`;
+  };
+
+  const renderProviderIcon = (title: string, providerId: string) => {
+    const fallbackToneClass = getProviderFallbackToneClass(providerId);
+
     return (
-      <span aria-hidden="true" className="agent-provider-card-monogram">
+      <span
+        aria-hidden="true"
+        className={`agent-provider-card-monogram agent-provider-card-monogram--${providerId}${fallbackToneClass ? ` ${fallbackToneClass}` : ""}`}
+      >
         {title.slice(0, 2).toUpperCase()}
       </span>
     );
@@ -187,21 +219,61 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
       return null;
     }
 
-    const payload = getWorkspacePathDragPayload(event.dataTransfer);
-    if (!payload || payload.workspaceId !== workspaceId || payload.kind !== "file") {
-      return null;
+    const workspacePayload = getWorkspacePathDragPayload(event.dataTransfer);
+    if (workspacePayload) {
+      if (workspacePayload.workspaceId !== workspaceId || workspacePayload.kind !== "file") {
+        return null;
+      }
+
+      return workspacePayload.path;
     }
 
-    return payload.path;
+    const skillPayload = getSkillPathDragPayload(event.dataTransfer) ?? skillPathDragPayload;
+    return skillPayload?.kind === "file" ? toSkillDragEditorPath(skillPayload) : null;
   };
 
+  useEffect(() => {
+    const handleSkillPathDragStart = (event: Event) => {
+      const payload = event instanceof CustomEvent ? event.detail : null;
+      setSkillPathDragPayload(isSkillPathDragPayload(payload) ? payload : null);
+    };
+    const handleSkillPathDragEnd = () => {
+      setSkillPathDragPayload(null);
+      setIsFileDropTarget(false);
+    };
+
+    window.addEventListener(SKILL_PATH_DRAG_START_EVENT, handleSkillPathDragStart);
+    window.addEventListener(SKILL_PATH_DRAG_END_EVENT, handleSkillPathDragEnd);
+    return () => {
+      window.removeEventListener(SKILL_PATH_DRAG_START_EVENT, handleSkillPathDragStart);
+      window.removeEventListener(SKILL_PATH_DRAG_END_EVENT, handleSkillPathDragEnd);
+    };
+  }, []);
+
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!paneId || !hasWorkspacePathDragType(event.dataTransfer)) {
+    if (!paneId) {
+      return;
+    }
+
+    const hasWorkspacePath = hasWorkspacePathDragType(event.dataTransfer);
+    const hasSkillPath = hasSkillPathDragType(event.dataTransfer);
+    if (!hasWorkspacePath && !hasSkillPath) {
       return;
     }
 
     event.preventDefault();
-    setIsFileDropTarget(true);
+
+    if (hasWorkspacePath) {
+      setIsFileDropTarget(true);
+      return;
+    }
+
+    if (resolveDroppedFilePath(event)) {
+      setIsFileDropTarget(true);
+      return;
+    }
+
+    setIsFileDropTarget(false);
   };
 
   const handleDragLeave = () => {
@@ -210,12 +282,12 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     const path = resolveDroppedFilePath(event);
+    event.preventDefault();
     setIsFileDropTarget(false);
     if (!path || !paneId) {
       return;
     }
 
-    event.preventDefault();
     onOpenFile?.(paneId, path);
   };
 
@@ -348,7 +420,7 @@ export const DraftLauncher: FC<DraftLauncherProps> = ({
                         disabled={isAnyProviderBusy}
                         leadingIcon={
                           <span className="agent-provider-card-icon">
-                            {renderProviderIcon(title)}
+                            {renderProviderIcon(title, provider.id)}
                           </span>
                         }
                         onClick={() => {

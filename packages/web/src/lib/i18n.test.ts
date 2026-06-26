@@ -74,6 +74,13 @@ describe("i18n coverage", () => {
     expect(en.skills.targets.summary).toBe("{count} enabled");
   });
 
+  it("describes mobile empty-state file and terminal access from the top bar", () => {
+    expect(zh.mobile.empty.files_terminal_hint).toBe("文件和终端可继续通过顶部栏访问。");
+    expect(en.mobile.empty.files_terminal_hint).toBe(
+      "Files and Terminal stay available from the top bar."
+    );
+  });
+
   it("resolves every static translation key used in source files", () => {
     const localeKeys = new Set(flattenKeys(zh));
     const sourceRoot = path.resolve(__dirname, "..");

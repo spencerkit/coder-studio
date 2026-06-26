@@ -16,6 +16,7 @@ describe("ui action domain", () => {
       "editor.closeFile",
       "browser.openUrl",
       "browser.closeUrl",
+      "canvas.open",
       "workspace.focus",
       "panel.show",
       "command.run",
@@ -42,6 +43,26 @@ describe("ui action domain", () => {
         available: true,
       }
     );
+    expect(capabilities.find((capability) => capability.type === "canvas.open")).toMatchObject({
+      cli: "coder-studio ui open-canvas --canvas <canvas-id>",
+      description:
+        "Open a persisted canvas artifact in the built-in editor. Canonical dispatch payloads are sourcePath-first; canvasId remains a compatibility identifier and CLI path.",
+      inputSchema: {
+        workspaceId: "string optional",
+        title: "string required for canonical sourcePath payloads",
+        artifactType:
+          "architecture_canvas | report_canvas required for canonical sourcePath payloads",
+        sourcePath: "workspace-relative string required for canonical sourcePath payloads",
+        canvasId: "string optional compatibility identifier",
+      },
+      permissions: ["ui:navigate"],
+      riskLevel: "read",
+      available: true,
+    });
+    expect(capabilities.find((capability) => capability.type === "canvas.open")?.examples).toEqual([
+      '{"type":"canvas.open","workspaceId":"ws_123","title":"Runtime Flow","artifactType":"architecture_canvas","sourcePath":".coder-studio/canvases/runtime-flow.csc"}',
+      "coder-studio ui open-canvas --workspace ws_123 --canvas canvas_123 --json",
+    ]);
   });
 
   it("filters UI action capabilities by permissions", () => {
@@ -54,6 +75,7 @@ describe("ui action domain", () => {
       "editor.closeFile",
       "browser.openUrl",
       "browser.closeUrl",
+      "canvas.open",
       "workspace.focus",
       "panel.show",
     ]);
@@ -96,6 +118,10 @@ describe("ui action domain", () => {
       type: "browser.closeUrl",
       url: "http://127.0.0.1:5173/",
     });
+    expect(validateUiActionIntent({ type: "browser.openUrl", url: "http://[::1]:5173" })).toEqual({
+      type: "browser.openUrl",
+      url: "http://[::1]:5173/",
+    });
 
     expect(() =>
       validateUiActionIntent({ type: "browser.openUrl", url: "https://example.com" })
@@ -103,6 +129,94 @@ describe("ui action domain", () => {
     expect(() =>
       validateUiActionIntent({ type: "browser.closeUrl", url: "https://example.com" })
     ).toThrow("localhost URLs");
+  });
+
+  it("validates and normalizes canvas.open intents", () => {
+    expect(
+      validateUiActionIntent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        title: " Runtime Flow ",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      })
+    ).toEqual({
+      type: "canvas.open",
+      workspaceId: "ws-1",
+      title: "Runtime Flow",
+      artifactType: "architecture_canvas",
+      sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+    });
+
+    expect(
+      validateUiActionIntent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "   ",
+        title: " Runtime Flow ",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      })
+    ).toEqual({
+      type: "canvas.open",
+      workspaceId: "ws-1",
+      title: "Runtime Flow",
+      artifactType: "architecture_canvas",
+      sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+    });
+
+    expect(
+      validateUiActionIntent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: " canvas-1 ",
+      })
+    ).toEqual({
+      type: "canvas.open",
+      workspaceId: "ws-1",
+      canvasId: "canvas-1",
+    });
+
+    expect(() =>
+      validateUiActionIntent({
+        type: "canvas.open",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+      })
+    ).toThrow("canvas.open requires title, artifactType, and sourcePath when metadata is provided");
+
+    expect(() =>
+      validateUiActionIntent({
+        type: "canvas.open",
+      })
+    ).toThrow("canvas.open requires canvasId or sourcePath metadata");
+
+    expect(() =>
+      validateUiActionIntent({
+        type: "canvas.open",
+        title: "   ",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      })
+    ).toThrow("canvas.open title must not be empty");
+
+    expect(() =>
+      validateUiActionIntent({
+        type: "canvas.open",
+        title: "Runtime Flow",
+        artifactType: "bogus" as never,
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      })
+    ).toThrow("canvas.open artifactType must be architecture_canvas or report_canvas");
+
+    expect(() =>
+      validateUiActionIntent({
+        type: "canvas.open",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: "../runtime.canvas.json",
+      })
+    ).toThrow("workspace-relative");
   });
 
   it("rejects non-allowlisted command.run ids", () => {

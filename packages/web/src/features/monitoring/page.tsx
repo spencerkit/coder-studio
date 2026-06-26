@@ -915,7 +915,7 @@ export function MonitoringPage() {
         ) : (
           <PageHeader
             title={t("monitoring.title")}
-            titleAs="h1"
+            titleAs="h3"
             level="secondary"
             onBack={() => window.history.back()}
             backLabel={t("action.back")}

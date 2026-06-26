@@ -1,4 +1,8 @@
-import type { SkillRecommendationEntry, WorkspaceIntelligenceSummary } from "@coder-studio/core";
+import type {
+  SkillRecommendationEntry,
+  SkillRecommendationPage,
+  WorkspaceIntelligenceSummary,
+} from "@coder-studio/core";
 
 export interface SkillRecommendationSearchResult {
   slug: string;
@@ -22,13 +26,12 @@ interface RecommendationAccumulator {
   sourceQueryScore: number;
 }
 
-const DEFAULT_RECOMMENDATION_LIMIT = 5;
+const DEFAULT_RECOMMENDATION_LIMIT = 20;
 
-export async function buildSkillRecommendations(input: {
+export async function buildSkillRecommendationEntries(input: {
   intelligence: WorkspaceIntelligenceSummary;
   search: (query: string) => Promise<SkillRecommendationSearchResult[]>;
   isInstalled: (slug: string) => boolean;
-  limit?: number;
 }): Promise<SkillRecommendationEntry[]> {
   const seeds = buildRecommendationQueries(input.intelligence);
   if (seeds.length === 0) {
@@ -88,7 +91,6 @@ export async function buildSkillRecommendations(input: {
         left.slug.localeCompare(right.slug, undefined, { sensitivity: "base" })
       );
     })
-    .slice(0, input.limit ?? DEFAULT_RECOMMENDATION_LIMIT)
     .map((entry) => ({
       slug: entry.slug,
       displayName: entry.displayName,
@@ -98,6 +100,24 @@ export async function buildSkillRecommendations(input: {
       score: entry.score,
       installed: false,
     }));
+}
+
+export async function buildSkillRecommendations(input: {
+  intelligence: WorkspaceIntelligenceSummary;
+  search: (query: string) => Promise<SkillRecommendationSearchResult[]>;
+  isInstalled: (slug: string) => boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<SkillRecommendationPage> {
+  const entries = await buildSkillRecommendationEntries(input);
+  const offset = input.offset ?? 0;
+  const limit = input.limit ?? DEFAULT_RECOMMENDATION_LIMIT;
+  const pageEntries = entries.slice(offset, offset + limit);
+
+  return {
+    entries: pageEntries,
+    hasMore: offset + pageEntries.length < entries.length,
+  };
 }
 
 function buildRecommendationQueries(

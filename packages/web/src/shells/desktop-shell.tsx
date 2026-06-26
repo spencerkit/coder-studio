@@ -18,7 +18,6 @@ import { MoreFeaturesPage } from "../features/more";
 import { NotFoundPage } from "../features/not-found";
 import { ToastContainer } from "../features/notifications";
 import { QuickOpen } from "../features/quick-open";
-import { SettingsPage } from "../features/settings";
 import { WelcomePage } from "../features/welcome";
 import { WorkAnalyticsPage } from "../features/work-analysis";
 import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
@@ -43,7 +42,6 @@ export function DesktopShell() {
   const location = useLocation();
   const authUnknown = authEnabled === null;
   const shouldBypassAuthLoading =
-    location.pathname.startsWith("/settings") ||
     location.pathname.startsWith("/analytics") ||
     location.pathname.startsWith("/monitoring") ||
     location.pathname.startsWith("/diagnostics") ||
@@ -87,7 +85,6 @@ export function DesktopShell() {
                 </WorkspaceRouteGate>
               }
             />
-            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         )}

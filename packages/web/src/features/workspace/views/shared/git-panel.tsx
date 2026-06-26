@@ -745,13 +745,14 @@ export const GitPanel: FC<GitPanelProps> = ({
             actions={
               stagedCount > 0 ? (
                 <Tooltip content={t("git.unstage_all")}>
-                  <button
-                    type="button"
-                    className="git-panel-section-link"
+                  <IconButton
+                    aria-label={t("git.unstage_all")}
+                    className="git-panel-section-action-icon"
+                    icon={<Minus size={12} />}
                     onClick={() => void handleUnstageAll()}
-                  >
-                    {t("git.unstage_all")}
-                  </button>
+                    size="sm"
+                    variant="ghost"
+                  />
                 </Tooltip>
               ) : null
             }
@@ -803,24 +804,26 @@ export const GitPanel: FC<GitPanelProps> = ({
               <>
                 {unstagedCount > 0 ? (
                   <Tooltip content={t("git.stage_all")}>
-                    <button
-                      type="button"
-                      className="git-panel-section-link"
+                    <IconButton
+                      aria-label={t("git.stage_all")}
+                      className="git-panel-section-action-icon"
+                      icon={<Plus size={12} />}
                       onClick={() => void handleStageAll()}
-                    >
-                      {t("git.stage_all")}
-                    </button>
+                      size="sm"
+                      variant="ghost"
+                    />
                   </Tooltip>
                 ) : null}
                 {unstagedCount > 0 ? (
                   <Tooltip content={t("git.discard_all")}>
-                    <button
-                      type="button"
-                      className="git-panel-section-link"
+                    <IconButton
+                      aria-label={t("git.discard_all")}
+                      className="git-panel-section-action-icon"
+                      icon={<RotateCcw size={12} />}
                       onClick={handleDiscardAll}
-                    >
-                      {t("git.discard_all")}
-                    </button>
+                      size="sm"
+                      variant="ghost"
+                    />
                   </Tooltip>
                 ) : null}
               </>

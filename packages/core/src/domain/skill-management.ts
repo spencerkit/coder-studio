@@ -1,5 +1,6 @@
 export const SKILL_INSTALL_STATES = ["installed", "installing", "failed"] as const;
-export const SKILL_LIBRARY_SOURCES = ["skillhub", "local", "builtin"] as const;
+export const SKILL_LIBRARY_SOURCES = ["builtin", "installed", "custom"] as const;
+export const SKILL_LIBRARY_ORIGINS = ["builtin", "skillhub", "filesystem"] as const;
 export const SKILL_LIBRARY_ITEM_STATES = [
   "unmounted",
   "partially_mounted",
@@ -23,6 +24,7 @@ export const SKILL_TARGET_HEALTH_STATES = ["healthy", "warning", "error", "uncon
 
 type SkillInstallState = (typeof SKILL_INSTALL_STATES)[number];
 export type SkillLibrarySource = (typeof SKILL_LIBRARY_SOURCES)[number];
+export type SkillLibraryOrigin = (typeof SKILL_LIBRARY_ORIGINS)[number];
 type SkillMountStatus = (typeof SKILL_MOUNT_STATUSES)[number];
 export type SkillVersionCheckStatus = (typeof SKILL_VERSION_CHECK_STATUSES)[number];
 type SkillTargetHealthState = (typeof SKILL_TARGET_HEALTH_STATES)[number];
@@ -37,6 +39,7 @@ export interface SkillLibraryEntry {
   description?: string;
   version: string;
   source: SkillLibrarySource;
+  origin?: SkillLibraryOrigin;
   libraryPath: string;
   installState: SkillInstallState;
   installedAt: number;
@@ -56,6 +59,11 @@ export interface SkillRecommendationEntry {
   sourceQuery: string;
   score: number;
   installed: boolean;
+}
+
+export interface SkillRecommendationPage {
+  entries: SkillRecommendationEntry[];
+  hasMore: boolean;
 }
 
 export interface SkillVersionCheckEntry {

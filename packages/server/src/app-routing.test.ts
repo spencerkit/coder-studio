@@ -7,6 +7,7 @@ import { buildFastifyApp } from "./app.js";
 import { EventBus } from "./bus/event-bus.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { SkillLibraryRepo } from "./storage/repositories/skill-library-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "./workspace/manager.js";
 import { FencingManager } from "./ws/fencing.js";
@@ -79,12 +80,35 @@ describe("app routing", () => {
         broadcaster: wsHub,
       }),
       config,
+      skillLibraryRepo: new SkillLibraryRepo({
+        filePath: join(tempDir, "state", "skills", "library-index.json"),
+        builtinRoot: join(tempDir, "state", "skills", "builtin"),
+        managedLibraryRoot: join(tempDir, "state", "skills", "library"),
+        customSkillRoot: join(tempDir, "state", "skills", "custom"),
+        externalSkillRoots: [],
+      }),
       authSessionRepo: new AuthSessionRepo({
         filePath: join(tempDir, "state", "auth-sessions.json"),
       }),
       authLoginBlockRepo: new AuthLoginBlockRepo({
         filePath: join(tempDir, "state", "auth-login-blocks.json"),
       }),
+      canvasService: {
+        getCanvasData: async () => ({
+          canvasId: "canvas-1",
+          workspaceId: "ws-1",
+          title: "Runtime Flow",
+          kind: "architecture_canvas",
+          renderStatus: "ready",
+          lastError: null,
+          compiledDocument: {
+            kind: "architecture_canvas",
+            title: "Runtime Flow",
+            summary: "How requests move.",
+            sections: [],
+          },
+        }),
+      } as never,
       logger: false,
     });
 
@@ -241,7 +265,25 @@ describe("app routing", () => {
     expect(response.body).not.toContain("<!doctype html>");
   });
 
-  it("registers dev browser session API routes", async () => {
+  it("does not fall back to index.html for canvas api routes", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/api/canvas/ws-1/data?sourcePath=.coder-studio%2Fcanvases%2Fruntime-flow.csc",
+      headers: {
+        accept: "text/html",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.json()).toMatchObject({
+      error: "workspace_not_found",
+    });
+  });
+
+  it("does not register the removed dev browser session API routes", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
@@ -250,8 +292,8 @@ describe("app routing", () => {
       payload: { url: "http://example.com:8000" },
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: "invalid_dev_browser_target" });
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("<!doctype html>");
   });
 
   it("does not serve index.html for dev browser proxy paths", async () => {
@@ -262,6 +304,21 @@ describe("app routing", () => {
       url: "/dev-browser/session/missing/proxy/app.js",
       headers: {
         accept: "application/javascript",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("<!doctype html>");
+  });
+
+  it("does not serve index.html for old dev browser HTML navigation paths", async () => {
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/dev-browser/session/missing/proxy/app",
+      headers: {
+        accept: "text/html",
       },
     });
 
@@ -281,7 +338,7 @@ describe("app routing", () => {
     expect(response.body).toBe("fake-wave");
   });
 
-  it("serves the dev browser service worker when a web root is configured", async () => {
+  it("does not serve the removed dev browser service worker", async () => {
     const instance = await createApp();
 
     const response = await instance.inject({
@@ -289,54 +346,39 @@ describe("app routing", () => {
       url: "/dev-browser-sw.js",
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.headers["content-type"]).toContain("javascript");
-    expect(response.body).toContain("coder-studio-dev-browser-session");
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("<!doctype html>");
   });
 
-  it("does not double-register dev-browser-sw.js when it exists in the web root", async () => {
-    writeFileSync(join(webRoot, "dev-browser-sw.js"), 'const MARKER = "bundled-dev-browser-sw";\n');
+  it("does not serve a stale dev browser service worker from the web root", async () => {
+    writeFileSync(join(webRoot, "dev-browser-sw.js"), "self.skipWaiting();\n");
+    const instance = await createApp();
+
+    const response = await instance.inject({
+      method: "GET",
+      url: "/dev-browser-sw.js",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain("skipWaiting");
+  });
+
+  it("serves ordinary root static files from the web root", async () => {
+    writeFileSync(join(webRoot, "robots.txt"), "User-agent: *\n");
 
     const instance = await createApp();
 
     const getResponse = await instance.inject({
       method: "GET",
-      url: "/dev-browser-sw.js",
+      url: "/robots.txt",
     });
     expect(getResponse.statusCode).toBe(200);
-    expect(getResponse.headers["cache-control"]).toBe("no-cache, no-store, must-revalidate");
-    expect(getResponse.body).toContain("bundled-dev-browser-sw");
+    expect(getResponse.body).toContain("User-agent: *");
 
     const headResponse = await instance.inject({
       method: "HEAD",
-      url: "/dev-browser-sw.js",
+      url: "/robots.txt",
     });
     expect(headResponse.statusCode).toBe(200);
-  });
-
-  it("serves the dev browser service worker without a configured web root", async () => {
-    const instance = await createApp(false, {}, { webRoot: null });
-
-    const response = await instance.inject({
-      method: "GET",
-      url: "/dev-browser-sw.js",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.headers["content-type"]).toContain("javascript");
-    expect(response.body).toContain("coder-studio-dev-browser-session");
-  });
-
-  it("treats the dev browser service worker as public when auth is enabled", async () => {
-    const instance = await createApp(true, {}, { webRoot: null });
-
-    const response = await instance.inject({
-      method: "GET",
-      url: "/dev-browser-sw.js",
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.headers["content-type"]).toContain("javascript");
-    expect(response.body).toContain("coder-studio-dev-browser-session");
   });
 });

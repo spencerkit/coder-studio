@@ -172,6 +172,7 @@ describe("UI preview catalog", () => {
         "app-loading-shell",
         "workspace-load-error",
         "workspace-desktop",
+        "workspace-custom-skills-review",
         "workspace-mobile",
         "workspace-draft-pane-editor-review",
         "auth-preview",
@@ -185,8 +186,27 @@ describe("UI preview catalog", () => {
     const scene = getUiPreviewScene("settings-appearance");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
-    ).toEqual(["/settings"]);
+    ).toEqual(["/more/settings/appearance"]);
     expect(scene?.capture?.settingsSection).toBe("appearance");
+  });
+
+  it("renders settings section scenes through the canonical More route", async () => {
+    const appearanceScene = renderScene("settings-appearance");
+
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Settings" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(await screen.findByRole("heading", { name: "Theme" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Background & Material" })).toBeInTheDocument();
+
+    appearanceScene.unmount();
+    renderScene("settings-providers");
+
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-current", "page");
   });
 
   it("marks the shortcuts settings scene for capture-time navigation", () => {
@@ -198,8 +218,18 @@ describe("UI preview catalog", () => {
     const scene = getUiPreviewScene("settings-monitoring");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
-    ).toEqual(["/settings?section=monitoring"]);
+    ).toEqual(["/more/analysis/monitoring"]);
     expect(scene?.capture?.selector).toBe(".settings-monitoring-shell");
+  });
+
+  it("renders the monitoring settings scene directly into monitoring content", async () => {
+    renderScene("settings-monitoring");
+
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Performance monitoring" })
+    ).toBeInTheDocument();
+    expect(document.querySelector(".settings-monitoring-shell")).toBeTruthy();
   });
 
   it("seeds the monitoring review scene with attribution, detail, and subprocess content", () => {
@@ -341,8 +371,11 @@ describe("UI preview catalog", () => {
   it("renders the shortcuts settings scene with the shortcuts list", async () => {
     renderScene("settings-shortcuts");
 
-    fireEvent.click(await screen.findByRole("button", { name: /keyboard shortcuts/i }));
-    expect(await screen.findByLabelText(/keyboard shortcuts/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("more-features-page")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /keyboard shortcuts/i })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
     expect(document.querySelector(".shortcuts-list")).toBeTruthy();
   });
 
@@ -452,6 +485,22 @@ describe("UI preview catalog", () => {
     expect(await screen.findByText("README.md")).toBeInTheDocument();
     expect(document.querySelectorAll(".agent-pane-leaf")).toHaveLength(2);
     expect(screen.getAllByText("Draft")).toHaveLength(2);
+  });
+
+  it("renders the custom skills workspace review scene and opens the skills sidebar", async () => {
+    renderScene("workspace-custom-skills-review");
+
+    expect(
+      await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Skills|技能/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Custom Skills" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Review Ops Skill")).toBeInTheDocument();
+    expect(screen.getByText("Session Audit Helper")).toBeInTheDocument();
   });
 
   it("renders the editor-pane review scene with pane-local editor toolbar chrome", async () => {
@@ -575,16 +624,25 @@ describe("UI preview catalog", () => {
   it("renders the settings density review scene", async () => {
     renderScene("settings-density-review");
 
-    expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
-    expect(document.querySelector(".settings-header .page-header")).toBeTruthy();
-    expect(document.querySelector(".settings-sidebar")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: /more features|更多功能/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "General" })).toHaveAttribute("aria-current", "page");
+    expect(document.querySelector(".more-features-page__page-header")).toBeTruthy();
+    expect(document.querySelector(".more-features-shell__nav")).toBeTruthy();
   });
 
   it("renders the settings light theme review scene", async () => {
     renderScene("settings-light-theme-review", "desktop", "mint-light");
 
-    expect(await screen.findByRole("heading", { name: /settings|设置/i })).toBeInTheDocument();
-    expect(document.querySelector(".settings-page")).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", { name: /more features|更多功能/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(document.querySelector(".settings-content")).toBeTruthy();
     expect(document.querySelector(".settings-nav-item")).toBeTruthy();
     expect(document.documentElement).toHaveAttribute("data-theme", "mint-light");
   });

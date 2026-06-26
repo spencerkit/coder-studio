@@ -12,7 +12,9 @@ import { ImageDiffPreview } from "../../components/image-diff-preview";
 import { ImagePreview } from "../../components/image-preview";
 import { MonacoDiffHost } from "../../components/monaco-diff-host";
 import { MonacoHost } from "../../components/monaco-host";
+import { isSkillEditorPath } from "../../skill-editor-path";
 import { isSystemAgentInstructionsEditorPath } from "../../system-agent-instructions-path";
+import { CanvasSurface } from "./canvas-surface";
 import type { CodeEditorChrome, CodeEditorState } from "./code-editor-host";
 import { CodeEditorDesktopHeaderActions } from "./code-editor-host";
 import {
@@ -105,14 +107,25 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
     );
   }
 
+  const resolveFileEditorTab = (path: string): Extract<WorkspaceEditorTab, { kind: "file" }> =>
+    openEditorTabs.find((tab) => tab.kind === "file" && tab.path === path) ?? {
+      kind: "file",
+      path,
+      pinned: openEditorPaths.includes(path),
+    };
   const activePreviewKind = activeDiffChange?.kind;
   const resolvedActiveEditorTab =
     activeEditorTab?.kind === "browser"
       ? activeEditorTab
-      : activeFilePath
-        ? { kind: "file" as const, path: activeFilePath }
-        : activeEditorTab;
+      : activeEditorTab?.kind === "canvas"
+        ? activeEditorTab
+        : activeEditorTab?.kind === "file" && activeEditorTab.path === activeFilePath
+          ? activeEditorTab
+          : activeFilePath
+            ? resolveFileEditorTab(activeFilePath)
+            : activeEditorTab;
   const isBrowserEditorTabActive = resolvedActiveEditorTab?.kind === "browser";
+  const isCanvasEditorTabActive = resolvedActiveEditorTab?.kind === "canvas";
   const currentTextFile = currentFile?.kind === "text" ? currentFile : null;
   const currentImageFile = currentFile?.kind === "image" ? currentFile : null;
   const showHeader = chrome === "full";
@@ -146,9 +159,11 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
   const isSystemTextFile = Boolean(
     currentTextFile && isSystemAgentInstructionsEditorPath(currentTextFile.path)
   );
+  const isSkillTextFile = Boolean(currentTextFile && isSkillEditorPath(currentTextFile.path));
   const shouldRenderDocumentPreview =
     mode === "preview" &&
     currentTextFile !== null &&
+    !isSkillTextFile &&
     deriveDocumentPreviewKind(currentTextFile.path) !== null;
   const titleText = commitPreview
     ? (commitPreview.title ?? commitPreview.path)
@@ -161,15 +176,17 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
   const visibleEditorTabs = isCommitPreview
     ? []
     : [
-        ...visibleEditorPaths.map((path) => ({ kind: "file" as const, path })),
-        ...openEditorTabs.filter((tab) => tab.kind === "browser"),
+        ...visibleEditorPaths.map(resolveFileEditorTab),
+        ...openEditorTabs.filter((tab) => tab.kind === "browser" || tab.kind === "canvas"),
       ];
   const activeFullPath =
-    currentFile?.displayPath ??
-    (activeFilePath ? getFullWorkspaceFilePath(workspace.path, activeFilePath) : titleText);
+    resolvedActiveEditorTab?.kind === "canvas"
+      ? resolvedActiveEditorTab.sourcePath
+      : (currentFile?.displayPath ??
+        (activeFilePath ? getFullWorkspaceFilePath(workspace.path, activeFilePath) : titleText));
   const dirtyStatusLabel = isDirtyTextFile ? t("code_editor.modified_unsaved_changes") : null;
   const handleActivateEditorTab = (tab: WorkspaceEditorTab) => {
-    if (tab.kind === "browser" || isBrowserEditorTabActive) {
+    if (tab.kind === "browser" || tab.kind === "canvas" || isBrowserEditorTabActive) {
       activateEditorTab(tab);
       return;
     }
@@ -177,7 +194,7 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
     activateOpenFile(tab.path);
   };
   const handleCloseEditorTab = (tab: WorkspaceEditorTab) => {
-    if (tab.kind === "browser" || isBrowserEditorTabActive) {
+    if (tab.kind === "browser" || tab.kind === "canvas" || isBrowserEditorTabActive) {
       closeEditorTab(tab);
       return;
     }
@@ -263,8 +280,13 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
               dirtyStatusLabel={dirtyStatusLabel}
               onActivateOpenFile={activateOpenFile}
               onActivateEditorTab={handleActivateEditorTab}
+              onCloseAllEditorTabs={state.closeAllEditorTabs}
               onCloseEditorTab={handleCloseEditorTab}
+              onCloseEditorTabsToRight={state.closeEditorTabsToRight}
               onCloseOpenFilePath={closeOpenFilePath}
+              onCloseOtherEditorTabs={state.closeOtherEditorTabs}
+              onCloseSavedEditorTabs={state.closeSavedEditorTabs}
+              onKeepOpenEditorTab={state.keepOpenEditorTab}
               openEditorPaths={visibleEditorPaths}
               openEditorTabs={visibleEditorTabs}
               openFiles={openFiles}
@@ -300,14 +322,17 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
           )
         ) : null}
 
-        {!isCommitPreview && !isBrowserEditorTabActive && saveError ? (
+        {!isCommitPreview && !isBrowserEditorTabActive && !isCanvasEditorTabActive && saveError ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon semantic="state.error" size={14} />
             <span>{saveError}</span>
           </div>
         ) : null}
 
-        {!isCommitPreview && !isBrowserEditorTabActive && activeExternalStatus ? (
+        {!isCommitPreview &&
+        !isBrowserEditorTabActive &&
+        !isCanvasEditorTabActive &&
+        activeExternalStatus ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon
               semantic={
@@ -323,7 +348,10 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
           </div>
         ) : null}
 
-        {!isCommitPreview && !isBrowserEditorTabActive && hasUnsavedChangesOutsideDiff ? (
+        {!isCommitPreview &&
+        !isBrowserEditorTabActive &&
+        !isCanvasEditorTabActive &&
+        hasUnsavedChangesOutsideDiff ? (
           <div className="code-editor-error" role="alert">
             <ThemedIcon semantic="state.warning" size={14} />
             <span>{t("code_editor.diff_saved_only")}</span>
@@ -337,6 +365,8 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
               workspaceId={workspace.id}
               browserTab={resolvedActiveEditorTab}
             />
+          ) : isCanvasEditorTabActive ? (
+            <CanvasSurface workspaceId={workspace.id} tab={resolvedActiveEditorTab} />
           ) : isCommitFileListPreview ? (
             <CommitFileListPreview
               preview={commitFileListPreview}
@@ -368,11 +398,11 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
           ) : currentTextFile ? (
             <MonacoHost
               workspaceId={workspace.id}
-              workspaceRootPath={isSystemTextFile ? undefined : workspace.path}
+              workspaceRootPath={isSystemTextFile || isSkillTextFile ? undefined : workspace.path}
               filePath={currentTextFile.displayPath ?? currentTextFile.path}
               content={currentTextFile.content}
               pendingNavigationAtom={pendingNavigationAtom}
-              standalone={isSystemTextFile}
+              standalone={isSystemTextFile || isSkillTextFile}
               onContentChange={handleContentChange}
               onSave={handleSave}
               readOnly={mode === "preview"}

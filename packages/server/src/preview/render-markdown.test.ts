@@ -32,4 +32,15 @@ describe("renderMarkdownDocument", () => {
 
     expect(html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
   });
+
+  it("injects mermaid runtime assets for mermaid fenced code blocks", () => {
+    const html = renderMarkdownDocument({
+      markdown: "```mermaid\ngraph TD\nA[README] --> B[Preview]\n```",
+      title: "README.md",
+    });
+
+    expect(html).toContain('<pre class="mermaid">');
+    expect(html).toContain("/api/preview/assets/mermaid.min.js");
+    expect(html).toContain("/api/preview/assets/markdown-mermaid-init.js");
+  });
 });

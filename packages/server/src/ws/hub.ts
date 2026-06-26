@@ -22,14 +22,15 @@ import type WebSocket from "ws";
 import { EventBus } from "../bus/event-bus.js";
 import { clearPendingTerminalInput, registerPendingTerminalInput } from "../commands/terminal.js";
 import type { ServerConfig } from "../config.js";
+import type { HostCommandContext } from "../host/context.js";
 import { ClientId, WsClient } from "./client.js";
-import { type CommandContext, dispatch } from "./dispatch.js";
+import { dispatch } from "./dispatch.js";
 import type { FencingManager } from "./fencing.js";
 import { isStreamTopic } from "./topic-class.js";
 
 interface WsHubDeps {
   eventBus: EventBus;
-  commandContext: CommandContext | null;
+  commandContext: HostCommandContext | null;
   config: ServerConfig;
   fencingMgr: FencingManager;
   logger?: FastifyBaseLogger;
@@ -84,7 +85,7 @@ export class WsHub implements Broadcaster {
     this.deps.logger = logger;
   }
 
-  setCommandContext(commandContext: CommandContext): void {
+  setCommandContext(commandContext: HostCommandContext): void {
     this.deps.commandContext = commandContext;
   }
 
@@ -250,7 +251,7 @@ export class WsHub implements Broadcaster {
         client.sendEvent(workspaceTopic, workspace);
       }
 
-      const sessions = commandContext.sessionMgr.getForWorkspace(workspace.id);
+      const sessions = commandContext.sessionMgr?.getForWorkspace(workspace.id) ?? [];
       for (const session of sessions) {
         const sessionTopic = Topics.sessionState(workspace.id, session.id);
         if (!client.subscribesTo(sessionTopic)) {
@@ -273,7 +274,7 @@ export class WsHub implements Broadcaster {
     this.clients.delete(client.id);
     this.clientRequests.delete(client.id);
     this.discardPendingBinaryWaiters(client.id);
-    this.deps.commandContext?.autoFetch.unregisterViewer(client.id);
+    this.deps.commandContext?.autoFetch?.unregisterViewer(client.id);
     this.deps.commandContext?.activationMgr.onSocketClosed(client.id);
 
     // Release fencing tokens held by this client
@@ -555,7 +556,7 @@ export class WsHub implements Broadcaster {
     return id;
   }
 
-  private getCommandContext(): CommandContext {
+  private getCommandContext(): HostCommandContext {
     if (!this.deps.commandContext) {
       throw new Error("WebSocket command context has not been initialized");
     }

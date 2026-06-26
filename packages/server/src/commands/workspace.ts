@@ -8,6 +8,8 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { WorkspacePaneNode } from "@coder-studio/core";
 import { z } from "zod";
 import { createDirectory } from "../fs/file-io.js";
+import { registerHostCommand } from "../host/command-registry.js";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
 import { WorkspaceHistoryStore } from "../workspace/history-store.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import { registerCommand } from "../ws/dispatch.js";
@@ -98,6 +100,7 @@ const workspaceEditorTabSchema = z.union([
     .object({
       kind: z.literal("file"),
       path: z.string(),
+      pinned: z.boolean().optional(),
     })
     .strict(),
   z
@@ -194,47 +197,64 @@ registerCommand(
 );
 
 // workspace.open
-registerCommand(
+registerHostCommand(
   "workspace.open",
   z.object({
     path: z.string(),
   }),
   async (args, ctx) => {
+    const targetRuntime = "native";
     const workspace = await ctx.workspaceMgr.open({
       path: args.path,
+      targetRuntime,
     });
 
-    new WorkspaceHistoryStore(ctx.settingsRepo).recordOpen(workspace.path);
-    await ctx.agentInstructionPublisher?.syncWorkspace(workspace.id);
+    ctx.runtimeBindings?.bindWorkspace(workspace.id, "native-default");
+    ctx.settingsRepo && new WorkspaceHistoryStore(ctx.settingsRepo).recordOpen(workspace.path);
+    await (
+      ctx as {
+        agentInstructionPublisher?: {
+          syncWorkspace(workspaceId: string): Promise<void>;
+        };
+      }
+    ).agentInstructionPublisher?.syncWorkspace(workspace.id);
     return workspace;
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "workspace.intelligence",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    return inspectWorkspaceIntelligence({
-      workspaceId: workspace.id,
-      rootPath: workspace.path,
-    });
+      return inspectWorkspaceIntelligence({
+        workspaceId: workspace.id,
+        rootPath: workspace.path,
+      });
+    },
   }
 );
 
 // workspace.close
-registerCommand(
+registerHostCommand(
   "workspace.close",
   z.object({
     id: z.string(),
   }),
   async (args, ctx) => {
+    const workspace = ctx.workspaceMgr.get(args.id);
+    if (!workspace) {
+      throw { code: "workspace_not_found", message: `Workspace not found: ${args.id}` };
+    }
+
     await ctx.workspaceMgr.close(args.id);
   }
 );
@@ -247,6 +267,7 @@ registerCommand(
       leftPanelWidth: z.number(),
       bottomPanelHeight: z.number(),
       focusMode: z.boolean(),
+      editorPinned: z.boolean().optional(),
       editorViewVisible: z.boolean().optional(),
       activeSessionId: z.string().optional(),
       agentInstructionsExpanded: z.boolean().optional(),

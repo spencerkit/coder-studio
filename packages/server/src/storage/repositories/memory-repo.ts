@@ -5,9 +5,14 @@ import type {
   WorkspaceMemoryEntry,
   WorkspaceMemoryListFilter,
   WorkspaceMemorySourceInput,
+  WorkspaceMemoryStatus,
   WorkspaceMemoryType,
 } from "@coder-studio/core";
-import { resolveWorkspaceMemorySource, validateWorkspaceMemoryInput } from "@coder-studio/core";
+import {
+  normalizeWorkspaceMemoryStatus,
+  resolveWorkspaceMemorySource,
+  validateWorkspaceMemoryInput,
+} from "@coder-studio/core";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 interface MemoryRepoOptions {
@@ -26,6 +31,7 @@ interface MemoryCreateInput {
   workspaceId: string;
   type: WorkspaceMemoryType;
   content: string;
+  status?: WorkspaceMemoryStatus;
   source?: WorkspaceMemorySourceInput;
 }
 
@@ -34,6 +40,7 @@ interface MemoryUpdateInput {
   id: string;
   type?: WorkspaceMemoryType;
   content?: string;
+  status?: WorkspaceMemoryStatus;
   archivedAt?: number;
 }
 
@@ -84,6 +91,7 @@ function normalizeEntry(
   const validated = validateWorkspaceMemoryInput({
     type: entry.type,
     content: entry.content,
+    status: normalizeWorkspaceMemoryStatus(entry.status),
   });
 
   return {
@@ -94,6 +102,7 @@ function normalizeEntry(
         : fallbackWorkspaceId,
     type: validated.type,
     content: validated.content,
+    ...(validated.status ? { status: validated.status } : {}),
     source: resolveWorkspaceMemorySource(isRecord(entry.source) ? entry.source : {}),
     createdAt:
       typeof entry.createdAt === "number" && Number.isFinite(entry.createdAt) ? entry.createdAt : 0,
@@ -160,6 +169,7 @@ export class MemoryRepo {
     const validated = validateWorkspaceMemoryInput({
       type: input.type,
       content: input.content,
+      status: input.status,
     });
     const file = this.readWorkspaceFile(input.workspaceId);
     const timestamp = this.now();
@@ -168,6 +178,7 @@ export class MemoryRepo {
       workspaceId: input.workspaceId,
       type: validated.type,
       content: validated.content,
+      ...(validated.status ? { status: validated.status } : {}),
       source: resolveWorkspaceMemorySource(input.source ?? {}),
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -188,11 +199,14 @@ export class MemoryRepo {
     const validated = validateWorkspaceMemoryInput({
       type: input.type ?? existing.type,
       content: input.content ?? existing.content,
+      status: input.status ?? existing.status,
     });
+    const { status: _status, ...existingWithoutStatus } = existing;
     const updated: WorkspaceMemoryEntry = {
-      ...existing,
+      ...existingWithoutStatus,
       type: validated.type,
       content: validated.content,
+      ...(validated.status ? { status: validated.status } : {}),
       updatedAt: this.now(),
       ...(input.archivedAt !== undefined ? { archivedAt: input.archivedAt } : {}),
     };

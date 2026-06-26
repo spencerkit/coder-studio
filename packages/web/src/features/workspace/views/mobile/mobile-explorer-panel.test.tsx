@@ -16,6 +16,8 @@ vi.mock("../../../../lib/i18n", () => ({
       "workspace.quick_jump.placeholder": "Type a filename or path",
       "workspace.quick_jump.no_results": "No results",
       "workspace.quick_jump.failed": "Search failed",
+      "workspace.quick_jump.expand_label": "Expand Quick Jump",
+      "workspace.quick_jump.collapse_label": "Collapse Quick Jump",
       "workspace.sidebar.workspace": "Workspace",
       "workspace.sidebar.workspace_expand_label": "Expand Workspace",
       "workspace.sidebar.workspace_collapse_label": "Collapse Workspace",
@@ -216,6 +218,38 @@ describe("MobileExplorerPanel", () => {
     ]);
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/alpha.tsx");
     expect(onSelectFile).not.toHaveBeenCalled();
+  });
+
+  it("allows the Quick Jump section to collapse and expand", () => {
+    const store = createStore();
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+    store.set(openFilesAtomFamily("ws-test"), {});
+
+    render(
+      <Provider store={store}>
+        <MobileExplorerPanel workspaceId="ws-test" routeToDetail={vi.fn()} collapseVersion={0} />
+      </Provider>
+    );
+
+    const quickJumpSection = screen
+      .getByRole("heading", { level: 2, name: /Quick Jump|快速跳转/i })
+      .closest("section") as HTMLElement;
+
+    expect(
+      within(quickJumpSection).getByPlaceholderText(/Type a filename or path|输入文件名或路径/i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(quickJumpSection).getByRole("button", { name: "Collapse Quick Jump" }));
+
+    expect(
+      within(quickJumpSection).queryByPlaceholderText(/Type a filename or path|输入文件名或路径/i)
+    ).toBeNull();
+
+    fireEvent.click(within(quickJumpSection).getByRole("button", { name: "Expand Quick Jump" }));
+
+    expect(
+      within(quickJumpSection).getByPlaceholderText(/Type a filename or path|输入文件名或路径/i)
+    ).toBeInTheDocument();
   });
 
   it("renders workspace actions inside the Workspace section and wires mobile callbacks", () => {

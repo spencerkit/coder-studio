@@ -107,7 +107,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
   });
 
-  it("renders SettingsPage on /settings while auth status is still unknown", () => {
+  it("shows the loading shell on /settings while auth status is still unknown", () => {
     window.history.replaceState({}, "", "/settings");
 
     const store = createStore();
@@ -117,8 +117,9 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("SettingsPage")).toBeInTheDocument();
-    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.queryByText("SettingsPage")).not.toBeInTheDocument();
   });
 
   it("renders DiagnosticsPage on /diagnostics while auth status is still unknown", () => {
@@ -149,8 +150,8 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders MoreFeaturesPage on /more/settings/general while auth status is still unknown", async () => {
-    window.history.replaceState({}, "", "/more/settings/general");
+  it("renders MoreFeaturesPage on /more/settings/terminal while auth status is still unknown", async () => {
+    window.history.replaceState({}, "", "/more/settings/terminal");
 
     const store = createStore();
     store.set(connectionStatusAtom, "connected");

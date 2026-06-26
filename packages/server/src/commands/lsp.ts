@@ -1,110 +1,125 @@
 import { z } from "zod";
 import { buildLspRuntimeStatus } from "../lsp-tools/runtime-status.js";
-import { registerCommand } from "../ws/dispatch.js";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.ensureSession",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => ctx.lspMgr.ensureSession(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.ensureSession(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.setMode",
   z.object({
     mode: z.enum(["auto", "off"]),
   }),
-  async (args, ctx) => {
-    await ctx.lspMgr.setRuntimeMode(args.mode);
-    return { mode: ctx.lspMgr.getRuntimeMode() };
+  {
+    resolveTarget: () => ({ kind: "default" }),
+    handler: async (args, ctx) => {
+      await ctx.lspMgr.setRuntimeMode(args.mode);
+      return { mode: ctx.lspMgr.getRuntimeMode() };
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.runtimeStatus",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    if (!ctx.lspToolMgr) {
-      throw {
-        code: "lsp_tool_manager_unavailable",
-        message: "LSP tool manager not configured",
-      };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      if (!ctx.lspToolMgr) {
+        throw {
+          code: "lsp_tool_manager_unavailable",
+          message: "LSP tool manager not configured",
+        };
+      }
 
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw {
-        code: "workspace_not_found",
-        message: `Workspace not found: ${args.workspaceId}`,
-      };
-    }
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw {
+          code: "workspace_not_found",
+          message: `Workspace not found: ${args.workspaceId}`,
+        };
+      }
 
-    return buildLspRuntimeStatus({
-      workspace,
-      lspToolMgr: ctx.lspToolMgr,
-    });
+      return buildLspRuntimeStatus({
+        workspace: workspace as never,
+        lspToolMgr: ctx.lspToolMgr,
+      });
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.install.start",
   z.object({
     workspaceId: z.string(),
     serverKind: z.enum(["typescript", "python", "go", "rust", "vue"]),
   }),
-  async (args, ctx) => {
-    if (!ctx.lspToolInstallMgr) {
-      throw {
-        code: "lsp_install_unavailable",
-        message: "LSP install manager not configured",
-      };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      if (!ctx.lspToolInstallMgr) {
+        throw {
+          code: "lsp_install_unavailable",
+          message: "LSP install manager not configured",
+        };
+      }
 
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw {
-        code: "workspace_not_found",
-        message: `Workspace not found: ${args.workspaceId}`,
-      };
-    }
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw {
+          code: "workspace_not_found",
+          message: `Workspace not found: ${args.workspaceId}`,
+        };
+      }
 
-    return ctx.lspToolInstallMgr.start({
-      workspace,
-      serverKind: args.serverKind,
-    });
+      return ctx.lspToolInstallMgr.start({
+        workspace: workspace as never,
+        serverKind: args.serverKind,
+      });
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.install.get",
   z.object({
     jobId: z.string(),
   }),
-  async (args, ctx) => {
-    if (!ctx.lspToolInstallMgr) {
-      throw {
-        code: "lsp_install_unavailable",
-        message: "LSP install manager not configured",
-      };
-    }
+  {
+    resolveTarget: () => ({ kind: "default" }),
+    handler: async (args, ctx) => {
+      if (!ctx.lspToolInstallMgr) {
+        throw {
+          code: "lsp_install_unavailable",
+          message: "LSP install manager not configured",
+        };
+      }
 
-    const job = ctx.lspToolInstallMgr.get(args.jobId);
-    if (!job) {
-      throw {
-        code: "lsp_install_job_not_found",
-        message: `Install job not found: ${args.jobId}`,
-      };
-    }
+      const job = ctx.lspToolInstallMgr.get(args.jobId);
+      if (!job) {
+        throw {
+          code: "lsp_install_job_not_found",
+          message: `Install job not found: ${args.jobId}`,
+        };
+      }
 
-    return job;
+      return job;
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.openDocument",
   z.object({
     workspaceId: z.string(),
@@ -112,29 +127,38 @@ registerCommand(
     languageId: z.string(),
     text: z.string(),
   }),
-  async (args, ctx) => ctx.lspMgr.openDocument(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.openDocument(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.changeDocument",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
     text: z.string(),
   }),
-  async (args, ctx) => ctx.lspMgr.changeDocument(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.changeDocument(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.closeDocument",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => ctx.lspMgr.closeDocument(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.closeDocument(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.definition",
   z.object({
     workspaceId: z.string(),
@@ -142,10 +166,13 @@ registerCommand(
     line: z.number().int().positive(),
     column: z.number().int().positive(),
   }),
-  async (args, ctx) => ctx.lspMgr.definition(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.definition(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.declaration",
   z.object({
     workspaceId: z.string(),
@@ -153,10 +180,13 @@ registerCommand(
     line: z.number().int().positive(),
     column: z.number().int().positive(),
   }),
-  async (args, ctx) => ctx.lspMgr.declaration(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.declaration(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.typeDefinition",
   z.object({
     workspaceId: z.string(),
@@ -164,10 +194,13 @@ registerCommand(
     line: z.number().int().positive(),
     column: z.number().int().positive(),
   }),
-  async (args, ctx) => ctx.lspMgr.typeDefinition(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.typeDefinition(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.references",
   z.object({
     workspaceId: z.string(),
@@ -175,10 +208,13 @@ registerCommand(
     line: z.number().int().positive(),
     column: z.number().int().positive(),
   }),
-  async (args, ctx) => ctx.lspMgr.references(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.references(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.hover",
   z.object({
     workspaceId: z.string(),
@@ -186,23 +222,32 @@ registerCommand(
     line: z.number().int().positive(),
     column: z.number().int().positive(),
   }),
-  async (args, ctx) => ctx.lspMgr.hover(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.hover(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.documentSymbols",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => ctx.lspMgr.documentSymbols(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.documentSymbols(args),
+  }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "lsp.semanticTokens",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => ctx.lspMgr.semanticTokens(args)
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => ctx.lspMgr.semanticTokens(args),
+  }
 );

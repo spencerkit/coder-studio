@@ -29,6 +29,16 @@ export interface ServerConfig {
     enabled: boolean;
     password?: string;
   };
+  proxy: {
+    enabled: boolean;
+    host: string;
+    port: number;
+    publicOrigin?: string;
+    maxGrantTtlMs: number;
+    allowedHosts: string[];
+    allowedCidrs: string[];
+    allowLoopback: boolean;
+  };
   update: {
     supported: boolean;
     installKind: "global_npm" | "unsupported";
@@ -158,6 +168,17 @@ function resolveUploadsDir(explicit?: string): string {
   return path.join(os.homedir(), ".coder-studio", "uploads");
 }
 
+function parseCsvEnv(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 /**
  * Parse server configuration from environment and CLI args
  */
@@ -171,12 +192,14 @@ export function parseServerConfig(overrides?: ServerConfigInput): ServerConfig {
     envDataDir: process.env.DATA_DIR,
   });
   const uploadsDir = resolveUploadsDir(overrides?.uploadsDir || process.env.UPLOADS_DIR);
+  const port = overrides?.port ?? parseInt(process.env.PORT || "4173", 10);
+  const proxyPort = overrides?.proxy?.port ?? process.env.PROXY_PORT;
 
   // NOTE: use `??` on port so callers can pass 0 to request an
   // OS-assigned port. `||` would silently fall through to 4173 for port=0.
   return {
     host: overrides?.host || process.env.HOST || "localhost",
-    port: overrides?.port ?? parseInt(process.env.PORT || "4173", 10),
+    port,
     stateDir,
     uploadsDir,
     logLevel: overrides?.logLevel ?? parseLogLevel(process.env.LOG_LEVEL) ?? "info",
@@ -186,6 +209,16 @@ export function parseServerConfig(overrides?: ServerConfigInput): ServerConfig {
     auth: overrides?.auth || {
       enabled: !noAuth && !!password,
       password,
+    },
+    proxy: {
+      enabled: process.env.PROXY_ENABLED === "true",
+      host: process.env.PROXY_HOST || overrides?.proxy?.host || process.env.HOST || "localhost",
+      port: proxyPort !== undefined ? Number(proxyPort) : port + 1,
+      publicOrigin: process.env.PROXY_PUBLIC_ORIGIN,
+      maxGrantTtlMs: Number(process.env.PROXY_MAX_GRANT_TTL_MS || 7 * 24 * 60 * 60 * 1000),
+      allowedHosts: parseCsvEnv(process.env.PROXY_ALLOWED_HOSTS),
+      allowedCidrs: parseCsvEnv(process.env.PROXY_ALLOWED_CIDRS),
+      allowLoopback: process.env.PROXY_ALLOW_LOOPBACK !== "false",
     },
     update: overrides?.update ?? {
       supported: false,

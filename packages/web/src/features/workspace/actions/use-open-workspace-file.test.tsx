@@ -15,7 +15,13 @@ import {
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
-import { activeFilePathAtomFamily, openEditorPathsAtomFamily } from "../atoms";
+import {
+  activeEditorTabAtomFamily,
+  activeFilePathAtomFamily,
+  openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
+  openFilesAtomFamily,
+} from "../atoms";
 import { useOpenWorkspaceFile } from "./use-open-workspace-file";
 
 function editorPaneStateKey(workspaceId: string, paneId: string): string {
@@ -46,6 +52,82 @@ function seedWorkspace(store: ReturnType<typeof createStore>) {
 }
 
 describe("useOpenWorkspaceFile", () => {
+  it("replaces the existing preview file tab when opening another preview file", async () => {
+    const store = createStore();
+    seedWorkspace(store);
+    store.set(openEditorTabsAtomFamily("ws-test"), [
+      { kind: "file", path: "src/a.ts", pinned: false },
+    ]);
+    store.set(activeEditorTabAtomFamily("ws-test"), {
+      kind: "file",
+      path: "src/a.ts",
+      pinned: false,
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/a.ts");
+
+    const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openWorkspaceFile(
+        { workspaceId: "ws-test", path: "src/b.ts", source: "file-tree" },
+        { openTarget: "navigate", openDisposition: "preview" }
+      );
+    });
+
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      { kind: "file", path: "src/b.ts", pinned: false },
+    ]);
+    expect(store.get(activeEditorTabAtomFamily("ws-test"))).toEqual({
+      kind: "file",
+      path: "src/b.ts",
+      pinned: false,
+    });
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/b.ts");
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([]);
+    expect(store.get(pendingEditorNavigationAtomFamily("ws-test"))).toMatchObject({
+      workspaceId: "ws-test",
+      path: "src/b.ts",
+      source: "file-tree",
+    });
+  });
+
+  it("pins the current preview tab when opening the same file as pinned", async () => {
+    const store = createStore();
+    seedWorkspace(store);
+    store.set(openEditorTabsAtomFamily("ws-test"), [
+      { kind: "file", path: "src/a.ts", pinned: false },
+    ]);
+    store.set(activeEditorTabAtomFamily("ws-test"), {
+      kind: "file",
+      path: "src/a.ts",
+      pinned: false,
+    });
+    store.set(activeFilePathAtomFamily("ws-test"), "src/a.ts");
+
+    const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openWorkspaceFile(
+        { workspaceId: "ws-test", path: "src/a.ts", source: "file-tree" },
+        { openTarget: "navigate", openDisposition: "pinned" }
+      );
+    });
+
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      { kind: "file", path: "src/a.ts", pinned: true },
+    ]);
+    expect(store.get(activeEditorTabAtomFamily("ws-test"))).toEqual({
+      kind: "file",
+      path: "src/a.ts",
+      pinned: true,
+    });
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/a.ts"]);
+  });
+
   it("opens regular files in the standalone editor without clearing the focused editor pane", async () => {
     const store = createStore();
     seedWorkspace(store);
@@ -338,6 +420,98 @@ describe("useOpenWorkspaceFile", () => {
         uiState: expect.objectContaining({
           openEditorPaths: ["src/persisted.ts"],
           activeEditorPath: "src/persisted.ts",
+        }),
+      }),
+      undefined
+    );
+  });
+
+  it("opens .csc files as canvas tabs for navigation-style opens", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      id: "ws-test",
+      path: "/workspace",
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 1,
+      uiState: {
+        leftPanelWidth: 280,
+        bottomPanelHeight: 200,
+        focusMode: false,
+      },
+    });
+
+    const store = createStore();
+    seedWorkspace(store);
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(openFilesAtomFamily("ws-test"), {
+      ".coder-studio/canvases/auth-gate.csc": {
+        kind: "text",
+        path: ".coder-studio/canvases/auth-gate.csc",
+        content: '{"kind":"architecture_canvas"}',
+        savedContent: '{"kind":"architecture_canvas"}',
+        baseHash: "canvas-hash",
+        isDirty: false,
+      },
+    });
+
+    const { result } = renderHook(() => useOpenWorkspaceFile("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.openWorkspaceFile(
+        {
+          workspaceId: "ws-test",
+          path: ".coder-studio/canvases/auth-gate.csc",
+          source: "manual",
+        },
+        { openTarget: "navigate" }
+      );
+    });
+
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([]);
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      {
+        kind: "canvas",
+        id: "canvas:.coder-studio/canvases/auth-gate.csc",
+        title: "auth-gate",
+        sourcePath: ".coder-studio/canvases/auth-gate.csc",
+        artifactType: "architecture_canvas",
+        canvasId: ".coder-studio/canvases/auth-gate.csc",
+      },
+    ]);
+    expect(store.get(activeEditorTabAtomFamily("ws-test"))).toEqual({
+      kind: "canvas",
+      id: "canvas:.coder-studio/canvases/auth-gate.csc",
+      title: "auth-gate",
+      sourcePath: ".coder-studio/canvases/auth-gate.csc",
+      artifactType: "architecture_canvas",
+      canvasId: ".coder-studio/canvases/auth-gate.csc",
+    });
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        uiState: expect.objectContaining({
+          openEditorTabs: [
+            {
+              kind: "canvas",
+              id: "canvas:.coder-studio/canvases/auth-gate.csc",
+              title: "auth-gate",
+              sourcePath: ".coder-studio/canvases/auth-gate.csc",
+              artifactType: "architecture_canvas",
+              canvasId: ".coder-studio/canvases/auth-gate.csc",
+            },
+          ],
+          activeEditorTab: {
+            kind: "canvas",
+            id: "canvas:.coder-studio/canvases/auth-gate.csc",
+            title: "auth-gate",
+            sourcePath: ".coder-studio/canvases/auth-gate.csc",
+            artifactType: "architecture_canvas",
+            canvasId: ".coder-studio/canvases/auth-gate.csc",
+          },
         }),
       }),
       undefined

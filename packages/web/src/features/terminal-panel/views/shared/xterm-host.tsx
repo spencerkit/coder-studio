@@ -83,6 +83,8 @@ const MOBILE_TOUCH_MOMENTUM_FRAME_MS = 16;
 const MOBILE_COPY_MODE_LONG_PRESS_MS = 500;
 const MOBILE_COPY_MODE_MOVE_TOLERANCE_PX = 10;
 const TERMINAL_FOCUS_REPORTING_BYTES = new Set(["\x1b[I", "\x1b[O"]);
+const TERMINAL_ESCAPE_SEQUENCE_PATTERN =
+  /^\x1b(?:\[[0-9;?<>]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\|[@-_])/;
 const TERMINAL_COPY_ON_SELECT_ERROR_THROTTLE_MS = 3_000;
 const TERMINAL_RECOVERY_LOADING_OVERLAY_DELAY_MS = 1_200;
 
@@ -247,9 +249,7 @@ function consumeTerminalInputDraft(
 
     if (char === "\x1b") {
       const remaining = data.slice(index);
-      const escapeMatch = remaining.match(
-        /^\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[\s\S]*?\x1b\\|[@-_])/
-      );
+      const escapeMatch = remaining.match(TERMINAL_ESCAPE_SEQUENCE_PATTERN);
       if (escapeMatch) {
         index += escapeMatch[0].length - 1;
         continue;
@@ -1702,6 +1702,20 @@ export function XtermHost({
     updateShiftArmed(false);
     inputDraftRef.current = "";
     inputRevisionRef.current += 1;
+    // XtermHost is reused across terminal tab switches, so per-terminal
+    // recovery cursors must be reset before the next terminal registers with
+    // the global recovery coordinator. Otherwise the new terminal can inherit
+    // the previous tab's rendered seq and incorrectly reconcile to `noop`,
+    // leaving a freshly-created xterm instance blank after switching back.
+    replayedSeqRef.current = 0;
+    latestRenderedSeqRef.current = 0;
+    recoveryReplayAnchorSeqRef.current = null;
+    pendingReplayChunksRef.current = [];
+    replayCompletedRef.current = false;
+    coldStartStateRef.current = "idle";
+    activeHistoricalRecoveryModeRef.current = null;
+    pendingRecoveryModeRef.current = null;
+    reconnectRecoveryTriggerRef.current = null;
     clearPendingImagesRef.current?.();
   }, [terminalId, updateCtrlMode, updateShiftArmed, workspaceId]);
 

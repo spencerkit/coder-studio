@@ -15,6 +15,7 @@ import {
   activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   createWorkspaceBrowserEditorTab,
+  createWorkspaceCanvasEditorTabFromSourcePath,
   deriveDocumentPreviewKind,
   deriveEditorModeForOpenFile,
   deriveEditorModeForPath,
@@ -25,6 +26,7 @@ import {
   gitDiffPreviewAtomFamily,
   gitDiffPreviewDismissedAtomFamily,
   gitStateAtomFamily,
+  isCanvasSourcePath,
   type OpenFile,
   openEditorPathsAtomFamily,
   openEditorTabsAtomFamily,
@@ -34,6 +36,7 @@ import {
 } from "../../workspace/atoms";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
 import { monacoModelRegistry } from "../monaco/model-registry";
+import { parseSkillEditorPath } from "../skill-editor-path";
 import { parseSystemAgentInstructionsEditorPath } from "../system-agent-instructions-path";
 import {
   beginPendingEditorLoad,
@@ -86,10 +89,28 @@ function toSystemFileReadPayload(document: AgentInstructionsSystemDocument): Edi
   };
 }
 
+function isSkillNotFoundError(error: { code?: string } | undefined): boolean {
+  return error?.code === "skill_not_found" || error?.code === "not_found";
+}
+
+function deriveEditorModeForResource(path: string, file?: OpenFile): WorkspaceEditorMode {
+  if (parseSkillEditorPath(path)) {
+    return "edit";
+  }
+
+  return file ? deriveEditorModeForOpenFile(file) : deriveEditorModeForPath(path);
+}
+
 function isBrowserEditorTab(
   tab: WorkspaceEditorTab
 ): tab is Extract<WorkspaceEditorTab, { kind: "browser" }> {
   return tab.kind === "browser";
+}
+
+function isCanvasEditorTab(
+  tab: WorkspaceEditorTab
+): tab is Extract<WorkspaceEditorTab, { kind: "canvas" }> {
+  return tab.kind === "canvas";
 }
 
 function isSameEditorTab(
@@ -104,7 +125,44 @@ function isSameEditorTab(
     return left.id === right.id;
   }
 
-  return left.path === right.path;
+  if (left.kind === "canvas" && right.kind === "canvas") {
+    if (left.canvasId && right.canvasId) {
+      return left.canvasId === right.canvasId;
+    }
+
+    return left.sourcePath === right.sourcePath;
+  }
+
+  if (left.kind === "file" && right.kind === "file") {
+    return left.path === right.path;
+  }
+
+  return false;
+}
+
+type WorkspaceFileEditorTab = Extract<WorkspaceEditorTab, { kind: "file" }>;
+
+function findOpenFileEditorTab(
+  tabs: WorkspaceEditorTab[],
+  path: string
+): WorkspaceFileEditorTab | null {
+  return (
+    (tabs.find((tab) => tab.kind === "file" && tab.path === path) as
+      | WorkspaceFileEditorTab
+      | undefined) ?? null
+  );
+}
+
+function resolveFileEditorTab(
+  tabs: WorkspaceEditorTab[],
+  path: string,
+  fallbackPinned = false
+): WorkspaceFileEditorTab {
+  return findOpenFileEditorTab(tabs, path) ?? { kind: "file", path, pinned: fallbackPinned };
+}
+
+function isDirtyOpenFile(file: OpenFile | undefined): boolean {
+  return file?.kind === "text" && file.isDirty === true;
 }
 
 export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
@@ -149,6 +207,8 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   const [globalActiveEditorTab, setActiveEditorTab] = useAtom(
     activeEditorTabAtomFamily(workspaceId ?? "")
   );
+  const [localOpenEditorTabs, setLocalOpenEditorTabs] = useState<WorkspaceEditorTab[]>([]);
+  const [localActiveEditorTab, setLocalActiveEditorTab] = useState<WorkspaceEditorTab | null>(null);
   const [mode, setMode] = useAtom(editorModeAtom);
   const setEditorViewVisible = useSetAtom(editorViewVisibleAtomFamily(workspaceId ?? ""));
   const editorRefreshToken = useAtomValue(editorRefreshTokenAtomFamily(workspaceId ?? ""));
@@ -187,25 +247,60 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   const currentFile: OpenFile | undefined = workspaceId
     ? openFiles[activeFilePath ?? ""]
     : undefined;
+  const currentOpenEditorTabs = isGlobalEditorState ? openEditorTabs : localOpenEditorTabs;
+  const currentActiveEditorTab = isGlobalEditorState ? globalActiveEditorTab : localActiveEditorTab;
+  const activeCanvasEditorTab =
+    currentActiveEditorTab?.kind === "canvas" ? currentActiveEditorTab : null;
 
   useEffect(() => {
     if (!activeFilePath) {
+      if (!isGlobalEditorState && currentActiveEditorTab?.kind === "file") {
+        setLocalActiveEditorTab(null);
+      }
       return;
     }
 
     recordActivationPath(activeFilePath);
-    if (isGlobalEditorState) {
-      setActiveEditorTab({ kind: "file", path: activeFilePath });
+    const matchingOpenFileTab = findOpenFileEditorTab(currentOpenEditorTabs, activeFilePath);
+    const nextFileTab =
+      matchingOpenFileTab ??
+      ({
+        kind: "file",
+        path: activeFilePath,
+        pinned: openEditorPaths.includes(activeFilePath),
+      } as const);
+    const shouldSyncPaneActiveTabToFile =
+      !currentActiveEditorTab ||
+      (currentActiveEditorTab.kind === "file" && currentActiveEditorTab.path !== activeFilePath) ||
+      (currentActiveEditorTab.kind === "file" &&
+        matchingOpenFileTab !== null &&
+        currentActiveEditorTab.pinned !== matchingOpenFileTab.pinned) ||
+      (currentActiveEditorTab.kind === "canvas" &&
+        currentActiveEditorTab.sourcePath !== activeFilePath);
+    const shouldSyncGlobalActiveTabToFile =
+      !currentActiveEditorTab ||
+      (currentActiveEditorTab.kind === "file" && currentActiveEditorTab.path !== activeFilePath) ||
+      (currentActiveEditorTab.kind === "file" &&
+        matchingOpenFileTab !== null &&
+        currentActiveEditorTab.pinned !== matchingOpenFileTab.pinned);
+    if (isGlobalEditorState && shouldSyncGlobalActiveTabToFile) {
+      setActiveEditorTab(nextFileTab);
+    } else if (!isGlobalEditorState && shouldSyncPaneActiveTabToFile) {
+      setLocalActiveEditorTab(nextFileTab);
     }
     if (isGlobalEditorState && workspaceId) {
       setEditorViewVisible(true);
     }
   }, [
     activeFilePath,
+    currentActiveEditorTab,
+    currentOpenEditorTabs,
     isGlobalEditorState,
+    openEditorPaths,
     recordActivationPath,
     setActiveEditorTab,
     setEditorViewVisible,
+    setLocalActiveEditorTab,
     workspaceId,
   ]);
 
@@ -225,7 +320,9 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       (diffPreview?.kind === "worktree-file-diff" ||
         diffPreview?.kind === "search-replace-file-diff") &&
       diffPreview.path === activeFilePath;
-    const nextMode = shouldPreserveDiffMode ? "diff" : deriveEditorModeForOpenFile(currentFile);
+    const nextMode = shouldPreserveDiffMode
+      ? "diff"
+      : deriveEditorModeForResource(activeFilePath, currentFile);
     if (nextMode !== mode) {
       setMode(nextMode);
     }
@@ -238,12 +335,12 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   }, [activeFilePath]);
 
   useEffect(() => {
-    openEditorTabsRef.current = openEditorTabs;
-  }, [openEditorTabs]);
+    openEditorTabsRef.current = currentOpenEditorTabs;
+  }, [currentOpenEditorTabs]);
 
   useEffect(() => {
-    activeEditorTabRef.current = globalActiveEditorTab;
-  }, [globalActiveEditorTab]);
+    activeEditorTabRef.current = currentActiveEditorTab;
+  }, [currentActiveEditorTab]);
 
   const invalidateSaveStateForPaths = useCallback((paths: string[]) => {
     if (paths.length === 0) {
@@ -308,15 +405,21 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       const requestId = beginPendingEditorLoad(workspaceId, path);
       setFileLoadError((current) => (current?.path === path ? null : current));
       const systemProviderId = parseSystemAgentInstructionsEditorPath(path);
+      const skillPath = parseSkillEditorPath(path);
       const result = systemProviderId
         ? await dispatch<AgentInstructionsSystemDocument>("agentInstructions.system.read", {
             workspaceId,
             providerId: systemProviderId,
           })
-        : await dispatch<FileReadPayload>("file.read", {
-            workspaceId,
-            path,
-          });
+        : skillPath
+          ? await dispatch<EditorReadPayload>("skills.files.read", {
+              skillSlug: skillPath.skillSlug,
+              path: skillPath.relativePath,
+            })
+          : await dispatch<FileReadPayload>("file.read", {
+              workspaceId,
+              path,
+            });
 
       if (shouldIgnorePendingEditorLoadResult(workspaceId, path, requestId)) {
         return;
@@ -366,7 +469,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
 
           finishPendingEditorLoad(workspaceId, path, requestId);
           setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
-          if (workspaceRootPath && !systemProviderId) {
+          if (workspaceRootPath && !systemProviderId && !skillPath) {
             monacoModelRegistry.updateFromDisk({
               workspaceRootPath,
               path,
@@ -410,7 +513,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
 
       finishPendingEditorLoad(workspaceId, path, requestId);
       setOpenFiles((prev) => ({ ...prev, [path]: newFile }));
-      if (workspaceRootPath && data.kind === "text" && !systemProviderId) {
+      if (workspaceRootPath && data.kind === "text" && !systemProviderId && !skillPath) {
         monacoModelRegistry.updateFromDisk({
           workspaceRootPath,
           path,
@@ -435,6 +538,53 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
     [t]
   );
 
+  const pinFileEditorTab = useCallback(
+    (path: string) => {
+      const pinnedTab = { kind: "file" as const, path, pinned: true };
+      const currentOpenEditorTabs = openEditorTabsRef.current;
+      const nextOpenEditorTabs = currentOpenEditorTabs.some(
+        (tab) => tab.kind === "file" && tab.path === path
+      )
+        ? currentOpenEditorTabs.map((tab) =>
+            tab.kind === "file" && tab.path === path ? pinnedTab : tab
+          )
+        : [...currentOpenEditorTabs, pinnedTab];
+
+      openEditorTabsRef.current = nextOpenEditorTabs;
+      activeEditorTabRef.current = pinnedTab;
+
+      if (isGlobalEditorState) {
+        setOpenEditorTabs(nextOpenEditorTabs);
+        setActiveEditorTab(pinnedTab);
+        const nextOpenEditorPaths = mergeOpenEditorPaths(openEditorPaths, [path]);
+        setOpenEditorPaths(nextOpenEditorPaths);
+        if (shouldPersistEditorUiState) {
+          void persistUiState({
+            openEditorPaths: nextOpenEditorPaths,
+            openEditorTabs: nextOpenEditorTabs,
+            activeEditorTab: pinnedTab,
+            activeEditorPath: path,
+          });
+        }
+        return;
+      }
+
+      setLocalOpenEditorTabs(nextOpenEditorTabs);
+      setLocalActiveEditorTab(pinnedTab);
+    },
+    [
+      isGlobalEditorState,
+      openEditorPaths,
+      persistUiState,
+      setActiveEditorTab,
+      setLocalActiveEditorTab,
+      setLocalOpenEditorTabs,
+      setOpenEditorPaths,
+      setOpenEditorTabs,
+      shouldPersistEditorUiState,
+    ]
+  );
+
   const handleSave = useCallback(async () => {
     if (!workspaceId || !currentFile || currentFile.kind !== "text") {
       return;
@@ -454,6 +604,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
     setSaveError((current) => (current?.path === path ? null : current));
 
     const systemProviderId = parseSystemAgentInstructionsEditorPath(path);
+    const skillPath = parseSkillEditorPath(path);
     const result = systemProviderId
       ? await dispatch<AgentInstructionsSystemDocument>("agentInstructions.system.write", {
           workspaceId,
@@ -461,12 +612,19 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
           content,
           baseHash: baseHash || undefined,
         })
-      : await dispatch<{ newHash: string }>("file.write", {
-          workspaceId,
-          path,
-          content,
-          baseHash: baseHash || undefined,
-        });
+      : skillPath
+        ? await dispatch<{ newHash: string }>("skills.files.write", {
+            skillSlug: skillPath.skillSlug,
+            path: skillPath.relativePath,
+            content,
+            baseHash: baseHash || undefined,
+          })
+        : await dispatch<{ newHash: string }>("file.write", {
+            workspaceId,
+            path,
+            content,
+            baseHash: baseHash || undefined,
+          });
 
     if (activeSaveRequestIdByPathRef.current.get(path) !== requestId) {
       return;
@@ -531,8 +689,13 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
           },
         };
       });
+
+      const activeTab = activeEditorTabRef.current;
+      if (activeTab?.kind === "file" && activeTab.path === currentFile.path) {
+        pinFileEditorTab(currentFile.path);
+      }
     },
-    [currentFile, setOpenFiles, workspaceId]
+    [currentFile, pinFileEditorTab, setOpenFiles, workspaceId]
   );
 
   useEffect(() => {
@@ -566,15 +729,21 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
     const reconcileOpenFiles = async () => {
       for (const [path, file] of entries) {
         const systemProviderId = parseSystemAgentInstructionsEditorPath(path);
+        const skillPath = parseSkillEditorPath(path);
         const result = systemProviderId
           ? await dispatch<AgentInstructionsSystemDocument>("agentInstructions.system.read", {
               workspaceId,
               providerId: systemProviderId,
             })
-          : await dispatch<FileReadPayload>("file.read", {
-              workspaceId,
-              path,
-            });
+          : skillPath
+            ? await dispatch<EditorReadPayload>("skills.files.read", {
+                skillSlug: skillPath.skillSlug,
+                path: skillPath.relativePath,
+              })
+            : await dispatch<FileReadPayload>("file.read", {
+                workspaceId,
+                path,
+              });
 
         if (cancelled) {
           return;
@@ -584,7 +753,11 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
           ? (result.data as AgentInstructionsSystemDocument | undefined)
           : undefined;
         if (!result.ok || !result.data || (systemDocument && !systemDocument.exists)) {
-          const isMissing = systemDocument ? true : result.error?.code === "not_found";
+          const isMissing = systemDocument
+            ? true
+            : skillPath
+              ? isSkillNotFoundError(result.error)
+              : result.error?.code === "not_found";
           setOpenFiles((prev) => {
             const existing = prev[path];
             if (!existing) {
@@ -648,7 +821,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
               viewingTextBackedImageAsText: file.viewingTextBackedImageAsText,
             },
           }));
-          if (workspaceRootPath && !systemProviderId) {
+          if (workspaceRootPath && !systemProviderId && !skillPath) {
             monacoModelRegistry.updateFromDisk({
               workspaceRootPath,
               path,
@@ -852,6 +1025,10 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
         setActiveEditorTab((current) =>
           current?.kind === "file" && current.path === path ? null : current
         );
+      } else {
+        setLocalActiveEditorTab((current) =>
+          current?.kind === "file" && current.path === path ? null : current
+        );
       }
       setSaveError((current) => (current?.path === path ? null : current));
     },
@@ -860,6 +1037,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       isGlobalEditorState,
       setActiveEditorTab,
       setEditorViewVisible,
+      setLocalActiveEditorTab,
       setOpenEditorTabs,
       setSaveError,
       workspaceId,
@@ -876,6 +1054,12 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       setActiveFilePath(null);
       setMode("edit");
       setSaveError(null);
+      if (shouldPersistEditorUiState) {
+        void persistUiState({
+          activeEditorPath: null,
+          editorViewVisible: false,
+        });
+      }
       return;
     }
 
@@ -893,6 +1077,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       void persistUiState({
         openEditorPaths: nextOpenEditorPaths,
         activeEditorPath: null,
+        editorViewVisible: false,
       });
     }
   }, [
@@ -1039,25 +1224,34 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   );
 
   const activateOpenFile = useCallback(
-    (path: string) => {
+    (path: string, options: { pinned?: boolean } = {}) => {
       if (!workspaceId) {
         return;
       }
 
       recordActivationPath(path);
+      const nextFileTab = resolveFileEditorTab(
+        openEditorTabsRef.current,
+        path,
+        options.pinned ?? openEditorPaths.includes(path)
+      );
       if (isGlobalEditorState) {
         setEditorViewVisible(true);
-        setActiveEditorTab({ kind: "file", path });
-      }
-
-      if (path === activeFilePath) {
-        return;
+        setActiveEditorTab(nextFileTab);
+      } else {
+        setLocalActiveEditorTab(nextFileTab);
       }
 
       const nextFile = openFiles[path];
-      const nextMode = nextFile
-        ? deriveEditorModeForOpenFile(nextFile)
-        : deriveEditorModeForPath(path);
+      const nextMode = deriveEditorModeForResource(path, nextFile);
+
+      if (path === activeFilePath) {
+        if (nextMode !== mode) {
+          setMode(nextMode);
+        }
+        return;
+      }
+
       setActiveFilePath(path);
       if (nextMode !== mode) {
         setMode(nextMode);
@@ -1072,12 +1266,14 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       activeFilePath,
       isGlobalEditorState,
       mode,
+      openEditorPaths,
       openFiles,
       persistUiState,
       recordActivationPath,
       setActiveFilePath,
       setActiveEditorTab,
       setEditorViewVisible,
+      setLocalActiveEditorTab,
       setMode,
       shouldPersistEditorUiState,
       workspaceId,
@@ -1113,6 +1309,61 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
     workspaceId,
   ]);
 
+  const activateCanvasPreviewForSourcePath = useCallback(
+    (sourcePath: string) => {
+      if (!workspaceId || !isCanvasSourcePath(sourcePath)) {
+        return false;
+      }
+
+      const currentOpenEditorTabs = openEditorTabsRef.current;
+      const existingCanvasTab = currentOpenEditorTabs.find(
+        (tab): tab is Extract<WorkspaceEditorTab, { kind: "canvas" }> =>
+          tab.kind === "canvas" && tab.sourcePath === sourcePath
+      );
+      const nextCanvasTab = createWorkspaceCanvasEditorTabFromSourcePath({
+        sourcePath,
+        file: openFiles[sourcePath],
+        existingTab: existingCanvasTab,
+      });
+      const nextOpenEditorTabs = existingCanvasTab
+        ? currentOpenEditorTabs.map((tab) => (tab === existingCanvasTab ? nextCanvasTab : tab))
+        : [...currentOpenEditorTabs, nextCanvasTab];
+
+      openEditorTabsRef.current = nextOpenEditorTabs;
+      activeEditorTabRef.current = nextCanvasTab;
+      if (isGlobalEditorState) {
+        setEditorViewVisible(true);
+        setOpenEditorTabs(nextOpenEditorTabs);
+        setActiveEditorTab(nextCanvasTab);
+      } else {
+        setLocalOpenEditorTabs(nextOpenEditorTabs);
+        setLocalActiveEditorTab(nextCanvasTab);
+      }
+      setMode("preview");
+      if (isGlobalEditorState && shouldPersistEditorUiState) {
+        void persistUiState({
+          editorViewVisible: true,
+          openEditorTabs: nextOpenEditorTabs,
+          activeEditorTab: nextCanvasTab,
+        });
+      }
+      return true;
+    },
+    [
+      isGlobalEditorState,
+      persistUiState,
+      setActiveEditorTab,
+      setEditorViewVisible,
+      setLocalActiveEditorTab,
+      setLocalOpenEditorTabs,
+      setMode,
+      setOpenEditorTabs,
+      openFiles,
+      shouldPersistEditorUiState,
+      workspaceId,
+    ]
+  );
+
   const activateEditorTab = useCallback(
     (tab: WorkspaceEditorTab) => {
       if (tab.kind === "browser") {
@@ -1133,6 +1384,30 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
         return;
       }
 
+      if (tab.kind === "canvas") {
+        if (!workspaceId) {
+          return;
+        }
+
+        if (isGlobalEditorState) {
+          const currentOpenEditorTabs = openEditorTabsRef.current;
+          activeEditorTabRef.current = tab;
+          setEditorViewVisible(true);
+          setActiveEditorTab(tab);
+          if (shouldPersistEditorUiState) {
+            void persistUiState({
+              openEditorTabs: currentOpenEditorTabs,
+              activeEditorTab: tab,
+            });
+          }
+          return;
+        }
+
+        activeEditorTabRef.current = tab;
+        setLocalActiveEditorTab(tab);
+        return;
+      }
+
       activateOpenFile(tab.path);
     },
     [
@@ -1141,6 +1416,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       persistUiState,
       setActiveEditorTab,
       setEditorViewVisible,
+      setLocalActiveEditorTab,
       shouldPersistEditorUiState,
       workspaceId,
     ]
@@ -1153,23 +1429,29 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
         return;
       }
 
-      if (!isGlobalEditorState) {
+      if (tab.kind === "browser" && !isGlobalEditorState) {
         return;
       }
 
       const currentOpenEditorTabs = openEditorTabsRef.current;
       const currentActiveEditorTab = activeEditorTabRef.current;
-      const currentBrowserTabs = currentOpenEditorTabs.filter(isBrowserEditorTab);
-      const closedBrowserIndex = currentBrowserTabs.findIndex((entry) => entry.id === tab.id);
+      const currentNonFileTabs = currentOpenEditorTabs.filter(
+        (entry): entry is Extract<WorkspaceEditorTab, { kind: "browser" | "canvas" }> =>
+          entry.kind === "browser" || entry.kind === "canvas"
+      );
+      const closedTabIndex = currentNonFileTabs.findIndex((entry) => isSameEditorTab(entry, tab));
       const nextOpenEditorTabs = currentOpenEditorTabs.filter(
-        (entry) => entry.kind !== "browser" || entry.id !== tab.id
+        (entry) => !isSameEditorTab(entry, tab)
       );
 
       if (nextOpenEditorTabs.length === currentOpenEditorTabs.length) {
         return;
       }
 
-      const nextBrowserTabs = nextOpenEditorTabs.filter(isBrowserEditorTab);
+      const nextNonFileTabs = nextOpenEditorTabs.filter(
+        (entry): entry is Extract<WorkspaceEditorTab, { kind: "browser" | "canvas" }> =>
+          entry.kind === "browser" || entry.kind === "canvas"
+      );
       const mergedOpenFilePaths = mergeOpenEditorPaths(
         openEditorPaths,
         activeFilePath ? [activeFilePath] : undefined
@@ -1179,16 +1461,21 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
           ? activeFilePath
           : (mergedOpenFilePaths[0] ?? null);
       const nextActiveEditorTab = isSameEditorTab(currentActiveEditorTab, tab)
-        ? (nextBrowserTabs[closedBrowserIndex] ??
-          nextBrowserTabs[closedBrowserIndex - 1] ??
+        ? (nextNonFileTabs[closedTabIndex] ??
+          nextNonFileTabs[closedTabIndex - 1] ??
           (fallbackFilePath ? ({ kind: "file", path: fallbackFilePath } as const) : null))
         : currentActiveEditorTab;
 
       openEditorTabsRef.current = nextOpenEditorTabs;
       activeEditorTabRef.current = nextActiveEditorTab;
-      setOpenEditorTabs(nextOpenEditorTabs);
-      setActiveEditorTab(nextActiveEditorTab);
-      if (shouldPersistEditorUiState) {
+      if (isGlobalEditorState) {
+        setOpenEditorTabs(nextOpenEditorTabs);
+        setActiveEditorTab(nextActiveEditorTab);
+      } else {
+        setLocalOpenEditorTabs(nextOpenEditorTabs);
+        setLocalActiveEditorTab(nextActiveEditorTab);
+      }
+      if (isGlobalEditorState && shouldPersistEditorUiState) {
         void persistUiState({
           openEditorTabs: nextOpenEditorTabs,
           activeEditorTab: nextActiveEditorTab,
@@ -1202,8 +1489,176 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       openEditorPaths,
       persistUiState,
       setActiveEditorTab,
+      setLocalActiveEditorTab,
+      setLocalOpenEditorTabs,
       setOpenEditorTabs,
       shouldPersistEditorUiState,
+    ]
+  );
+
+  const removeEditorTabs = useCallback(
+    (tabsToRemove: WorkspaceEditorTab[]) => {
+      if (tabsToRemove.length === 0) {
+        return;
+      }
+
+      const currentOpenEditorTabs = openEditorTabsRef.current;
+      const removedFilePaths = tabsToRemove.flatMap((tab) =>
+        tab.kind === "file" ? [tab.path] : []
+      );
+      const removedFilePathSet = new Set(removedFilePaths);
+      const nextOpenEditorTabs = currentOpenEditorTabs.filter(
+        (tab) => !tabsToRemove.some((removed) => isSameEditorTab(tab, removed))
+      );
+      const currentActiveEditorTab = activeEditorTabRef.current;
+      const currentActiveRemoved =
+        currentActiveEditorTab !== null &&
+        tabsToRemove.some((removed) => isSameEditorTab(currentActiveEditorTab, removed));
+      const nextActiveEditorTab =
+        currentActiveRemoved || !currentActiveEditorTab
+          ? (nextOpenEditorTabs[0] ?? null)
+          : currentActiveEditorTab;
+      const nextActiveFilePath =
+        nextActiveEditorTab?.kind === "file"
+          ? nextActiveEditorTab.path
+          : activeFilePath && !removedFilePathSet.has(activeFilePath)
+            ? activeFilePath
+            : null;
+      const nextOpenEditorPaths = openEditorPaths.filter((path) => !removedFilePathSet.has(path));
+
+      for (const path of removedFilePaths) {
+        cancelPendingEditorLoad(workspaceId ?? "", path);
+      }
+
+      setOpenFiles((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const path of removedFilePaths) {
+          if (path in next) {
+            delete next[path];
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+
+      openEditorTabsRef.current = nextOpenEditorTabs;
+      activeEditorTabRef.current = nextActiveEditorTab;
+      setOpenEditorTabs(nextOpenEditorTabs);
+      setActiveEditorTab(nextActiveEditorTab);
+      setOpenEditorPaths(nextOpenEditorPaths);
+      setActiveFilePath(nextActiveFilePath);
+      if (nextActiveFilePath !== activeFilePath) {
+        setMode("edit");
+      }
+      if (shouldPersistEditorUiState) {
+        void persistUiState({
+          openEditorTabs: nextOpenEditorTabs,
+          activeEditorTab: nextActiveEditorTab,
+          openEditorPaths: nextOpenEditorPaths,
+          activeEditorPath: nextActiveFilePath,
+        });
+      }
+    },
+    [
+      activeFilePath,
+      openEditorPaths,
+      persistUiState,
+      setActiveEditorTab,
+      setActiveFilePath,
+      setMode,
+      setOpenEditorPaths,
+      setOpenEditorTabs,
+      setOpenFiles,
+      shouldPersistEditorUiState,
+      workspaceId,
+    ]
+  );
+
+  const keepOpenEditorTab = useCallback(
+    (tab: WorkspaceEditorTab) => {
+      if (tab.kind !== "file") {
+        return;
+      }
+
+      pinFileEditorTab(tab.path);
+    },
+    [pinFileEditorTab]
+  );
+
+  const closeOtherEditorTabs = useCallback(
+    (tab: WorkspaceEditorTab) => {
+      const tabsToRemove = openEditorTabsRef.current.filter((entry) => {
+        if (isSameEditorTab(entry, tab)) {
+          return false;
+        }
+
+        return entry.kind !== "file" || !isDirtyOpenFile(openFiles[entry.path]);
+      });
+      removeEditorTabs(tabsToRemove);
+    },
+    [openFiles, removeEditorTabs]
+  );
+
+  const closeEditorTabsToRight = useCallback(
+    (tab: WorkspaceEditorTab) => {
+      const currentOpenEditorTabs = openEditorTabsRef.current;
+      const index = currentOpenEditorTabs.findIndex((entry) => isSameEditorTab(entry, tab));
+      if (index < 0) {
+        return;
+      }
+
+      removeEditorTabs(
+        currentOpenEditorTabs
+          .slice(index + 1)
+          .filter((entry) => entry.kind !== "file" || !isDirtyOpenFile(openFiles[entry.path]))
+      );
+    },
+    [openFiles, removeEditorTabs]
+  );
+
+  const closeSavedEditorTabs = useCallback(() => {
+    const tabsToRemove = openEditorTabsRef.current.filter((tab) => {
+      if (tab.kind !== "file") {
+        return false;
+      }
+
+      return !isDirtyOpenFile(openFiles[tab.path]);
+    });
+
+    removeEditorTabs(tabsToRemove);
+  }, [openFiles, removeEditorTabs]);
+
+  const closeAllEditorTabs = useCallback(() => {
+    removeEditorTabs(
+      openEditorTabsRef.current.filter(
+        (tab) => tab.kind !== "file" || !isDirtyOpenFile(openFiles[tab.path])
+      )
+    );
+  }, [openFiles, removeEditorTabs]);
+
+  const handleSetMode = useCallback(
+    (nextMode: WorkspaceEditorMode) => {
+      if (nextMode === "preview") {
+        const previewSourcePath = activeFilePath ?? activeCanvasEditorTab?.sourcePath;
+        if (previewSourcePath && activateCanvasPreviewForSourcePath(previewSourcePath)) {
+          return;
+        }
+      }
+
+      if (nextMode === "edit" && activeCanvasEditorTab) {
+        activateOpenFile(activeCanvasEditorTab.sourcePath, { pinned: true });
+        return;
+      }
+
+      setMode(nextMode);
+    },
+    [
+      activeCanvasEditorTab,
+      activeFilePath,
+      activateCanvasPreviewForSourcePath,
+      activateOpenFile,
+      setMode,
     ]
   );
 
@@ -1212,10 +1667,12 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   const isSvgTextBacked =
     (isImageFile && currentFile.isTextBacked) ||
     (isTextFile && currentFile.viewingTextBackedImageAsText === true);
-  const canPreview = Boolean(currentFile);
+  const canPreview = Boolean(currentFile) || activeCanvasEditorTab !== null;
   const canEdit =
-    Boolean(currentFile) &&
-    (currentFile?.kind === "text" || (currentFile?.kind === "image" && currentFile.isTextBacked));
+    activeCanvasEditorTab !== null ||
+    (Boolean(currentFile) &&
+      (currentFile?.kind === "text" ||
+        (currentFile?.kind === "image" && currentFile.isTextBacked)));
   const activeFileHasDiffPreview = Boolean(
     activeFilePath &&
       diffPreview &&
@@ -1275,8 +1732,12 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
     activeFilePath && externalStatus?.path === activeFilePath ? externalStatus.status : null;
   const activeSaveError =
     activeFilePath && saveError?.path === activeFilePath ? saveError.message : null;
+  const activeSkillPath =
+    currentFile?.kind === "text" ? parseSkillEditorPath(currentFile.path) : null;
   const documentPreviewKind =
-    currentFile?.kind === "text" ? deriveDocumentPreviewKind(currentFile.path) : null;
+    currentFile?.kind === "text" && !activeSkillPath
+      ? deriveDocumentPreviewKind(currentFile.path)
+      : null;
   const documentPreview = usePreviewSession({
     enabled: mode === "preview" && Boolean(documentPreviewKind),
     workspaceId,
@@ -1287,17 +1748,25 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
 
   return {
     activeFilePath,
-    activeEditorTab: isGlobalEditorState
-      ? (globalActiveEditorTab ?? (activeFilePath ? { kind: "file", path: activeFilePath } : null))
-      : activeFilePath
-        ? { kind: "file", path: activeFilePath }
-        : null,
+    activeEditorTab:
+      currentActiveEditorTab ??
+      (activeFilePath
+        ? resolveFileEditorTab(
+            currentOpenEditorTabs,
+            activeFilePath,
+            openEditorPaths.includes(activeFilePath)
+          )
+        : null),
     activeDiffChange,
     activeExternalStatus,
     activeLoadError,
     activateOpenFile,
     activateEditorTab,
     closeEditorTab,
+    closeAllEditorTabs,
+    closeEditorTabsToRight,
+    closeOtherEditorTabs,
+    closeSavedEditorTabs,
     closeOpenFilePath,
     canSave,
     canDiff,
@@ -1308,30 +1777,44 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
     handleClose,
     hideEditorView,
     handleContentChange,
+    keepOpenEditorTab,
     handleSave,
     hasUnsavedChangesOutsideDiff,
     isImageFile,
     isSaving,
     isSvgTextBacked,
     isTextFile,
-    mode,
+    mode: activeCanvasEditorTab ? "preview" : mode,
     openBrowserTab,
-    openEditorTabs: isGlobalEditorState
-      ? mergeOpenEditorPaths(openEditorPaths, activeFilePath ? [activeFilePath] : undefined)
-          .map((path): WorkspaceEditorTab => ({ kind: "file", path }))
-          .concat(openEditorTabs.filter((tab) => tab.kind === "browser"))
-      : mergeOpenEditorPaths(openEditorPaths, activeFilePath ? [activeFilePath] : undefined).map(
-          (path): WorkspaceEditorTab => ({ kind: "file", path })
-        ),
+    openEditorTabs: (() => {
+      const existingFileTabs = currentOpenEditorTabs.filter(
+        (tab): tab is Extract<WorkspaceEditorTab, { kind: "file" }> => tab.kind === "file"
+      );
+      const existingFileTabPaths = new Set(existingFileTabs.map((tab) => tab.path));
+      const mergedFileTabs = [
+        ...existingFileTabs,
+        ...mergeOpenEditorPaths(openEditorPaths, activeFilePath ? [activeFilePath] : undefined)
+          .filter((path) => !existingFileTabPaths.has(path))
+          .map(
+            (path): WorkspaceEditorTab => ({
+              kind: "file",
+              path,
+              pinned: openEditorPaths.includes(path),
+            })
+          ),
+      ];
+
+      return mergedFileTabs.concat(
+        currentOpenEditorTabs.filter((tab) => isBrowserEditorTab(tab) || isCanvasEditorTab(tab))
+      );
+    })(),
     openEditorPaths,
     openFiles,
     openCommitFileDiff,
     openInDiffMode,
     pendingNavigationAtom,
     saveError: activeSaveError,
-    setMode: (nextMode: WorkspaceEditorMode) => {
-      setMode(nextMode);
-    },
+    setMode: handleSetMode,
     toggleSvgTextMode,
     workspace,
     workspaceId,

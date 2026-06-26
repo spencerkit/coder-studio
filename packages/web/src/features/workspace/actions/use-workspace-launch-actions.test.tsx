@@ -35,6 +35,12 @@ function Harness({ onClose }: { onClose: () => void }) {
       <button type="button" onClick={() => void actions.openWorkspaceByPath("/repo/history-app")}>
         open-history
       </button>
+      <button type="button" onClick={() => void actions.removeRecentWorkspace("/repo/history-app")}>
+        remove-history
+      </button>
+      <button type="button" onClick={() => void actions.clearRecentWorkspaces()}>
+        clear-history
+      </button>
     </div>
   );
 }
@@ -153,5 +159,115 @@ describe("useWorkspaceLaunchActions", () => {
     expect(store.get(activeWorkspaceIdAtom)).toBe("ws-history");
     expect(store.get(workspacesAtom)).toHaveProperty("ws-history");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes one recent workspace entry using the server-returned history snapshot", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [
+          {
+            path: "/repo/history-app",
+            name: "history-app",
+            lastOpenedAt: 100,
+          },
+          {
+            path: "/repo/keep-app",
+            name: "keep-app",
+            lastOpenedAt: 90,
+          },
+        ];
+      }
+
+      if (op === "workspace.history.remove") {
+        expect(args).toEqual({ path: "/repo/history-app" });
+        return [
+          {
+            path: "/repo/keep-app",
+            name: "keep-app",
+            lastOpenedAt: 90,
+          },
+        ];
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Harness onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByTestId("recent-workspaces")).toHaveTextContent(
+      "/repo/history-app|/repo/keep-app"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "remove-history" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-workspaces")).toHaveTextContent("/repo/keep-app");
+    });
+  });
+
+  it("clears all recent workspaces using the server-returned empty history snapshot", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [
+          {
+            path: "/repo/history-app",
+            name: "history-app",
+            lastOpenedAt: 100,
+          },
+        ];
+      }
+
+      if (op === "workspace.history.clear") {
+        return [];
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Harness onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByTestId("recent-workspaces")).toHaveTextContent("/repo/history-app");
+
+    fireEvent.click(screen.getByRole("button", { name: "clear-history" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("recent-workspaces")).toHaveTextContent("");
+    });
   });
 });

@@ -8,6 +8,7 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 
 export interface CoderStudioCommandInput {
   apiUrl?: string;
+  resolveStrategy?: "auto" | "session";
   op: string;
   args: unknown;
   timeoutMs?: number;
@@ -33,13 +34,23 @@ function toWebSocketUrl(apiUrl: string): string {
   return url.toString();
 }
 
-async function resolveApiUrl(explicitApiUrl: string | undefined): Promise<string> {
+async function resolveApiUrl(
+  explicitApiUrl: string | undefined,
+  resolveStrategy: "auto" | "session" = "auto"
+): Promise<string> {
   if (explicitApiUrl) {
     return explicitApiUrl;
   }
 
-  if (process.env.CODER_STUDIO_API_URL) {
-    return process.env.CODER_STUDIO_API_URL;
+  const envApiUrl = process.env.CODER_STUDIO_API_URL?.trim();
+  if (envApiUrl) {
+    return envApiUrl;
+  }
+
+  if (resolveStrategy === "session") {
+    throw new Error(
+      "Session-scoped automation requires CODER_STUDIO_API_URL to be set or passed explicitly."
+    );
   }
 
   const status = await getServerStatus();
@@ -73,13 +84,22 @@ function parseResultMessage(data: WebSocket.RawData): Result | null {
 export async function callCoderStudioCommand<T = unknown>(
   input: CoderStudioCommandInput
 ): Promise<T> {
-  const apiUrl = await resolveApiUrl(input.apiUrl);
+  const apiUrl = await resolveApiUrl(input.apiUrl, input.resolveStrategy);
   const wsUrl = toWebSocketUrl(apiUrl);
   const id = randomUUID();
   const timeoutMs = input.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  const sessionToken = process.env.CODER_STUDIO_SESSION_TOKEN?.trim();
+  const socketOptions =
+    sessionToken && sessionToken.length > 0
+      ? {
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+        }
+      : undefined;
 
   return new Promise<T>((resolve, reject) => {
-    const socket = new WebSocket(wsUrl);
+    const socket = new WebSocket(wsUrl, socketOptions);
     let settled = false;
     const timer = setTimeout(() => {
       finish(() => reject(new Error(`Timed out waiting for ${input.op} result`)));

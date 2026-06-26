@@ -9,6 +9,7 @@ import { activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom, lastViewedTargetAtom, localeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from "../atoms/connection";
 import { workspacesAtom, workspacesLoadStateAtom } from "../atoms/workspaces";
+import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import {
   activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
@@ -224,5 +225,89 @@ describe("useBootstrap", () => {
       browserTab("dev-browser-legacy", "localhost:8001")
     );
     expect(store.get(workspacesAtom)["ws-1"]?.uiState).not.toHaveProperty("devBrowserTargetUrl");
+  });
+
+  it("hydrates the persisted pane layout from the workspace list response", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.list") {
+        return [
+          {
+            id: "ws-1",
+            path: "/workspace",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "split",
+                direction: "horizontal",
+                ratio: 0.6,
+                children: [
+                  {
+                    id: "session-pane",
+                    type: "leaf",
+                    leafKind: "session",
+                    sessionId: "sess-1",
+                  },
+                  {
+                    id: "editor-pane",
+                    type: "leaf",
+                    leafKind: "editor",
+                  },
+                ],
+              },
+            },
+          },
+        ];
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        return null;
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(activationStatusAtom, "active");
+    store.set(authenticatedAtom, true);
+    store.set(localeAtom, "en");
+
+    renderHook(() => useBootstrap(), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await waitFor(() => {
+        expect(store.get(workspacesLoadStateAtom)).toBe("ready");
+      });
+    });
+
+    expect(store.get(paneLayoutAtomFamily("ws-1"))).toEqual({
+      id: "root",
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.6,
+      children: [
+        {
+          id: "session-pane",
+          type: "leaf",
+          leafKind: "session",
+          sessionId: "sess-1",
+        },
+        {
+          id: "editor-pane",
+          type: "leaf",
+          leafKind: "editor",
+        },
+      ],
+    });
   });
 });

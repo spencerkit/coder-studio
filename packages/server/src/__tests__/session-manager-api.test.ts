@@ -1,5 +1,6 @@
 import type { DomainEvent, ProviderDefinition, Session } from "@coder-studio/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionTokenRepo } from "../auth/session-token-repo.js";
 import { EventBus } from "../bus/event-bus.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
@@ -18,6 +19,10 @@ type EventBusWithHandlers = EventBus & {
   handlers: Map<string, Set<(...args: unknown[]) => void>>;
 };
 
+type SessionTokenRepoInternals = SessionTokenRepo & {
+  recordsByToken: Map<string, unknown>;
+};
+
 const providerConfigRepoStub = {
   get: vi.fn(() => undefined),
 } as unknown as ProviderConfigRepo;
@@ -30,6 +35,7 @@ describe("SessionManager session-level API", () => {
   let ptyResizes: Array<[number, number]>;
   let mockPty: PtyProcess;
   let provider: ProviderDefinition;
+  let sessionTokenRepo: SessionTokenRepo;
 
   beforeEach(() => {
     ptyWrites = [];
@@ -83,6 +89,7 @@ describe("SessionManager session-level API", () => {
     } as ProviderDefinition;
 
     eventBus = new EventBus();
+    sessionTokenRepo = new SessionTokenRepo();
     terminalMgr = new TerminalManager({ ptyHost, eventBus, db: terminalDb });
     sessionMgr = new SessionManager({
       terminalMgr,
@@ -91,6 +98,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
   });
 
@@ -196,6 +204,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -234,6 +243,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -274,6 +284,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -313,6 +324,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -358,6 +370,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -400,6 +413,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -442,6 +456,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -487,6 +502,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -532,6 +548,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -571,6 +588,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -611,6 +629,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -655,6 +674,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -702,6 +722,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -749,6 +770,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -793,6 +815,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -836,6 +859,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -871,6 +895,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     const session = await createSession();
@@ -909,6 +934,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -957,6 +983,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [provider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
     const lifecycleEvents: string[] = [];
     eventBus.on("session.lifecycle", (event) => lifecycleEvents.push(event.event));
@@ -1096,6 +1123,25 @@ describe("SessionManager session-level API", () => {
     );
   });
 
+  it("revokes the session token when deleting an ended session", async () => {
+    const session = await createSession();
+    sessionMgr.onTerminalExit(session.terminalId, 0);
+    expect(sessionMgr.get(session.id)?.state).toBe("ended");
+
+    const replacementToken = sessionTokenRepo.issue({
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      providerId: session.providerId,
+      permissions: ["session:read"],
+    }).token;
+
+    expect(replacementToken).toMatch(/^[a-f0-9]{64}$/);
+    expect((sessionTokenRepo as SessionTokenRepoInternals).recordsByToken.size).toBe(1);
+
+    expect(() => sessionMgr.delete(session.id)).not.toThrow();
+    expect((sessionTokenRepo as SessionTokenRepoInternals).recordsByToken.size).toBe(0);
+  });
+
   it("does not retain a half-created session when terminal creation throws", async () => {
     const failingProvider = {
       ...provider,
@@ -1122,6 +1168,7 @@ describe("SessionManager session-level API", () => {
       broadcaster: { broadcast: vi.fn() } as Broadcaster,
       providerRegistry: [failingProvider],
       providerConfigRepo: providerConfigRepoStub,
+      sessionTokenRepo,
     });
 
     await expect(
@@ -1134,5 +1181,6 @@ describe("SessionManager session-level API", () => {
     ).rejects.toThrow("spawn failed");
 
     expect(failingSessionMgr.getForWorkspace("ws-1")).toEqual([]);
+    expect((sessionTokenRepo as SessionTokenRepoInternals).recordsByToken.size).toBe(0);
   });
 });

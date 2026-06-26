@@ -181,6 +181,22 @@ describe("ConfigEditor", () => {
     );
   });
 
+  it("wraps the editor in a dedicated fill-height viewport container", async () => {
+    const { container } = renderConfigEditor();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toBeInTheDocument();
+    });
+
+    const editorViewport = container.querySelector(".config-card-editor-slot--fill-height");
+
+    expect(editorViewport).not.toBeNull();
+    expect(editorViewport).toContainElement(screen.getByTestId("monaco-host"));
+    expect(editorViewport).toContainElement(
+      screen.getByRole("textbox", { name: "Config editor content" })
+    );
+  });
+
   it("renders the shared spinner primitive while a save is in flight", async () => {
     const user = userEvent.setup();
     let resolveSave: ((value: { success: boolean; backupPath: string | null }) => void) | undefined;

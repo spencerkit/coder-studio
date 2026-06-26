@@ -185,11 +185,14 @@ export function OpenEditorsSection({ workspaceId, onSelectFile, title }: OpenEdi
                   draggable
                   onDragStart={(event) => handleDragStart(path, event)}
                   onClick={() => {
-                    void openWorkspaceFile({
-                      workspaceId,
-                      path,
-                      source: "manual",
-                    });
+                    void openWorkspaceFile(
+                      {
+                        workspaceId,
+                        path,
+                        source: "manual",
+                      },
+                      { openTarget: "source" }
+                    );
                     onSelectFile?.(path);
                   }}
                 >

@@ -531,6 +531,132 @@ describe("WorkspaceLaunchModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("removes a recent workspace row without opening it", async () => {
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [
+          {
+            path: "/repo/coder-studio",
+            name: "coder-studio",
+            lastOpenedAt: 100,
+          },
+          {
+            path: "/repo/keep-me",
+            name: "keep-me",
+            lastOpenedAt: 90,
+          },
+        ];
+      }
+
+      if (op === "workspace.history.remove") {
+        expect(args).toEqual({ path: "/repo/coder-studio" });
+        return [
+          {
+            path: "/repo/keep-me",
+            name: "keep-me",
+            lastOpenedAt: 90,
+          },
+        ];
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("coder-studio")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove coder-studio from recent workspaces" })
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("/repo/coder-studio")).not.toBeInTheDocument();
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "workspace.open",
+      { path: "/repo/coder-studio" },
+      undefined
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("confirms before clearing all recent workspaces", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [
+          {
+            path: "/repo/coder-studio",
+            name: "coder-studio",
+            lastOpenedAt: 100,
+          },
+        ];
+      }
+
+      if (op === "workspace.history.clear") {
+        return [];
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(await screen.findByText("Recent Workspaces")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear all recent workspaces" }));
+
+    expect(screen.getByText("Clear recent workspaces?")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This only clears the recent workspace list. It does not delete any project directories from disk."
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Recent Workspaces")).not.toBeInTheDocument();
+    });
+  });
+
   it("renders recent workspace rows inside the mobile launch sheet", async () => {
     viewportMocks.viewport = "mobile";
 

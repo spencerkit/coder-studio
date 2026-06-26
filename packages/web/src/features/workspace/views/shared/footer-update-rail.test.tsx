@@ -249,7 +249,7 @@ describe("FooterUpdateRail", () => {
 
       if (testCase.action) {
         fireEvent.click(screen.getByRole("button", { name: testCase.action }));
-        expect(navigateMock).toHaveBeenLastCalledWith("/settings?section=about");
+        expect(navigateMock).toHaveBeenLastCalledWith("/more/about/update-status");
       }
 
       unmount();

@@ -16,7 +16,7 @@ import { getServerStatus, type ServerStatus, stopRunningServer } from "./server-
 import { prepareLocalStateStorage, startServer } from "./server-runner.js";
 import { getBrowserUrl, getListenIp, getListenUrl } from "./server-url.js";
 
-const MANAGED_SERVER_WAIT_MS = 5000;
+const MANAGED_SERVER_WAIT_MS = 15000;
 const DEFAULT_LOG_TAIL_LINES = 40;
 
 function formatConfig(config: CliConfig | null): string {
@@ -85,6 +85,7 @@ COMMANDS:
   terminal      Read terminal automation data
   git           Read git automation data
   ui            Dispatch UI actions to the active Coder Studio workspace
+  canvas        Create, update, render, and list workspace canvases
   memory        Read and write workspace memory
   version  Show version
 
@@ -121,9 +122,14 @@ EXAMPLES:
   coder-studio ui open-url --workspace ws_123 --url http://127.0.0.1:5173 --json
   coder-studio ui close-url --workspace ws_123 --url http://127.0.0.1:5173 --json
   coder-studio ui show-panel --workspace ws_123 --panel terminal --json
+  coder-studio canvas list --workspace ws_123 --json
+  coder-studio canvas create --workspace ws_123 --kind architecture_canvas --title "Runtime Flow" --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --open --json
+  coder-studio canvas update --workspace ws_123 --canvas canvas_123 --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --json
+  coder-studio canvas render --workspace ws_123 --canvas canvas_123 --json
   coder-studio memory list --workspace ws_123 --json
   coder-studio memory search architecture --workspace ws_123 --json
-  coder-studio memory add --workspace ws_123 --type decision --content "This repo uses pnpm." --tag tooling --json
+  coder-studio memory add --workspace ws_123 --type wiki --content "This repo uses pnpm." --json
+  coder-studio memory add --workspace ws_123 --type issue --content "Verify release notes." --status pending_verification --json
   coder-studio stop
   coder-studio config --host 0.0.0.0 --port 8080
 `);
@@ -191,6 +197,16 @@ function printCommandResult(result: unknown, options: { json?: boolean } = {}): 
   console.log(JSON.stringify(result, null, 2));
 }
 
+function parseJsonOption(label: string, value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new Error(
+      `Invalid ${label} JSON: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
 function buildUiActionIntent(args: CliArgs): Record<string, unknown> {
   const workspace = args.workspaceId !== undefined ? { workspaceId: args.workspaceId } : {};
 
@@ -220,6 +236,12 @@ function buildUiActionIntent(args: CliArgs): Record<string, unknown> {
         type: "browser.closeUrl",
         ...workspace,
         url: args.url!,
+      };
+    case "open-canvas":
+      return {
+        type: "canvas.open",
+        ...workspace,
+        canvasId: args.canvasId!,
       };
     case "show-panel":
       return {
@@ -504,6 +526,71 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  if (args.command === "canvas") {
+    if (args.canvasCommand === "list") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "canvas.list",
+          args: { workspaceId: args.workspaceId! },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.canvasCommand === "create") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "canvas.create",
+          args: {
+            workspaceId: args.workspaceId!,
+            kind: args.kind!,
+            title: args.title!,
+            document: parseJsonOption("document-json", args.documentJson!),
+            ...(args.openInEditor === true ? { openInEditor: true } : {}),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.canvasCommand === "update") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "canvas.update",
+          args: {
+            workspaceId: args.workspaceId!,
+            canvasId: args.canvasId!,
+            ...(args.title !== undefined ? { title: args.title } : {}),
+            document: parseJsonOption("document-json", args.documentJson!),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+
+    if (args.canvasCommand === "render") {
+      printCommandResult(
+        await callCoderStudioCommand({
+          apiUrl: args.apiUrl,
+          op: "canvas.render",
+          args: {
+            workspaceId: args.workspaceId!,
+            ...(args.canvasId !== undefined ? { canvasId: args.canvasId } : {}),
+            ...(args.sourcePath !== undefined ? { sourcePath: args.sourcePath } : {}),
+          },
+        }),
+        { json: args.json }
+      );
+      return;
+    }
+  }
+
   if (args.command === "memory") {
     const workspaceId = resolveMemoryWorkspaceId(args);
 
@@ -516,7 +603,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             workspaceId,
             ...(args.query !== undefined ? { query: args.query } : {}),
             ...(args.memoryType !== undefined ? { type: args.memoryType } : {}),
-            ...(args.tags?.[0] !== undefined ? { tag: args.tags[0] } : {}),
           },
         }),
         { json: args.json }
@@ -533,7 +619,6 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             workspaceId,
             query: args.query!,
             ...(args.memoryType !== undefined ? { type: args.memoryType } : {}),
-            ...(args.tags?.[0] !== undefined ? { tag: args.tags[0] } : {}),
           },
         }),
         { json: args.json }
@@ -562,7 +647,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             workspaceId,
             type: args.memoryType!,
             content: args.content!,
-            ...(args.tags !== undefined ? { tags: args.tags } : {}),
+            ...(args.memoryStatus !== undefined ? { status: args.memoryStatus } : {}),
             ...(args.skillSlug !== undefined ? { sourceHint: { skillSlug: args.skillSlug } } : {}),
           },
         }),
@@ -581,7 +666,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
             id: args.memoryId!,
             ...(args.memoryType !== undefined ? { type: args.memoryType } : {}),
             ...(args.content !== undefined ? { content: args.content } : {}),
-            ...(args.tags !== undefined ? { tags: args.tags } : {}),
+            ...(args.memoryStatus !== undefined ? { status: args.memoryStatus } : {}),
           },
         }),
         { json: args.json }

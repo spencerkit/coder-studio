@@ -13,6 +13,7 @@ import {
   terminalOutputAtomFamily,
 } from "../atoms";
 import { useCreateShellTerminal } from "./use-create-shell-terminal";
+import { useTerminalProfiles } from "./use-terminal-profiles";
 
 const EMPTY_TERMINAL_ID = "__terminal_panel_empty__";
 const EMPTY_WORKSPACE_ID = "__terminal_panel_empty_workspace__";
@@ -55,6 +56,14 @@ export function useTerminalActions() {
     terminalActiveIdAtomFamily(workspaceAtomKey)
   );
   const { createShellTerminal } = useCreateShellTerminal(activeWorkspaceId);
+  const {
+    profiles,
+    configuredDefaultProfileId,
+    resolvedDefaultProfileId,
+    defaultProfile,
+    loading: terminalProfilesLoading,
+    ensureProfilesLoaded,
+  } = useTerminalProfiles();
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const activeTerminalMetaState = useAtomValue(
@@ -192,9 +201,18 @@ export function useTerminalActions() {
     };
   }, [activeWorkspaceId, store, wsClient]);
 
-  const handleCreateTerminal = useCallback(async () => {
-    await createShellTerminal();
-  }, [createShellTerminal]);
+  const handleCreateTerminal = useCallback(
+    async (profileId?: string) => {
+      const resolvedProfileId =
+        profileId ??
+        resolvedDefaultProfileId ??
+        (await ensureProfilesLoaded()).resolvedDefaultProfileId ??
+        undefined;
+
+      await createShellTerminal({ profileId: resolvedProfileId });
+    },
+    [createShellTerminal, ensureProfilesLoaded, resolvedDefaultProfileId]
+  );
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
@@ -228,10 +246,15 @@ export function useTerminalActions() {
     activeTerminalId,
     activeTerminalMeta,
     activeWorkspaceId,
+    configuredDefaultProfileId,
+    defaultProfile,
     handleCloseTerminal,
     handleCreateTerminal,
     handleSwitchTerminal,
     hasTerminals: terminalIds.length > 0,
+    resolvedDefaultProfileId,
     terminalIds,
+    terminalProfiles: profiles,
+    terminalProfilesLoading,
   };
 }

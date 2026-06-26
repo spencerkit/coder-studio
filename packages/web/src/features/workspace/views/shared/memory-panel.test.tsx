@@ -1,5 +1,6 @@
 import type { WorkspaceMemoryEntry } from "@coder-studio/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -9,11 +10,19 @@ import { MemoryPanel } from "./memory-panel";
 const baseMemoryEntry: WorkspaceMemoryEntry = {
   id: "mem-1",
   workspaceId: "ws-1",
-  type: "project",
+  type: "wiki",
   content: "Package scripts should run through pnpm.",
   source: { kind: "user" },
   createdAt: 1000,
   updatedAt: 2000,
+};
+
+const issueMemoryEntry: WorkspaceMemoryEntry = {
+  ...baseMemoryEntry,
+  id: "mem-2",
+  type: "issue",
+  content: "Dropdown stays open.",
+  status: "pending_verification",
 };
 
 function renderMemoryPanel(
@@ -37,9 +46,10 @@ describe("MemoryPanel", () => {
       if (op === "memory.list") {
         return [
           baseMemoryEntry,
+          issueMemoryEntry,
           {
             ...baseMemoryEntry,
-            id: "mem-2",
+            id: "mem-3",
             type: "note",
             content: "Run targeted tests before handoff.",
           },
@@ -53,15 +63,21 @@ describe("MemoryPanel", () => {
 
     expect(await screen.findByText("Project Memory")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Memory" })).toBeInTheDocument();
-    expect(screen.getByText("2 active entries")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Note" })).toBeInTheDocument();
-    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Project" });
+    expect(screen.getByText("3 active entries")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("group", { name: "Memory type" }))
+        .getAllByRole("button")
+        .map((button) => button.textContent)
+    ).toEqual(["All", "Wiki", "Issue", "Todo", "Note"]);
+    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Wiki" });
     expect(sendCommand).toHaveBeenCalledWith("memory.list", { workspaceId: "ws-1" }, undefined);
     expect(screen.getByText("Package scripts should run through pnpm.")).toBeInTheDocument();
-    expect(screen.getByText("project")).toBeInTheDocument();
+    expect(screen.getByText("Dropdown stays open.")).toBeInTheDocument();
+    expect(screen.getByText("wiki")).toBeInTheDocument();
+    expect(screen.getByText("issue")).toBeInTheDocument();
     expect(screen.getByText("note")).toBeInTheDocument();
+    expect(screen.getByText("pending verification")).toBeInTheDocument();
+    expect(screen.queryByText("not started")).toBeNull();
     expect(screen.queryByText("Selected Memory")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save memory" })).toBeNull();
 
@@ -73,9 +89,36 @@ describe("MemoryPanel", () => {
       screen.getByRole("button", { name: "Run targeted tests before handoff. Note" })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Package scripts should run through pnpm. Project" })
+      screen.queryByRole("button", { name: "Package scripts should run through pnpm. Wiki" })
     ).toBeNull();
     expect(sendCommand.mock.calls.filter(([op]) => op === "memory.list")).toHaveLength(1);
+  });
+
+  it("renders actionable memory statuses as separate status badges", async () => {
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "memory.list") {
+        return [issueMemoryEntry];
+      }
+
+      return null;
+    });
+
+    const { container } = renderMemoryPanel(sendCommand);
+
+    await screen.findByRole("button", { name: "Dropdown stays open. Issue" });
+
+    const badges = container.querySelector(".memory-panel__item-badges");
+    expect(badges).not.toBeNull();
+
+    const typeBadge = screen.getByText("issue");
+    const statusBadge = screen.getByText("pending verification");
+
+    expect(typeBadge).toHaveClass("memory-panel__badge", "memory-panel__badge--issue");
+    expect(statusBadge).toHaveClass(
+      "memory-panel__badge",
+      "memory-panel__badge--status",
+      "memory-panel__badge--status-pending_verification"
+    );
   });
 
   it("creates and deletes memory entries without issuing inline update commands", async () => {
@@ -112,7 +155,7 @@ describe("MemoryPanel", () => {
 
     renderMemoryPanel(sendCommand);
 
-    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Project" });
+    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Wiki" });
     expect(screen.queryByRole("button", { name: "Save memory" })).toBeNull();
     expect(screen.queryByText("Selected Memory")).toBeNull();
 
@@ -120,8 +163,14 @@ describe("MemoryPanel", () => {
 
     const createDialog = await screen.findByRole("dialog", { name: "Create memory" });
     fireEvent.change(within(createDialog).getByLabelText("Content"), {
-      target: { value: "Workspace memory is stored per workspace." },
+      target: { value: "Dropdown stays open." },
     });
+    fireEvent.click(within(createDialog).getByRole("button", { name: "Type Wiki" }));
+    fireEvent.click(
+      within(within(createDialog).getByRole("listbox", { name: "Type" })).getByRole("option", {
+        name: "Issue",
+      })
+    );
     fireEvent.click(within(createDialog).getByRole("button", { name: "Save memory" }));
 
     await waitFor(() => {
@@ -129,8 +178,9 @@ describe("MemoryPanel", () => {
         "memory.create",
         {
           workspaceId: "ws-1",
-          type: "project",
-          content: "Workspace memory is stored per workspace.",
+          type: "issue",
+          content: "Dropdown stays open.",
+          status: "not_started",
         },
         undefined
       );
@@ -142,14 +192,14 @@ describe("MemoryPanel", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "Workspace memory is stored per workspace. Project",
+        name: "Dropdown stays open. Issue",
       })
     ).toBeInTheDocument();
     expect(sendCommand.mock.calls.some(([op]) => op === "memory.update")).toBe(false);
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: /Delete memory Workspace memory is stored per workspace\./i,
+        name: /Delete memory Dropdown stays open\./i,
       })
     );
 
@@ -160,6 +210,111 @@ describe("MemoryPanel", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "memory.delete",
         { workspaceId: "ws-1", id: "mem-2" },
+        undefined
+      );
+    });
+  });
+
+  it("closes the create-memory type dropdown after selecting a category", async () => {
+    const user = userEvent.setup();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "memory.list") {
+        return [baseMemoryEntry];
+      }
+
+      return null;
+    });
+
+    renderMemoryPanel(sendCommand);
+
+    await screen.findByRole("button", { name: "Package scripts should run through pnpm. Wiki" });
+
+    await user.click(screen.getByRole("button", { name: "New memory" }));
+
+    const createDialog = await screen.findByRole("dialog", { name: "Create memory" });
+    const typeTrigger = within(createDialog).getByRole("button", { name: "Type Wiki" });
+    expect(within(createDialog).queryByRole("button", { name: /Status/i })).toBeNull();
+
+    await user.click(typeTrigger);
+
+    const listbox = within(createDialog).getByRole("listbox", { name: "Type" });
+    await user.click(within(listbox).getByRole("option", { name: "Issue" }));
+
+    expect(within(createDialog).queryByRole("listbox", { name: "Type" })).toBeNull();
+    expect(within(createDialog).getByRole("button", { name: "Type Issue" })).toBeInTheDocument();
+    expect(
+      within(createDialog).getByRole("button", { name: "Status Not started" })
+    ).toBeInTheDocument();
+
+    await user.click(within(createDialog).getByRole("button", { name: "Type Issue" }));
+    await user.click(
+      within(within(createDialog).getByRole("listbox", { name: "Type" })).getByRole("option", {
+        name: "Note",
+      })
+    );
+
+    expect(within(createDialog).getByRole("button", { name: "Type Note" })).toBeInTheDocument();
+    expect(within(createDialog).queryByRole("button", { name: /Status/i })).toBeNull();
+
+    await user.click(within(createDialog).getByRole("button", { name: "Type Note" }));
+    await user.click(
+      within(within(createDialog).getByRole("listbox", { name: "Type" })).getByRole("option", {
+        name: "Wiki",
+      })
+    );
+
+    expect(within(createDialog).getByRole("button", { name: "Type Wiki" })).toBeInTheDocument();
+    expect(within(createDialog).queryByRole("button", { name: /Status/i })).toBeNull();
+  });
+
+  it("edits issue memory status", async () => {
+    let entries: WorkspaceMemoryEntry[] = [issueMemoryEntry];
+    const sendCommand = vi.fn(async (op: string, args: unknown) => {
+      if (op === "memory.list") {
+        return entries;
+      }
+
+      if (op === "memory.update") {
+        const { id, ...updates } = args as Partial<WorkspaceMemoryEntry> & { id: string };
+        entries = entries.map((entry) =>
+          entry.id === id ? { ...entry, ...updates, updatedAt: 4000 } : entry
+        );
+        return entries.find((entry) => entry.id === id);
+      }
+
+      return null;
+    });
+
+    renderMemoryPanel(sendCommand);
+
+    await screen.findByRole("button", { name: "Dropdown stays open. Issue" });
+    fireEvent.click(screen.getByRole("button", { name: /Edit memory Dropdown stays open\./i }));
+
+    const editDialog = await screen.findByRole("dialog", { name: "Edit memory" });
+    expect(
+      within(editDialog).getByRole("button", { name: "Status Pending verification" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(editDialog).getByRole("button", { name: "Status Pending verification" })
+    );
+    fireEvent.click(
+      within(within(editDialog).getByRole("listbox", { name: "Status" })).getByRole("option", {
+        name: "Completed",
+      })
+    );
+    fireEvent.click(within(editDialog).getByRole("button", { name: "Save memory" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "memory.update",
+        {
+          workspaceId: "ws-1",
+          id: "mem-2",
+          type: "issue",
+          content: "Dropdown stays open.",
+          status: "completed",
+        },
         undefined
       );
     });
@@ -178,7 +333,7 @@ describe("MemoryPanel", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "Package scripts should run through pnpm. Project",
+        name: "Package scripts should run through pnpm. Wiki",
       })
     ).toBeInTheDocument();
     expect(screen.queryByText("Selected Memory")).toBeNull();

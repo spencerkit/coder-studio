@@ -5,6 +5,7 @@
  */
 
 import {
+  type CustomTerminalProfile,
   createDefaultMonitoringSettings,
   createDefaultUpdateSettings,
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
@@ -30,6 +31,7 @@ import {
   resolveSupervisorRetryOnTimeout,
   resolveUpdateAutoCheckEnabled,
   resolveUpdateCheckIntervalSec,
+  type TerminalProfilesListResult,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
@@ -58,12 +60,11 @@ import { useMonitoringData } from "../../monitoring";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { PageHeader } from "../../shared/components/page-header";
+import { resetTerminalProfilesAtom } from "../../terminal-panel/actions/use-terminal-profiles";
 import {
   getTerminalFontSizePreference,
   hasExplicitTerminalFontSizeSetting,
   hasLegacyTerminalFontSizeSetting,
-  MAX_TERMINAL_FONT_SIZE,
-  MIN_TERMINAL_FONT_SIZE,
   resolveTerminalCopyOnSelectSetting,
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
@@ -80,6 +81,8 @@ import {
   type SettingsSection,
 } from "./settings-sections";
 import { ShortcutsSettings } from "./shortcuts-settings";
+import { type TerminalProfileSettingsChange } from "./terminal-profile-settings";
+import { TerminalSettingsSection } from "./terminal-settings-section";
 import { useSessionGateDispatch } from "./use-session-gate-dispatch";
 
 type NotificationCapabilityStatus = "available" | "limited" | "unsupported";
@@ -100,7 +103,7 @@ type AppearanceAssetScope = "common" | "desktop" | "mobile";
 type AppearanceOverrideTarget = Exclude<AppearanceAssetScope, "common">;
 type EmbeddedSettingsSection = Extract<
   SettingsSection,
-  "general" | "providers" | "appearance" | "shortcuts" | "about" | "monitoring"
+  "general" | "providers" | "terminal" | "appearance" | "shortcuts" | "about" | "monitoring"
 >;
 
 const CORE_THEME_IDS = [
@@ -126,7 +129,6 @@ const SEASONAL_THEME_IDS = [
 ] as const;
 
 const DEFAULT_SETTINGS_SECTION: SettingsSection = SETTINGS_SECTIONS[0].id;
-const TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS = 500;
 const PERSONALIZATION_OVERRIDE_FIELDS = [
   "backgroundAssetId",
   "backgroundDimness",
@@ -196,6 +198,54 @@ function loadProviderAdditionalArgs(
   );
 }
 
+function isCustomTerminalProfileId(value: unknown): value is CustomTerminalProfile["id"] {
+  return typeof value === "string" && value.startsWith("custom:");
+}
+
+function loadCustomTerminalProfiles(settings: Record<string, unknown>): CustomTerminalProfile[] {
+  const value = settings["terminal.profiles"];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const profiles: CustomTerminalProfile[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const record = item as Record<string, unknown>;
+    if (
+      !isCustomTerminalProfileId(record.id) ||
+      typeof record.label !== "string" ||
+      typeof record.command !== "string" ||
+      seen.has(record.id)
+    ) {
+      continue;
+    }
+
+    const label = record.label.trim();
+    const command = record.command.trim();
+    if (!label || !command) {
+      continue;
+    }
+
+    seen.add(record.id);
+    profiles.push({
+      id: record.id,
+      label,
+      command,
+      args: Array.isArray(record.args)
+        ? record.args.filter((arg): arg is string => typeof arg === "string")
+        : [],
+      icon: typeof record.icon === "string" ? record.icon : undefined,
+    });
+  }
+
+  return profiles;
+}
+
 const DEFAULT_PROVIDERS: ProviderInfo[] = [
   { id: "claude", displayName: "Claude" },
   { id: "codex", displayName: "Codex" },
@@ -219,6 +269,8 @@ function getMobileSectionHintKey(section: SettingsSection) {
       return "settings.notifications_channel_hint";
     case "providers":
       return "settings.provider.command_preview_hint";
+    case "terminal":
+      return "settings.terminal_renderer_hint";
     case "analysis":
       return "settings.analysis.hint";
     case "appearance":
@@ -237,7 +289,7 @@ function getMobileSectionHintKey(section: SettingsSection) {
 const MOBILE_SETTINGS_GROUPS = [
   {
     titleKey: "settings.mobile_groups.workspace_runtime",
-    sections: ["general", "providers"],
+    sections: ["general", "providers", "terminal"],
   },
   {
     titleKey: "settings.mobile_groups.interface_interaction",
@@ -407,6 +459,14 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
   const [terminalRenderer, setTerminalRendererState] = useState<"standard" | "compatibility">(
     "standard"
   );
+  const [terminalProfiles, setTerminalProfiles] = useState<TerminalProfile[]>([]);
+  const [customTerminalProfiles, setCustomTerminalProfiles] = useState<CustomTerminalProfile[]>([]);
+  const [configuredTerminalDefaultProfileId, setConfiguredTerminalDefaultProfileId] = useState<
+    string | undefined
+  >(undefined);
+  const [resolvedTerminalDefaultProfileId, setResolvedTerminalDefaultProfileId] = useState<
+    string | null
+  >(null);
   const [providerAdditionalArgsById, setProviderAdditionalArgsById] = useState<
     Record<string, string>
   >({});
@@ -430,6 +490,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
+  const resetTerminalProfiles = useSetAtom(resetTerminalProfilesAtom);
   const setHydratedLspRuntimeMode = useSetAtom(lspRuntimeModeAtom);
   const store = useStore();
   const settingsLoadFailedUnknownRef = useRef(settingsLoadFailedUnknown);
@@ -449,6 +510,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
     checkIntervalSec: 0,
   });
   const monitoringSelectionVersionRef = useRef(0);
+  const terminalProfileSelectionVersionRef = useRef(0);
   const detailSection =
     navigationState.kind === "detail" ? navigationState.section : navigationState.lastSection;
   const effectiveSection = embeddedSection ?? detailSection;
@@ -525,11 +587,14 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
         ...updateSelectionVersionRef.current,
       };
       const monitoringSelectionVersionAtRequestStart = monitoringSelectionVersionRef.current;
-      const [settingsResult, providersResult] = await Promise.all([
+      const terminalProfileSelectionVersionAtRequestStart =
+        terminalProfileSelectionVersionRef.current;
+      const [settingsResult, providersResult, terminalProfilesResult] = await Promise.all([
         dispatch<Record<string, unknown>>("settings.get", {}),
         dispatch<ProviderListItem[]>("provider.list", {}),
+        dispatch<TerminalProfilesListResult>("terminal.profiles.list", {}),
       ]);
-      if (settingsResult === null || providersResult === null) {
+      if (settingsResult === null || providersResult === null || terminalProfilesResult === null) {
         return;
       }
 
@@ -554,6 +619,28 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
       const settings = settingsResult.data;
       if (cancelled) return;
       setSettingsLoadError(null);
+      if (
+        terminalProfileSelectionVersionRef.current === terminalProfileSelectionVersionAtRequestStart
+      ) {
+        setCustomTerminalProfiles(loadCustomTerminalProfiles(settings));
+        setConfiguredTerminalDefaultProfileId(
+          typeof terminalProfilesResult.data?.configuredDefaultProfileId === "string"
+            ? terminalProfilesResult.data.configuredDefaultProfileId
+            : typeof settings["terminal.defaultProfileId"] === "string"
+              ? settings["terminal.defaultProfileId"]
+              : undefined
+        );
+        setResolvedTerminalDefaultProfileId(
+          typeof terminalProfilesResult.data?.resolvedDefaultProfileId === "string"
+            ? terminalProfilesResult.data.resolvedDefaultProfileId
+            : null
+        );
+        setTerminalProfiles(
+          terminalProfilesResult.ok && Array.isArray(terminalProfilesResult.data?.profiles)
+            ? terminalProfilesResult.data.profiles
+            : []
+        );
+      }
       if (typeof settings["notifications.enabled"] === "boolean") {
         setNotificationsEnabled(settings["notifications.enabled"]);
       }
@@ -813,6 +900,71 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
     });
   };
 
+  const handleTerminalProfileSettingsChange = async (next: TerminalProfileSettingsChange) => {
+    const previousCustomProfiles = customTerminalProfiles;
+    const previousDefaultProfileId = configuredTerminalDefaultProfileId;
+    const previousResolvedDefaultProfileId = resolvedTerminalDefaultProfileId;
+    terminalProfileSelectionVersionRef.current += 1;
+    const requestVersion = terminalProfileSelectionVersionRef.current;
+    setCustomTerminalProfiles(next.customProfiles);
+    if ("defaultProfileId" in next) {
+      setConfiguredTerminalDefaultProfileId(next.defaultProfileId ?? undefined);
+    }
+
+    const terminalSettings: {
+      profiles: CustomTerminalProfile[];
+      defaultProfileId?: string | null;
+    } = {
+      profiles: next.customProfiles,
+    };
+    if ("defaultProfileId" in next) {
+      terminalSettings.defaultProfileId = next.defaultProfileId ?? null;
+    }
+
+    const result = await dispatch("settings.update", {
+      settings: {
+        terminal: terminalSettings,
+      },
+    });
+
+    if (result === null || !result.ok) {
+      if (terminalProfileSelectionVersionRef.current === requestVersion) {
+        setCustomTerminalProfiles(previousCustomProfiles);
+        setConfiguredTerminalDefaultProfileId(previousDefaultProfileId);
+        setResolvedTerminalDefaultProfileId(previousResolvedDefaultProfileId);
+      }
+      if (result !== null && !result.ok) {
+        setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
+      }
+      return false;
+    }
+
+    const refreshedProfilesResult = await dispatch<TerminalProfilesListResult>(
+      "terminal.profiles.list",
+      {}
+    );
+    if (
+      refreshedProfilesResult?.ok &&
+      Array.isArray(refreshedProfilesResult.data?.profiles) &&
+      terminalProfileSelectionVersionRef.current === requestVersion
+    ) {
+      setTerminalProfiles(refreshedProfilesResult.data.profiles);
+      setConfiguredTerminalDefaultProfileId(
+        typeof refreshedProfilesResult.data.configuredDefaultProfileId === "string"
+          ? refreshedProfilesResult.data.configuredDefaultProfileId
+          : undefined
+      );
+      setResolvedTerminalDefaultProfileId(
+        typeof refreshedProfilesResult.data.resolvedDefaultProfileId === "string"
+          ? refreshedProfilesResult.data.resolvedDefaultProfileId
+          : null
+      );
+    }
+
+    resetTerminalProfiles();
+    return true;
+  };
+
   const handleUpdateAutoCheckChange = async (value: boolean) => {
     updateSelectionVersionRef.current.autoCheckEnabled += 1;
     setUpdateAutoCheckEnabled(value);
@@ -929,10 +1081,6 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
             setSupervisorRetryOnEvaluatorError={setSupervisorRetryOnEvaluatorError}
             lspRuntimeMode={lspRuntimeMode}
             onLspRuntimeModeSelect={handleLspRuntimeModeSelection}
-            terminalRenderer={terminalRenderer}
-            setTerminalRenderer={handleTerminalRendererSelection}
-            terminalCopyOnSelect={terminalPreferences.copyOnSelect}
-            setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
             locale={locale}
             setLocale={handleLocaleSelection}
           />
@@ -950,11 +1098,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
       case "appearance":
         return (
           <AppearanceSettings
-            desktopTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "desktop")}
-            mobileTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "mobile")}
             personalization={personalization}
-            setDesktopTerminalFontSize={handleDesktopTerminalFontSizeSelection}
-            setMobileTerminalFontSize={handleMobileTerminalFontSizeSelection}
             savePersonalization={saveAppearancePersonalization}
             theme={theme}
             setTheme={handleThemeSelection}
@@ -983,6 +1127,24 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
             isMobile={isMobile}
             activeWorkspaceId={activeWorkspaceId}
             onLayoutModeChange={setContentLayoutMode}
+          />
+        );
+      case "terminal":
+        return (
+          <TerminalSettingsSection
+            terminalRenderer={terminalRenderer}
+            setTerminalRenderer={handleTerminalRendererSelection}
+            terminalCopyOnSelect={terminalPreferences.copyOnSelect}
+            setTerminalCopyOnSelect={handleTerminalCopyOnSelectSelection}
+            terminalProfiles={terminalProfiles}
+            customTerminalProfiles={customTerminalProfiles}
+            configuredTerminalDefaultProfileId={configuredTerminalDefaultProfileId}
+            resolvedTerminalDefaultProfileId={resolvedTerminalDefaultProfileId}
+            onTerminalProfileSettingsChange={handleTerminalProfileSettingsChange}
+            desktopTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "desktop")}
+            mobileTerminalFontSize={getTerminalFontSizePreference(terminalPreferences, "mobile")}
+            setDesktopTerminalFontSize={handleDesktopTerminalFontSizeSelection}
+            setMobileTerminalFontSize={handleMobileTerminalFontSizeSelection}
           />
         );
       case "shortcuts":
@@ -1100,7 +1262,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
         ) : (
           <PageHeader
             title={t("settings.title")}
-            titleAs="h1"
+            titleAs="h3"
             level="secondary"
             onBack={handleBack}
             backLabel={t("action.back")}
@@ -1218,10 +1380,6 @@ interface GeneralSettingsProps {
   setSupervisorRetryOnEvaluatorError: (value: boolean) => void;
   lspRuntimeMode: LspRuntimeMode;
   onLspRuntimeModeSelect: (value: LspRuntimeMode) => Promise<void>;
-  terminalRenderer: "standard" | "compatibility";
-  setTerminalRenderer: (value: "standard" | "compatibility") => void;
-  terminalCopyOnSelect: boolean;
-  setTerminalCopyOnSelect: (value: boolean) => void;
   locale: string;
   setLocale: (value: "zh" | "en") => void;
 }
@@ -1266,24 +1424,6 @@ function parseSupervisorRetryDelayInput(value: string): number | null {
 
   const parsed = Number(trimmed);
   if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_SUPERVISOR_RETRY_DELAY_SEC) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function parseTerminalFontSizeInput(value: string): number | null {
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    return null;
-  }
-
-  const parsed = Number(trimmed);
-  if (
-    !Number.isSafeInteger(parsed) ||
-    parsed < MIN_TERMINAL_FONT_SIZE ||
-    parsed > MAX_TERMINAL_FONT_SIZE
-  ) {
     return null;
   }
 
@@ -1340,10 +1480,6 @@ function GeneralSettings({
   setSupervisorRetryOnEvaluatorError,
   lspRuntimeMode,
   onLspRuntimeModeSelect,
-  terminalRenderer,
-  setTerminalRenderer,
-  terminalCopyOnSelect,
-  setTerminalCopyOnSelect,
   locale,
   setLocale,
 }: GeneralSettingsProps) {
@@ -1352,12 +1488,8 @@ function GeneralSettings({
   const notificationsDescId = useId();
   const soundLabelId = useId();
   const soundDescId = useId();
-  const terminalRendererTitleId = useId();
-  const terminalRendererDescId = useId();
   const lspRuntimeModeTitleId = useId();
   const lspRuntimeModeDescId = useId();
-  const copyOnSelectLabelId = useId();
-  const copyOnSelectDescId = useId();
   const languageTitleId = useId();
   const languageDescId = useId();
   const dispatch = useSessionGateDispatch();
@@ -1701,64 +1833,6 @@ function GeneralSettings({
       </div>
 
       <div className="settings-group">
-        <h3 className="settings-group-title" id={terminalRendererTitleId}>
-          {t("settings.terminal_renderer")}
-        </h3>
-        <p className="settings-group-desc" id={terminalRendererDescId}>
-          {t("settings.terminal_renderer_hint")}
-        </p>
-
-        <div
-          aria-describedby={terminalRendererDescId}
-          aria-labelledby={terminalRendererTitleId}
-          className="settings-pills"
-          role="group"
-        >
-          <Pill
-            leadingIcon={terminalRenderer === "standard" ? <Check size={12} /> : undefined}
-            onClick={() => {
-              setTerminalRenderer("standard");
-              void saveSettings({ appearance: { terminalRenderer: "standard" } });
-            }}
-            active={terminalRenderer === "standard"}
-          >
-            {t("settings.terminal_standard")}
-          </Pill>
-          <Pill
-            leadingIcon={terminalRenderer === "compatibility" ? <Check size={12} /> : undefined}
-            onClick={() => {
-              setTerminalRenderer("compatibility");
-              void saveSettings({ appearance: { terminalRenderer: "compatibility" } });
-            }}
-            active={terminalRenderer === "compatibility"}
-          >
-            {t("settings.terminal_compatibility")}
-          </Pill>
-        </div>
-
-        <div className="settings-toggle-row">
-          <div className="settings-toggle-info">
-            <span className="settings-toggle-label" id={copyOnSelectLabelId}>
-              {t("settings.copy_on_select")}
-            </span>
-            <span className="settings-toggle-desc" id={copyOnSelectDescId}>
-              {t("settings.copy_on_select_hint")}
-            </span>
-          </div>
-          <Switch
-            aria-describedby={copyOnSelectDescId}
-            aria-labelledby={copyOnSelectLabelId}
-            checked={terminalCopyOnSelect}
-            className="settings-toggle"
-            onCheckedChange={(nextValue) => {
-              setTerminalCopyOnSelect(nextValue);
-              void saveSettings({ appearance: { terminalCopyOnSelect: nextValue } });
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="settings-group">
         <h3 className="settings-group-title">{t("settings.supervisor.title")}</h3>
         <p className="settings-group-desc">{t("settings.supervisor.hint")}</p>
 
@@ -1984,22 +2058,14 @@ function GeneralSettings({
 }
 
 interface AppearanceSettingsProps {
-  desktopTerminalFontSize: number;
-  mobileTerminalFontSize: number;
   personalization: AppearancePersonalization;
-  setDesktopTerminalFontSize: (value: number) => void;
-  setMobileTerminalFontSize: (value: number) => void;
   savePersonalization: (value: AppearancePersonalization) => Promise<boolean>;
   theme: string;
   setTheme: (value: string) => void;
 }
 
 function AppearanceSettings({
-  desktopTerminalFontSize,
-  mobileTerminalFontSize,
   personalization,
-  setDesktopTerminalFontSize,
-  setMobileTerminalFontSize,
   savePersonalization,
   theme,
   setTheme,
@@ -2008,10 +2074,6 @@ function AppearanceSettings({
   const themeTitleId = useId();
   const themeDescId = useId();
   const themeSelectId = useId();
-  const desktopTerminalFontSizeLabelId = useId();
-  const desktopTerminalFontSizeDescId = useId();
-  const mobileTerminalFontSizeLabelId = useId();
-  const mobileTerminalFontSizeDescId = useId();
   const backgroundFileInputId = useId();
   const commonGlassLabelId = useId();
   const commonGlassDescId = useId();
@@ -2062,18 +2124,6 @@ function AppearanceSettings({
       };
     }),
   ];
-  const [desktopTerminalFontSizeDraft, setDesktopTerminalFontSizeDraft] = useState(
-    String(desktopTerminalFontSize)
-  );
-  const [desktopTerminalFontSizeError, setDesktopTerminalFontSizeError] = useState<string | null>(
-    null
-  );
-  const [mobileTerminalFontSizeDraft, setMobileTerminalFontSizeDraft] = useState(
-    String(mobileTerminalFontSize)
-  );
-  const [mobileTerminalFontSizeError, setMobileTerminalFontSizeError] = useState<string | null>(
-    null
-  );
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
   const [backgroundDimnessDraft, setBackgroundDimnessDraft] = useState(
     String(personalization.common.backgroundDimness)
@@ -2104,32 +2154,9 @@ function AppearanceSettings({
   const [desktopSurfaceOpacityError, setDesktopSurfaceOpacityError] = useState<string | null>(null);
   const [mobileSurfaceOpacityError, setMobileSurfaceOpacityError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const lastTerminalFontSizeCommitAtRef = useRef<
-    Record<"desktopTerminalFontSize" | "mobileTerminalFontSize", number>
-  >({
-    desktopTerminalFontSize: 0,
-    mobileTerminalFontSize: 0,
-  });
-
   const saveSettings = async (settings: Record<string, unknown>) => {
     return await dispatch("settings.update", { settings });
   };
-
-  useEffect(() => {
-    setDesktopTerminalFontSizeDraft(String(desktopTerminalFontSize));
-  }, [desktopTerminalFontSize]);
-
-  useEffect(() => {
-    setMobileTerminalFontSizeDraft(String(mobileTerminalFontSize));
-  }, [mobileTerminalFontSize]);
-
-  useEffect(() => {
-    setDesktopTerminalFontSizeError(null);
-  }, [desktopTerminalFontSize]);
-
-  useEffect(() => {
-    setMobileTerminalFontSizeError(null);
-  }, [mobileTerminalFontSize]);
 
   useEffect(() => {
     setBackgroundDimnessDraft(String(personalization.common.backgroundDimness));
@@ -2411,64 +2438,6 @@ function AppearanceSettings({
       {renderAssetButtons(target, hasAsset)}
     </div>
   );
-
-  const commitTerminalFontSize = async (
-    draft: string,
-    currentValue: number,
-    settingKey: "desktopTerminalFontSize" | "mobileTerminalFontSize",
-    setValue: (value: number) => void,
-    setDraft: (value: string) => void,
-    setError: (value: string | null) => void
-  ) => {
-    const parsed = parseTerminalFontSizeInput(draft);
-    if (parsed === null) {
-      setDraft(String(currentValue));
-      setError(
-        t("settings.terminal_font_size_validation_error", {
-          min: MIN_TERMINAL_FONT_SIZE,
-          max: MAX_TERMINAL_FONT_SIZE,
-        })
-      );
-      return;
-    }
-
-    if (parsed === currentValue) {
-      setDraft(String(parsed));
-      setError(null);
-      return;
-    }
-
-    const now = Date.now();
-    if (
-      now - lastTerminalFontSizeCommitAtRef.current[settingKey] <
-      TERMINAL_FONT_SIZE_SAVE_THROTTLE_MS
-    ) {
-      return;
-    }
-    lastTerminalFontSizeCommitAtRef.current[settingKey] = now;
-
-    const result = await dispatch("settings.update", {
-      settings: {
-        appearance: {
-          [settingKey]: parsed,
-        },
-      },
-    });
-
-    if (result === null) {
-      return;
-    }
-
-    if (!result.ok) {
-      setDraft(String(currentValue));
-      setError(result.error?.message || t("settings.config_files.save_failed"));
-      return;
-    }
-
-    setValue(parsed);
-    setDraft(String(parsed));
-    setError(null);
-  };
 
   return (
     <div className="settings-section">
@@ -2983,135 +2952,6 @@ function AppearanceSettings({
             {assetActionError}
           </span>
         ) : null}
-      </div>
-
-      <div className="settings-group">
-        <h3 className="settings-group-title">{t("settings.terminal_appearance")}</h3>
-        <p className="settings-group-desc">{t("settings.terminal_font_size_hint")}</p>
-
-        <div className="settings-config-field settings-config-field--inline">
-          <label
-            className="settings-config-label"
-            htmlFor="desktop-terminal-font-size"
-            id={desktopTerminalFontSizeLabelId}
-          >
-            {t("settings.desktop_terminal_font_size")}
-          </label>
-          <div className="settings-config-control">
-            <Input
-              id="desktop-terminal-font-size"
-              aria-describedby={desktopTerminalFontSizeDescId}
-              aria-labelledby={desktopTerminalFontSizeLabelId}
-              className="settings-input-compact"
-              type="number"
-              min={MIN_TERMINAL_FONT_SIZE}
-              max={MAX_TERMINAL_FONT_SIZE}
-              step={1}
-              inputMode="numeric"
-              invalid={Boolean(desktopTerminalFontSizeError)}
-              value={desktopTerminalFontSizeDraft}
-              onChange={(event) => {
-                setDesktopTerminalFontSizeDraft(event.target.value);
-                if (desktopTerminalFontSizeError) {
-                  setDesktopTerminalFontSizeError(null);
-                }
-              }}
-              onBlur={() => {
-                void commitTerminalFontSize(
-                  desktopTerminalFontSizeDraft,
-                  desktopTerminalFontSize,
-                  "desktopTerminalFontSize",
-                  setDesktopTerminalFontSize,
-                  setDesktopTerminalFontSizeDraft,
-                  setDesktopTerminalFontSizeError
-                );
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void commitTerminalFontSize(
-                    desktopTerminalFontSizeDraft,
-                    desktopTerminalFontSize,
-                    "desktopTerminalFontSize",
-                    setDesktopTerminalFontSize,
-                    setDesktopTerminalFontSizeDraft,
-                    setDesktopTerminalFontSizeError
-                  );
-                }
-              }}
-            />
-          </div>
-          <span className="settings-toggle-desc" id={desktopTerminalFontSizeDescId}>
-            {t("settings.desktop_terminal_font_size_hint")}
-          </span>
-          {desktopTerminalFontSizeError ? (
-            <span className="form-error" role="alert">
-              {desktopTerminalFontSizeError}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="settings-config-field settings-config-field--inline">
-          <label
-            className="settings-config-label"
-            htmlFor="mobile-terminal-font-size"
-            id={mobileTerminalFontSizeLabelId}
-          >
-            {t("settings.mobile_terminal_font_size")}
-          </label>
-          <div className="settings-config-control">
-            <Input
-              id="mobile-terminal-font-size"
-              aria-describedby={mobileTerminalFontSizeDescId}
-              aria-labelledby={mobileTerminalFontSizeLabelId}
-              className="settings-input-compact"
-              type="number"
-              min={MIN_TERMINAL_FONT_SIZE}
-              max={MAX_TERMINAL_FONT_SIZE}
-              step={1}
-              inputMode="numeric"
-              invalid={Boolean(mobileTerminalFontSizeError)}
-              value={mobileTerminalFontSizeDraft}
-              onChange={(event) => {
-                setMobileTerminalFontSizeDraft(event.target.value);
-                if (mobileTerminalFontSizeError) {
-                  setMobileTerminalFontSizeError(null);
-                }
-              }}
-              onBlur={() => {
-                void commitTerminalFontSize(
-                  mobileTerminalFontSizeDraft,
-                  mobileTerminalFontSize,
-                  "mobileTerminalFontSize",
-                  setMobileTerminalFontSize,
-                  setMobileTerminalFontSizeDraft,
-                  setMobileTerminalFontSizeError
-                );
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void commitTerminalFontSize(
-                    mobileTerminalFontSizeDraft,
-                    mobileTerminalFontSize,
-                    "mobileTerminalFontSize",
-                    setMobileTerminalFontSize,
-                    setMobileTerminalFontSizeDraft,
-                    setMobileTerminalFontSizeError
-                  );
-                }
-              }}
-            />
-          </div>
-          <span className="settings-toggle-desc" id={mobileTerminalFontSizeDescId}>
-            {t("settings.mobile_terminal_font_size_hint")}
-          </span>
-          {mobileTerminalFontSizeError ? (
-            <span className="form-error" role="alert">
-              {mobileTerminalFontSizeError}
-            </span>
-          ) : null}
-        </div>
       </div>
     </div>
   );

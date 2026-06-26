@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
+import { setSkillPathDragData } from "../../../../lib/skill-path-drag";
 import { setWorkspacePathDragData } from "../../../../lib/workspace-path-drag";
 import { type OpenFile, openFilesAtomFamily } from "../../../workspace/atoms";
 import {
@@ -59,6 +60,80 @@ function createWorkspaceFileDataTransfer(workspaceId: string, path: string) {
     workspaceId,
     path,
     kind: "file",
+  });
+
+  return dataTransfer;
+}
+
+function createWorkspaceDirDataTransfer(workspaceId: string, path: string) {
+  const values = new Map<string, string>();
+  const types: string[] = [];
+  const dataTransfer: Pick<DataTransfer, "effectAllowed" | "getData" | "setData" | "types"> = {
+    types,
+    effectAllowed: "uninitialized" as DataTransfer["effectAllowed"],
+    setData: vi.fn((type: string, value: string) => {
+      if (!types.includes(type)) {
+        types.push(type);
+      }
+      values.set(type, value);
+    }),
+    getData: vi.fn((type: string) => values.get(type) ?? ""),
+  };
+
+  setWorkspacePathDragData(dataTransfer, {
+    workspaceId,
+    path,
+    kind: "dir",
+  });
+
+  return dataTransfer;
+}
+
+function createSkillFileDataTransfer(skillSlug: string, path: string, absolutePath: string) {
+  const values = new Map<string, string>();
+  const types: string[] = [];
+  const dataTransfer: Pick<DataTransfer, "effectAllowed" | "getData" | "setData" | "types"> = {
+    types,
+    effectAllowed: "uninitialized" as DataTransfer["effectAllowed"],
+    setData: vi.fn((type: string, value: string) => {
+      if (!types.includes(type)) {
+        types.push(type);
+      }
+      values.set(type, value);
+    }),
+    getData: vi.fn((type: string) => values.get(type) ?? ""),
+  };
+
+  setSkillPathDragData(dataTransfer, {
+    skillSlug,
+    path,
+    absolutePath,
+    kind: "file",
+  });
+
+  return dataTransfer;
+}
+
+function createSkillDirDataTransfer(skillSlug: string, path: string, absolutePath: string) {
+  const values = new Map<string, string>();
+  const types: string[] = [];
+  const dataTransfer: Pick<DataTransfer, "effectAllowed" | "getData" | "setData" | "types"> = {
+    types,
+    effectAllowed: "uninitialized" as DataTransfer["effectAllowed"],
+    setData: vi.fn((type: string, value: string) => {
+      if (!types.includes(type)) {
+        types.push(type);
+      }
+      values.set(type, value);
+    }),
+    getData: vi.fn((type: string) => values.get(type) ?? ""),
+  };
+
+  setSkillPathDragData(dataTransfer, {
+    skillSlug,
+    path,
+    absolutePath,
+    kind: "dir",
   });
 
   return dataTransfer;
@@ -218,6 +293,245 @@ describe("EditorPaneCard", () => {
 
     act(() => {
       window.dispatchEvent(new Event("coder-studio:workspace-path-drag-end"));
+    });
+    expect(document.querySelector(".editor-pane-card__file-drop-overlay")).toBeNull();
+  });
+
+  it("opens dropped skill files in the editor pane", () => {
+    const store = createStore();
+    const onClosePane = vi.fn();
+    const onSplitPane = vi.fn();
+    const onOpenFile = vi.fn();
+
+    mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
+    store.set(localeAtom, "en");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
+
+    render(
+      <Provider store={store}>
+        <EditorPaneCard
+          workspaceId="ws-123"
+          paneId="pane-1"
+          onClosePane={onClosePane}
+          onOpenFile={onOpenFile}
+          onSplitPane={onSplitPane}
+        />
+      </Provider>
+    );
+
+    const editorPane = screen.getByTestId("editor-pane-pane-1");
+    const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOver, "dataTransfer", {
+      value: createSkillFileDataTransfer(
+        "my-review-skill",
+        "refs/guide.md",
+        "/root/.agents/skills/my-review-skill/refs/guide.md"
+      ),
+    });
+
+    fireEvent(editorPane, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(screen.getByText("Open in editor")).toBeInTheDocument();
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: createSkillFileDataTransfer(
+        "my-review-skill",
+        "refs/guide.md",
+        "/root/.agents/skills/my-review-skill/refs/guide.md"
+      ),
+    });
+
+    fireEvent(editorPane, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(onOpenFile).toHaveBeenCalledWith("pane-1", "skill:my-review-skill/refs/guide.md");
+  });
+
+  it("swallows dropped workspace directories without leaking text into the editor", () => {
+    const store = createStore();
+    const onClosePane = vi.fn();
+    const onSplitPane = vi.fn();
+    const onOpenFile = vi.fn();
+    const parentDrop = vi.fn();
+
+    mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
+    store.set(localeAtom, "en");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
+
+    render(
+      <Provider store={store}>
+        <div onDrop={parentDrop}>
+          <EditorPaneCard
+            workspaceId="ws-123"
+            paneId="pane-1"
+            onClosePane={onClosePane}
+            onOpenFile={onOpenFile}
+            onSplitPane={onSplitPane}
+          />
+        </div>
+      </Provider>
+    );
+
+    const editorPane = screen.getByTestId("editor-pane-pane-1");
+    const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOver, "dataTransfer", {
+      value: createWorkspaceDirDataTransfer("ws-123", "src"),
+    });
+
+    fireEvent(editorPane, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(screen.queryByText("Open in editor")).toBeNull();
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: createWorkspaceDirDataTransfer("ws-123", "src"),
+    });
+
+    fireEvent(editorPane, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(parentDrop).not.toHaveBeenCalled();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it("swallows dropped skill directories without leaking text into the editor", () => {
+    const store = createStore();
+    const onClosePane = vi.fn();
+    const onSplitPane = vi.fn();
+    const onOpenFile = vi.fn();
+    const parentDrop = vi.fn();
+
+    mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
+    store.set(localeAtom, "en");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "src/app.tsx"
+    );
+
+    render(
+      <Provider store={store}>
+        <div onDrop={parentDrop}>
+          <EditorPaneCard
+            workspaceId="ws-123"
+            paneId="pane-1"
+            onClosePane={onClosePane}
+            onOpenFile={onOpenFile}
+            onSplitPane={onSplitPane}
+          />
+        </div>
+      </Provider>
+    );
+
+    const editorPane = screen.getByTestId("editor-pane-pane-1");
+    const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOver, "dataTransfer", {
+      value: createSkillDirDataTransfer(
+        "my-review-skill",
+        "refs",
+        "/root/.agents/skills/my-review-skill/refs"
+      ),
+    });
+
+    fireEvent(editorPane, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(screen.queryByText("Open in editor")).toBeNull();
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: createSkillDirDataTransfer(
+        "my-review-skill",
+        "refs",
+        "/root/.agents/skills/my-review-skill/refs"
+      ),
+    });
+
+    fireEvent(editorPane, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(parentDrop).not.toHaveBeenCalled();
+    expect(onOpenFile).not.toHaveBeenCalled();
+  });
+
+  it("prepares a hidden file drop shield while a skill file drag is active", () => {
+    const store = createStore();
+    const onClosePane = vi.fn();
+    const onSplitPane = vi.fn();
+    const onOpenFile = vi.fn();
+
+    mocks.mockUseCodeEditorActions.mockReturnValue(mocks.editorState);
+    store.set(localeAtom, "en");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(getEditorPaneStateKey("ws-123", "pane-1")),
+      "docs/preview.md"
+    );
+
+    render(
+      <Provider store={store}>
+        <EditorPaneCard
+          workspaceId="ws-123"
+          paneId="pane-1"
+          onClosePane={onClosePane}
+          onOpenFile={onOpenFile}
+          onSplitPane={onSplitPane}
+        />
+      </Provider>
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("coder-studio:skill-path-drag-start", {
+          detail: {
+            skillSlug: "my-review-skill",
+            path: "refs/guide.md",
+            absolutePath: "/root/.agents/skills/my-review-skill/refs/guide.md",
+            kind: "file",
+          },
+        })
+      );
+    });
+
+    const hiddenDropShield = document.querySelector(".editor-pane-card__file-drop-overlay");
+    expect(hiddenDropShield).toHaveClass("editor-pane-card__file-drop-overlay--hidden");
+
+    const dragOver = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragOver, "dataTransfer", {
+      value: createSkillFileDataTransfer(
+        "my-review-skill",
+        "refs/guide.md",
+        "/root/.agents/skills/my-review-skill/refs/guide.md"
+      ),
+    });
+
+    fireEvent(hiddenDropShield!, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(screen.getByText("Open in editor")).toBeInTheDocument();
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: createSkillFileDataTransfer(
+        "my-review-skill",
+        "refs/guide.md",
+        "/root/.agents/skills/my-review-skill/refs/guide.md"
+      ),
+    });
+
+    fireEvent(hiddenDropShield!, drop);
+
+    expect(onOpenFile).toHaveBeenCalledWith("pane-1", "skill:my-review-skill/refs/guide.md");
+
+    act(() => {
+      window.dispatchEvent(new Event("coder-studio:skill-path-drag-end"));
     });
     expect(document.querySelector(".editor-pane-card__file-drop-overlay")).toBeNull();
   });

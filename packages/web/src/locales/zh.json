@@ -54,7 +54,8 @@
     "no": "否",
     "ok": "确定",
     "all": "全部",
-    "active": "当前"
+    "active": "当前",
+    "create": "创建"
   },
   "action": {
     "open": "打开",
@@ -70,11 +71,13 @@
     "commit": "提交",
     "push": "推送",
     "pull": "拉取",
+    "open_source": "打开源文件",
     "refresh": "刷新",
     "settings": "设置",
     "cancel": "取消",
     "confirm": "确认",
     "close": "关闭",
+    "edit": "编辑",
     "apply": "应用",
     "reset": "重置",
     "search": "搜索",
@@ -210,11 +213,17 @@
       "type_filter": "记忆类型",
       "all_types": "全部类型",
       "types": {
-        "feature": "功能",
+        "wiki": "Wiki",
+        "issue": "问题",
         "todo": "待办",
-        "bugfix": "修复",
-        "project": "项目",
         "note": "备注"
+      },
+      "status_label": "状态",
+      "statuses": {
+        "not_started": "待开始",
+        "in_progress": "进行中",
+        "pending_verification": "待验证",
+        "completed": "已完成"
       },
       "active_count": "{count} 条当前记忆",
       "active_count_one": "{count} 条当前记忆",
@@ -239,7 +248,9 @@
       "title": "快速跳转",
       "placeholder": "输入文件名或路径",
       "no_results": "未找到匹配文件。",
-      "failed": "文件搜索失败，请重试。"
+      "failed": "文件搜索失败，请重试。",
+      "expand_label": "展开快速跳转",
+      "collapse_label": "收起快速跳转"
     },
     "open_editors": {
       "title_with_count": "{title} ({count})",
@@ -334,9 +345,13 @@
         "failed": "失败"
       },
       "source": {
-        "skillhub": "skills-hub",
-        "local": "本地",
+        "installed": "已安装",
+        "custom": "自定义",
         "builtin": "内置"
+      },
+      "origin": {
+        "skillhub": "skills-hub",
+        "filesystem": "本地"
       }
     },
     "extensions": {
@@ -384,6 +399,11 @@
       "title": "启动工作区",
       "recent_title": "最近工作区",
       "open_recent": "打开最近工作区 {name}",
+      "remove_recent": "从最近工作区中移除 {name}",
+      "clear_recent_workspaces": "清空全部最近工作区",
+      "clear_recent_confirm_title": "清空最近工作区？",
+      "clear_recent_confirm_description": "这只会清空最近工作区列表，不会删除磁盘上的任何项目目录。",
+      "clear_all": "全部清空",
       "home_directory": "主目录",
       "go_up": "返回上一级",
       "new_folder": "新建文件夹",
@@ -419,6 +439,20 @@
   },
   "skills": {
     "title": "Skills",
+    "custom_title": "自定义 Skill",
+    "custom_expand_label": "展开自定义 Skill",
+    "custom_collapse_label": "收起自定义 Skill",
+    "custom_new": "新建 Skill",
+    "custom_empty": "还没有自定义 Skill。",
+    "custom_create_title": "创建自定义 Skill",
+    "custom_create_name": "Skill 名称",
+    "custom_create_name_required": "请输入 Skill 名称",
+    "custom_create_placeholder": "我的评审 Skill",
+    "custom_create_helper": "我们会在你的全局 skills 目录下创建一个包含 SKILL.md 的文件夹。",
+    "custom_files_title": "文件",
+    "custom_new_file": "新建文件",
+    "custom_new_folder": "新建文件夹",
+    "custom_delete": "删除",
     "discover_title": "发现技能",
     "recommendations_title": "推荐",
     "recommendations_expand_label": "展开推荐 Skill",
@@ -467,8 +501,14 @@
     "detail_source": "来源",
     "detail_library_path": "库路径",
     "detail_targets": "启用状态",
+    "delete": "删除",
     "uninstall": "卸载",
     "uninstall_tooltip": "先停用，再从共享 Skill 库中移除。",
+    "custom_remove_tooltip": "从你的全局 skills 目录中删除这个自定义 Skill 文件夹。",
+    "custom_remove_confirm_title": "删除 {name}？",
+    "custom_remove_confirm_description": "这会从你的全局 skills 目录中永久删除这个自定义 Skill 文件夹及其所有文件。",
+    "custom_remove_confirm_mounted_description": "这个自定义 Skill 已在 {count} 个目标中启用。删除时会先停用，再从你的全局 skills 目录中永久删除这个 Skill 文件夹及其所有文件。",
+    "custom_remove_confirm_confirm": "删除 Skill",
     "uninstall_confirm_title": "卸载 {name}？",
     "uninstall_confirm_description": "这个 Skill 已在 {count} 个目标中启用。卸载时会先停用，再从 Skill 库中移除。",
     "uninstall_confirm_confirm": "卸载 Skill",
@@ -562,12 +602,16 @@
       "aria_label": "工作区抽屉",
       "close": "关闭工作区抽屉",
       "select_title": "选择工作区",
+      "current_workspace": "当前工作区 {name}",
+      "expand_workspace": "展开工作区 {name}",
+      "collapse_workspace": "收起工作区 {name}",
       "switch_to_workspace": "切换到工作区 {name}",
+      "create_session_in_workspace": "在 {name} 中创建会话",
       "close_workspace": "关闭工作区 {name}"
     },
     "empty": {
       "start_session": "为当前工作区启动一个新的 Agent 会话。",
-      "files_terminal_hint": "文件和终端可继续通过底部栏访问。"
+      "files_terminal_hint": "文件和终端可继续通过顶部栏访问。"
     }
   },
   "dev_browser": {
@@ -589,6 +633,7 @@
     "loading": "正在打开...",
     "unsupported": "当前浏览器或连接不支持 Service Worker。Coder Studio 将降级为兼容模式打开页面，但实时更新能力可能受限。",
     "error": "无法打开本地预览。",
+    "embed_limitations": "部分本地应用会阻止 iframe 预览。如果页面保持空白，请直接在浏览器中打开该 URL，或在本地开发时放宽嵌入限制。",
     "invalid_viewport": "请输入 1 到 4096 之间的宽度和高度。",
     "empty_description": "输入本地开发服务的 loopback 地址，例如 localhost:8000。"
   },
@@ -712,6 +757,12 @@
     "paste_dialog_submit": "发送",
     "hide": "隐藏终端",
     "show": "显示终端",
+    "profile_chooser_label": "选择终端配置",
+    "profile_configure": "管理终端配置...",
+    "open_default_profile": "打开默认配置：{label}",
+    "profile_source_custom": "自定义",
+    "profile_source_detected": "检测到",
+    "default_badge": "默认",
     "selector": {
       "switch": "切换终端",
       "title": "终端会话",
@@ -869,6 +920,11 @@
     "close_browser_tab": "关闭浏览器标签",
     "open_editor_view": "打开编辑器视图",
     "open_editor_tabs": "打开的编辑器标签",
+    "editor_tab_actions": "编辑器标签操作",
+    "keep_tab_open": "保持打开",
+    "close_other_tabs": "关闭其他标签",
+    "close_tabs_to_right": "关闭右侧标签",
+    "close_saved_tabs": "关闭已保存标签",
     "current_file_path": "当前文件路径",
     "modified_unsaved_changes": "已修改 · 未保存的更改",
     "image_load_failed_body": "图片无法加载。文件可能已被移动，或大小超出浏览器限制。",
@@ -879,6 +935,8 @@
     "image_zoom_actual": "原始大小",
     "image_zoom_level": "缩放比例",
     "image_zoom_fit_level": "适应",
+    "canvas_zoom_controls": "Canvas 缩放控制",
+    "canvas_zoom_reset": "重置缩放",
     "image_diff_base": "基准",
     "image_diff_current": "当前",
     "image_diff_no_base": "没有基准图片",
@@ -928,12 +986,12 @@
     "no_commits": "暂无提交",
     "stage": "暂存",
     "unstage": "取消暂存",
-    "stage_all": "暂存全部",
+    "stage_all": "添加全部",
     "unstage_all": "取消暂存全部",
     "stage_failed_title": "暂存失败",
     "unstage_failed_title": "取消暂存失败",
     "discard": "放弃",
-    "discard_all": "放弃全部",
+    "discard_all": "撤销全部",
     "discard_failed_title": "放弃失败",
     "stage_file": "暂存文件",
     "unstage_file": "取消暂存文件",
@@ -1347,6 +1405,26 @@
     "copy_on_select_failed_body": "请使用 Ctrl/Cmd+C 手动复制",
     "terminal_standard": "标准",
     "terminal_compatibility": "兼容模式",
+    "terminal_profiles": {
+      "title": "终端配置",
+      "hint": "选择默认 shell，并管理可复用的自定义终端启动配置。检测到的配置为只读。",
+      "default_label": "默认终端配置",
+      "current_default": "当前默认",
+      "system_default": "系统默认",
+      "detected_profiles": "检测到的配置",
+      "detected_badge": "检测到",
+      "none_detected": "未检测到配置",
+      "custom_profiles": "自定义配置",
+      "no_custom_profiles": "暂无自定义配置",
+      "profile_label": "配置名称",
+      "command": "命令",
+      "args": "参数",
+      "args_hint": "每行输入一个参数。",
+      "save_custom": "保存自定义配置",
+      "edit_profile": "编辑 {label}",
+      "delete_profile": "删除 {label}",
+      "pending_refresh": "配置刷新后可用"
+    },
     "provider": {
       "title": "Agent 设置",
       "status": "状态",
@@ -1469,7 +1547,7 @@
     "placeholder_description": "这个任务只搭建桌面端外壳，具体分区内容会在后续任务里接入。",
     "category": {
       "settings": "设置",
-      "settings_hint": "调整工作区行为、provider、外观和快捷键。",
+      "settings_hint": "调整工作区、agent、终端、外观和快捷键行为。",
       "analysis": "分析与诊断",
       "analysis_hint": "查看工作分析、性能监控和环境诊断页面。",
       "about": "关于与更新",
@@ -1477,9 +1555,10 @@
     },
     "section": {
       "settings": {
-        "general_hint": "工作区、通知、终端和语言等基础偏好。",
+        "general_hint": "工作区、通知、语言和运行时等基础偏好。",
         "agents": "Agents",
         "agents_hint": "Provider 选择、命令参数和 agent 相关配置。",
+        "terminal_hint": "终端渲染、选中复制、启动配置和终端字号。",
         "appearance_hint": "主题、背景和材质偏好。",
         "shortcuts_hint": "键盘绑定和常用交互快捷键。"
       },

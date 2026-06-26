@@ -81,6 +81,7 @@ export type WorkspaceEditorMode = "preview" | "edit" | "diff";
 export interface WorkspaceFileEditorTab {
   kind: "file";
   path: string;
+  pinned?: boolean;
 }
 
 export type DevBrowserDevicePreset = "desktop" | "iphone-14" | "pixel-7" | "custom";
@@ -98,11 +99,38 @@ export interface WorkspaceBrowserEditorTab {
   userAgentMode: DevBrowserUserAgentMode;
 }
 
-export type WorkspaceEditorTab = WorkspaceFileEditorTab | WorkspaceBrowserEditorTab;
+export interface WorkspaceCanvasEditorTab {
+  kind: "canvas";
+  id: string;
+  title: string;
+  sourcePath: string;
+  artifactType?: "architecture_canvas" | "report_canvas";
+  canvasId?: string;
+}
+
+export type WorkspaceEditorTab =
+  | WorkspaceFileEditorTab
+  | WorkspaceBrowserEditorTab
+  | WorkspaceCanvasEditorTab;
 
 let browserTabIdCounter = 0;
 
 export const MAX_BROWSER_VIEWPORT_DIMENSION = 4096;
+
+export function createWorkspaceFileEditorTab(
+  path: string,
+  options: { pinned?: boolean } = {}
+): WorkspaceFileEditorTab {
+  return {
+    kind: "file",
+    path,
+    pinned: options.pinned ?? true,
+  };
+}
+
+export function isPreviewFileEditorTab(tab: WorkspaceEditorTab | null | undefined): boolean {
+  return tab?.kind === "file" && tab.pinned === false;
+}
 
 function normalizeViewportDimension(value: unknown): number | null {
   return typeof value === "number" &&
@@ -148,9 +176,14 @@ export function createWorkspaceBrowserEditorTab(
 
 const IMAGE_FILE_EXTENSION_PATTERN = /\.(avif|bmp|gif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const DOCUMENT_PREVIEW_EXTENSION_PATTERN = /\.(md|markdown|html?)$/i;
+const CANVAS_SOURCE_EXTENSION_PATTERN = /\.csc$/i;
 
 export function isDocumentPreviewPath(path: string): boolean {
   return DOCUMENT_PREVIEW_EXTENSION_PATTERN.test(path);
+}
+
+export function isCanvasSourcePath(path: string): boolean {
+  return CANVAS_SOURCE_EXTENSION_PATTERN.test(path);
 }
 
 export function deriveDocumentPreviewKind(path: string): "markdown" | "html" | null {
@@ -189,6 +222,66 @@ export function deriveEditorModeForPath(path: string): WorkspaceEditorMode {
   return isPreviewByDefaultPath(path) ? "preview" : "edit";
 }
 
+function deriveCanvasTabTitle(sourcePath: string): string {
+  const fileName = sourcePath.split("/").pop() ?? sourcePath;
+  return fileName.replace(/\.csc$/i, "");
+}
+
+export function createWorkspaceCanvasEditorTab(input: {
+  sourcePath: string;
+  title?: string;
+  artifactType?: "architecture_canvas" | "report_canvas";
+  canvasId?: string;
+  id?: string;
+}): WorkspaceCanvasEditorTab {
+  const sourcePath = input.sourcePath.trim();
+
+  return {
+    kind: "canvas",
+    id: input.id?.trim() || `canvas:${sourcePath}`,
+    title: input.title?.trim() || deriveCanvasTabTitle(sourcePath),
+    sourcePath,
+    ...(input.artifactType ? { artifactType: input.artifactType } : {}),
+    ...(input.canvasId?.trim() ? { canvasId: input.canvasId.trim() } : {}),
+  };
+}
+
+export function deriveCanvasArtifactTypeFromOpenFile(
+  file?: OpenFile
+): WorkspaceCanvasEditorTab["artifactType"] {
+  if (file?.kind !== "text") {
+    return undefined;
+  }
+
+  try {
+    const candidate = JSON.parse(file.content) as { kind?: unknown };
+    if (candidate.kind === "architecture_canvas" || candidate.kind === "report_canvas") {
+      return candidate.kind;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+export function createWorkspaceCanvasEditorTabFromSourcePath(input: {
+  sourcePath: string;
+  file?: OpenFile;
+  existingTab?: WorkspaceCanvasEditorTab;
+}): WorkspaceCanvasEditorTab {
+  const artifactType =
+    deriveCanvasArtifactTypeFromOpenFile(input.file) ?? input.existingTab?.artifactType;
+
+  return createWorkspaceCanvasEditorTab({
+    sourcePath: input.sourcePath,
+    id: input.existingTab?.id,
+    title: input.existingTab?.title,
+    artifactType,
+    canvasId: input.existingTab?.canvasId?.trim() || input.sourcePath,
+  });
+}
+
 function normalizeBrowserTab(entry: unknown): WorkspaceBrowserEditorTab | null {
   if (!entry || typeof entry !== "object") {
     return null;
@@ -218,6 +311,41 @@ function normalizeBrowserTab(entry: unknown): WorkspaceBrowserEditorTab | null {
   };
 }
 
+function normalizeCanvasTab(entry: unknown): WorkspaceCanvasEditorTab | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const candidate = entry as Partial<WorkspaceCanvasEditorTab>;
+  if (candidate.kind !== "canvas") {
+    return null;
+  }
+
+  if (typeof candidate.sourcePath !== "string" || candidate.sourcePath.trim().length === 0) {
+    return null;
+  }
+
+  if (
+    candidate.artifactType !== undefined &&
+    candidate.artifactType !== "architecture_canvas" &&
+    candidate.artifactType !== "report_canvas"
+  ) {
+    return null;
+  }
+
+  if (typeof candidate.title !== "string" || candidate.title.trim().length === 0) {
+    return null;
+  }
+
+  return createWorkspaceCanvasEditorTab({
+    id: typeof candidate.id === "string" ? candidate.id : undefined,
+    title: candidate.title,
+    artifactType: candidate.artifactType,
+    sourcePath: candidate.sourcePath,
+    canvasId: typeof candidate.canvasId === "string" ? candidate.canvasId : undefined,
+  });
+}
+
 export function normalizeWorkspaceEditorTabs(value: unknown): WorkspaceEditorTab[] {
   if (!Array.isArray(value)) {
     return [];
@@ -225,6 +353,7 @@ export function normalizeWorkspaceEditorTabs(value: unknown): WorkspaceEditorTab
 
   const seenFilePaths = new Set<string>();
   const seenBrowserIds = new Set<string>();
+  const seenCanvasSourcePaths = new Set<string>();
   const next: WorkspaceEditorTab[] = [];
 
   for (const entry of value) {
@@ -236,6 +365,17 @@ export function normalizeWorkspaceEditorTabs(value: unknown): WorkspaceEditorTab
 
       seenBrowserIds.add(normalizedBrowserTab.id);
       next.push(normalizedBrowserTab);
+      continue;
+    }
+
+    const normalizedCanvasTab = normalizeCanvasTab(entry);
+    if (normalizedCanvasTab) {
+      if (seenCanvasSourcePaths.has(normalizedCanvasTab.sourcePath)) {
+        continue;
+      }
+
+      seenCanvasSourcePaths.add(normalizedCanvasTab.sourcePath);
+      next.push(normalizedCanvasTab);
       continue;
     }
 
@@ -258,7 +398,11 @@ export function normalizeWorkspaceEditorTabs(value: unknown): WorkspaceEditorTab
     }
 
     seenFilePaths.add(path);
-    next.push({ kind: "file", path });
+    next.push({
+      kind: "file",
+      path,
+      pinned: candidate.pinned === false ? false : true,
+    });
   }
 
   return next;
@@ -305,6 +449,16 @@ export const editorModeAtomFamily = atomFamily((_workspaceId: string) =>
  * may need to reconcile with disk state.
  */
 export const editorRefreshTokenAtomFamily = atomFamily((_workspaceId: string) => atom<number>(0));
+
+export interface CanvasRefreshTokenKey {
+  workspaceId: string;
+  sourcePath: string;
+}
+
+export const canvasRefreshTokenAtomFamily = atomFamily(
+  (_key: CanvasRefreshTokenKey) => atom<number>(0),
+  (left, right) => left.workspaceId === right.workspaceId && left.sourcePath === right.sourcePath
+);
 
 /**
  * Active file (derived)

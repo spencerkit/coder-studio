@@ -194,6 +194,21 @@ describe("SessionManager title derivation", () => {
     }
   });
 
+  it("ignores SGR mouse tracking sequences when deriving the title", async () => {
+    const session = await createSession();
+
+    sessionMgr.onTerminalInput("terminal-1", "submit", "\x1b[<35;17;18M");
+    expect(sessionMgr.get(session.id)?.title).toBeUndefined();
+
+    mockDb.update.mockClear();
+    sessionMgr.onTerminalInput("terminal-1", "submit", "\x1b[<35;17;18Mfix the build");
+
+    expect(mockDb.update).toHaveBeenCalledWith(session.id, {
+      title: "fix the b…",
+      firstSubmittedUserInput: "fix the build",
+    });
+  });
+
   it("derives the title from submitted text instead of terminal buffer state", async () => {
     const session = await createSession();
 

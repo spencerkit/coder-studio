@@ -10,7 +10,13 @@ describe("SkillLibraryRepo", () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "skill-library-repo-"));
-    repo = new SkillLibraryRepo({ filePath: join(tempDir, "library.json") });
+    repo = new SkillLibraryRepo({
+      filePath: join(tempDir, "library.json"),
+      builtinRoot: join(tempDir, "state", "skills", "builtin"),
+      managedLibraryRoot: join(tempDir, "state", "skills", "library"),
+      customSkillRoot: join(tempDir, "state", "skills", "custom"),
+      externalSkillRoots: [],
+    });
   });
 
   afterEach(async () => {
@@ -30,7 +36,13 @@ describe("SkillLibraryRepo", () => {
       updatedAt: 2,
     });
 
-    const reloaded = new SkillLibraryRepo({ filePath: join(tempDir, "library.json") });
+    const reloaded = new SkillLibraryRepo({
+      filePath: join(tempDir, "library.json"),
+      builtinRoot: join(tempDir, "state", "skills", "builtin"),
+      managedLibraryRoot: join(tempDir, "state", "skills", "library"),
+      customSkillRoot: join(tempDir, "state", "skills", "custom"),
+      externalSkillRoots: [],
+    });
     expect(reloaded.get("code-review")).toMatchObject({
       slug: "code-review",
       displayName: "Code Review",
@@ -59,14 +71,18 @@ describe("SkillLibraryRepo", () => {
 
     const scannedRepo = new SkillLibraryRepo({
       filePath: join(tempDir, "library.json"),
-      localSkillRoots: [skillsRoot],
+      builtinRoot: join(tempDir, "state", "skills", "builtin"),
+      managedLibraryRoot: join(tempDir, "state", "skills", "library"),
+      customSkillRoot: join(tempDir, "state", "skills", "custom"),
+      externalSkillRoots: [skillsRoot],
     });
 
     expect(scannedRepo.get("code-review")).toMatchObject({
       slug: "code-review",
       displayName: "Code Review",
       description: "Review code changes before merge",
-      source: "local",
+      source: "installed",
+      origin: "filesystem",
       version: "local",
       installState: "installed",
       libraryPath: localSkillDir,
@@ -76,53 +92,170 @@ describe("SkillLibraryRepo", () => {
       expect.objectContaining({
         slug: "code-review",
         displayName: "Code Review",
-        source: "local",
+        source: "installed",
       }),
     ]);
   });
 
-  it("does not let scanned local skills override persisted built-in entries", async () => {
-    const skillsRoot = join(tempDir, "agents-skills");
-    const localSkillDir = join(skillsRoot, "coder-studio-example-builtin");
-    await mkdir(localSkillDir, { recursive: true });
+  it("normalizes persisted entries inside the custom root to custom filesystem skills", async () => {
+    const customRoot = join(tempDir, "state", "skills", "custom");
+    const customSkillDir = join(customRoot, "code-review");
+    await mkdir(customSkillDir, { recursive: true });
     await writeFile(
-      join(localSkillDir, "SKILL.md"),
-      [
-        "---",
-        "name: coder-studio-example-builtin",
-        "description: Local shadow copy",
-        "---",
-        "",
-        "# Local Shadow Copy",
-        "",
-      ].join("\n"),
+      join(customSkillDir, "SKILL.md"),
+      ["---", "name: code-review", "description: Custom copy", "---", "", "# Custom", ""].join(
+        "\n"
+      ),
+      "utf8"
+    );
+
+    await writeFile(
+      join(tempDir, "library.json"),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          "code-review": {
+            slug: "code-review",
+            displayName: "Code Review",
+            description: "Custom copy",
+            version: "1",
+            source: "local",
+            libraryPath: customSkillDir,
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+        },
+      }),
+      "utf8"
+    );
+
+    const reloaded = new SkillLibraryRepo({
+      filePath: join(tempDir, "library.json"),
+      builtinRoot: join(tempDir, "state", "skills", "builtin"),
+      managedLibraryRoot: join(tempDir, "state", "skills", "library"),
+      customSkillRoot: customRoot,
+      externalSkillRoots: [],
+    });
+
+    expect(reloaded.get("code-review")).toMatchObject({
+      source: "custom",
+      origin: "filesystem",
+      libraryPath: customSkillDir,
+    });
+  });
+
+  it("keeps managed installed entries ahead of matching external filesystem scans", async () => {
+    const externalRoot = join(tempDir, "external");
+    const skillDir = join(externalRoot, "code-review");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      ["---", "name: code-review", "description: External copy", "---", "", "# External", ""].join(
+        "\n"
+      ),
       "utf8"
     );
 
     repo.set({
-      slug: "coder-studio-example-builtin",
-      displayName: "Coder Studio Example Builtin",
-      description: "Built-in test fixture",
-      version: "1.0.0",
-      source: "builtin",
-      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-example-builtin"),
+      slug: "code-review",
+      displayName: "Code Review",
+      description: "Managed copy",
+      version: "2.0.0",
+      source: "skillhub",
+      libraryPath: join(tempDir, "state", "skills", "library", "code-review"),
       installState: "installed",
       installedAt: 1,
       updatedAt: 2,
-      builtin: { defaultEnabled: true, autoMount: false },
     });
 
     const scannedRepo = new SkillLibraryRepo({
       filePath: join(tempDir, "library.json"),
-      localSkillRoots: [skillsRoot],
+      builtinRoot: join(tempDir, "state", "skills", "builtin"),
+      managedLibraryRoot: join(tempDir, "state", "skills", "library"),
+      customSkillRoot: join(tempDir, "state", "skills", "custom"),
+      externalSkillRoots: [externalRoot],
     });
 
-    expect(scannedRepo.get("coder-studio-example-builtin")).toMatchObject({
-      slug: "coder-studio-example-builtin",
-      description: "Built-in test fixture",
-      source: "builtin",
-      libraryPath: join(tempDir, "state", "skills", "builtin", "coder-studio-example-builtin"),
-      builtin: { defaultEnabled: true, autoMount: false },
+    expect(scannedRepo.get("code-review")).toMatchObject({
+      source: "installed",
+      origin: "skillhub",
+      description: "Managed copy",
+    });
+  });
+
+  it("normalizes legacy local entries to installed filesystem when no custom root is configured", async () => {
+    const legacyRoot = join(tempDir, "legacy-skills");
+    const legacySkillDir = join(legacyRoot, "code-review");
+    await mkdir(legacySkillDir, { recursive: true });
+    await writeFile(
+      join(tempDir, "library.json"),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          "code-review": {
+            slug: "code-review",
+            displayName: "Code Review",
+            description: "Legacy local copy",
+            version: "1",
+            source: "local",
+            libraryPath: legacySkillDir,
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+        },
+      }),
+      "utf8"
+    );
+
+    const repoWithoutCustomRoot = new SkillLibraryRepo({
+      filePath: join(tempDir, "library.json"),
+      localSkillRoots: [legacyRoot],
+    });
+
+    expect(repoWithoutCustomRoot.get("code-review")).toMatchObject({
+      source: "installed",
+      origin: "filesystem",
+      libraryPath: legacySkillDir,
+    });
+  });
+
+  it("treats sibling paths that merely share the custom prefix as installed filesystem skills", async () => {
+    const customRoot = join(tempDir, "state", "skills", "custom");
+    const siblingRoot = join(tempDir, "state", "skills", "custom-shadow");
+    const siblingSkillDir = join(siblingRoot, "code-review");
+    await mkdir(siblingSkillDir, { recursive: true });
+    await writeFile(
+      join(tempDir, "library.json"),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          "code-review": {
+            slug: "code-review",
+            displayName: "Code Review",
+            description: "Sibling copy",
+            version: "1",
+            source: "local",
+            libraryPath: siblingSkillDir,
+            installState: "installed",
+            installedAt: 1,
+            updatedAt: 2,
+          },
+        },
+      }),
+      "utf8"
+    );
+
+    const repoWithCustomRoot = new SkillLibraryRepo({
+      filePath: join(tempDir, "library.json"),
+      customSkillRoot: customRoot,
+    });
+
+    expect(repoWithCustomRoot.get("code-review")).toMatchObject({
+      source: "installed",
+      origin: "filesystem",
+      libraryPath: siblingSkillDir,
     });
   });
 });

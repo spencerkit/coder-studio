@@ -272,3 +272,30 @@ export async function writeFile(
 
   return { newHash };
 }
+
+export async function writeFileIfMissing(
+  rootPath: string,
+  relPath: string,
+  content: string
+): Promise<FileWriteResult> {
+  const abs = resolveSafe(rootPath, relPath);
+  await assertResolvesInsideWorkspace(rootPath, abs);
+
+  await mkdir(path.dirname(abs), { recursive: true });
+
+  try {
+    await fsWriteFile(abs, content, {
+      encoding: "utf-8",
+      flag: "wx",
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw { code: "already_exists", message: "File already exists" };
+    }
+
+    throw error;
+  }
+
+  const newHash = createHash("sha256").update(content).digest("hex");
+  return { newHash };
+}

@@ -148,12 +148,14 @@ describe("workspace watcher hydrate restart", () => {
     );
 
     expect(openResult.ok).toBe(true);
-    expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toContain(
-      "# Agent Instructions"
-    );
-    expect(await readFile(join(workspaceDir, ".claude", "CLAUDE.md"), "utf8")).toContain(
-      "# Agent Instructions"
-    );
+    await vi.waitFor(async () => {
+      expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toContain(
+        "# Agent Instructions"
+      );
+      expect(await readFile(join(workspaceDir, ".claude", "CLAUDE.md"), "utf8")).toContain(
+        "# Agent Instructions"
+      );
+    });
 
     await server.stop();
     server = undefined;
@@ -168,11 +170,13 @@ describe("workspace watcher hydrate restart", () => {
       port: 0,
     });
 
-    expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toContain(
-      "# Agent Instructions"
-    );
-    expect(await readFile(join(workspaceDir, ".claude", "CLAUDE.md"), "utf8")).toContain(
-      "# Agent Instructions"
-    );
+    await vi.waitFor(async () => {
+      expect(await readFile(join(workspaceDir, "AGENTS.md"), "utf8")).toContain(
+        "# Agent Instructions"
+      );
+      expect(await readFile(join(workspaceDir, ".claude", "CLAUDE.md"), "utf8")).toContain(
+        "# Agent Instructions"
+      );
+    });
   });
 });

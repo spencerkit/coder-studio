@@ -271,6 +271,67 @@ describe("Workspace Commands", () => {
         },
       ]);
     });
+
+    it("removes a recent workspace by path and returns the updated list", async () => {
+      settingsRepo.set(WORKSPACE_HISTORY_KEY, [
+        {
+          path: "/repo/alpha",
+          name: "alpha",
+          lastOpenedAt: 3,
+        },
+        {
+          path: "/repo/beta",
+          name: "beta",
+          lastOpenedAt: 2,
+        },
+      ]);
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-remove-entry",
+          op: "workspace.history.remove",
+          args: {
+            path: "/repo/alpha",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([
+        {
+          path: "/repo/beta",
+          name: "beta",
+          lastOpenedAt: 2,
+        },
+      ]);
+      expect(settingsRepo.get(WORKSPACE_HISTORY_KEY)).toEqual(result.data);
+    });
+
+    it("clears the recent workspace list and removes the stored key", async () => {
+      settingsRepo.set(WORKSPACE_HISTORY_KEY, [
+        {
+          path: "/repo/alpha",
+          name: "alpha",
+          lastOpenedAt: 3,
+        },
+      ]);
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-history-clear",
+          op: "workspace.history.clear",
+          args: {},
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual([]);
+      expect(settingsRepo.get(WORKSPACE_HISTORY_KEY)).toBeUndefined();
+    });
   });
 
   describe("workspace.open", () => {
@@ -288,6 +349,24 @@ describe("Workspace Commands", () => {
       );
 
       expect(result.ok).toBe(false);
+    });
+
+    it("workspace.open still records a native workspace through the command layer", async () => {
+      const workspaceDir = join(tmpdir(), `workspace-open-native-${Date.now()}`);
+      await mkdir(workspaceDir, { recursive: true });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-open-native",
+          op: "workspace.open",
+          args: { path: workspaceDir },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toMatchObject({ targetRuntime: "native" });
     });
 
     it("triggers open-time auto fetch after workspace.open succeeds", async () => {
@@ -535,7 +614,7 @@ describe("Workspace Commands", () => {
       );
 
       expect(result.ok).toBe(false);
-      expect(result.error?.code).toBe("internal_error");
+      expect(result.error?.code).toBe("workspace_not_found");
     });
   });
 
@@ -595,6 +674,53 @@ describe("Workspace Commands", () => {
           { id: "right", type: "leaf", sessionId: "sess-right" },
         ],
       });
+    });
+
+    it("preserves preview file tab metadata in workspace ui state", async () => {
+      const dir = join(tmpdir(), `workspace-command-preview-tab-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-preview-tab",
+          op: "workspace.open",
+          args: {
+            path: dir,
+          },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+
+      const workspaceId = (openResult.data as { id: string }).id;
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-preview-tab",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              openEditorTabs: [{ kind: "file", path: "src/preview.ts", pinned: false }],
+              activeEditorTab: { kind: "file", path: "src/preview.ts", pinned: false },
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(
+        (result.data as { uiState: { openEditorTabs: unknown } }).uiState.openEditorTabs
+      ).toEqual([{ kind: "file", path: "src/preview.ts", pinned: false }]);
+      expect(
+        (result.data as { uiState: { activeEditorTab: unknown } }).uiState.activeEditorTab
+      ).toEqual({ kind: "file", path: "src/preview.ts", pinned: false });
     });
 
     it("persists typed pane leaves with draft and editor kinds", async () => {
@@ -830,6 +956,47 @@ describe("Workspace Commands", () => {
       expect(
         (result.data as { uiState: { activeEditorPath?: string | null } }).uiState.activeEditorPath
       ).toBe("src/app.tsx");
+    });
+
+    it("persists editor pinned state into workspace ui state", async () => {
+      const dir = join(tmpdir(), `workspace-editor-pinned-test-${Date.now()}`);
+      await mkdir(dir);
+
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "open-workspace-editor-pinned",
+          op: "workspace.open",
+          args: { path: dir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = (openResult.data as { id: string }).id;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "set-ui-state-editor-pinned",
+          op: "workspace.uiState.set",
+          args: {
+            workspaceId,
+            uiState: {
+              leftPanelWidth: 320,
+              bottomPanelHeight: 210,
+              focusMode: false,
+              editorPinned: false,
+            },
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result.data as { uiState: { editorPinned?: boolean } }).uiState.editorPinned).toBe(
+        false
+      );
     });
 
     it("persists multiple browser editor tabs with duplicate urls", async () => {

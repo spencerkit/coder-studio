@@ -1,11 +1,13 @@
+import { join } from "node:path";
 import type { ProviderDefinition, SkillLibraryEntry, SkillMountRelation } from "@coder-studio/core";
 import type { SettingsRepo } from "../../storage/repositories/settings-repo.js";
 import type { SkillLibraryRepo } from "../../storage/repositories/skill-library-repo.js";
 import type { SkillMountRepo } from "../../storage/repositories/skill-mount-repo.js";
 import type { SkillMountManager } from "../mount-manager.js";
+import { renderMountedSkillContent } from "./automation-bridge.js";
 import { materializeBuiltinSkills } from "./materialize.js";
 import { BuiltinSkillMountPreferences } from "./mount-preferences.js";
-import type { BuiltinSkillDefinition } from "./registry.js";
+import { BUILTIN_SKILLS, type BuiltinSkillDefinition } from "./registry.js";
 import { removeStaleBuiltinSkills } from "./stale-cleanup.js";
 
 export interface BuiltinSkillSyncManagerDeps {
@@ -32,10 +34,11 @@ export class BuiltinSkillSyncManager {
   constructor(private readonly deps: BuiltinSkillSyncManagerDeps) {}
 
   async sync(): Promise<BuiltinSkillSyncResult> {
+    const builtinDefinitions = this.getBuiltinDefinitions();
     const entries = await materializeBuiltinSkills({
       builtinRoot: this.deps.builtinRoot,
       now: this.deps.now,
-      skills: this.deps.skills,
+      skills: builtinDefinitions,
     });
     for (const entry of entries) {
       this.deps.skillLibraryRepo.set(entry);
@@ -80,6 +83,7 @@ export class BuiltinSkillSyncManager {
           providerId: provider.id,
           skillSlug: entry.slug,
           enabled: true,
+          ...this.getMountRenderingPlan(provider, entry.slug, builtinDefinitions),
         });
         this.deps.skillMountRepo.upsert(relation);
         mounted.push(relation);
@@ -112,5 +116,36 @@ export class BuiltinSkillSyncManager {
 
     this.preferences = new BuiltinSkillMountPreferences(this.deps.settingsRepo);
     return this.preferences;
+  }
+
+  private getBuiltinDefinitions(): readonly BuiltinSkillDefinition[] {
+    return this.deps.skills ?? BUILTIN_SKILLS;
+  }
+
+  private getMountRenderingPlan(
+    provider: ProviderDefinition,
+    skillSlug: string,
+    definitions: readonly BuiltinSkillDefinition[]
+  ): Pick<Parameters<SkillMountManager["mount"]>[0], "preferredMode" | "mountedOverrides"> {
+    const definition = definitions.find((item) => item.slug === skillSlug);
+    if (definition?.mountRendering !== "automation_bridge") {
+      return {};
+    }
+
+    const providerSkillDir = provider?.skillMountDirectories?.[0];
+    if (!providerSkillDir) {
+      return { preferredMode: "copy" };
+    }
+
+    const targetPath = join(providerSkillDir, skillSlug);
+    return {
+      preferredMode: "copy",
+      mountedOverrides: [
+        {
+          relativePath: "SKILL.md",
+          content: `${renderMountedSkillContent(definition.content, targetPath).trimEnd()}\n`,
+        },
+      ],
+    };
   }
 }

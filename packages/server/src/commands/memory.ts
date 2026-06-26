@@ -1,8 +1,20 @@
-import { WORKSPACE_MEMORY_SOURCE_KINDS, WORKSPACE_MEMORY_TYPES } from "@coder-studio/core";
+import {
+  normalizeWorkspaceMemoryType,
+  WORKSPACE_MEMORY_SOURCE_KINDS,
+  WORKSPACE_MEMORY_STATUSES,
+} from "@coder-studio/core";
 import { z } from "zod";
 import { type CommandContext, registerCommand } from "../ws/dispatch.js";
 
-const memoryTypeSchema = z.enum(WORKSPACE_MEMORY_TYPES);
+const memoryTypeArgSchema = z
+  .string()
+  .trim()
+  .min(1, { message: "Invalid memory type" })
+  .refine((value) => normalizeWorkspaceMemoryType(value) !== undefined, {
+    message: "Invalid memory type",
+  })
+  .transform((value) => normalizeWorkspaceMemoryType(value)!);
+const memoryStatusSchema = z.enum(WORKSPACE_MEMORY_STATUSES);
 const memorySourceKindSchema = z.enum(WORKSPACE_MEMORY_SOURCE_KINDS);
 
 const workspaceSchema = z.object({
@@ -29,7 +41,7 @@ function rejectLegacyTagArgs<T extends z.ZodTypeAny>(schema: T) {
 
 const memoryListBaseSchema = workspaceSchema.extend({
   query: z.string().optional(),
-  type: memoryTypeSchema.optional(),
+  type: memoryTypeArgSchema.optional(),
   includeArchived: z.boolean().optional(),
 });
 const memoryListSchema = rejectLegacyTagArgs(memoryListBaseSchema);
@@ -50,7 +62,8 @@ const sourceHintSchema = z
 
 const memoryCreateSchema = rejectLegacyTagArgs(
   workspaceSchema.extend({
-    type: memoryTypeSchema,
+    type: memoryTypeArgSchema,
+    status: memoryStatusSchema.optional(),
     content: z.string().trim().min(1).max(20_000),
     sourceHint: sourceHintSchema.optional(),
   })
@@ -58,7 +71,8 @@ const memoryCreateSchema = rejectLegacyTagArgs(
 
 const memoryUpdateSchema = rejectLegacyTagArgs(
   memoryIdSchema.extend({
-    type: memoryTypeSchema.optional(),
+    type: memoryTypeArgSchema.optional(),
+    status: memoryStatusSchema.optional(),
     content: z.string().trim().min(1).max(20_000).optional(),
   })
 );
@@ -141,6 +155,7 @@ registerCommand("memory.create", memoryCreateSchema, async (args, ctx) => {
   const entry = memoryRepo.create({
     workspaceId: args.workspaceId,
     type: args.type,
+    status: args.status,
     content: args.content,
     source: {
       defaultKind: defaultSourceKind(args.sourceHint),
@@ -159,6 +174,7 @@ registerCommand("memory.update", memoryUpdateSchema, async (args, ctx) => {
     workspaceId: args.workspaceId,
     id: args.id,
     type: args.type,
+    status: args.status,
     content: args.content,
   });
 

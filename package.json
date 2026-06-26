@@ -14,7 +14,7 @@
     "publish:cli": "tsx scripts/publish-cli.ts",
     "publish:wiki": "tsx scripts/publish-wiki.ts",
     "ci:lint": "pnpm exec biome check --diagnostic-level=error --max-diagnostics=none .",
-    "ci:test:scripts": "pnpm exec vitest run --config scripts/vitest.config.ts scripts/publish-cli.test.ts scripts/build-cli.test.ts scripts/validate-changesets.test.ts scripts/husky-pre-commit.test.ts --environment node",
+    "ci:test:scripts": "pnpm exec vitest run --config scripts/vitest.config.ts --environment node",
     "ci:test:workspace": "pnpm -r --filter './packages/**' --filter '!@coder-studio/web' --if-present run test && pnpm --filter @coder-studio/web test",
     "ci:test": "pnpm ci:test:scripts && pnpm ci:test:workspace",
     "ci:typecheck": "pnpm --filter @spencer-kit/coder-studio exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/utils exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/core exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/providers exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/server exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/web exec tsc -p tsconfig.json --noEmit",

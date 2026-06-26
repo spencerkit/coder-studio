@@ -87,6 +87,21 @@ function renderMorePage(
           return [];
         }
 
+        if (op === "terminal.profiles.list") {
+          return {
+            profiles: [
+              {
+                id: "detected:bash",
+                label: "Bash",
+                source: "detected",
+                runtime: "native",
+                icon: "terminal",
+              },
+            ],
+            resolvedDefaultProfileId: "detected:bash",
+          };
+        }
+
         if (op === "monitoring.get") {
           return {
             settings: {
@@ -269,6 +284,7 @@ describe("more routes", () => {
   it("builds canonical more paths", () => {
     expect(buildMorePath()).toBe("/more");
     expect(buildMorePath("settings")).toBe("/more/settings");
+    expect(buildMorePath("settings", "terminal")).toBe("/more/settings/terminal");
     expect(buildMorePath("analysis", "monitoring")).toBe("/more/analysis/monitoring");
   });
 
@@ -404,6 +420,14 @@ describe("MoreFeaturesPage", () => {
     ).toBeTruthy();
   });
 
+  it("does not render desktop category tab descriptions for the active category", () => {
+    renderMorePage(["/more/settings/general"], { locale: "zh" });
+
+    expect(screen.getByRole("tab", { name: "设置" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("调整工作区行为、provider、外观和快捷键。")).not.toBeInTheDocument();
+    expect(document.querySelector(".more-features-tab__copy")).toBeNull();
+  });
+
   it("canonicalizes the desktop root route to the default settings section", async () => {
     renderMorePage(["/more"]);
 
@@ -498,7 +522,7 @@ describe("MoreFeaturesPage", () => {
   it("returns to /workspace from the desktop back button even when prior history exists", async () => {
     const user = userEvent.setup();
 
-    renderMorePage(["/settings", "/more/analysis/monitoring"]);
+    renderMorePage(["/more/settings/general", "/more/analysis/monitoring"]);
 
     await user.click(screen.getByRole("button", { name: "Back" }));
 
@@ -507,12 +531,36 @@ describe("MoreFeaturesPage", () => {
     });
   });
 
-  it("renders embedded settings content for /more/settings/general", async () => {
-    renderMorePage(["/more/settings/general"]);
+  it("renders embedded settings content for /more/settings/terminal", async () => {
+    renderMorePage(["/more/settings/terminal"]);
 
-    expect(await screen.findByText("Notifications")).toBeInTheDocument();
+    expect(await screen.findByTestId("location-display")).toHaveTextContent(
+      "/more/settings/terminal"
+    );
+    expect(await screen.findByRole("heading", { name: /Terminal renderer/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("spinbutton", { name: /Desktop terminal font size/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
     expect(screen.queryByText("Section placeholder")).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { level: 1, name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 3, name: "Settings" })).not.toBeInTheDocument();
+  });
+
+  it("exposes the terminal profiles anchor from the canonical terminal settings route", async () => {
+    renderMorePage(["/more/settings/terminal#terminal-profiles"]);
+
+    const terminalProfilesHeading = await screen.findByRole("heading", {
+      name: "Terminal Profiles",
+    });
+    const terminalProfilesSection = document.getElementById("terminal-profiles");
+
+    expect(screen.getByRole("button", { name: "Terminal" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(terminalProfilesSection).not.toBeNull();
+    expect(terminalProfilesSection).toContainElement(terminalProfilesHeading);
+    expect(terminalProfilesSection).toHaveClass("settings-group");
   });
 
   it("renders only the product subview for /more/about/product", async () => {
@@ -547,7 +595,7 @@ describe("MoreFeaturesPage", () => {
       )
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { level: 1, name: "Performance monitoring" })
+      screen.queryByRole("heading", { level: 3, name: "Performance monitoring" })
     ).not.toBeInTheDocument();
   });
 

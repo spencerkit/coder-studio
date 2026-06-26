@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "../server.js";
 import { SettingsRepo } from "../storage/index.js";
 
@@ -34,11 +34,13 @@ describe("server monitoring hydration", () => {
       port: 0,
     });
 
-    expect(server.__test__?.commandContext.monitoringService?.getResponse().settings).toEqual(
-      expect.objectContaining({
-        enabled: true,
-        sampleIntervalMs: 5000,
-      })
-    );
+    await vi.waitFor(() => {
+      expect(server.__test__?.commandContext.monitoringService?.getResponse().settings).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          sampleIntervalMs: 5000,
+        })
+      );
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { rm } from "node:fs/promises";
 import { z } from "zod";
+import { isPathInsideRoot } from "../../fs/path-safety.js";
+import { readManagedSkillMarker } from "../../skills/managed-skill-metadata.js";
 import { registerCommand } from "../../ws/dispatch.js";
 import {
   broadcastSkillLibraryChanged,
@@ -8,6 +10,15 @@ import {
   requireSkillsQuerySupport,
   requireSkillTargetSupport,
 } from "./shared.js";
+
+function canDeleteCustomSkillPath(customRoot: string, libraryPath: string, slug: string): boolean {
+  if (!customRoot || !libraryPath || !isPathInsideRoot(customRoot, libraryPath)) {
+    return false;
+  }
+
+  const marker = readManagedSkillMarker(libraryPath);
+  return marker?.source === "custom" && marker.slug === slug;
+}
 
 export function registerSkillMountCommands(): void {
   registerCommand(
@@ -70,6 +81,20 @@ export function registerSkillMountCommands(): void {
         };
       }
 
+      if (libraryEntry?.source === "installed" && libraryEntry.origin === "filesystem") {
+        throw {
+          code: "skill_uninstall_unavailable",
+          message: `Filesystem-installed skills cannot be uninstalled by Coder Studio: ${args.slug}`,
+        };
+      }
+
+      if (libraryEntry?.source === "custom" && !args.force) {
+        throw {
+          code: "skill_uninstall_confirmation_required",
+          message: `Custom skill deletion requires confirmation: ${args.slug}`,
+        };
+      }
+
       const mounts = ctx.skillMountRepo.listBySkillSlug(args.slug);
       const enabledMounts = mounts.filter((entry) => entry.enabled);
       if (enabledMounts.length > 0 && !args.force) {
@@ -88,8 +113,13 @@ export function registerSkillMountCommands(): void {
 
       ctx.skillMountRepo.deleteBySkillSlug(args.slug);
       ctx.skillLibraryRepo.delete(args.slug);
-      if (libraryEntry?.libraryPath) {
-        await rm(libraryEntry.libraryPath, { recursive: true, force: true }).catch(() => undefined);
+      if (libraryEntry?.source === "custom" && libraryEntry.libraryPath) {
+        const customRoot = ctx.skillLibraryRepo.getCustomSkillRoot();
+        if (canDeleteCustomSkillPath(customRoot, libraryEntry.libraryPath, args.slug)) {
+          await rm(libraryEntry.libraryPath, { recursive: true, force: true }).catch(
+            () => undefined
+          );
+        }
       }
       broadcastSkillLibraryChanged(ctx, {
         reason: "uninstalled",

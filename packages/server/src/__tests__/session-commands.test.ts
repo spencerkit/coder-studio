@@ -5,7 +5,11 @@ import type { ProviderDefinition } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
+import { RuntimeRegistry } from "../host/runtime-registry.js";
+import { RuntimeRouter } from "../host/runtime-router.js";
+import { WorkspaceRuntimeBindingStore } from "../host/workspace-runtime-binding.js";
 import { buildCustomProviderDefinition } from "../provider-runtime/custom-provider.js";
+import { createNativeRuntime } from "../runtime/native-runtime.js";
 import { SessionManager } from "../session/manager.js";
 import type { SessionDatabase } from "../session/types.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
@@ -36,6 +40,9 @@ describe("Session Commands", () => {
   let workspaceRepo: WorkspaceRepo;
   let terminalMgrStub: TerminalManager;
   let sessionDbStub: SessionDatabase;
+  let runtimeBindings: WorkspaceRuntimeBindingStore;
+  let runtimeRegistry: RuntimeRegistry;
+  let runtimeRouter: RuntimeRouter;
 
   beforeEach(() => {
     eventBus = new EventBus();
@@ -76,11 +83,54 @@ describe("Session Commands", () => {
       providerRegistry: [],
       providerConfigRepo,
     });
+    runtimeBindings = new WorkspaceRuntimeBindingStore();
+    runtimeRegistry = new RuntimeRegistry();
+    runtimeRouter = new RuntimeRouter({
+      runtimeRegistry,
+      bindings: runtimeBindings,
+      defaultRuntimeId: "native-default",
+    });
+    eventBus.on("workspace.meta.changed", (event) => {
+      const workspace = workspaceMgr.get(event.workspaceId);
+      if (!workspace) {
+        runtimeBindings.unbindWorkspace(event.workspaceId);
+        return;
+      }
+
+      runtimeBindings.bindWorkspace(workspace.id, "native-default");
+    });
+    eventBus.on("session.state.changed", (event) => {
+      if (event.session) {
+        runtimeBindings.bindSession(event.session);
+      }
+    });
+    eventBus.on("session.lifecycle", (event) => {
+      if (event.event === "removed") {
+        runtimeBindings.removeSession(event.sessionId);
+      }
+    });
+    eventBus.on("terminal.created", (event) => {
+      runtimeBindings.bindTerminal({
+        id: event.terminalId,
+        workspaceId: event.workspaceId,
+        kind: event.kind,
+        title: event.title,
+        cwd: event.cwd,
+        argv: [],
+        cols: 120,
+        rows: 30,
+        alive: true,
+        createdAt: Date.now(),
+      });
+    });
+    eventBus.on("terminal.exited", (event) => {
+      runtimeBindings.removeTerminal(event.terminalId);
+    });
 
     ctx = {
       workspaceMgr,
       sessionMgr,
-      terminalMgr: {} as never,
+      terminalMgr: terminalMgrStub,
       eventBus,
       broadcaster,
       settingsRepo,
@@ -89,6 +139,11 @@ describe("Session Commands", () => {
       supervisorMgr: {} as never,
       providerConfigRepo,
       sessionMetadataRepo,
+      runtimeBindings,
+      runtimeRouter,
+      activationMgr: { getLease: vi.fn(() => ({ wsClientId: "client-1" })) } as never,
+      autoFetch: {} as never,
+      lspMgr: {} as never,
     } as unknown as CommandContext;
     tempDirs = [];
   });
@@ -129,6 +184,40 @@ describe("Session Commands", () => {
       };
 
       try {
+        runtimeRegistry.register(
+          await createNativeRuntime({
+            runtimeId: "native-default",
+            stateRoot: stateDir,
+            hostBridge: {
+              issueSessionToken: vi.fn(() => ({ token: "token" })),
+              revokeSessionTokensBySessionId: vi.fn(),
+              getHostApiUrl: () => "http://127.0.0.1:4173",
+              emitDomainEvent: (event) => eventBus.emit(event),
+              broadcast: vi.fn(),
+              recordWorkspaceFetch: vi.fn(),
+              sendToClient: vi.fn(() => true),
+              sendBinaryToClient: vi.fn(() => true),
+            },
+            providerRegistry: ctx.providerRegistry,
+            workspaceLookup: {
+              get: (workspaceId: string) => workspaceMgr.get(workspaceId),
+              list: () => workspaceMgr.list(),
+            },
+            providerRuntimeDeps: ctx.providerRuntimeDeps,
+            contextOverrides: {
+              eventBus,
+              providerConfigRepo: ctx.providerConfigRepo,
+              sessionMgr,
+              terminalMgr: ctx.terminalMgr,
+              taskMgr: ctx.taskMgr,
+              lspMgr: ctx.lspMgr,
+              supervisorMgr: ctx.supervisorMgr,
+              sessionMetadataRepo,
+              agentInstructionPublisher: ctx.agentInstructionPublisher,
+            },
+          })
+        );
+
         const openResult = await dispatch(
           {
             kind: "command",
@@ -140,6 +229,7 @@ describe("Session Commands", () => {
         );
 
         expect(openResult.ok).toBe(true);
+        expect(ctx.runtimeBindings.findWorkspaceIdBySessionId(openResult.data!.id)).toBeUndefined();
 
         const result = await dispatch(
           {
@@ -186,21 +276,47 @@ describe("Session Commands", () => {
         syncAllOpenWorkspaces: vi.fn(),
       } as never;
 
-      const createSpy = vi.spyOn(sessionMgr, "create").mockImplementation(async () => {
+      const realCreate = sessionMgr.create.bind(sessionMgr);
+      const createSpy = vi.spyOn(sessionMgr, "create").mockImplementation(async (request) => {
         calls.push("create");
-        return {
-          id: "sess-1",
-          workspaceId: "ws-1",
-          providerId: "claude",
-          terminalId: "term-1",
-          capability: "full",
-          state: "starting",
-          startedAt: Date.now(),
-          lastActiveAt: Date.now(),
-        };
+        return realCreate(request);
       });
 
       try {
+        runtimeRegistry.register(
+          await createNativeRuntime({
+            runtimeId: "native-default",
+            stateRoot: stateDir,
+            hostBridge: {
+              issueSessionToken: vi.fn(() => ({ token: "token" })),
+              revokeSessionTokensBySessionId: vi.fn(),
+              getHostApiUrl: () => "http://127.0.0.1:4173",
+              emitDomainEvent: (event) => eventBus.emit(event),
+              broadcast: vi.fn(),
+              recordWorkspaceFetch: vi.fn(),
+              sendToClient: vi.fn(() => true),
+              sendBinaryToClient: vi.fn(() => true),
+            },
+            providerRegistry: ctx.providerRegistry,
+            workspaceLookup: {
+              get: (workspaceId: string) => workspaceMgr.get(workspaceId),
+              list: () => workspaceMgr.list(),
+            },
+            providerRuntimeDeps: ctx.providerRuntimeDeps,
+            contextOverrides: {
+              eventBus,
+              providerConfigRepo: ctx.providerConfigRepo,
+              sessionMgr,
+              terminalMgr: ctx.terminalMgr,
+              taskMgr: ctx.taskMgr,
+              lspMgr: ctx.lspMgr,
+              supervisorMgr: ctx.supervisorMgr,
+              sessionMetadataRepo,
+              agentInstructionPublisher: ctx.agentInstructionPublisher,
+            },
+          })
+        );
+
         const openResult = await dispatch(
           {
             kind: "command",
@@ -229,6 +345,9 @@ describe("Session Commands", () => {
 
         expect(result.ok).toBe(true);
         expect(calls).toEqual(["publish", "create"]);
+        expect(ctx.runtimeBindings.findWorkspaceIdBySessionId(result.data!.id)).toBe(
+          openResult.data!.id
+        );
       } finally {
         createSpy.mockRestore();
         rmSync(testDir, { recursive: true, force: true });
@@ -300,6 +419,7 @@ describe("Session Commands", () => {
           CODER_STUDIO_PROVIDER_ID: "claude",
           CODER_STUDIO_API_URL: "http://127.0.0.1:4173",
         });
+        expect(createdSpecs[0]?.env?.CODER_STUDIO_SESSION_TOKEN).toMatch(/^[a-f0-9]{64}$/);
       } finally {
         rmSync(testDir, { recursive: true, force: true });
       }

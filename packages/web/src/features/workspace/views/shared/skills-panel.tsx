@@ -1,15 +1,32 @@
 import type {
   AgentSkillTargetEntry,
+  FileNode,
+  SkillLibraryEntry,
   SkillMountRelation,
   SkillRecommendationEntry,
   SkillVersionCheckEntry,
 } from "@coder-studio/core";
-import { ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
-import { type FC, type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ChevronDown, ChevronRight, Pencil, Trash2, X } from "lucide-react";
+import {
+  type FC,
+  type KeyboardEvent,
+  type DragEvent as ReactDragEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Button,
   ConfirmDialog,
   IconButton,
+  Input,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
   Notice,
   Switch,
   Tag,
@@ -17,6 +34,8 @@ import {
   Tooltip,
 } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { setSkillPathDragData } from "../../../../lib/skill-path-drag";
+import { useSkillFileActions } from "../../actions/use-skill-file-actions";
 import type {
   SkillInfoItem,
   SkillLibraryListItem,
@@ -51,6 +70,7 @@ interface SkillDetailItem {
   description?: string;
   version?: string;
   source?: SkillLibraryListItem["source"];
+  origin?: SkillLibraryListItem["origin"];
   libraryPath?: string;
   installed: boolean;
 }
@@ -100,6 +120,22 @@ function detailHeaderMeta(skill: SkillDetailItem, t: Translate) {
   }
 
   return null;
+}
+
+function sourceLabel(skill: Pick<SkillDetailItem, "source" | "origin">, t: Translate) {
+  if (skill.origin === "filesystem") {
+    return t("workspace.skills.origin.filesystem");
+  }
+
+  if (skill.origin === "skillhub") {
+    return t("workspace.skills.origin.skillhub");
+  }
+
+  if (skill.source) {
+    return t(`workspace.skills.source.${skill.source}`);
+  }
+
+  return t("skills.available");
 }
 
 function formatSkillVersion(version: string | undefined) {
@@ -164,7 +200,11 @@ function isBuiltinSkill(skill: SkillLibraryListItem) {
 }
 
 function sourceForSkillInfo(info: SkillInfoItem): SkillDetailItem["source"] {
-  return info.libraryEntry?.source ?? "skillhub";
+  return info.libraryEntry?.source ?? "installed";
+}
+
+function originForSkillInfo(info: SkillInfoItem): SkillDetailItem["origin"] {
+  return info.libraryEntry?.origin ?? "skillhub";
 }
 
 function detailFromLibraryItem(skill: SkillLibraryListItem): SkillDetailItem {
@@ -174,6 +214,20 @@ function detailFromLibraryItem(skill: SkillLibraryListItem): SkillDetailItem {
     description: skill.description,
     version: skill.version,
     source: skill.source,
+    origin: skill.origin,
+    libraryPath: skill.libraryPath,
+    installed: skill.installState === "installed",
+  };
+}
+
+function detailFromLibraryEntry(skill: SkillLibraryEntry): SkillDetailItem {
+  return {
+    slug: skill.slug,
+    displayName: skill.displayName,
+    description: skill.description,
+    version: skill.version,
+    source: skill.source,
+    origin: skill.origin,
     libraryPath: skill.libraryPath,
     installed: skill.installState === "installed",
   };
@@ -186,6 +240,7 @@ function detailFromSkillInfo(info: SkillInfoItem): SkillDetailItem {
     description: info.description,
     version: info.version,
     source: sourceForSkillInfo(info),
+    origin: originForSkillInfo(info),
     libraryPath: info.libraryEntry?.libraryPath,
     installed: info.installed,
   };
@@ -197,7 +252,8 @@ function detailFromSearchResult(item: SkillSearchResultItem): SkillDetailItem {
     displayName: item.displayName,
     description: item.description,
     version: item.installedVersion ?? item.version,
-    source: "skillhub",
+    source: "installed",
+    origin: "skillhub",
     installed: item.installed,
   };
 }
@@ -207,7 +263,8 @@ function detailFromRecommendation(item: SkillRecommendationEntry): SkillDetailIt
     slug: item.slug,
     displayName: item.displayName,
     description: item.description,
-    source: "skillhub",
+    source: "installed",
+    origin: "skillhub",
     installed: item.installed,
   };
 }
@@ -219,24 +276,28 @@ function skillDetailMatches(left: SkillDetailItem, right: SkillDetailItem) {
     left.description === right.description &&
     left.version === right.version &&
     left.source === right.source &&
+    left.origin === right.origin &&
     left.libraryPath === right.libraryPath &&
     left.installed === right.installed
   );
 }
 
 function groupLibraryItems(items: SkillLibraryListItem[]) {
+  const custom: SkillLibraryListItem[] = [];
   const installed: SkillLibraryListItem[] = [];
   const builtin: SkillLibraryListItem[] = [];
 
   for (const item of items) {
     if (isBuiltinSkill(item)) {
       builtin.push(item);
+    } else if (item.source === "custom") {
+      custom.push(item);
     } else {
       installed.push(item);
     }
   }
 
-  return { builtin, installed };
+  return { builtin, custom, installed };
 }
 
 function sortSearchItems(items: SkillSearchResultItem[]) {
@@ -353,6 +414,421 @@ function buildTargetSummaries(
       mounted: Boolean(relation?.enabled && relation.status === "mounted"),
     };
   });
+}
+
+function buildNestedTree(treeMap: Map<string, FileNode[]>, expandedDirs: Set<string>): FileNode[] {
+  const attachChildren = (nodes: FileNode[]): FileNode[] =>
+    nodes.map((node) => {
+      if (node.kind === "dir" && expandedDirs.has(node.path) && treeMap.has(node.path)) {
+        return {
+          ...node,
+          children: attachChildren(treeMap.get(node.path)!),
+        };
+      }
+
+      return node;
+    });
+
+  return attachChildren(treeMap.get(".") ?? []);
+}
+
+function sortNodes(nodes: FileNode[]): FileNode[] {
+  return [...nodes].sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "dir" ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+}
+
+interface SkillFilesTreeProps {
+  nodes: FileNode[];
+  isLoadingDir: string | null;
+  onLoadChildren: (path: string) => Promise<boolean>;
+  onOpenFile: (path: string) => Promise<void>;
+  onRequestCreate: (mode: "file" | "folder", baseDir: string | null) => void;
+  onRequestRename: (node: { path: string; name: string; kind: "file" | "dir" }) => void;
+  onRequestDelete: (node: { path: string; name: string }) => void;
+  skillLibraryPath: string;
+  skillSlug: string;
+}
+
+function toSkillAbsolutePath(skillLibraryPath: string, relativePath: string) {
+  if (relativePath === ".") {
+    return skillLibraryPath;
+  }
+
+  return `${skillLibraryPath}/${relativePath}`;
+}
+
+function SkillFilesTree({
+  nodes,
+  isLoadingDir,
+  onLoadChildren,
+  onOpenFile,
+  onRequestCreate,
+  onRequestRename,
+  onRequestDelete,
+  skillLibraryPath,
+  skillSlug,
+}: SkillFilesTreeProps) {
+  return (
+    <div className="skills-panel__files-tree" role="tree">
+      {sortNodes(nodes).map((node) => (
+        <SkillFilesTreeNode
+          key={node.path}
+          isLoadingDir={isLoadingDir}
+          node={node}
+          onLoadChildren={onLoadChildren}
+          onOpenFile={onOpenFile}
+          onRequestCreate={onRequestCreate}
+          onRequestRename={onRequestRename}
+          onRequestDelete={onRequestDelete}
+          skillLibraryPath={skillLibraryPath}
+          skillSlug={skillSlug}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface SkillFilesTreeNodeProps {
+  node: FileNode;
+  isLoadingDir: string | null;
+  onLoadChildren: (path: string) => Promise<boolean>;
+  onOpenFile: (path: string) => Promise<void>;
+  onRequestCreate: (mode: "file" | "folder", baseDir: string | null) => void;
+  onRequestRename: (node: { path: string; name: string; kind: "file" | "dir" }) => void;
+  onRequestDelete: (node: { path: string; name: string }) => void;
+  skillLibraryPath: string;
+  skillSlug: string;
+}
+
+function SkillFilesTreeNode({
+  node,
+  isLoadingDir,
+  onLoadChildren,
+  onOpenFile,
+  onRequestCreate,
+  onRequestRename,
+  onRequestDelete,
+  skillLibraryPath,
+  skillSlug,
+}: SkillFilesTreeNodeProps) {
+  const t = useTranslation();
+  const handleClick = () => {
+    if (node.path === ".") {
+      return;
+    }
+
+    if (node.kind === "file") {
+      void onOpenFile(node.path);
+      return;
+    }
+
+    void onLoadChildren(node.path);
+  };
+
+  const handleDragStart = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    event.stopPropagation();
+    setSkillPathDragData(event.dataTransfer, {
+      skillSlug,
+      path: node.path,
+      absolutePath: toSkillAbsolutePath(skillLibraryPath, node.path),
+      kind: node.kind,
+    });
+  };
+
+  return (
+    <div
+      className="skills-panel__files-node"
+      role="treeitem"
+      aria-expanded={node.kind === "dir" ? Boolean(node.children) : undefined}
+      draggable
+      onDragStart={handleDragStart}
+    >
+      <div className="skills-panel__files-row">
+        <button type="button" className="skills-panel__files-button" onClick={handleClick}>
+          {node.kind === "dir" ? (
+            <span aria-hidden="true">{node.children ? "▾" : "▸"}</span>
+          ) : (
+            <span aria-hidden="true">•</span>
+          )}
+          <span>{node.name}</span>
+          {isLoadingDir === node.path ? <span>{` ${"..."}`}</span> : null}
+        </button>
+        {node.path !== "." ? (
+          <div className="skills-panel__files-actions">
+            {node.kind === "dir" ? (
+              <button
+                type="button"
+                className="workspace-sidebar-section__action"
+                aria-label={`${t("skills.custom_new_folder")} ${node.path}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRequestCreate("folder", node.path);
+                }}
+              >
+                {t("skills.custom_new_folder")}
+              </button>
+            ) : null}
+            <IconButton
+              aria-label={`${t("action.edit")} ${node.name}`}
+              icon={<Pencil size={12} />}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestRename({
+                  path: node.path,
+                  name: node.name,
+                  kind: node.kind,
+                });
+              }}
+              size="sm"
+              variant="ghost"
+            />
+            <IconButton
+              aria-label={`${t("skills.custom_delete")} ${node.name}`}
+              icon={<Trash2 size={12} />}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRequestDelete({
+                  path: node.path,
+                  name: node.name,
+                });
+              }}
+              size="sm"
+              variant="ghost"
+            />
+          </div>
+        ) : null}
+      </div>
+      {node.kind === "dir" && node.children?.length ? (
+        <div className="skills-panel__files-children">
+          <SkillFilesTree
+            skillLibraryPath={skillLibraryPath}
+            skillSlug={skillSlug}
+            nodes={node.children}
+            isLoadingDir={isLoadingDir}
+            onLoadChildren={onLoadChildren}
+            onOpenFile={onOpenFile}
+            onRequestCreate={onRequestCreate}
+            onRequestRename={onRequestRename}
+            onRequestDelete={onRequestDelete}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CreateCustomSkillFileDialogs({
+  skillFileActions,
+}: {
+  skillFileActions: ReturnType<typeof useSkillFileActions>;
+}) {
+  const t = useTranslation();
+  const createInputRef = useRef<HTMLInputElement | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <>
+      {skillFileActions.createDialog ? (
+        <Modal
+          initialFocus={() => createInputRef.current}
+          onOpenChange={skillFileActions.closeCreateDialog}
+          open
+        >
+          <ModalHeader>
+            <ModalTitle>
+              <span>
+                {skillFileActions.createDialog.mode === "file"
+                  ? t("skills.custom_new_file")
+                  : t("skills.custom_new_folder")}
+              </span>
+            </ModalTitle>
+            <IconButton
+              aria-label={t("action.close")}
+              icon={<X size={14} />}
+              onClick={skillFileActions.closeCreateDialog}
+              size="sm"
+            />
+          </ModalHeader>
+          <ModalBody>
+            <div className="form-group">
+              <label htmlFor="custom-skill-path">{t("file.path")}</label>
+              <Input
+                id="custom-skill-path"
+                ref={createInputRef}
+                value={skillFileActions.createDialog.draftPath}
+                onChange={(event) => skillFileActions.updateDraftPath(event.target.value)}
+                invalid={Boolean(skillFileActions.createDialog.error)}
+                autoFocus
+              />
+              {skillFileActions.createDialog.error ? (
+                <span className="form-error" role="alert">
+                  {skillFileActions.createDialog.error}
+                </span>
+              ) : null}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={skillFileActions.closeCreateDialog}>{t("common.cancel")}</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                void skillFileActions.submitCreateDialog();
+              }}
+            >
+              {t("common.create")}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      ) : null}
+
+      {skillFileActions.renameDialog ? (
+        <Modal
+          initialFocus={() => renameInputRef.current}
+          onOpenChange={skillFileActions.closeRenameDialog}
+          open
+        >
+          <ModalHeader>
+            <ModalTitle>
+              <span>{t("action.edit")}</span>
+            </ModalTitle>
+            <IconButton
+              aria-label={t("action.close")}
+              icon={<X size={14} />}
+              onClick={skillFileActions.closeRenameDialog}
+              size="sm"
+            />
+          </ModalHeader>
+          <ModalBody>
+            <div className="form-group">
+              <label htmlFor="custom-skill-rename">{t("action.edit")}</label>
+              <Input
+                id="custom-skill-rename"
+                ref={renameInputRef}
+                value={skillFileActions.renameDialog.nextName}
+                onChange={(event) => skillFileActions.updateRenameDraft(event.target.value)}
+                invalid={Boolean(skillFileActions.renameDialog.error)}
+                autoFocus
+              />
+              {skillFileActions.renameDialog.error ? (
+                <span className="form-error" role="alert">
+                  {skillFileActions.renameDialog.error}
+                </span>
+              ) : null}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={skillFileActions.closeRenameDialog}>{t("common.cancel")}</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                void skillFileActions.submitRenameDialog();
+              }}
+            >
+              {t("action.confirm")}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      ) : null}
+
+      <ConfirmDialog
+        open={Boolean(skillFileActions.pendingDelete)}
+        title={t("skills.custom_delete")}
+        description={skillFileActions.pendingDelete?.name ?? ""}
+        cancelText={t("common.cancel")}
+        confirmText={t("action.confirm")}
+        tone="danger"
+        onOpenChange={(open) => {
+          if (!open) {
+            skillFileActions.cancelDelete();
+          }
+        }}
+        onConfirm={() => {
+          void skillFileActions.confirmDelete();
+        }}
+      />
+    </>
+  );
+}
+
+interface CreateCustomSkillModalProps {
+  open: boolean;
+  draftName: string;
+  error: string | null;
+  onDraftChange: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+function CreateCustomSkillModal({
+  open,
+  draftName,
+  error,
+  onDraftChange,
+  onClose,
+  onConfirm,
+}: CreateCustomSkillModalProps) {
+  const t = useTranslation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <Modal initialFocus={() => inputRef.current} onOpenChange={onClose} open>
+      <ModalHeader>
+        <ModalTitle>
+          <span>{t("skills.custom_create_title")}</span>
+        </ModalTitle>
+        <IconButton
+          aria-label={t("action.close")}
+          icon={<X size={14} />}
+          onClick={onClose}
+          size="sm"
+        />
+      </ModalHeader>
+      <ModalBody>
+        <div className="form-group">
+          <label htmlFor="custom-skill-name">{t("skills.custom_create_name")}</label>
+          <Input
+            id="custom-skill-name"
+            ref={inputRef}
+            value={draftName}
+            onChange={(event) => onDraftChange(event.target.value)}
+            placeholder={t("skills.custom_create_placeholder")}
+            invalid={Boolean(error)}
+            autoFocus
+          />
+          <span className="dialog-helper">{t("skills.custom_create_helper")}</span>
+          {error ? (
+            <span className="form-error" role="alert">
+              {error}
+            </span>
+          ) : null}
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            void onConfirm();
+          }}
+        >
+          {t("common.create")}
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
 }
 
 interface SkillsSectionHeaderProps {
@@ -476,6 +952,7 @@ interface SkillDetailViewProps {
   installSkill: ReturnType<typeof useSkillsPanel>["installSkill"];
   installingSkillSlugs: ReturnType<typeof useSkillsPanel>["installingSkillSlugs"];
   onBack: () => void;
+  workspaceId: string;
 }
 
 function SkillDetailView({
@@ -486,9 +963,54 @@ function SkillDetailView({
   installSkill,
   installingSkillSlugs,
   onBack,
+  workspaceId,
 }: SkillDetailViewProps) {
   const targetSummaries = buildTargetSummaries(t, targets, mounts);
   const headerMeta = detailHeaderMeta(skill, t);
+  const skillFileActions = useSkillFileActions({
+    workspaceId,
+    skillSlug: skill.slug,
+  });
+  const didAutoOpenSkillRef = useRef<string | null>(null);
+  const loadFileTreeRef = useRef(skillFileActions.loadFileTree);
+  const treeNodes = useMemo(
+    () =>
+      skillFileActions.fileTree
+        ? buildNestedTree(skillFileActions.fileTree, skillFileActions.expandedDirs)
+        : [],
+    [skillFileActions.expandedDirs, skillFileActions.fileTree]
+  );
+
+  useEffect(() => {
+    loadFileTreeRef.current = skillFileActions.loadFileTree;
+  }, [skillFileActions.loadFileTree]);
+
+  useEffect(() => {
+    if (skill.source !== "custom") {
+      return;
+    }
+
+    void loadFileTreeRef.current();
+  }, [skill.slug, skill.source]);
+
+  useEffect(() => {
+    if (skill.source !== "custom") {
+      didAutoOpenSkillRef.current = null;
+      return;
+    }
+
+    if (didAutoOpenSkillRef.current === skill.slug) {
+      return;
+    }
+
+    if (skillFileActions.activeFilePath?.startsWith(`skill:${skill.slug}/`)) {
+      didAutoOpenSkillRef.current = skill.slug;
+      return;
+    }
+
+    didAutoOpenSkillRef.current = skill.slug;
+    void skillFileActions.openSkillFile("SKILL.md", "file-tree");
+  }, [skill.slug, skill.source, skillFileActions.activeFilePath, skillFileActions.openSkillFile]);
 
   return (
     <div className="workspace-sidebar-view skills-panel skills-panel--detail">
@@ -502,7 +1024,6 @@ function SkillDetailView({
               onClick={onBack}
             >
               <ArrowLeft size={14} aria-hidden="true" />
-              <span>{t("skills.detail_back")}</span>
             </button>
             <div className="skills-panel__detail-title-row">
               <h2 className="skills-panel__detail-title">{skill.displayName}</h2>
@@ -533,11 +1054,7 @@ function SkillDetailView({
           <dl className="skills-panel__detail-fields">
             <div className="skills-panel__detail-field">
               <dt>{t("skills.detail_source")}</dt>
-              <dd>
-                {skill.source
-                  ? t(`workspace.skills.source.${skill.source}`)
-                  : t("skills.available")}
-              </dd>
+              <dd>{sourceLabel(skill, t)}</dd>
             </div>
             {skill.libraryPath ? (
               <div className="skills-panel__detail-field">
@@ -548,7 +1065,61 @@ function SkillDetailView({
           </dl>
         </section>
 
-        {skill.installed ? (
+        {skill.source === "custom" ? (
+          <section className="workspace-sidebar-section skills-panel__detail-targets">
+            <div className="workspace-sidebar-section__header">
+              <div className="workspace-sidebar-section__header-main">
+                <h3 className="workspace-sidebar-section__title">
+                  {t("skills.custom_files_title")}
+                </h3>
+              </div>
+              <div className="workspace-sidebar-panel__actions workspace-sidebar-section__actions">
+                <button
+                  type="button"
+                  className="workspace-sidebar-section__action"
+                  onClick={() => skillFileActions.openCreateDialog("file", null)}
+                >
+                  {t("skills.custom_new_file")}
+                </button>
+                <button
+                  type="button"
+                  className="workspace-sidebar-section__action"
+                  onClick={() => skillFileActions.openCreateDialog("folder", null)}
+                >
+                  {t("skills.custom_new_folder")}
+                </button>
+              </div>
+            </div>
+            <div className="skills-panel__target-details skills-panel__target-details--detail">
+              <div className="skills-panel__files-tree" role="tree">
+                <SkillFilesTreeNode
+                  isLoadingDir={skillFileActions.isLoadingDir}
+                  node={{
+                    kind: "dir",
+                    name: `${skill.slug}/`,
+                    path: ".",
+                    children: treeNodes,
+                  }}
+                  onLoadChildren={skillFileActions.loadChildren}
+                  onOpenFile={skillFileActions.openSkillFile}
+                  onRequestCreate={skillFileActions.openCreateDialog}
+                  onRequestRename={skillFileActions.openRenameDialog}
+                  onRequestDelete={(node) =>
+                    skillFileActions.requestDelete({
+                      path: node.path,
+                      name: node.name,
+                      error: null,
+                    })
+                  }
+                  skillLibraryPath={skill.libraryPath}
+                  skillSlug={skill.slug}
+                />
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {skill.installed && skill.source !== "custom" ? (
           <section className="workspace-sidebar-section skills-panel__detail-targets">
             <div className="workspace-sidebar-section__header">
               <div className="workspace-sidebar-section__header-main">
@@ -560,6 +1131,10 @@ function SkillDetailView({
               <SkillTargetRows skillSlug={skill.slug} targetSummaries={targetSummaries} />
             </div>
           </section>
+        ) : null}
+
+        {skill.source === "custom" ? (
+          <CreateCustomSkillFileDialogs skillFileActions={skillFileActions} />
         ) : null}
       </div>
     </div>
@@ -575,6 +1150,7 @@ interface SkillsLibrarySectionProps {
   emptyLabel: string;
   actions?: ReactNode;
   allowUninstall: boolean;
+  requireUninstallConfirm?: boolean;
   isExpanded: boolean;
   toggleLabel: string;
   mountsBySkillSlug: Record<string, SkillMountRelation[]>;
@@ -672,6 +1248,7 @@ function SkillsLibrarySection({
   emptyLabel,
   actions,
   allowUninstall,
+  requireUninstallConfirm = false,
   isExpanded,
   toggleLabel,
   mountsBySkillSlug,
@@ -701,7 +1278,7 @@ function SkillsLibrarySection({
       }
     }
 
-    if (mountedProviderIds.size > 0) {
+    if (mountedProviderIds.size > 0 || requireUninstallConfirm) {
       setPendingUninstall({ mountCount: mountedProviderIds.size, skill });
       return;
     }
@@ -734,7 +1311,10 @@ function SkillsLibrarySection({
                 const targetSummaries = buildTargetSummaries(t, targets, mounts);
                 const versionCheck = versionChecksBySlug[skill.slug];
                 const versionStatus = versionCheckTag(t, versionCheck);
-                const canUpdate = versionCheck?.status === "update_available";
+                const canUpdate =
+                  skill.source === "installed" &&
+                  skill.origin === "skillhub" &&
+                  versionCheck?.status === "update_available";
                 const configuredProviderIds = targetSummaries
                   .filter((summary) => summary.configured)
                   .map((summary) => summary.providerId);
@@ -783,6 +1363,10 @@ function SkillsLibrarySection({
                   : t("skills.builtin_enable_skill", {
                       name: skill.displayName,
                     });
+                const isManagedInstalledSkill =
+                  skill.source === "installed" && skill.origin === "skillhub";
+                const isFilesystemInstalledSkill =
+                  skill.source === "installed" && skill.origin === "filesystem";
 
                 return (
                   <article
@@ -858,14 +1442,24 @@ function SkillsLibrarySection({
                                     size="sm"
                                   />
                                 </Tooltip>
-                                <Tooltip content={t("skills.uninstall_tooltip")}>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => requestUninstallSkill(skill, mounts)}
+                                {isManagedInstalledSkill || skill.source === "custom" ? (
+                                  <Tooltip
+                                    content={
+                                      skill.source === "custom"
+                                        ? t("skills.custom_remove_tooltip")
+                                        : t("skills.uninstall_tooltip")
+                                    }
                                   >
-                                    {t("skills.uninstall")}
-                                  </Button>
-                                </Tooltip>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => requestUninstallSkill(skill, mounts)}
+                                    >
+                                      {skill.source === "custom"
+                                        ? t("skills.delete")
+                                        : t("skills.uninstall")}
+                                    </Button>
+                                  </Tooltip>
+                                ) : null}
                               </>
                             ) : null}
                           </>
@@ -873,6 +1467,11 @@ function SkillsLibrarySection({
                         onOpenSkill={onOpenSkill}
                         badges={
                           <>
+                            {isFilesystemInstalledSkill ? (
+                              <Tag color="neutral" caps={false}>
+                                {sourceLabel(detailFromLibraryItem(skill), t)}
+                              </Tag>
+                            ) : null}
                             {shouldShowSkillVersion(skill) ? (
                               <Tag color="neutral" caps={false}>
                                 {formatSkillVersion(skill.version)}
@@ -901,12 +1500,22 @@ function SkillsLibrarySection({
 
       <ConfirmDialog
         cancelText={t("common.cancel")}
-        confirmText={t("skills.uninstall_confirm_confirm")}
+        confirmText={
+          pendingUninstall?.skill.source === "custom"
+            ? t("skills.custom_remove_confirm_confirm")
+            : t("skills.uninstall_confirm_confirm")
+        }
         description={
           pendingUninstall
-            ? t("skills.uninstall_confirm_description", {
-                count: pendingUninstall.mountCount,
-              })
+            ? pendingUninstall.skill.source === "custom"
+              ? pendingUninstall.mountCount > 0
+                ? t("skills.custom_remove_confirm_mounted_description", {
+                    count: pendingUninstall.mountCount,
+                  })
+                : t("skills.custom_remove_confirm_description")
+              : t("skills.uninstall_confirm_description", {
+                  count: pendingUninstall.mountCount,
+                })
             : null
         }
         onConfirm={() => {
@@ -925,7 +1534,11 @@ function SkillsLibrarySection({
         open={Boolean(pendingUninstall)}
         title={
           pendingUninstall
-            ? t("skills.uninstall_confirm_title", { name: pendingUninstall.skill.displayName })
+            ? pendingUninstall.skill.source === "custom"
+              ? t("skills.custom_remove_confirm_title", {
+                  name: pendingUninstall.skill.displayName,
+                })
+              : t("skills.uninstall_confirm_title", { name: pendingUninstall.skill.displayName })
             : ""
         }
         tone="danger"
@@ -939,19 +1552,23 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
   const {
     checkSkillVersions,
     checkingVersions,
+    createCustomSkill,
     errorMessage,
     installSkill,
     installingSkillSlugs,
     library,
     loadSkillInfo,
     loadingLibrary,
+    loadingRecommendationPage,
     loadingRecommendations,
     loadingSearch,
+    loadMoreRecommendations,
     mountsBySkillSlug,
     panelState,
     refreshHealth,
     refreshRecommendations,
     recommendations,
+    recommendationsHasMore,
     runSearch,
     searchResults,
     setBuiltinMountEnabled,
@@ -964,20 +1581,30 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
     versionChecksBySlug,
   } = useSkillsPanel(workspaceId);
   const sortedLibrary = useMemo(() => sortLibraryItems(library), [library]);
-  const { builtin: builtinLibrary, installed: installedLibrary } = useMemo(
-    () => groupLibraryItems(sortedLibrary),
-    [sortedLibrary]
-  );
+  const {
+    builtin: builtinLibrary,
+    custom: customLibrary,
+    installed: installedLibrary,
+  } = useMemo(() => groupLibraryItems(sortedLibrary), [sortedLibrary]);
   const sortedSearchResults = useMemo(() => sortSearchItems(searchResults), [searchResults]);
   const sortedRecommendations = useMemo(
     () => sortRecommendationItems(recommendations),
     [recommendations]
   );
   const [selectedSkillDetail, setSelectedSkillDetail] = useState<SkillDetailItem | null>(null);
+  const [createCustomOpen, setCreateCustomOpen] = useState(false);
+  const [createCustomDraft, setCreateCustomDraft] = useState("");
+  const [createCustomError, setCreateCustomError] = useState<string | null>(null);
+  const customPanelId = `skills-custom-${workspaceId}`;
   const installedPanelId = `skills-installed-${workspaceId}`;
   const builtinPanelId = `skills-builtin-${workspaceId}`;
   const recommendationsPanelId = `skills-recommendations-${workspaceId}`;
   const discoverPanelId = `skills-discover-${workspaceId}`;
+  const recommendationsLoadSentinelRef = useRef<HTMLDivElement | null>(null);
+  const recommendationsScrollRootRef = useRef<HTMLDivElement | null>(null);
+  const customToggleLabel = panelState.customCollapsed
+    ? t("skills.custom_expand_label")
+    : t("skills.custom_collapse_label");
   const installedToggleLabel = panelState.installedCollapsed
     ? t("skills.installed_expand_label")
     : t("skills.installed_collapse_label");
@@ -992,6 +1619,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
     : t("skills.recommendations_collapse_label");
   const discoverCount =
     panelState.resolvedQuery && !loadingSearch ? sortedSearchResults.length : undefined;
+  const customCount = loadingLibrary ? undefined : customLibrary.length;
   const installedCount = loadingLibrary ? undefined : installedLibrary.length;
   const builtinCount = loadingLibrary ? undefined : builtinLibrary.length;
   const recommendationsCount = loadingRecommendations ? undefined : sortedRecommendations.length;
@@ -1025,6 +1653,46 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
     void refreshHealth();
     void refreshRecommendations();
   }, [refreshHealth, refreshRecommendations, refreshToken]);
+
+  useEffect(() => {
+    if (
+      selectedSkillDetail ||
+      panelState.recommendationsCollapsed ||
+      !recommendationsHasMore ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const root = recommendationsScrollRootRef.current;
+    const sentinel = recommendationsLoadSentinelRef.current;
+    if (!root || !sentinel) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadMoreRecommendations();
+        }
+      },
+      {
+        root,
+        rootMargin: "120px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [
+    loadMoreRecommendations,
+    panelState.recommendationsCollapsed,
+    recommendationsHasMore,
+    selectedSkillDetail,
+  ]);
 
   useEffect(() => {
     if (!selectedSkillDetail) {
@@ -1063,6 +1731,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
         skill={selectedSkillDetail}
         t={t}
         targets={targets}
+        workspaceId={workspaceId}
       />
     );
   }
@@ -1070,7 +1739,51 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
   return (
     <>
       <div className="workspace-sidebar-view skills-panel">
-        <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked skills-panel__body">
+        <div
+          ref={recommendationsScrollRootRef}
+          className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked skills-panel__body"
+        >
+          <SkillsLibrarySection
+            actions={
+              <button
+                type="button"
+                className="workspace-sidebar-section__action"
+                onClick={() => {
+                  setCreateCustomDraft("");
+                  setCreateCustomError(null);
+                  setCreateCustomOpen(true);
+                }}
+              >
+                {t("skills.custom_new")}
+              </button>
+            }
+            allowUninstall={true}
+            requireUninstallConfirm={true}
+            emptyLabel={loadingLibrary ? t("common.loading") : t("skills.custom_empty")}
+            count={customCount}
+            isExpanded={!panelState.customCollapsed}
+            items={loadingLibrary ? [] : customLibrary}
+            mountsBySkillSlug={mountsBySkillSlug}
+            panelId={customPanelId}
+            panelState={panelState}
+            setBuiltinMountEnabled={setBuiltinMountEnabled}
+            setSkillMountEnabled={setSkillMountEnabled}
+            t={t}
+            targets={targets}
+            title={t("skills.custom_title")}
+            toggleLabel={customToggleLabel}
+            uninstallSkill={uninstallSkill}
+            updateSkill={updateSkill}
+            versionChecksBySlug={versionChecksBySlug}
+            onOpenSkill={openSkillDetail}
+            onToggleExpanded={() =>
+              setPanelState((current) => ({
+                ...current,
+                customCollapsed: !current.customCollapsed,
+              }))
+            }
+          />
+
           <SkillsLibrarySection
             actions={
               <>
@@ -1276,43 +1989,84 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                 ) : sortedRecommendations.length === 0 ? (
                   <p className="workspace-search-panel__state">{t("skills.no_recommendations")}</p>
                 ) : (
-                  sortedRecommendations.map((item) => (
-                    <article
-                      key={item.slug}
-                      className="skills-panel__list-item skills-panel__list-item--recommendation workspace-sidebar-row"
-                    >
-                      <div className="skills-panel__row-head">
-                        <SkillCardOpen
-                          detail={detailFromRecommendation(item)}
-                          t={t}
-                          onOpenSkill={openSkillDetail}
-                          badges={
-                            <Tag color="neutral" caps={false}>
-                              {item.installed ? t("skills.installed") : t("skills.available")}
-                            </Tag>
-                          }
-                          actions={
-                            <Button
-                              size="sm"
-                              loading={installingSkillSlugs.has(item.slug)}
-                              disabled={item.installed}
-                              onClick={() => void installSkill(item.slug)}
-                            >
-                              {item.installed ? t("skills.installed") : t("skills.install")}
-                            </Button>
-                          }
-                        >
-                          <SkillCardDescription>{item.reason}</SkillCardDescription>
-                        </SkillCardOpen>
-                      </div>
-                    </article>
-                  ))
+                  <>
+                    {sortedRecommendations.map((item) => (
+                      <article
+                        key={item.slug}
+                        className="skills-panel__list-item skills-panel__list-item--recommendation workspace-sidebar-row"
+                      >
+                        <div className="skills-panel__row-head">
+                          <SkillCardOpen
+                            detail={detailFromRecommendation(item)}
+                            t={t}
+                            onOpenSkill={openSkillDetail}
+                            badges={
+                              <Tag color="neutral" caps={false}>
+                                {item.installed ? t("skills.installed") : t("skills.available")}
+                              </Tag>
+                            }
+                            actions={
+                              <Button
+                                size="sm"
+                                loading={installingSkillSlugs.has(item.slug)}
+                                disabled={item.installed}
+                                onClick={() => void installSkill(item.slug)}
+                              >
+                                {item.installed ? t("skills.installed") : t("skills.install")}
+                              </Button>
+                            }
+                          >
+                            <SkillCardDescription>{item.reason}</SkillCardDescription>
+                          </SkillCardOpen>
+                        </div>
+                      </article>
+                    ))}
+                    {loadingRecommendationPage ? (
+                      <p className="workspace-search-panel__state">{t("common.loading")}</p>
+                    ) : null}
+                    {recommendationsHasMore ? (
+                      <div
+                        ref={recommendationsLoadSentinelRef}
+                        data-testid="skills-recommendations-sentinel"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </>
                 )}
               </div>
             ) : null}
           </section>
         </div>
       </div>
+
+      <CreateCustomSkillModal
+        draftName={createCustomDraft}
+        error={createCustomError}
+        open={createCustomOpen}
+        onClose={() => {
+          setCreateCustomOpen(false);
+          setCreateCustomError(null);
+        }}
+        onDraftChange={setCreateCustomDraft}
+        onConfirm={async () => {
+          const trimmed = createCustomDraft.trim();
+          if (!trimmed) {
+            setCreateCustomError(t("skills.custom_create_name_required"));
+            return;
+          }
+
+          const created = await createCustomSkill(trimmed);
+          if (!created) {
+            setCreateCustomError(errorMessage ?? "Failed to create custom skill");
+            return;
+          }
+
+          setCreateCustomOpen(false);
+          setCreateCustomError(null);
+          setCreateCustomDraft("");
+          setSelectedSkillDetail(detailFromLibraryEntry(created));
+        }}
+      />
     </>
   );
 };

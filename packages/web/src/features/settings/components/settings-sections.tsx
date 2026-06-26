@@ -3,6 +3,7 @@ import type { IconSemantic } from "../../../theme";
 export type SettingsSection =
   | "general"
   | "providers"
+  | "terminal"
   | "appearance"
   | "shortcuts"
   | "monitoring"
@@ -19,6 +20,7 @@ export interface SettingsSectionMeta {
 const VISIBLE_SETTINGS_SECTIONS = [
   { id: "general", labelKey: "settings.general", iconSemantic: "nav.settings.general" },
   { id: "providers", labelKey: "settings.providers", iconSemantic: "nav.settings.providers" },
+  { id: "terminal", labelKey: "label.terminal", iconSemantic: "nav.settings.terminal" },
   { id: "appearance", labelKey: "settings.appearance", iconSemantic: "nav.settings.appearance" },
   { id: "shortcuts", labelKey: "settings.shortcuts.title", iconSemantic: "nav.settings.shortcuts" },
 ] as const satisfies readonly SettingsSectionMeta[];

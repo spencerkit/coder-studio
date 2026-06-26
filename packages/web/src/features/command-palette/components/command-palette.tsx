@@ -345,7 +345,7 @@ function buildCommands(context: {
       description: t("settings.title"),
       shortcut: "Ctrl+,",
       action: () => {
-        navigate("/settings");
+        navigate("/more/settings/general");
       },
     },
     {

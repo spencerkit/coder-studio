@@ -9,6 +9,7 @@ import { WorkspaceValidator } from "./validator.js";
 
 export interface OpenWorkspaceRequest {
   path: string;
+  targetRuntime?: Workspace["targetRuntime"];
   wslDistro?: string;
 }
 
@@ -117,6 +118,8 @@ export class WorkspaceManager {
    * @returns Created or existing workspace
    */
   async open(req: OpenWorkspaceRequest): Promise<Workspace> {
+    const targetRuntime = req.targetRuntime ?? "native";
+
     // 1. Validate path
     await this.validator.validate(req.path);
 
@@ -143,8 +146,8 @@ export class WorkspaceManager {
     const workspace: Workspace = {
       id: generateWorkspaceId(),
       path: req.path,
-      targetRuntime: "native",
-      wslDistro: req.wslDistro,
+      targetRuntime,
+      wslDistro: targetRuntime === "wsl" ? req.wslDistro : undefined,
       openedAt: Date.now(),
       lastActiveAt: Date.now(),
       uiState: {

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getRuntimePath, readRuntimeConfig } from "@coder-studio/core/runtime";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerConfig } from "../config.js";
 import { createServer, type Server, type ServerRuntimeOptions } from "../server.js";
 
@@ -33,6 +33,9 @@ describe("server runtime config", () => {
       await server.stop();
       server = undefined;
     }
+
+    vi.doUnmock("../agent-instructions/publisher.js");
+    vi.resetModules();
 
     if (existsSync(runtimePath)) {
       rmSync(runtimePath);
@@ -85,5 +88,47 @@ describe("server runtime config", () => {
     server = undefined;
 
     expect(readRuntimeConfig()).toBeNull();
+  });
+
+  it("writes runtime config before post-listen workspace sync completes", async () => {
+    const syncGate = Promise.withResolvers<void>();
+    vi.resetModules();
+    vi.doMock("../agent-instructions/publisher.js", async () => {
+      const actual = await vi.importActual<typeof import("../agent-instructions/publisher.js")>(
+        "../agent-instructions/publisher.js"
+      );
+
+      class DeferredPublisher extends actual.AgentInstructionsPublisher {
+        override async syncAllOpenWorkspaces() {
+          await syncGate.promise;
+          return [];
+        }
+      }
+
+      return {
+        ...actual,
+        AgentInstructionsPublisher: DeferredPublisher,
+      };
+    });
+
+    const { createServer: createDeferredServer } = await import("../server.js");
+
+    const pendingServer = createDeferredServer({
+      stateDir: join(testHomeDir, "server-state-deferred"),
+      host: "127.0.0.1",
+      port: 0,
+      writeRuntimeConfig: true,
+    });
+
+    await expect
+      .poll(() => readRuntimeConfig(), {
+        timeout: 5_000,
+      })
+      .not.toBeNull();
+
+    syncGate.resolve();
+    server = await pendingServer;
+    const { createServer: restoredCreateServer } = await import("../server.js");
+    expect(restoredCreateServer).toBeDefined();
   });
 });

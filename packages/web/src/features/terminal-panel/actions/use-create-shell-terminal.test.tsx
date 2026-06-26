@@ -67,6 +67,82 @@ describe("useCreateShellTerminal", () => {
     });
   });
 
+  it("passes profileId through to terminal.create when launching a non-default profile", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      id: "term_3",
+      workspaceId: "ws-test",
+      kind: "shell",
+      title: "Ops Shell",
+      cwd: "/tmp/ws-test",
+      argv: ["/usr/bin/env", "bash"],
+      cols: 120,
+      rows: 30,
+      alive: true,
+      createdAt: 1,
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { result } = renderHook(() => useCreateShellTerminal("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.createShellTerminal({ cwdPath: "src", profileId: "custom:ops" });
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "terminal.create",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        cwdPath: "src",
+        profileId: "custom:ops",
+        themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+      }),
+      undefined
+    );
+  });
+
+  it("passes a detected Git Bash profileId through to terminal.create", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      id: "term_git_bash",
+      workspaceId: "ws-test",
+      kind: "shell",
+      title: "Git Bash",
+      cwd: "/tmp/ws-test",
+      argv: ["C:/Program Files/Git/bin/bash.exe"],
+      cols: 120,
+      rows: 30,
+      alive: true,
+      createdAt: 1,
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    const { result } = renderHook(() => useCreateShellTerminal("ws-test"), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      await result.current.createShellTerminal({ profileId: "detected:win:git-bash" });
+    });
+
+    expect(sendCommand).toHaveBeenCalledWith(
+      "terminal.create",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        cwdPath: undefined,
+        profileId: "detected:win:git-bash",
+        themeBackground: expect.stringMatching(/^#[0-9a-fA-F]{6,8}$/),
+      }),
+      undefined
+    );
+  });
+
   it("shows a warning toast and returns null when no workspace is selected", async () => {
     const sendCommand = vi.fn();
     const store = createStore();

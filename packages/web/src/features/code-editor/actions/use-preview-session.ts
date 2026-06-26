@@ -1,3 +1,4 @@
+import { markdownUsesMermaid } from "@coder-studio/utils/markdown-mermaid";
 import { useEffect, useRef, useState } from "react";
 import {
   createPreviewSession,
@@ -22,15 +23,17 @@ export function usePreviewSession(input: {
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
-  const latestContentRef = useRef(input.content ?? "");
-  const lastSyncedContentRef = useRef(input.content ?? "");
-  const allowScripts = input.kind === "html";
+  const content = input.content ?? "";
+  const latestContentRef = useRef(content);
+  const lastSyncedContentRef = useRef(content);
+  const allowScripts =
+    input.kind === "html" || (input.kind === "markdown" && markdownUsesMermaid(content));
   const targetKey =
     input.enabled && input.workspaceId && input.filePath && input.kind
       ? `${input.workspaceId}:${input.kind}:${input.filePath}`
       : null;
 
-  latestContentRef.current = input.content ?? "";
+  latestContentRef.current = content;
 
   useEffect(() => {
     if (!targetKey || !input.workspaceId || !input.filePath || !input.kind) {

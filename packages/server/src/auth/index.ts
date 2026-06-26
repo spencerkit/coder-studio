@@ -1,3 +1,4 @@
+export type { RequestAuthContext } from "./plugin.js";
 export {
   createAuthGuard,
   registerAuthLogoutRoute,

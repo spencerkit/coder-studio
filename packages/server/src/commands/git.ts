@@ -22,8 +22,8 @@ import {
 import { getFileDiff } from "../git/diff.js";
 import { getGitCommitDetail, getGitCommitFileDiff } from "../git/history.js";
 import { applyGitHunkOperation } from "../git/hunk-operations.js";
-import type { CommandContext } from "../ws/dispatch.js";
-import { registerCommand } from "../ws/dispatch.js";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import type { RuntimeCommandContext } from "../runtime/context.js";
 import { emitGitStateChanged } from "./git-events.js";
 
 const gitHttpAuthSchema = z.object({
@@ -44,73 +44,83 @@ function debugGitHistoryCommand(message: string, details?: Record<string, unknow
   console.log("[git-history]", message, details);
 }
 
+function getWorkspaceOrThrow(ctx: RuntimeCommandContext, workspaceId: string) {
+  const workspace = ctx.workspaceLookup.get(workspaceId);
+  if (!workspace) {
+    throw { code: "workspace_not_found", message: `Workspace not found: ${workspaceId}` };
+  }
+  return workspace;
+}
+
 async function runGitNetworkOperation<T>(
-  ctx: CommandContext,
+  ctx: RuntimeCommandContext,
   workspaceId: string,
   op: () => Promise<T>
 ): Promise<T> {
-  if (!ctx.autoFetch?.runExclusive) {
+  const autoFetch = (
+    ctx as unknown as {
+      autoFetch?: { runExclusive?<R>(workspaceId: string, op: () => Promise<R>): Promise<R> };
+    }
+  ).autoFetch;
+  if (!autoFetch?.runExclusive) {
     return op();
   }
 
-  return ctx.autoFetch.runExclusive(workspaceId, op);
+  return autoFetch.runExclusive(workspaceId, op);
 }
 
-// git.status
-registerCommand(
+function workspaceTarget(workspaceId: string) {
+  return { kind: "workspace" as const, workspaceId };
+}
+
+registerRuntimeCommand(
   "git.status",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    return getGitStatus(workspace.path);
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return getGitStatus(workspace.path);
+    },
   }
 );
 
-// git.stage
-registerCommand(
+registerRuntimeCommand(
   "git.stage",
   z.object({
     workspaceId: z.string(),
     paths: z.array(z.string()),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    await stageFiles(workspace.path, args.paths);
-    emitGitStateChanged(ctx, args.workspaceId);
-    return {};
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      await stageFiles(workspace.path, args.paths);
+      emitGitStateChanged(ctx as never, args.workspaceId);
+      return {};
+    },
   }
 );
 
-// git.diff
-registerCommand(
+registerRuntimeCommand(
   "git.diff",
   z.object({
     workspaceId: z.string(),
     path: z.string(),
     staged: z.boolean().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    return getFileDiff(workspace.path, args.path, args.staged ?? false);
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return getFileDiff(workspace.path, args.path, args.staged ?? false);
+    },
   }
 );
 
-// git.hunk
-registerCommand(
+registerRuntimeCommand(
   "git.hunk",
   z.object({
     workspaceId: z.string(),
@@ -119,96 +129,89 @@ registerCommand(
     hunkId: z.string(),
     operation: z.enum(["stage", "unstage", "discard"]),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    await applyGitHunkOperation(workspace.path, args);
-    emitGitStateChanged(ctx, args.workspaceId, {
-      worktreeChanged: true,
-    });
-    return {};
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      await applyGitHunkOperation(workspace.path, args);
+      emitGitStateChanged(ctx as never, args.workspaceId, {
+        worktreeChanged: true,
+      });
+      return {};
+    },
   }
 );
 
-// git.log
-registerCommand(
+registerRuntimeCommand(
   "git.log",
   z.object({
     workspaceId: z.string(),
     limit: z.number().int().min(1).max(50).optional(),
     afterSha: gitCommitRevisionSchema.optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
 
-    debugGitHistoryCommand("command git.log request", {
-      workspaceId: args.workspaceId,
-      workspacePath: workspace.path,
-      limit: args.limit ?? 5,
-      afterSha: args.afterSha,
-    });
+      debugGitHistoryCommand("command git.log request", {
+        workspaceId: args.workspaceId,
+        workspacePath: workspace.path,
+        limit: args.limit ?? 5,
+        afterSha: args.afterSha,
+      });
 
-    const history = await getGitHistory(workspace.path, {
-      limit: args.limit ?? 5,
-      afterSha: args.afterSha,
-    });
+      const history = await getGitHistory(workspace.path, {
+        limit: args.limit ?? 5,
+        afterSha: args.afterSha,
+      });
 
-    debugGitHistoryCommand("command git.log response", {
-      workspaceId: args.workspaceId,
-      entryCount: history.entries.length,
-      hasMore: history.hasMore,
-      firstSha: history.entries[0]?.sha,
-      lastSha: history.entries.at(-1)?.sha,
-    });
+      debugGitHistoryCommand("command git.log response", {
+        workspaceId: args.workspaceId,
+        entryCount: history.entries.length,
+        hasMore: history.hasMore,
+        firstSha: history.entries[0]?.sha,
+        lastSha: history.entries.at(-1)?.sha,
+      });
 
-    return history;
+      return history;
+    },
   }
 );
 
-// git.show
-registerCommand(
+registerRuntimeCommand(
   "git.show",
   z.object({
     workspaceId: z.string(),
     sha: gitCommitRevisionSchema,
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    return {
-      diff: await getGitCommitDiff(workspace.path, args.sha),
-    };
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return {
+        diff: await getGitCommitDiff(workspace.path, args.sha),
+      };
+    },
   }
 );
 
-// git.commitDetail
-registerCommand(
+registerRuntimeCommand(
   "git.commitDetail",
   z.object({
     workspaceId: z.string(),
     sha: gitCommitRevisionSchema,
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    return getGitCommitDetail(workspace.path, args.sha);
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return getGitCommitDetail(workspace.path, args.sha);
+    },
   }
 );
 
-// git.commitFileDiff
-registerCommand(
+registerRuntimeCommand(
   "git.commitFileDiff",
   z.object({
     workspaceId: z.string(),
@@ -216,80 +219,72 @@ registerCommand(
     path: z.string(),
     oldPath: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    return getGitCommitFileDiff(workspace.path, args);
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return getGitCommitFileDiff(workspace.path, args);
+    },
   }
 );
 
-// git.unstage
-registerCommand(
+registerRuntimeCommand(
   "git.unstage",
   z.object({
     workspaceId: z.string(),
     paths: z.array(z.string()),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    await unstageFiles(workspace.path, args.paths);
-    emitGitStateChanged(ctx, args.workspaceId);
-    return {};
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      await unstageFiles(workspace.path, args.paths);
+      emitGitStateChanged(ctx as never, args.workspaceId);
+      return {};
+    },
   }
 );
 
-// git.discard
-registerCommand(
+registerRuntimeCommand(
   "git.discard",
   z.object({
     workspaceId: z.string(),
     paths: z.array(z.string()),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    await discardChanges(workspace.path, args.paths);
-    emitGitStateChanged(ctx, args.workspaceId, {
-      treeChanged: true,
-    });
-    return {};
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      await discardChanges(workspace.path, args.paths);
+      emitGitStateChanged(ctx as never, args.workspaceId, {
+        treeChanged: true,
+      });
+      return {};
+    },
   }
 );
 
-// git.commit
-registerCommand(
+registerRuntimeCommand(
   "git.commit",
   z.object({
     workspaceId: z.string(),
     message: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    const result = await commitChanges(workspace.path, args.message);
-    emitGitStateChanged(ctx, args.workspaceId, {
-      branchChanged: true,
-      worktreeChanged: true,
-    });
-    return result;
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      const result = await commitChanges(workspace.path, args.message);
+      emitGitStateChanged(ctx as never, args.workspaceId, {
+        branchChanged: true,
+        worktreeChanged: true,
+      });
+      return result;
+    },
   }
 );
 
-// git.push
-registerCommand(
+registerRuntimeCommand(
   "git.push",
   z.object({
     workspaceId: z.string(),
@@ -298,30 +293,28 @@ registerCommand(
     force: z.boolean().optional(),
     auth: gitHttpAuthSchema.optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    const result = await runGitNetworkOperation(ctx, args.workspaceId, () =>
-      runGitPush(workspace.path, {
-        remote: args.remote,
-        branch: args.branch,
-        force: args.force,
-        auth: args.auth,
-      })
-    );
-    emitGitStateChanged(ctx, args.workspaceId, {
-      branchChanged: true,
-      worktreeChanged: true,
-    });
-    return result;
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      const result = await runGitNetworkOperation(ctx, args.workspaceId, () =>
+        runGitPush(workspace.path, {
+          remote: args.remote,
+          branch: args.branch,
+          force: args.force,
+          auth: args.auth,
+        })
+      );
+      emitGitStateChanged(ctx as never, args.workspaceId, {
+        branchChanged: true,
+        worktreeChanged: true,
+      });
+      return result;
+    },
   }
 );
 
-// git.pull
-registerCommand(
+registerRuntimeCommand(
   "git.pull",
   z.object({
     workspaceId: z.string(),
@@ -329,31 +322,29 @@ registerCommand(
     branch: z.string().optional(),
     auth: gitHttpAuthSchema.optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    const result = await runGitNetworkOperation(ctx, args.workspaceId, () =>
-      runGitPull(workspace.path, {
-        remote: args.remote,
-        branch: args.branch,
-        auth: args.auth,
-      })
-    );
-    ctx.workspaceMgr.recordFetch(args.workspaceId);
-    emitGitStateChanged(ctx, args.workspaceId, {
-      treeChanged: true,
-      branchChanged: true,
-      worktreeChanged: true,
-    });
-    return result;
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      const result = await runGitNetworkOperation(ctx, args.workspaceId, () =>
+        runGitPull(workspace.path, {
+          remote: args.remote,
+          branch: args.branch,
+          auth: args.auth,
+        })
+      );
+      ctx.hostBridge.recordWorkspaceFetch?.(args.workspaceId);
+      emitGitStateChanged(ctx as never, args.workspaceId, {
+        treeChanged: true,
+        branchChanged: true,
+        worktreeChanged: true,
+      });
+      return result;
+    },
   }
 );
 
-// git.fetch
-registerCommand(
+registerRuntimeCommand(
   "git.fetch",
   z.object({
     workspaceId: z.string(),
@@ -362,104 +353,95 @@ registerCommand(
     auth: gitHttpAuthSchema.optional(),
     background: z.boolean().optional(),
   }),
-  async (args, ctx, clientId) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx, meta) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
 
-    try {
-      // AutoFetchScheduler already holds the per-workspace lock before it
-      // dispatches an internal background fetch. Client-originated requests
-      // must still serialize through the shared network-operation gate.
-      const isInternalBackgroundFetch = args.background === true && !clientId;
-      const runFetch = () =>
-        runGitFetch(workspace.path, {
-          remote: args.remote,
-          prune: args.prune,
-          auth: args.auth,
-          timeoutMs: args.background ? GIT_BACKGROUND_FETCH_TIMEOUT_MS : undefined,
-        });
-      const result = isInternalBackgroundFetch
-        ? await runFetch()
-        : await runGitNetworkOperation(ctx, args.workspaceId, runFetch);
-      ctx.workspaceMgr.recordFetch(args.workspaceId);
-      emitGitStateChanged(ctx, args.workspaceId, { branchChanged: true });
-      return result;
-    } catch (err) {
-      if (args.background && err instanceof GitAuthError) {
-        return { success: false, message: err.message, updatedRefs: [] };
+      try {
+        const isInternalBackgroundFetch = args.background === true && !meta?.clientId;
+        const runFetch = () =>
+          runGitFetch(workspace.path, {
+            remote: args.remote,
+            prune: args.prune,
+            auth: args.auth,
+            timeoutMs: args.background ? GIT_BACKGROUND_FETCH_TIMEOUT_MS : undefined,
+          });
+        const result = isInternalBackgroundFetch
+          ? await runFetch()
+          : await runGitNetworkOperation(ctx, args.workspaceId, runFetch);
+        ctx.hostBridge.recordWorkspaceFetch?.(args.workspaceId);
+        emitGitStateChanged(ctx as never, args.workspaceId, { branchChanged: true });
+        return result;
+      } catch (err) {
+        if (args.background && err instanceof GitAuthError) {
+          return { success: false, message: err.message, updatedRefs: [] };
+        }
+        throw err;
       }
-      throw err;
-    }
+    },
   }
 );
 
-// git.checkout
-registerCommand(
+registerRuntimeCommand(
   "git.checkout",
   z.object({
     workspaceId: z.string(),
     ref: z.string(),
     createBranch: z.boolean().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    const result = await runGitCheckout(workspace.path, args.ref, {
-      createBranch: args.createBranch,
-    });
-    if (result.success) {
-      emitGitStateChanged(ctx, args.workspaceId, {
-        treeChanged: true,
-        branchChanged: true,
-        worktreeChanged: true,
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      const result = await runGitCheckout(workspace.path, args.ref, {
+        createBranch: args.createBranch,
       });
-    }
-    return result;
+      if (result.success) {
+        emitGitStateChanged(ctx as never, args.workspaceId, {
+          treeChanged: true,
+          branchChanged: true,
+          worktreeChanged: true,
+        });
+      }
+      return result;
+    },
   }
 );
 
-// git.branch
-registerCommand(
+registerRuntimeCommand(
   "git.branch",
   z.object({
     workspaceId: z.string(),
     name: z.string(),
     startPoint: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    const result = await runGitCreateBranch(workspace.path, args.name, {
-      startPoint: args.startPoint,
-    });
-    emitGitStateChanged(ctx, args.workspaceId, {
-      branchChanged: true,
-      worktreeChanged: true,
-    });
-    return result;
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      const result = await runGitCreateBranch(workspace.path, args.name, {
+        startPoint: args.startPoint,
+      });
+      emitGitStateChanged(ctx as never, args.workspaceId, {
+        branchChanged: true,
+        worktreeChanged: true,
+      });
+      return result;
+    },
   }
 );
 
-// git.branches
-registerCommand(
+registerRuntimeCommand(
   "git.branches",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
-
-    return runGitListBranches(workspace.path);
+  {
+    resolveTarget: (args) => workspaceTarget(args.workspaceId),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return runGitListBranches(workspace.path);
+    },
   }
 );

@@ -12,9 +12,15 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DomainEvent, Session } from "@coder-studio/core";
+import {
+  AUTOMATION_PERMISSIONS_ENV,
+  type DomainEvent,
+  SCOPED_SESSION_AUTOMATION_PERMISSIONS,
+  type Session,
+} from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionTokenRepo } from "../auth/session-token-repo.js";
 import { EventBus } from "../bus/event-bus.js";
 import { ProviderInstallManager } from "../provider-runtime/install-manager.js";
 import { SessionManager } from "../session/manager.js";
@@ -138,6 +144,7 @@ describe("Session Integration", () => {
   let testDir: string;
   let stateDir: string;
   let providerConfigRepo: ProviderConfigRepo;
+  let sessionTokenRepo: SessionTokenRepo;
 
   beforeEach(() => {
     // Create event bus
@@ -195,6 +202,7 @@ describe("Session Integration", () => {
     providerConfigRepo = new ProviderConfigRepo({
       filePath: join(stateDir, "provider-configs.json"),
     });
+    sessionTokenRepo = new SessionTokenRepo();
     const settingsRepo = new SettingsRepo({
       filePath: join(stateDir, "settings.json"),
     });
@@ -205,6 +213,10 @@ describe("Session Integration", () => {
       broadcaster: mockBroadcaster,
       providerRegistry,
       providerConfigRepo,
+      sessionTokenRepo,
+      runtimeContext: {
+        apiUrl: "http://127.0.0.1:4321",
+      },
     });
 
     // Create context
@@ -529,6 +541,105 @@ describe("Session Integration", () => {
         })
       );
     });
+
+    it("injects session token and scoped automation permissions into the launched agent env", async () => {
+      const openResult = await dispatch(
+        {
+          kind: "command",
+          id: "test-session-token-open",
+          op: "workspace.open",
+          args: { path: testDir },
+        },
+        ctx
+      );
+
+      expect(openResult.ok).toBe(true);
+      const workspaceId = openResult.data!.id;
+
+      const sessionResult = await dispatch(
+        {
+          kind: "command",
+          id: "test-session-token-create",
+          op: "session.create",
+          args: {
+            workspaceId,
+            providerId: "claude",
+          },
+        },
+        ctx
+      );
+
+      expect(sessionResult.ok).toBe(true);
+
+      const env = (spawnCalls.at(-1)?.options as { env?: Record<string, string> } | undefined)?.env;
+      expect(env?.CODER_STUDIO_API_URL).toBe("http://127.0.0.1:4321");
+      expect(env?.CODER_STUDIO_SESSION_TOKEN).toMatch(/^[a-f0-9]{64}$/);
+      expect(env?.CODER_STUDIO_WORKSPACE_ID).toBe(workspaceId);
+      expect(env?.CODER_STUDIO_AUTOMATION_ENTRY).toContain("automation-entry");
+      expect(env?.[AUTOMATION_PERMISSIONS_ENV]).toBe(
+        SCOPED_SESSION_AUTOMATION_PERMISSIONS.join(",")
+      );
+
+      const tokenRecord = sessionTokenRepo.get(env?.CODER_STUDIO_SESSION_TOKEN ?? "");
+      expect(tokenRecord).toEqual(
+        expect.objectContaining({
+          sessionId: sessionResult.data!.id,
+          workspaceId,
+          providerId: "claude",
+          permissions: [...SCOPED_SESSION_AUTOMATION_PERMISSIONS],
+        })
+      );
+    });
+
+    it("revokes the issued session token when automation entry resolution fails", async () => {
+      const resolverError = new Error("automation entry resolution failed");
+      const issuedSessionIds: string[] = [];
+      const revokedSessionIds: string[] = [];
+      const claudeProvider = providerRegistry.find((provider) => provider.id === "claude");
+
+      expect(claudeProvider).toBeDefined();
+
+      const failingSessionMgr = new SessionManager({
+        terminalMgr,
+        eventBus,
+        db: sessionDb,
+        broadcaster: ctx.broadcaster,
+        providerRegistry,
+        providerConfigRepo,
+        hostBridge: {
+          issueSessionToken: (input) => {
+            issuedSessionIds.push(input.sessionId);
+            const record = sessionTokenRepo.issue(input);
+            return { token: record.token };
+          },
+          revokeSessionTokensBySessionId: (sessionId) => {
+            revokedSessionIds.push(sessionId);
+            sessionTokenRepo.revokeBySessionId(sessionId);
+          },
+          getHostApiUrl: () => "http://127.0.0.1:4321",
+          emitDomainEvent: () => {},
+          broadcast: () => {},
+          sendToClient: () => false,
+          sendBinaryToClient: () => false,
+        },
+        resolveAutomationEntryPath: () => {
+          throw resolverError;
+        },
+      } as never);
+
+      await expect(
+        failingSessionMgr.create({
+          workspaceId: "workspace-resolution-failure",
+          workspacePath: testDir,
+          providerId: "claude",
+          provider: claudeProvider!,
+        })
+      ).rejects.toThrow(resolverError);
+
+      expect(issuedSessionIds).toHaveLength(1);
+      expect(revokedSessionIds).toEqual(issuedSessionIds);
+      expect(sessionTokenRepo.listBySessionId(issuedSessionIds[0]!)).toEqual([]);
+    });
   });
 
   describe("Session state transitions", () => {
@@ -699,6 +810,11 @@ describe("Session Integration", () => {
     });
 
     it("should stop session successfully", async () => {
+      const sessionToken = (
+        spawnCalls.at(-1)?.options as { env?: Record<string, string> } | undefined
+      )?.env?.CODER_STUDIO_SESSION_TOKEN;
+      expect(sessionToken).toBeDefined();
+
       const result = await dispatch(
         {
           kind: "command",
@@ -714,6 +830,40 @@ describe("Session Integration", () => {
       // Verify session state changed to ended
       const session = sessionMgr.get(sessionId);
       expect(session?.state).toBe("ended");
+      expect(sessionTokenRepo.get(sessionToken ?? "")).toBeUndefined();
+    });
+
+    it("revokes tokens when ended sessions are deleted during workspace teardown cleanup", async () => {
+      const sessionToken = (
+        spawnCalls.at(-1)?.options as { env?: Record<string, string> } | undefined
+      )?.env?.CODER_STUDIO_SESSION_TOKEN;
+      expect(sessionToken).toBeDefined();
+
+      await dispatch(
+        {
+          kind: "command",
+          id: "test-stop-for-delete-ended",
+          op: "session.stop",
+          args: { sessionId },
+        },
+        ctx
+      );
+
+      expect(sessionMgr.get(sessionId)?.state).toBe("ended");
+      expect(sessionTokenRepo.get(sessionToken ?? "")).toBeUndefined();
+
+      const replacementToken = sessionTokenRepo.issue({
+        sessionId,
+        workspaceId: workspaceId!,
+        providerId: "claude",
+        permissions: SCOPED_SESSION_AUTOMATION_PERMISSIONS,
+      }).token;
+
+      expect(sessionTokenRepo.get(replacementToken)).toBeDefined();
+
+      sessionMgr.deleteEndedForWorkspace(workspaceId!);
+
+      expect(sessionTokenRepo.get(replacementToken)).toBeUndefined();
     });
 
     it("should fail session.stop for non-existent session", async () => {
@@ -1048,6 +1198,27 @@ describe("Session Integration", () => {
           state: "ended",
         })
       );
+    });
+
+    it("does not recreate a live automation token while hydrating a stale session", async () => {
+      sessionDb.listHydratable = vi.fn().mockReturnValue([
+        {
+          id: "sess-hydrate-4",
+          workspaceId: "ws-1",
+          terminalId: "term-dead",
+          providerId: "claude",
+          state: "running",
+          capability: "full",
+          startedAt: 100,
+          lastActiveAt: 200,
+        },
+      ]);
+
+      await sessionMgr.hydrate();
+
+      const tokens = sessionTokenRepo.listBySessionId("sess-hydrate-4");
+      expect(tokens).toEqual([]);
+      expect(sessionMgr.get("sess-hydrate-4")?.state).toBe("ended");
     });
   });
 

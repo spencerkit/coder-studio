@@ -711,11 +711,29 @@ export function useFileActions({
 
   const handleSelectFile = useCallback(
     (path: string) => {
-      void openWorkspaceFile({
-        workspaceId,
-        path,
-        source: "file-tree",
-      });
+      void openWorkspaceFile(
+        {
+          workspaceId,
+          path,
+          source: "file-tree",
+        },
+        { openTarget: "navigate", openDisposition: "preview" }
+      );
+      onSelectFile?.(path);
+    },
+    [onSelectFile, openWorkspaceFile, workspaceId]
+  );
+
+  const handlePinFile = useCallback(
+    (path: string) => {
+      void openWorkspaceFile(
+        {
+          workspaceId,
+          path,
+          source: "file-tree",
+        },
+        { openTarget: "navigate", openDisposition: "pinned" }
+      );
       onSelectFile?.(path);
     },
     [onSelectFile, openWorkspaceFile, workspaceId]
@@ -733,6 +751,7 @@ export function useFileActions({
     cancelDelete,
     confirmDelete,
     handleSelectFile,
+    handlePinFile,
     loadFileTree,
     loadChildren,
     loadSearchResults,

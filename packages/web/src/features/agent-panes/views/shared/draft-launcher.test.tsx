@@ -4,6 +4,7 @@ import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
+import { SKILL_PATH_DRAG_MIME } from "../../../../lib/skill-path-drag";
 import { WORKSPACE_PATH_DRAG_MIME } from "../../../../lib/workspace-path-drag";
 import { DraftLauncher } from "./draft-launcher";
 
@@ -207,10 +208,71 @@ describe("DraftLauncher", () => {
     expect(within(geminiCard as HTMLElement).getByText("GE")).toBeInTheDocument();
     expect(within(cursorCard as HTMLElement).getByText("CU")).toBeInTheDocument();
     expect(within(opencodeCard as HTMLElement).getByText("OP")).toBeInTheDocument();
+    expect(
+      within(claudeCard as HTMLElement)
+        .getByText("CL")
+        .closest(".agent-provider-card-monogram--claude")
+    ).not.toBeNull();
+    expect(
+      within(codexCard as HTMLElement)
+        .getByText("CO")
+        .closest(".agent-provider-card-monogram--codex")
+    ).not.toBeNull();
+    expect(
+      within(geminiCard as HTMLElement)
+        .getByText("GE")
+        .closest(".agent-provider-card-monogram--gemini")
+    ).not.toBeNull();
+    expect(
+      within(cursorCard as HTMLElement)
+        .getByText("CU")
+        .closest(".agent-provider-card-monogram--cursor")
+    ).not.toBeNull();
+    expect(
+      within(opencodeCard as HTMLElement)
+        .getByText("OP")
+        .closest(".agent-provider-card-monogram--opencode")
+    ).not.toBeNull();
     expect(screen.queryByText("Limited Support")).not.toBeInTheDocument();
     expect(screen.queryByText("Experimental")).not.toBeInTheDocument();
     expect(screen.queryByText("Supervisor evaluation")).not.toBeInTheDocument();
     expect(screen.queryByText("Interactive session")).not.toBeInTheDocument();
+  });
+
+  it("uses fallback tone classes for unknown provider monograms", () => {
+    const store = createDraftLauncherStore();
+
+    mockUseProviderLauncher.mockReturnValue({
+      providers: [
+        ...createProviderLauncherValue().providers,
+        createProvider({ id: "mistral", displayName: "Mistral Agent", badge: "Mistral" }),
+      ],
+      states: {
+        ...createProviderLauncherValue().states,
+        mistral: createRuntimeState("mistral"),
+      },
+      launch: vi.fn(),
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" />
+      </Provider>
+    );
+
+    const mistralCard = container.querySelector(".agent-provider-card-mistral");
+
+    expect(mistralCard).not.toBeNull();
+    expect(within(mistralCard as HTMLElement).getByText("MI")).toBeInTheDocument();
+
+    const mistralMonogram = within(mistralCard as HTMLElement)
+      .getByText("MI")
+      .closest(".agent-provider-card-monogram--mistral");
+
+    expect(mistralMonogram).not.toBeNull();
+    expect(mistralMonogram?.className).toMatch(
+      /agent-provider-card-monogram--tone-(accent|info|success|warning)/
+    );
   });
 
   it("renders provider rows as single-line labels with a dedicated CTA column", () => {
@@ -484,5 +546,117 @@ describe("DraftLauncher", () => {
 
     expect(dragOver.defaultPrevented).toBe(true);
     expect(await screen.findByText("Open in editor")).toBeInTheDocument();
+  });
+
+  it("opens dropped skill files in an editor pane target", async () => {
+    const store = createDraftLauncherStore();
+    const onOpenFile = vi.fn();
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" paneId="pane-1" onOpenFile={onOpenFile} />
+      </Provider>
+    );
+
+    const root = container.querySelector('[data-pane-id="pane-1"]') as HTMLElement;
+    const payload = {
+      skillSlug: "my-review-skill",
+      path: "refs/guide.md",
+      absolutePath: "/root/.agents/skills/my-review-skill/refs/guide.md",
+      kind: "file" as const,
+    };
+
+    const dataTransfer = {
+      files: [],
+      types: [SKILL_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === SKILL_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.absolutePath,
+    };
+    const dragOver = createEvent.dragOver(root, { dataTransfer });
+    fireEvent(root, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(await screen.findByText("Open in editor")).toBeInTheDocument();
+
+    const drop = createEvent.drop(root, { dataTransfer });
+    fireEvent(root, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(onOpenFile).toHaveBeenCalledWith("pane-1", "skill:my-review-skill/refs/guide.md");
+  });
+
+  it("allows drag-over for skill file drags even when payload data is not readable until drop", async () => {
+    const store = createDraftLauncherStore();
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" paneId="pane-1" onOpenFile={vi.fn()} />
+      </Provider>
+    );
+
+    const root = container.querySelector('[data-pane-id="pane-1"]') as HTMLElement;
+
+    fireEvent(
+      window,
+      new CustomEvent("coder-studio:skill-path-drag-start", {
+        detail: {
+          skillSlug: "my-review-skill",
+          path: "refs/guide.md",
+          absolutePath: "/root/.agents/skills/my-review-skill/refs/guide.md",
+          kind: "file",
+        },
+      })
+    );
+
+    const dataTransfer = {
+      files: [],
+      types: [SKILL_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: () => "",
+    };
+    const dragOver = createEvent.dragOver(root, { dataTransfer });
+    fireEvent(root, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(await screen.findByText("Open in editor")).toBeInTheDocument();
+  });
+
+  it("ignores dropped skill directories for editor pane targets", async () => {
+    const store = createDraftLauncherStore();
+    const onOpenFile = vi.fn();
+
+    const { container } = render(
+      <Provider store={store}>
+        <DraftLauncher workspaceId="ws-123" paneId="pane-1" onOpenFile={onOpenFile} />
+      </Provider>
+    );
+
+    const root = container.querySelector('[data-pane-id="pane-1"]') as HTMLElement;
+    const payload = {
+      skillSlug: "my-review-skill",
+      path: "refs",
+      absolutePath: "/root/.agents/skills/my-review-skill/refs",
+      kind: "dir" as const,
+    };
+
+    const dataTransfer = {
+      files: [],
+      types: [SKILL_PATH_DRAG_MIME, "text/plain"],
+      items: [],
+      getData: (type: string) =>
+        type === SKILL_PATH_DRAG_MIME ? JSON.stringify(payload) : payload.absolutePath,
+    };
+    const dragOver = createEvent.dragOver(root, { dataTransfer });
+    fireEvent(root, dragOver);
+
+    expect(dragOver.defaultPrevented).toBe(true);
+    expect(screen.queryByText("Open in editor")).toBeNull();
+
+    const drop = createEvent.drop(root, { dataTransfer });
+    fireEvent(root, drop);
+
+    expect(drop.defaultPrevented).toBe(true);
+    expect(onOpenFile).not.toHaveBeenCalled();
   });
 });

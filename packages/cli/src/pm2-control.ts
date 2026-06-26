@@ -40,6 +40,11 @@ interface StartupLogOffsets {
   errOffset: number;
 }
 
+interface RuntimeReadinessState {
+  kind: "ready" | "pending" | "failed";
+  reason?: string;
+}
+
 const isMissingManagedServerError = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
     return false;
@@ -208,6 +213,31 @@ const withPm2Connection = async <T>(operation: (pm2: Pm2Module) => Promise<T>): 
   }
 };
 
+const readRuntimeReadiness = async (pm2: Pm2Module): Promise<RuntimeReadinessState> => {
+  if (readRuntimeConfig()) {
+    return { kind: "ready" };
+  }
+
+  const processes = await describeManagedServer(pm2);
+  const process = processes[0];
+  if (!process) {
+    return {
+      kind: "failed",
+      reason: "the managed process exited before runtime data was written",
+    };
+  }
+
+  const status = process.pm2_env?.status;
+  if (status === "errored" || status === "stopped") {
+    return {
+      kind: "failed",
+      reason: `the managed process entered the ${status} state`,
+    };
+  }
+
+  return { kind: "pending" };
+};
+
 const waitForRuntimeReady = async (
   pm2: Pm2Module,
   waitMs: number,
@@ -216,22 +246,13 @@ const waitForRuntimeReady = async (
   const deadline = Date.now() + waitMs;
 
   while (Date.now() <= deadline) {
-    if (readRuntimeConfig()) {
+    const readiness = await readRuntimeReadiness(pm2);
+    if (readiness.kind === "ready") {
       return;
     }
 
-    const processes = await describeManagedServer(pm2);
-    const process = processes[0];
-    if (!process) {
-      throw createStartupError(
-        "the managed process exited before runtime data was written",
-        logOffsets
-      );
-    }
-
-    const status = process.pm2_env?.status;
-    if (status === "errored" || status === "stopped") {
-      throw createStartupError(`the managed process entered the ${status} state`, logOffsets);
+    if (readiness.kind === "failed") {
+      throw createStartupError(readiness.reason ?? "runtime readiness failed", logOffsets);
     }
 
     const remainingMs = deadline - Date.now();

@@ -54,7 +54,8 @@
     "no": "No",
     "ok": "OK",
     "all": "All",
-    "active": "Active"
+    "active": "Active",
+    "create": "Create"
   },
   "action": {
     "open": "Open",
@@ -70,11 +71,13 @@
     "commit": "Commit",
     "push": "Push",
     "pull": "Pull",
+    "open_source": "Open Source File",
     "refresh": "Refresh",
     "settings": "Settings",
     "cancel": "Cancel",
     "confirm": "Confirm",
     "close": "Close",
+    "edit": "Edit",
     "apply": "Apply",
     "reset": "Reset",
     "search": "Search",
@@ -209,11 +212,17 @@
       "type_filter": "Memory type",
       "all_types": "All types",
       "types": {
-        "feature": "Feature",
+        "wiki": "Wiki",
+        "issue": "Issue",
         "todo": "Todo",
-        "bugfix": "Bugfix",
-        "project": "Project",
         "note": "Note"
+      },
+      "status_label": "Status",
+      "statuses": {
+        "not_started": "Not started",
+        "in_progress": "In progress",
+        "pending_verification": "Pending verification",
+        "completed": "Completed"
       },
       "active_count": "{count} active entries",
       "active_count_one": "{count} active entry",
@@ -238,7 +247,9 @@
       "title": "Quick Jump",
       "placeholder": "Type a filename or path",
       "no_results": "No matching files found.",
-      "failed": "File search failed. Try again."
+      "failed": "File search failed. Try again.",
+      "expand_label": "Expand Quick Jump",
+      "collapse_label": "Collapse Quick Jump"
     },
     "open_editors": {
       "title_with_count": "{title} ({count})",
@@ -333,9 +344,13 @@
         "failed": "Failed"
       },
       "source": {
-        "skillhub": "skills-hub",
-        "local": "Local",
+        "installed": "Installed",
+        "custom": "Custom",
         "builtin": "Built-in"
+      },
+      "origin": {
+        "skillhub": "skills-hub",
+        "filesystem": "Local"
       }
     },
     "search": {
@@ -372,6 +387,11 @@
       "title": "Start Workspace",
       "recent_title": "Recent Workspaces",
       "open_recent": "Open recent workspace {name}",
+      "remove_recent": "Remove {name} from recent workspaces",
+      "clear_recent_workspaces": "Clear all recent workspaces",
+      "clear_recent_confirm_title": "Clear recent workspaces?",
+      "clear_recent_confirm_description": "This only clears the recent workspace list. It does not delete any project directories from disk.",
+      "clear_all": "Clear all",
       "home_directory": "Home Directory",
       "go_up": "Go Up",
       "new_folder": "New Folder",
@@ -407,6 +427,20 @@
   },
   "skills": {
     "title": "Skills",
+    "custom_title": "Custom Skills",
+    "custom_expand_label": "Expand Custom Skills",
+    "custom_collapse_label": "Collapse Custom Skills",
+    "custom_new": "New Skill",
+    "custom_empty": "No custom skills yet.",
+    "custom_create_title": "Create Custom Skill",
+    "custom_create_name": "Skill Name",
+    "custom_create_name_required": "Enter a skill name",
+    "custom_create_placeholder": "My Review Skill",
+    "custom_create_helper": "We will create a folder with SKILL.md under your global skills directory.",
+    "custom_files_title": "Files",
+    "custom_new_file": "New File",
+    "custom_new_folder": "New Folder",
+    "custom_delete": "Delete",
     "discover_title": "Discover",
     "recommendations_title": "Recommended",
     "recommendations_expand_label": "Expand Recommendations",
@@ -455,8 +489,14 @@
     "detail_source": "Source",
     "detail_library_path": "Library path",
     "detail_targets": "Agent Status",
+    "delete": "Delete",
     "uninstall": "Uninstall",
     "uninstall_tooltip": "Disable this skill first, then remove it from the shared skill library.",
+    "custom_remove_tooltip": "Delete this custom skill folder from your global skills directory.",
+    "custom_remove_confirm_title": "Delete {name}?",
+    "custom_remove_confirm_description": "This permanently deletes the custom skill folder and all files under it from your global skills directory.",
+    "custom_remove_confirm_mounted_description": "This custom skill is enabled on {count} target(s). Deleting it will disable it first, then permanently delete the skill folder and all files under it from your global skills directory.",
+    "custom_remove_confirm_confirm": "Delete Skill",
     "uninstall_confirm_title": "Remove {name}?",
     "uninstall_confirm_description": "This skill is enabled on {count} target(s). Removing it will disable it first, then delete it from the skill library.",
     "uninstall_confirm_confirm": "Remove Skill",
@@ -550,12 +590,16 @@
       "aria_label": "Workspace drawer",
       "close": "Close workspace drawer",
       "select_title": "Select workspace",
+      "current_workspace": "Current workspace {name}",
+      "expand_workspace": "Expand workspace {name}",
+      "collapse_workspace": "Collapse workspace {name}",
       "switch_to_workspace": "Switch to workspace {name}",
+      "create_session_in_workspace": "Create session in {name}",
       "close_workspace": "Close workspace {name}"
     },
     "empty": {
       "start_session": "Start a new agent session for this workspace.",
-      "files_terminal_hint": "Files and Terminal stay available from the bottom bar."
+      "files_terminal_hint": "Files and Terminal stay available from the top bar."
     }
   },
   "dev_browser": {
@@ -577,6 +621,7 @@
     "loading": "Opening...",
     "unsupported": "Service workers are unavailable in this browser or connection. Coder Studio will fall back to compatibility mode, but live updates may be limited.",
     "error": "Could not open the local preview.",
+    "embed_limitations": "Some local apps block iframe previews. If the page stays blank, open the URL in your browser or relax frame restrictions for local development.",
     "invalid_viewport": "Enter a width and height between 1 and 4096.",
     "empty_description": "Enter a loopback URL from a local dev server, such as localhost:8000."
   },
@@ -700,6 +745,12 @@
     "paste_dialog_submit": "Send",
     "hide": "Hide Terminal",
     "show": "Show Terminal",
+    "profile_chooser_label": "Choose Terminal Profile",
+    "profile_configure": "Configure Terminal Profiles...",
+    "open_default_profile": "Open Default: {label}",
+    "profile_source_custom": "Custom",
+    "profile_source_detected": "Detected",
+    "default_badge": "Default",
     "selector": {
       "switch": "Switch terminal",
       "title": "Terminal Sessions",
@@ -857,6 +908,11 @@
     "close_browser_tab": "Close Browser tab",
     "open_editor_view": "Open editor view",
     "open_editor_tabs": "Open editor tabs",
+    "editor_tab_actions": "Editor tab actions",
+    "keep_tab_open": "Keep Open",
+    "close_other_tabs": "Close Others",
+    "close_tabs_to_right": "Close to the Right",
+    "close_saved_tabs": "Close Saved",
     "current_file_path": "Current file path",
     "modified_unsaved_changes": "modified · Unsaved changes",
     "image_load_failed_body": "The image could not be loaded. The file may have been moved or is larger than the browser allows.",
@@ -867,6 +923,8 @@
     "image_zoom_actual": "Actual size",
     "image_zoom_level": "Zoom level",
     "image_zoom_fit_level": "Fit",
+    "canvas_zoom_controls": "Canvas zoom controls",
+    "canvas_zoom_reset": "Reset zoom",
     "image_diff_base": "Base",
     "image_diff_current": "Current",
     "image_diff_no_base": "No base image",
@@ -1335,6 +1393,26 @@
     "copy_on_select_failed_body": "Use Ctrl/Cmd+C to copy manually",
     "terminal_standard": "Standard",
     "terminal_compatibility": "Compatibility Mode",
+    "terminal_profiles": {
+      "title": "Terminal Profiles",
+      "hint": "Choose the default shell and manage reusable custom terminal launch presets. Detected profiles are read-only.",
+      "default_label": "Default terminal profile",
+      "current_default": "Current default",
+      "system_default": "System default",
+      "detected_profiles": "Detected profiles",
+      "detected_badge": "Detected",
+      "none_detected": "No detected profiles",
+      "custom_profiles": "Custom profiles",
+      "no_custom_profiles": "No custom profiles yet",
+      "profile_label": "Profile label",
+      "command": "Command",
+      "args": "Arguments",
+      "args_hint": "Enter one argument per line.",
+      "save_custom": "Save custom profile",
+      "edit_profile": "Edit {label}",
+      "delete_profile": "Delete {label}",
+      "pending_refresh": "Available after profile refresh"
+    },
     "provider": {
       "title": "Agent Settings",
       "status": "Status",
@@ -1457,7 +1535,7 @@
     "placeholder_description": "This task only builds the desktop shell. Route-aware section content will be wired in a later task.",
     "category": {
       "settings": "Settings",
-      "settings_hint": "Adjust workspace behavior, providers, appearance, and shortcuts.",
+      "settings_hint": "Adjust workspace, agent, terminal, appearance, and shortcut behavior.",
       "analysis": "Analysis & Diagnostics",
       "analysis_hint": "Review analytics, monitoring, and diagnostics surfaces.",
       "about": "About & Updates",
@@ -1465,9 +1543,10 @@
     },
     "section": {
       "settings": {
-        "general_hint": "Core workspace, notification, terminal, and language preferences.",
+        "general_hint": "Core workspace, notification, language, and runtime preferences.",
         "agents": "Agents",
         "agents_hint": "Provider selection, commands, and agent-specific configuration.",
+        "terminal_hint": "Renderer, copy-on-select, launch profiles, and terminal font sizes.",
         "appearance_hint": "Theme, background, and material preferences.",
         "shortcuts_hint": "Keyboard bindings and common interaction shortcuts."
       },

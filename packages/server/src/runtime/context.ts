@@ -1,0 +1,62 @@
+import type { ProviderDefinition, Workspace } from "@coder-studio/core";
+import type { AgentInstructionsPublisher } from "../agent-instructions/publisher.js";
+import type { EventBus } from "../bus/event-bus.js";
+import type { LspManager } from "../lsp/manager.js";
+import type { LspToolInstallManager } from "../lsp-tools/install-manager.js";
+import type { LspToolManager } from "../lsp-tools/manager.js";
+import type { ProviderInstallManager } from "../provider-runtime/install-manager.js";
+import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
+import type { SessionManager } from "../session/manager.js";
+import type { SessionAnalysisService } from "../session-analysis/service.js";
+import type { BuiltinSkillSyncManager } from "../skills/builtin/sync-manager.js";
+import type { SkillHealthManager } from "../skills/health-manager.js";
+import type { SkillInstallManager } from "../skills/install-manager.js";
+import type { SkillMountManager } from "../skills/mount-manager.js";
+import type { SkillsHubClient } from "../skills/skills-hub-client.js";
+import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
+import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
+import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js";
+import type { SkillTargetRepo } from "../storage/repositories/skill-target-repo.js";
+import type { SupervisorManager } from "../supervisor/manager.js";
+import type { SystemDependencyInstallManager } from "../system-deps/install-manager.js";
+import type { TaskManager } from "../tasks/manager.js";
+import type { TerminalManager } from "../terminal/manager.js";
+import type { WorkAnalysisService } from "../work-analysis/service.js";
+import type { RuntimeHostBridge } from "./contract.js";
+
+type RuntimeWorkspaceLookup = Pick<Workspace, "id" | "path" | "targetRuntime">;
+
+export interface RuntimeCommandContext {
+  runtimeId: string;
+  workspaceLookup: {
+    get(workspaceId: string): RuntimeWorkspaceLookup | undefined;
+    list(): RuntimeWorkspaceLookup[];
+  };
+  hostBridge: RuntimeHostBridge;
+  eventBus: EventBus;
+  providerConfigRepo: ProviderConfigRepo;
+  providerRegistry: ProviderDefinition[];
+  sessionMgr: SessionManager;
+  terminalMgr: TerminalManager;
+  taskMgr: TaskManager;
+  lspMgr: LspManager;
+  lspToolMgr?: LspToolManager;
+  lspToolInstallMgr?: LspToolInstallManager;
+  supervisorMgr: SupervisorManager;
+  providerRuntimeDeps?: RuntimeStatusDeps;
+  providerInstallMgr?: ProviderInstallManager;
+  systemDependencyInstallMgr?: SystemDependencyInstallManager;
+  skillsHubClient?: SkillsHubClient;
+  skillInstallMgr?: SkillInstallManager;
+  skillMountMgr?: SkillMountManager;
+  skillHealthMgr?: SkillHealthManager;
+  skillLibraryRepo?: SkillLibraryRepo;
+  skillTargetRepo?: SkillTargetRepo;
+  skillMountRepo?: SkillMountRepo;
+  builtinSkillSyncMgr?: BuiltinSkillSyncManager;
+  sessionMetadataRepo?: SessionMetadataRepo;
+  sessionAnalysisService?: SessionAnalysisService;
+  workAnalysisService?: WorkAnalysisService;
+  agentInstructionPublisher?: AgentInstructionsPublisher;
+}
