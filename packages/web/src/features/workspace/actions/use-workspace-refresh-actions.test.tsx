@@ -123,4 +123,150 @@ describe("useWorkspaceRefreshActions", () => {
 
     expect(Array.from(store.get(loadedDirsAtomFamily("ws-test")))).toEqual(["src"]);
   });
+
+  it("skips stale descendant refreshes after a parent refresh prunes expanded paths", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(
+        async (op: string, args?: { subPath?: string; uiState?: Record<string, unknown> }) => {
+          if (op === "git.branches") {
+            return {
+              current: "main",
+              branches: [{ name: "main", isRemote: false, isCurrent: true }],
+            };
+          }
+
+          if (op === "git.status") {
+            return {
+              branch: "main",
+              ahead: 0,
+              behind: 0,
+              staged: [],
+              modified: [],
+              untracked: [],
+              deleted: [],
+            };
+          }
+
+          if (op === "worktree.list") {
+            return { worktrees: [] };
+          }
+
+          if (op === "workspace.uiState.set") {
+            return {
+              id: "ws-test",
+              path: "/workspace",
+              targetRuntime: "native",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: args?.uiState,
+            };
+          }
+
+          if (op === "file.readTree" && !args?.subPath) {
+            return {
+              path: "/workspace",
+              children: [
+                { path: "worktrees", name: "worktrees", kind: "dir", isGitIgnored: false },
+              ],
+            };
+          }
+
+          if (op === "file.readTree" && args.subPath === "worktrees") {
+            return {
+              path: "worktrees",
+              children: [],
+            };
+          }
+
+          throw new Error(`Unexpected command: ${op} ${args?.subPath ?? ""}`.trim());
+        }
+      );
+
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/workspace",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          fileTreeExpandedDirs: ["worktrees", "worktrees/feature-agent-canvas"],
+        },
+      },
+    } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [".", [{ path: "worktrees", name: "worktrees", kind: "dir", isGitIgnored: false }]],
+        [
+          "worktrees",
+          [
+            {
+              path: "worktrees/feature-agent-canvas",
+              name: "feature-agent-canvas",
+              kind: "dir",
+              isGitIgnored: false,
+            },
+          ],
+        ],
+        [
+          "worktrees/feature-agent-canvas",
+          [
+            {
+              path: "worktrees/feature-agent-canvas/output",
+              name: "output",
+              kind: "dir",
+              isGitIgnored: false,
+            },
+          ],
+        ],
+      ])
+    );
+    store.set(
+      expandedDirsAtomFamily("ws-test"),
+      new Set(["worktrees", "worktrees/feature-agent-canvas"])
+    );
+    store.set(
+      loadedDirsAtomFamily("ws-test"),
+      new Set(["worktrees", "worktrees/feature-agent-canvas"])
+    );
+
+    render(
+      <Provider store={store}>
+        <RefreshHarness workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "refresh workspace" }));
+
+    await waitFor(() => {
+      expect(Array.from(store.get(expandedDirsAtomFamily("ws-test")) ?? [])).toEqual(["worktrees"]);
+    });
+
+    expect(Array.from(store.get(loadedDirsAtomFamily("ws-test")))).toEqual(["worktrees"]);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "workspace.uiState.set",
+      expect.objectContaining({
+        workspaceId: "ws-test",
+        uiState: expect.objectContaining({ fileTreeExpandedDirs: ["worktrees"] }),
+      }),
+      undefined
+    );
+    expect(
+      sendCommand.mock.calls.some(
+        ([op, args]) =>
+          op === "file.readTree" &&
+          typeof args === "object" &&
+          args !== null &&
+          "subPath" in args &&
+          (args as { subPath?: string }).subPath === "worktrees/feature-agent-canvas"
+      )
+    ).toBe(false);
+  });
 });
