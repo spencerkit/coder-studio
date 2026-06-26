@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4
+
+### Patch Changes
+
+- [#82](https://github.com/spencerkit/coder-studio/pull/82) [`4ebd361`](https://github.com/spencerkit/coder-studio/commit/4ebd361432c844f501d0bdc01bda8e86803b6265) Thanks [@pallyoung](https://github.com/pallyoung)! - Stabilize the web test suite and fix workspace UI and dev-browser regressions.
+
 ## 0.5.3
 
 ### Patch Changes
