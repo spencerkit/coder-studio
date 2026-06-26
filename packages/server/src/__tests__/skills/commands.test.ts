@@ -1,10 +1,19 @@
-import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  readFile as fsReadFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Topics } from "@coder-studio/core";
 import { describe, expect, it, vi } from "vitest";
 import { registerSkillsCommands } from "../../commands/skills/index.js";
 import { SkillHealthManager } from "../../skills/health-manager.js";
+import { readManagedSkillMarker } from "../../skills/managed-skill-metadata.js";
 import { SkillMountManager } from "../../skills/mount-manager.js";
 import { SkillLibraryRepo } from "../../storage/repositories/skill-library-repo.js";
 import { SkillMountRepo } from "../../storage/repositories/skill-mount-repo.js";
@@ -12,6 +21,13 @@ import type { CommandContext } from "../../ws/dispatch.js";
 import { dispatch } from "../../ws/dispatch.js";
 
 registerSkillsCommands();
+
+const PNG_BYTES = Buffer.from(
+  "89504E470D0A1A0A0000000D4948445200000001000000010806000000" +
+    "1F15C4890000000A49444154789C63000100000005000157CFC4A30000" +
+    "0000049454E44AE426082",
+  "hex"
+);
 
 function createBaseContext(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
@@ -62,7 +78,8 @@ describe("skills commands", () => {
           displayName: "Code Review",
           description: "Review code changes before merge",
           version: "1.2.3",
-          source: "skillhub",
+          source: "installed",
+          origin: "skillhub",
           libraryPath: "/library/code-review",
           installState: "installed",
           installedAt: 1,
@@ -155,7 +172,8 @@ describe("skills commands", () => {
                   displayName: "React Review",
                   description: "Review React code",
                   version: "1.0.0",
-                  source: "skillhub",
+                  source: "installed",
+                  origin: "skillhub",
                   libraryPath: "/library/react-review",
                   installState: "installed",
                   installedAt: 1,
@@ -200,17 +218,79 @@ describe("skills commands", () => {
       );
 
       expect(result.ok).toBe(true);
-      expect(result.data).toEqual([
-        expect.objectContaining({
-          slug: "vite-testing",
-          installed: false,
-          reason: expect.any(String),
-          sourceQuery: expect.any(String),
-        }),
-      ]);
+      expect(result.data).toEqual({
+        entries: [
+          expect.objectContaining({
+            slug: "vite-testing",
+            installed: false,
+            reason: expect.any(String),
+            sourceQuery: expect.any(String),
+          }),
+        ],
+        hasMore: false,
+      });
       expect(
-        (result.data as Array<{ slug: string }>).some((item) => item.slug === "react-review")
+        (result.data as { entries: Array<{ slug: string }> }).entries.some(
+          (item) => item.slug === "react-review"
+        )
       ).toBe(false);
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns paginated recommendations with hasMore", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "skills-recommend-page-"));
+    try {
+      await writeFile(
+        join(workspaceRoot, "package.json"),
+        JSON.stringify(
+          {
+            dependencies: { react: "^19.0.0" },
+            scripts: { test: "vitest run" },
+          },
+          null,
+          2
+        )
+      );
+
+      const ctx = createBaseContext({
+        workspaceMgr: {
+          get: vi.fn(() => ({ id: "ws-1", path: workspaceRoot })),
+        } as never,
+        skillLibraryRepo: { get: vi.fn(() => undefined) } as never,
+        skillMountRepo: { listBySkillSlug: vi.fn(() => []) } as never,
+        skillsHubClient: {
+          search: vi.fn(async (query: string) =>
+            query.includes("React")
+              ? [
+                  { slug: "skill-a", displayName: "Skill A", description: "A" },
+                  { slug: "skill-b", displayName: "Skill B", description: "B" },
+                  { slug: "skill-c", displayName: "Skill C", description: "C" },
+                ]
+              : []
+          ),
+        } as never,
+      });
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "skills-recommend-page-1",
+          op: "skills.recommend",
+          args: { workspaceId: "ws-1", limit: 2, offset: 1 },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual({
+        entries: [
+          expect.objectContaining({ slug: "skill-b" }),
+          expect.objectContaining({ slug: "skill-c" }),
+        ],
+        hasMore: false,
+      });
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
@@ -224,7 +304,8 @@ describe("skills commands", () => {
           displayName: "Code Review",
           description: "Review code changes before merge",
           version: "1.2.3",
-          source: "skillhub",
+          source: "installed",
+          origin: "skillhub",
           libraryPath: "/library/code-review",
           installState: "installed",
           installedAt: 1,
@@ -285,7 +366,8 @@ describe("skills commands", () => {
             displayName: "Code Review",
             description: "Review code changes before merge",
             version: "1.2.3",
-            source: "skillhub",
+            source: "installed",
+            origin: "skillhub",
             libraryPath: "/library/code-review",
             installState: "installed",
             installedAt: 1,
@@ -360,7 +442,8 @@ describe("skills commands", () => {
             displayName: "Code Review",
             description: "Review code changes before merge",
             version: "1.2.3",
-            source: "skillhub",
+            source: "installed",
+            origin: "skillhub",
             libraryPath: "/library/code-review",
             installState: "installed",
             installedAt: 1,
@@ -371,7 +454,8 @@ describe("skills commands", () => {
             displayName: "Security Review",
             description: "Review security issues",
             version: "1.2.3",
-            source: "skillhub",
+            source: "installed",
+            origin: "skillhub",
             libraryPath: "/library/security-review",
             installState: "installed",
             installedAt: 1,
@@ -381,7 +465,8 @@ describe("skills commands", () => {
             slug: "local-helper",
             displayName: "Local Helper",
             version: "local",
-            source: "local",
+            source: "custom",
+            origin: "filesystem",
             libraryPath: "/library/local-helper",
             installState: "installed",
             installedAt: 1,
@@ -451,7 +536,8 @@ describe("skills commands", () => {
             slug: "missing-version",
             displayName: "Missing Version",
             version: "1.0.0",
-            source: "skillhub",
+            source: "installed",
+            origin: "skillhub",
             libraryPath: "/library/missing-version",
             installState: "installed",
             installedAt: 1,
@@ -461,7 +547,8 @@ describe("skills commands", () => {
             slug: "lookup-failed",
             displayName: "Lookup Failed",
             version: "1.0.0",
-            source: "skillhub",
+            source: "installed",
+            origin: "skillhub",
             libraryPath: "/library/lookup-failed",
             installState: "installed",
             installedAt: 1,
@@ -543,6 +630,396 @@ describe("skills commands", () => {
         builtin: { defaultEnabled: true, autoMount: false },
       }),
     ]);
+  });
+
+  it("creates a custom skill in the canonical custom root", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skills-custom-create-"));
+    const libraryFile = join(tempDir, "skill-library.json");
+    const customSkillRoot = join(tempDir, "state", "skills", "custom");
+    const externalSkillRoot = join(tempDir, "external-skills");
+    await mkdir(customSkillRoot, { recursive: true });
+    await mkdir(externalSkillRoot, { recursive: true });
+    const broadcast = vi.fn();
+    const skillLibraryRepo = new SkillLibraryRepo({
+      filePath: libraryFile,
+      customSkillRoot,
+      externalSkillRoots: [externalSkillRoot],
+    });
+    const ctx = createBaseContext({
+      broadcaster: { broadcast } as never,
+      skillsHubClient: {} as never,
+      skillLibraryRepo,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+    });
+
+    try {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "skills-custom-create-1",
+          op: "skills.custom.create",
+          args: { name: "My Review Skill" },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          slug: "my-review-skill",
+          source: "custom",
+          origin: "filesystem",
+          installState: "installed",
+          libraryPath: join(customSkillRoot, "my-review-skill"),
+        })
+      );
+      expect(skillLibraryRepo.get("my-review-skill")).toEqual(
+        expect.objectContaining({
+          slug: "my-review-skill",
+          source: "custom",
+          origin: "filesystem",
+        })
+      );
+      expect(readManagedSkillMarker(join(customSkillRoot, "my-review-skill"))).toEqual({
+        version: 1,
+        managedBy: "coder-studio",
+        source: "custom",
+        slug: "my-review-skill",
+      });
+      expect(broadcast).toHaveBeenCalledWith(
+        Topics.skillLibraryChanged,
+        expect.objectContaining({
+          reason: "custom_created",
+          slug: "my-review-skill",
+        })
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects custom skill creation when another source already owns the slug", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skills-custom-create-conflict-"));
+    const customSkillRoot = join(tempDir, "state", "skills", "custom");
+    const managedLibraryRoot = join(tempDir, "state", "skills", "library");
+    const existingLibraryPath = join(managedLibraryRoot, "my-review-skill");
+    await mkdir(existingLibraryPath, { recursive: true });
+    await writeFile(join(existingLibraryPath, "SKILL.md"), "# Existing\n");
+
+    const skillLibraryRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "skill-library.json"),
+      managedLibraryRoot,
+      customSkillRoot,
+    });
+    skillLibraryRepo.set({
+      slug: "my-review-skill",
+      displayName: "My Review Skill",
+      description: "Installed variant",
+      version: "1.0.0",
+      source: "installed",
+      origin: "skillhub",
+      libraryPath: existingLibraryPath,
+      installState: "installed",
+      installedAt: 1,
+      updatedAt: 1,
+    });
+    const ctx = createBaseContext({
+      broadcaster: { broadcast: vi.fn() } as never,
+      skillsHubClient: {} as never,
+      skillLibraryRepo,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+    });
+
+    try {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "skills-custom-create-conflict-1",
+          op: "skills.custom.create",
+          args: { name: "My Review Skill" },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatchObject({
+        code: "skill_slug_conflict",
+        message: "A skill with slug my-review-skill already exists",
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads the file tree and files for local skills", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skills-files-read-"));
+    const customSkillRoot = join(tempDir, "state", "skills", "custom");
+    const skillRoot = join(customSkillRoot, "my-review-skill");
+    await mkdir(join(skillRoot, "refs"), { recursive: true });
+    await writeFile(join(skillRoot, "SKILL.md"), "# My Review Skill\n");
+    await writeFile(join(skillRoot, "refs", "guide.md"), "guide\n");
+    await writeFile(join(skillRoot, "pixel.png"), PNG_BYTES);
+    const skillLibraryRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "skill-library.json"),
+      customSkillRoot,
+    });
+    const ctx = createBaseContext({
+      skillsHubClient: {} as never,
+      skillLibraryRepo,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+    });
+
+    try {
+      const treeResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-tree-1",
+          op: "skills.files.readTree",
+          args: { skillSlug: "my-review-skill" },
+        },
+        ctx
+      );
+      const textReadResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-read-1",
+          op: "skills.files.read",
+          args: { skillSlug: "my-review-skill", path: "refs/guide.md" },
+        },
+        ctx
+      );
+      const imageReadResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-read-2",
+          op: "skills.files.read",
+          args: { skillSlug: "my-review-skill", path: "pixel.png" },
+        },
+        ctx
+      );
+
+      expect(treeResult.ok).toBe(true);
+      expect((treeResult.data as { path: string }).path).toBe(".");
+      expect(
+        (treeResult.data as { children: Array<{ path: string; kind: string }> }).children
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: "refs", kind: "dir" }),
+          expect.objectContaining({ path: "SKILL.md", kind: "file" }),
+        ])
+      );
+      expect(textReadResult.ok).toBe(true);
+      expect(textReadResult.data).toMatchObject({
+        kind: "text",
+        content: "guide\n",
+        displayPath: join(skillRoot, "refs", "guide.md"),
+        baseHash: expect.any(String),
+      });
+      expect(imageReadResult.ok).toBe(true);
+      expect(imageReadResult.data).toMatchObject({
+        kind: "image",
+        mime: "image/png",
+        url: "/api/skill-file?skillSlug=my-review-skill&path=pixel.png",
+        size: PNG_BYTES.length,
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes and mutates local skill files through skill file commands", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skills-files-write-"));
+    const customSkillRoot = join(tempDir, "state", "skills", "custom");
+    const skillRoot = join(customSkillRoot, "my-review-skill");
+    await mkdir(skillRoot, { recursive: true });
+    await writeFile(join(skillRoot, "SKILL.md"), "# My Review Skill\n");
+    await writeFile(join(skillRoot, "draft.md"), "draft\n");
+    const broadcast = vi.fn();
+    const skillLibraryRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "skill-library.json"),
+      customSkillRoot,
+    });
+    const ctx = createBaseContext({
+      broadcaster: { broadcast } as never,
+      skillsHubClient: {} as never,
+      skillLibraryRepo,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+    });
+
+    try {
+      const writeResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-write-1",
+          op: "skills.files.write",
+          args: { skillSlug: "my-review-skill", path: "draft.md", content: "updated\n" },
+        },
+        ctx
+      );
+      expect(writeResult.ok).toBe(true);
+      expect(writeResult.data).toMatchObject({ newHash: expect.any(String) });
+      expect(await fsReadFile(join(skillRoot, "draft.md"), "utf8")).toBe("updated\n");
+
+      const createResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-create-1",
+          op: "skills.files.create",
+          args: { skillSlug: "my-review-skill", path: "notes/today.md" },
+        },
+        ctx
+      );
+      const mkdirResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-mkdir-1",
+          op: "skills.files.mkdir",
+          args: { skillSlug: "my-review-skill", path: "archive" },
+        },
+        ctx
+      );
+      const renameResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-rename-1",
+          op: "skills.files.rename",
+          args: {
+            skillSlug: "my-review-skill",
+            fromPath: "draft.md",
+            toPath: "final.md",
+          },
+        },
+        ctx
+      );
+      expect(createResult.ok).toBe(true);
+      expect(await fsReadFile(join(skillRoot, "notes", "today.md"), "utf8")).toBe("");
+      expect(mkdirResult.ok).toBe(true);
+      expect((await stat(join(skillRoot, "archive"))).isDirectory()).toBe(true);
+      expect(renameResult.ok).toBe(true);
+      expect(await fsReadFile(join(skillRoot, "final.md"), "utf8")).toBe("updated\n");
+      const deleteResult = await dispatch(
+        {
+          kind: "command",
+          id: "skills-files-delete-1",
+          op: "skills.files.delete",
+          args: { skillSlug: "my-review-skill", path: "notes/today.md" },
+        },
+        ctx
+      );
+      expect(deleteResult.ok).toBe(true);
+      await expect(stat(join(skillRoot, "notes", "today.md"))).rejects.toThrow();
+      expect(broadcast).toHaveBeenCalledTimes(5);
+      expect(broadcast).toHaveBeenCalledWith(
+        Topics.skillLibraryChanged,
+        expect.objectContaining({
+          reason: "skill_files_changed",
+          skillSlug: "my-review-skill",
+        })
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects skill file commands for non-custom skills", async () => {
+    const ctx = createBaseContext({
+      skillsHubClient: {} as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "code-review",
+          displayName: "Code Review",
+          version: "1.0.0",
+          source: "installed",
+          origin: "skillhub",
+          libraryPath: "/library/code-review",
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+        })),
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+      } as never,
+    });
+
+    const results = await Promise.all([
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-tree-1",
+          op: "skills.files.readTree",
+          args: { skillSlug: "code-review" },
+        },
+        ctx
+      ),
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-read-1",
+          op: "skills.files.read",
+          args: { skillSlug: "code-review", path: "SKILL.md" },
+        },
+        ctx
+      ),
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-write-1",
+          op: "skills.files.write",
+          args: { skillSlug: "code-review", path: "SKILL.md", content: "updated\n" },
+        },
+        ctx
+      ),
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-create-1",
+          op: "skills.files.create",
+          args: { skillSlug: "code-review", path: "new.md" },
+        },
+        ctx
+      ),
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-mkdir-1",
+          op: "skills.files.mkdir",
+          args: { skillSlug: "code-review", path: "refs" },
+        },
+        ctx
+      ),
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-rename-1",
+          op: "skills.files.rename",
+          args: { skillSlug: "code-review", fromPath: "a.md", toPath: "b.md" },
+        },
+        ctx
+      ),
+      dispatch(
+        {
+          kind: "command",
+          id: "skills-files-nonlocal-delete-1",
+          op: "skills.files.delete",
+          args: { skillSlug: "code-review", path: "SKILL.md" },
+        },
+        ctx
+      ),
+    ]);
+
+    expect(results.every((result) => result.ok === false)).toBe(true);
+    for (const result of results) {
+      expect(result.error?.code).toBe("skill_not_found");
+    }
   });
 
   it("syncs builtin skills through command dispatch", async () => {
@@ -690,7 +1167,8 @@ describe("skills commands", () => {
           displayName: "Code Review",
           description: "Review code changes before merge",
           version: "1.2.3",
-          source: "skillhub",
+          source: "installed",
+          origin: "skillhub",
           libraryPath: "/library/code-review",
           installState: "installed",
           installedAt: 1,
@@ -722,7 +1200,8 @@ describe("skills commands", () => {
           slug: "local-helper",
           displayName: "Local Helper",
           version: "local",
-          source: "local",
+          source: "custom",
+          origin: "filesystem",
           libraryPath: "/library/local-helper",
           installState: "installed",
           installedAt: 1,
@@ -749,6 +1228,43 @@ describe("skills commands", () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it("rejects update requests for filesystem-installed skills", async () => {
+    const start = vi.fn();
+    const ctx = createBaseContext({
+      skillInstallMgr: { start } as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "code-review",
+          displayName: "Code Review",
+          version: "1.0.0",
+          source: "installed",
+          origin: "filesystem",
+          libraryPath: "/library/code-review",
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 2,
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-update-start-filesystem-1",
+        op: "skills.update.start",
+        args: { slug: "code-review" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "skill_update_unavailable",
+      message: "Only installed Skill Hub skills can be updated: code-review",
+    });
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("rejects update requests for Skill Hub skills that are not installed", async () => {
     const start = vi.fn();
     const ctx = createBaseContext({
@@ -759,7 +1275,8 @@ describe("skills commands", () => {
           displayName: "Code Review",
           description: "Review code changes before merge",
           version: "1.2.3",
-          source: "skillhub",
+          source: "installed",
+          origin: "skillhub",
           libraryPath: "/library/code-review",
           installState: "failed",
           installedAt: 1,
@@ -844,7 +1361,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "1.0.0",
-        source: "skillhub",
+        source: "installed",
+        origin: "skillhub",
         libraryPath,
         installState: "installed",
         installedAt: 1,
@@ -927,7 +1445,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "local",
-        source: "local",
+        source: "custom",
+        origin: "filesystem",
         libraryPath: localSkillPath,
         installState: "installed",
         installedAt: 1,
@@ -1013,7 +1532,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "local",
-        source: "local",
+        source: "custom",
+        origin: "filesystem",
         libraryPath: localSkillPath,
         installState: "installed",
         installedAt: 1,
@@ -1107,7 +1627,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "1.0.0",
-        source: "skillhub",
+        source: "installed",
+        origin: "skillhub",
         libraryPath,
         installState: "installed",
         installedAt: 1,
@@ -1211,7 +1732,7 @@ describe("skills commands", () => {
     ]);
   });
 
-  it("uninstalls a skill by removing repo state and library directory", async () => {
+  it("uninstalls a Skill Hub skill by removing repo state without deleting third-party filesystem directories", async () => {
     const tempDir = join(tmpdir(), `skill-uninstall-${Date.now()}`);
     const libraryPath = join(tempDir, "code-review");
     await mkdir(libraryPath, { recursive: true });
@@ -1226,7 +1747,8 @@ describe("skills commands", () => {
           slug: "code-review",
           displayName: "Code Review",
           version: "1.0.0",
-          source: "skillhub",
+          source: "installed",
+          origin: "skillhub",
           libraryPath,
           installState: "installed",
           installedAt: 1,
@@ -1261,7 +1783,7 @@ describe("skills commands", () => {
         slug: "code-review",
       })
     );
-    await expect(rm(libraryPath, { recursive: true, force: false })).rejects.toBeTruthy();
+    await expect(lstat(libraryPath)).resolves.toBeTruthy();
   });
 
   it("rejects uninstalling built-in skills", async () => {
@@ -1311,6 +1833,288 @@ describe("skills commands", () => {
     expect((await lstat(libraryPath)).isDirectory()).toBe(true);
 
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("rejects uninstalling custom skills without force", async () => {
+    const tempDir = join(tmpdir(), `skill-uninstall-custom-${Date.now()}`);
+    const libraryPath = join(tempDir, "my-review-skill");
+    await mkdir(libraryPath, { recursive: true });
+    const deleteBySkillSlug = vi.fn();
+    const deleteEntry = vi.fn();
+    const ctx = createBaseContext({
+      skillsHubClient: {} as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "my-review-skill",
+          displayName: "My Review Skill",
+          version: "local",
+          source: "custom",
+          origin: "filesystem",
+          libraryPath,
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+        })),
+        delete: deleteEntry,
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+        deleteBySkillSlug,
+      } as never,
+      skillMountMgr: {} as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-uninstall-custom-1",
+        op: "skills.uninstall",
+        args: { slug: "my-review-skill" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("skill_uninstall_confirmation_required");
+    expect(deleteBySkillSlug).not.toHaveBeenCalled();
+    expect(deleteEntry).not.toHaveBeenCalled();
+    expect((await lstat(libraryPath)).isDirectory()).toBe(true);
+
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("rejects uninstalling filesystem-installed skills", async () => {
+    const tempDir = join(tmpdir(), `skill-uninstall-filesystem-${Date.now()}`);
+    const libraryPath = join(tempDir, "code-review");
+    await mkdir(libraryPath, { recursive: true });
+    const deleteBySkillSlug = vi.fn();
+    const deleteEntry = vi.fn();
+    const ctx = createBaseContext({
+      skillsHubClient: {} as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "code-review",
+          displayName: "Code Review",
+          version: "1.0.0",
+          source: "installed",
+          origin: "filesystem",
+          libraryPath,
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+        })),
+        delete: deleteEntry,
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+        deleteBySkillSlug,
+      } as never,
+      skillMountMgr: {} as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-uninstall-filesystem-1",
+        op: "skills.uninstall",
+        args: { slug: "code-review", force: true },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("skill_uninstall_unavailable");
+    expect(deleteBySkillSlug).not.toHaveBeenCalled();
+    expect(deleteEntry).not.toHaveBeenCalled();
+    expect((await lstat(libraryPath)).isDirectory()).toBe(true);
+
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("force deletes custom skills and unmounts their relations", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-uninstall-custom-force-"));
+    const libraryPath = join(tempDir, "state", "skills", "custom", "my-review-skill");
+    await mkdir(libraryPath, { recursive: true });
+    await writeFile(join(libraryPath, "SKILL.md"), "# My Review Skill\n");
+    await writeFile(
+      join(libraryPath, ".coder-studio-skill.json"),
+      JSON.stringify({
+        version: 1,
+        managedBy: "coder-studio",
+        source: "custom",
+        slug: "my-review-skill",
+      }),
+      "utf8"
+    );
+    const deleteBySkillSlug = vi.fn();
+    const deleteEntry = vi.fn();
+    const unmount = vi.fn(async () => undefined);
+    const broadcast = vi.fn();
+    const ctx = createBaseContext({
+      broadcaster: { broadcast } as never,
+      skillsHubClient: {} as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "my-review-skill",
+          displayName: "My Review Skill",
+          version: "local",
+          source: "custom",
+          origin: "filesystem",
+          libraryPath,
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+        })),
+        getCustomSkillRoot: vi.fn(() => join(tempDir, "state", "skills", "custom")),
+        delete: deleteEntry,
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => [
+          {
+            providerId: "codex",
+            skillSlug: "my-review-skill",
+            enabled: true,
+            sourcePath: libraryPath,
+            targetPath: join(tempDir, ".agents", "skills", "my-review-skill"),
+            mountModeResolved: "symlink",
+            status: "mounted",
+          },
+          {
+            providerId: "claude",
+            skillSlug: "my-review-skill",
+            enabled: false,
+            sourcePath: libraryPath,
+            targetPath: join(tempDir, ".claude", "skills", "my-review-skill"),
+            mountModeResolved: "copy",
+            status: "mounted",
+          },
+        ]),
+        deleteBySkillSlug,
+      } as never,
+      skillMountMgr: { unmount } as never,
+    });
+
+    try {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "skills-uninstall-custom-force-1",
+          op: "skills.uninstall",
+          args: { slug: "my-review-skill", force: true },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(unmount).toHaveBeenCalledTimes(2);
+      expect(deleteBySkillSlug).toHaveBeenCalledWith("my-review-skill");
+      expect(deleteEntry).toHaveBeenCalledWith("my-review-skill");
+      await expect(lstat(libraryPath)).rejects.toThrow();
+      expect(broadcast).toHaveBeenCalledWith(
+        Topics.skillLibraryChanged,
+        expect.objectContaining({
+          reason: "uninstalled",
+          slug: "my-review-skill",
+        })
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not delete a custom skill path outside the configured custom root", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-uninstall-custom-guard-"));
+    const customSkillRoot = join(tempDir, "state", "skills", "custom");
+    const unrelatedPath = join(tempDir, "external", "my-review-skill");
+    await mkdir(customSkillRoot, { recursive: true });
+    await mkdir(unrelatedPath, { recursive: true });
+    await writeFile(join(unrelatedPath, "SKILL.md"), "# My Review Skill\n");
+    const deleteBySkillSlug = vi.fn();
+    const deleteEntry = vi.fn();
+    const ctx = createBaseContext({
+      skillsHubClient: {} as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "my-review-skill",
+          displayName: "My Review Skill",
+          version: "local",
+          source: "custom",
+          origin: "filesystem",
+          libraryPath: unrelatedPath,
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+        })),
+        getCustomSkillRoot: vi.fn(() => customSkillRoot),
+        delete: deleteEntry,
+      } as never,
+      skillMountRepo: {
+        listBySkillSlug: vi.fn(() => []),
+        deleteBySkillSlug,
+      } as never,
+      skillMountMgr: { unmount: vi.fn(async () => undefined) } as never,
+    });
+
+    try {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "skills-uninstall-custom-guard-1",
+          op: "skills.uninstall",
+          args: { slug: "my-review-skill", force: true },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      await expect(lstat(unrelatedPath)).resolves.toBeTruthy();
+      expect(deleteBySkillSlug).toHaveBeenCalledWith("my-review-skill");
+      expect(deleteEntry).toHaveBeenCalledWith("my-review-skill");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects Skill Hub installs when another source already owns the slug", async () => {
+    const start = vi.fn(async () => ({
+      jobId: "job-install-conflict-1",
+      slug: "code-review",
+      status: "queued",
+      steps: [],
+    }));
+    const ctx = createBaseContext({
+      skillInstallMgr: { start } as never,
+      skillLibraryRepo: {
+        get: vi.fn(() => ({
+          slug: "code-review",
+          displayName: "Code Review",
+          version: "local",
+          source: "custom",
+          origin: "filesystem",
+          libraryPath: "/skills/custom/code-review",
+          installState: "installed",
+          installedAt: 1,
+          updatedAt: 1,
+        })),
+      } as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "skills-install-start-conflict-1",
+        op: "skills.install.start",
+        args: { slug: "code-review" },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "skill_slug_conflict",
+      message: "A skill with slug code-review already exists",
+    });
+    expect(start).not.toHaveBeenCalled();
   });
 
   it("scans and persists mount health state", async () => {
@@ -1374,7 +2178,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "1.0.0",
-        source: "skillhub",
+        source: "installed",
+        origin: "skillhub",
         libraryPath,
         installState: "installed",
         installedAt: 1,
@@ -1459,7 +2264,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "1.0.0",
-        source: "skillhub",
+        source: "installed",
+        origin: "skillhub",
         libraryPath,
         installState: "installed",
         installedAt: 1,

@@ -1,10 +1,13 @@
+import type { Session } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   lastViewedTargetAtom,
   pendingFocusSessionAtom,
   visibleMobileSessionIdAtom,
 } from "../../../../atoms/app-ui";
+import { connectionStatusAtom, dispatchCommandAtom } from "../../../../atoms/connection";
+import { sessionsAtom } from "../../../../atoms/sessions";
 import { Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
@@ -26,7 +29,6 @@ import { useMobileLayoutMode } from "./hooks/use-mobile-layout-mode";
 import { useMobileMotionMode } from "./hooks/use-mobile-motion-mode";
 import { useVisualViewportInset } from "./hooks/use-visual-viewport-inset";
 import { MobileAgentSheet } from "./mobile-agent-sheet";
-import { MobileDock } from "./mobile-dock";
 import { MobileFilesSheet } from "./mobile-files-sheet";
 import { MobileTopBar } from "./mobile-topbar";
 import { MobileWorkspaceDrawer } from "./mobile-workspace-drawer";
@@ -70,10 +72,16 @@ export function WorkspaceMobileView() {
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const restoredWorkspaceIdRef = useRef<string | null>(null);
   const lastPersistedSessionIdRef = useRef<string | null>(null);
+  const drawerHydratedWorkspaceIdsRef = useRef<Set<string>>(new Set());
+  const drawerPendingWorkspaceIdsRef = useRef<Set<string>>(new Set());
   const fullscreenController = useWorkspaceFullscreen(fullscreenRootRef);
   const t = useTranslation();
+  const connectionStatus = useAtomValue(connectionStatusAtom);
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const pendingFocusSessionId = useAtomValue(pendingFocusSessionAtom);
   const lastViewedTarget = useAtomValue(lastViewedTargetAtom);
+  const allSessions = useAtomValue(sessionsAtom);
+  const setSessions = useSetAtom(sessionsAtom);
   const setVisibleMobileSessionId = useSetAtom(visibleMobileSessionIdAtom);
   const supervisorDetails = useAtomValue(supervisorDetailsAtom);
   const supervisorDialog = useAtomValue(supervisorDialogAtom);
@@ -103,6 +111,7 @@ export function WorkspaceMobileView() {
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [agentSheetOpen, setAgentSheetOpen] = useState(false);
+  const [agentSheetMode, setAgentSheetMode] = useState<"create" | "list">("create");
   const [mobileFilesView, setMobileFilesView] = useState<MobileWorkspaceSidebarView>("explorer");
   const [mobileFileCreateRequest, setMobileFileCreateRequest] = useState<CreateRequest | null>(
     null
@@ -312,6 +321,119 @@ export function WorkspaceMobileView() {
         ? t("workspace.sidebar.search")
         : t("workspace.sidebar.source_control");
 
+  useEffect(() => {
+    if (!drawerOpen || connectionStatus !== "connected") {
+      return;
+    }
+
+    let cancelled = false;
+    const workspaceIdsToHydrate = workspaces
+      .map((candidate) => candidate.id)
+      .filter(
+        (workspaceId) =>
+          workspaceId !== activeWorkspaceId &&
+          !drawerHydratedWorkspaceIdsRef.current.has(workspaceId) &&
+          !drawerPendingWorkspaceIdsRef.current.has(workspaceId)
+      );
+
+    for (const workspaceId of workspaceIdsToHydrate) {
+      drawerPendingWorkspaceIdsRef.current.add(workspaceId);
+      const workspaceSessionIdsAtRequestStart = new Set(
+        Object.values(allSessions)
+          .filter((session) => session.workspaceId === workspaceId)
+          .map((session) => session.id)
+      );
+
+      dispatch<Session[]>("session.list", { workspaceId })
+        .then((result) => {
+          drawerPendingWorkspaceIdsRef.current.delete(workspaceId);
+
+          if (cancelled || !result.ok || !result.data) {
+            console.error("Failed to fetch sessions:", result.error?.message);
+            return;
+          }
+
+          const nextSessions = result.data;
+          drawerHydratedWorkspaceIdsRef.current.add(workspaceId);
+
+          setSessions((previous) => {
+            const currentWorkspaceSessions = Object.values(previous).filter(
+              (session) => session.workspaceId === workspaceId
+            );
+            const preservedLateSessions = currentWorkspaceSessions.filter(
+              (session) =>
+                !workspaceSessionIdsAtRequestStart.has(session.id) &&
+                !nextSessions.some((nextSession) => nextSession.id === session.id)
+            );
+            const mergedSessions = [...nextSessions, ...preservedLateSessions];
+            const next = Object.fromEntries(
+              Object.entries(previous).filter(([, session]) => session.workspaceId !== workspaceId)
+            );
+
+            for (const session of mergedSessions) {
+              next[session.id] = session;
+            }
+
+            return next;
+          });
+        })
+        .catch((error) => {
+          drawerPendingWorkspaceIdsRef.current.delete(workspaceId);
+
+          if (!cancelled) {
+            console.error("Failed to fetch sessions:", error);
+          }
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeWorkspaceId,
+    allSessions,
+    connectionStatus,
+    dispatch,
+    drawerOpen,
+    setSessions,
+    workspaces,
+  ]);
+
+  const sessionsByWorkspaceId = useMemo(() => {
+    const grouped = Object.fromEntries(
+      workspaces.map((workspaceItem) => [workspaceItem.id, [] as typeof mobileAgentSessions])
+    ) as Record<string, typeof mobileAgentSessions>;
+
+    if (activeWorkspaceId) {
+      grouped[activeWorkspaceId] = mobileAgentSessions;
+    }
+
+    for (const session of Object.values(allSessions)) {
+      if (session.state === "draft" || session.workspaceId === activeWorkspaceId) {
+        continue;
+      }
+
+      if (!grouped[session.workspaceId]) {
+        grouped[session.workspaceId] = [];
+      }
+
+      grouped[session.workspaceId].push(session);
+    }
+
+    return Object.fromEntries(
+      Object.entries(grouped).map(([workspaceId, workspaceSessions]) => [
+        workspaceId,
+        workspaceSessions.map((session) => ({
+          id: session.id,
+          workspaceId: session.workspaceId,
+          providerId: session.providerId,
+          title: session.title,
+          state: session.state,
+        })),
+      ])
+    );
+  }, [activeWorkspaceId, allSessions, mobileAgentSessions, workspaces]);
+
   const sheetBody =
     mobileSheet === "files"
       ? {
@@ -377,21 +499,23 @@ export function WorkspaceMobileView() {
           }
         : null;
 
-  const handleDockSelect = (item: "agent" | "files" | "terminal") => {
-    if (item === "agent") {
-      setAgentSheetOpen((value) => !value);
-      return;
-    }
-
+  const handleOpenFiles = () => {
+    setDrawerOpen(false);
     setAgentSheetOpen(false);
-    openMobileSheet(item);
+    openMobileSheet("files");
   };
 
-  const activeDockItem = agentSheetOpen
-    ? "agent"
-    : mobileSheet === "files" || mobileSheet === "terminal"
-      ? mobileSheet
-      : null;
+  const handleOpenTerminal = () => {
+    setDrawerOpen(false);
+    setAgentSheetOpen(false);
+    openMobileSheet("terminal");
+  };
+
+  const handleOpenAgentSheet = (mode: "create" | "list") => {
+    setDrawerOpen(false);
+    setAgentSheetMode(mode);
+    setAgentSheetOpen(true);
+  };
 
   return (
     <div
@@ -409,6 +533,8 @@ export function WorkspaceMobileView() {
           setAgentSheetOpen(false);
           setDrawerOpen((value) => !value);
         }}
+        onOpenFiles={handleOpenFiles}
+        onOpenTerminal={handleOpenTerminal}
       />
 
       <main className="mobile-shell__viewport">
@@ -443,7 +569,7 @@ export function WorkspaceMobileView() {
                     <button
                       type="button"
                       className="mobile-shell__empty-cta"
-                      onClick={() => setAgentSheetOpen(true)}
+                      onClick={() => handleOpenAgentSheet("create")}
                     >
                       {t("action.create_session")}
                     </button>
@@ -460,9 +586,6 @@ export function WorkspaceMobileView() {
         data-testid="mobile-bottom-stack"
         style={{ "--mobile-keyboard-inset": `${keyboardInset}px` } as CSSProperties}
       >
-        <div className="mobile-dock-shell">
-          <MobileDock activeItem={activeDockItem} onSelectItem={handleDockSelect} />
-        </div>
         {activeWorkspaceId ? (
           <WorkspaceStatusBar
             workspaceId={activeWorkspaceId}
@@ -476,7 +599,7 @@ export function WorkspaceMobileView() {
         <MobileAgentSheet
           activeSessionId={mobileActiveSessionId}
           activeWorkspaceId={activeWorkspaceId}
-          defaultMode={mobileAgentSessions.length === 0 ? "create" : "list"}
+          defaultMode={agentSheetMode}
           sessions={mobileAgentSessions}
           onClose={() => setAgentSheetOpen(false)}
           onCloseSession={closeMobileSession}
@@ -517,12 +640,20 @@ export function WorkspaceMobileView() {
 
       <MobileWorkspaceDrawer
         activeWorkspaceId={activeWorkspaceId}
+        activeSessionId={mobileActiveSessionId}
         isOpen={drawerOpen}
+        sessionsByWorkspaceId={sessionsByWorkspaceId}
         workspaces={workspaces}
         onClose={() => setDrawerOpen(false)}
+        onCloseSession={closeMobileSession}
+        onCreateSession={() => handleOpenAgentSheet("create")}
         onOpenWorkspaceLauncher={() => {
           setAgentSheetOpen(false);
           setWorkspaceLaunchOpen(true);
+        }}
+        onSelectSession={(sessionId) => {
+          selectMobileSession(sessionId);
+          setDrawerOpen(false);
         }}
       />
 

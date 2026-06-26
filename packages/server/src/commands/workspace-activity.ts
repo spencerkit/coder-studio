@@ -58,6 +58,20 @@ registerCommand("workspace.history.list", z.object({}), async (_args, ctx) => {
 });
 
 registerCommand(
+  "workspace.history.remove",
+  z.object({
+    path: z.string(),
+  }),
+  async (args, ctx) => {
+    return new WorkspaceHistoryStore(ctx.settingsRepo).remove(args.path);
+  }
+);
+
+registerCommand("workspace.history.clear", z.object({}), async (_args, ctx) => {
+  return new WorkspaceHistoryStore(ctx.settingsRepo).clear();
+});
+
+registerCommand(
   "workspace.lastViewedTarget.set",
   z.object({
     workspaceId: z.string(),

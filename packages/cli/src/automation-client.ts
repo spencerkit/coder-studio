@@ -1,7 +1,9 @@
 import {
+  AUTOMATION_PERMISSIONS_ENV,
   buildIdentifyResult,
   DEFAULT_AGENT_AUTOMATION_PERMISSIONS,
   listAutomationCapabilities,
+  parseAutomationPermissionsEnv,
 } from "@coder-studio/core";
 
 interface PrintOptions {
@@ -20,10 +22,15 @@ export function printIdentify(options: PrintOptions = {}): void {
 }
 
 export function printCapabilities(options: PrintOptions = {}): void {
+  const scopedPermissionsEnv = process.env[AUTOMATION_PERMISSIONS_ENV];
+  const scopedPermissions = parseAutomationPermissionsEnv(scopedPermissionsEnv);
   const result = {
     version: 1,
     commands: listAutomationCapabilities({
-      permissions: DEFAULT_AGENT_AUTOMATION_PERMISSIONS,
+      permissions:
+        scopedPermissionsEnv === undefined
+          ? DEFAULT_AGENT_AUTOMATION_PERMISSIONS
+          : scopedPermissions,
     }),
   };
 

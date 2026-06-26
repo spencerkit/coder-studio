@@ -1,11 +1,16 @@
-import { lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderDefinition } from "@coder-studio/core";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN,
+  AUTOMATION_CMD_FILE_NAME,
+} from "../../skills/builtin/automation-bridge.js";
 import type { BuiltinSkillDefinition } from "../../skills/builtin/registry.js";
 import { BUILTIN_SKILLS } from "../../skills/builtin/registry.js";
 import { BuiltinSkillSyncManager } from "../../skills/builtin/sync-manager.js";
+import { readManagedSkillMarker } from "../../skills/managed-skill-metadata.js";
 import { SkillMountManager } from "../../skills/mount-manager.js";
 import { SettingsRepo } from "../../storage/repositories/settings-repo.js";
 import { SkillLibraryRepo } from "../../storage/repositories/skill-library-repo.js";
@@ -27,6 +32,31 @@ const TEST_BUILTIN_SKILL: BuiltinSkillDefinition = {
     "# Example Builtin",
     "",
   ].join("\n"),
+};
+
+const TEST_AUTOMATION_BRIDGE_SKILL: BuiltinSkillDefinition = {
+  slug: "coder-studio-automation-bridge-test",
+  displayName: "Coder Studio Automation Bridge Test",
+  description: "Test fixture for automation bridge mount rewriting.",
+  version: "1.0.0",
+  defaultEnabled: true,
+  autoMountInMvp: true,
+  mountRendering: "automation_bridge",
+  content: [
+    "---",
+    "name: coder-studio-automation-bridge-test",
+    "description: Automation bridge test fixture.",
+    "---",
+    "",
+    `Run \`node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}"\` to bridge.`,
+    "",
+  ].join("\n"),
+  files: [
+    {
+      relativePath: AUTOMATION_CMD_FILE_NAME,
+      content: 'console.log("bridge");',
+    },
+  ],
 };
 
 function provider(id: string, skillDir?: string): ProviderDefinition {
@@ -97,6 +127,20 @@ describe("BuiltinSkillSyncManager", () => {
     expect(result.libraryEntries.map((entry) => entry.slug)).toEqual(
       expect.arrayContaining(["coder-studio-open", "coder-studio-memory"])
     );
+    expect(result.libraryEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: "coder-studio-open",
+          source: "builtin",
+          origin: "builtin",
+        }),
+        expect.objectContaining({
+          slug: "coder-studio-memory",
+          source: "builtin",
+          origin: "builtin",
+        }),
+      ])
+    );
     expect(result.mounted).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -109,10 +153,21 @@ describe("BuiltinSkillSyncManager", () => {
           skillSlug: "coder-studio-memory",
           status: "mounted",
         }),
+        expect.objectContaining({
+          providerId: "codex",
+          skillSlug: "coder-studio-canvas",
+          status: "mounted",
+        }),
       ])
     );
-    expect(result.mounted).toHaveLength(2);
+    expect(result.mounted).toHaveLength(3);
     expect(result.skipped).toEqual([]);
+    expect(readManagedSkillMarker(join(skillDir, "coder-studio-open"))).toEqual({
+      version: 1,
+      managedBy: "coder-studio",
+      source: "builtin",
+      slug: "coder-studio-open",
+    });
     expect(mountRepo.get("codex", "coder-studio-open")).toEqual(
       expect.objectContaining({
         providerId: "codex",
@@ -125,8 +180,15 @@ describe("BuiltinSkillSyncManager", () => {
         skillSlug: "coder-studio-memory",
       })
     );
+    expect(mountRepo.get("codex", "coder-studio-canvas")).toEqual(
+      expect.objectContaining({
+        providerId: "codex",
+        skillSlug: "coder-studio-canvas",
+      })
+    );
     await expect(lstat(join(skillDir, "coder-studio-open", "SKILL.md"))).resolves.toBeTruthy();
     await expect(lstat(join(skillDir, "coder-studio-memory", "SKILL.md"))).resolves.toBeTruthy();
+    await expect(lstat(join(skillDir, "coder-studio-canvas", "SKILL.md"))).resolves.toBeTruthy();
   });
 
   it("syncs provided built-ins into the library without auto-mounting by default", async () => {
@@ -216,6 +278,59 @@ describe("BuiltinSkillSyncManager", () => {
     });
   });
 
+  it("mounts automation-rendered builtins in copy mode with rewritten SKILL.md content", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "coder-studio-builtin-automation-"));
+    const builtinRoot = join(tempDir, "builtin");
+    const skillDir = join(tempDir, "codex-skills");
+    const providers = [provider("codex", skillDir)];
+    const libraryRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "library-index.json"),
+    });
+    const mountRepo = new SkillMountRepo({
+      filePath: join(tempDir, "mounts.json"),
+    });
+    const settingsRepo = new SettingsRepo({
+      filePath: join(tempDir, "settings.json"),
+    });
+    const mountManager = new SkillMountManager({
+      getProviderRegistry: () => providers,
+      skillLibraryRepo: libraryRepo,
+      skillMountRepo: mountRepo,
+    });
+
+    const manager = new BuiltinSkillSyncManager({
+      builtinRoot,
+      getProviderRegistry: () => providers,
+      skillLibraryRepo: libraryRepo,
+      skillMountRepo: mountRepo,
+      skillMountMgr: mountManager,
+      settingsRepo,
+      now: () => 1000,
+      skills: [TEST_AUTOMATION_BRIDGE_SKILL],
+    });
+
+    const result = await manager.sync();
+    const mountedPath = join(skillDir, TEST_AUTOMATION_BRIDGE_SKILL.slug);
+    const mountedSkillPath = join(mountedPath, "SKILL.md");
+    const expectedCmdPath = join(mountedPath, AUTOMATION_CMD_FILE_NAME);
+
+    expect(result.mounted).toEqual([
+      expect.objectContaining({
+        providerId: "codex",
+        skillSlug: TEST_AUTOMATION_BRIDGE_SKILL.slug,
+        mountModeResolved: "copy",
+      }),
+    ]);
+    expect((await lstat(mountedPath)).isSymbolicLink()).toBe(false);
+    await expect(readFile(mountedSkillPath, "utf8")).resolves.toContain(expectedCmdPath);
+    await expect(readFile(mountedSkillPath, "utf8")).resolves.not.toContain(
+      AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN
+    );
+    await expect(
+      readFile(join(builtinRoot, TEST_AUTOMATION_BRIDGE_SKILL.slug, "SKILL.md"), "utf8")
+    ).resolves.toContain(AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN);
+  });
+
   it("removes stale built-in skills without touching other installed skills", async () => {
     tempDir = await mkdtemp(join(tmpdir(), "coder-studio-builtin-stale-"));
     const builtinRoot = join(tempDir, "builtin");
@@ -258,7 +373,8 @@ describe("BuiltinSkillSyncManager", () => {
       displayName: "Frontend Design",
       description: "Installed from Skill Hub",
       version: "1.0.0",
-      source: "skillhub",
+      source: "installed",
+      origin: "skillhub",
       libraryPath: skillHubLibraryPath,
       installState: "installed",
       installedAt: 1,
@@ -303,7 +419,11 @@ describe("BuiltinSkillSyncManager", () => {
 
     expect(libraryRepo.get("old-builtin-skill")).toBeUndefined();
     expect(libraryRepo.get("frontend-design")).toEqual(
-      expect.objectContaining({ slug: "frontend-design", source: "skillhub" })
+      expect.objectContaining({
+        slug: "frontend-design",
+        source: "installed",
+        origin: "skillhub",
+      })
     );
     await expect(lstat(staleLibraryPath)).rejects.toThrow();
     await expect(lstat(staleTargetPath)).rejects.toThrow();
@@ -347,7 +467,11 @@ describe("BuiltinSkillSyncManager", () => {
     await symlink(staleLibraryPath, staleTargetPath);
 
     expect(libraryRepo.get("old-builtin-skill")).toEqual(
-      expect.objectContaining({ slug: "old-builtin-skill", source: "local" })
+      expect.objectContaining({
+        slug: "old-builtin-skill",
+        source: "installed",
+        origin: "filesystem",
+      })
     );
 
     const mountManager = new SkillMountManager({
@@ -408,7 +532,11 @@ describe("BuiltinSkillSyncManager", () => {
     await symlink(staleLibraryPath, providerTargetPath);
 
     expect(libraryRepo.get("old-builtin-skill")).toEqual(
-      expect.objectContaining({ slug: "old-builtin-skill", source: "local" })
+      expect.objectContaining({
+        slug: "old-builtin-skill",
+        source: "installed",
+        origin: "filesystem",
+      })
     );
 
     const mountManager = new SkillMountManager({
@@ -437,6 +565,66 @@ describe("BuiltinSkillSyncManager", () => {
       {
         skillSlug: "old-builtin-skill",
         unmountedProviderIds: ["codex", "claude"],
+      },
+    ]);
+  });
+
+  it("removes copied stale built-in artifacts under a symlinked parent skill directory", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "coder-studio-builtin-stale-symlink-parent-copy-"));
+    const builtinRoot = join(tempDir, "dev", "state", "skills", "builtin");
+    const externalBuiltinRoot = join(tempDir, "prod", "state", "skills", "builtin");
+    const symlinkedSkillDir = join(tempDir, "agent-skills");
+    const staleLibraryPath = join(externalBuiltinRoot, "old-builtin-skill");
+    const staleTargetPath = join(symlinkedSkillDir, "old-builtin-skill");
+    const providers = [provider("codex", symlinkedSkillDir)];
+    const libraryRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "library-index.json"),
+      localSkillRoots: [symlinkedSkillDir],
+    });
+    const mountRepo = new SkillMountRepo({
+      filePath: join(tempDir, "mounts.json"),
+    });
+    const settingsRepo = new SettingsRepo({
+      filePath: join(tempDir, "settings.json"),
+    });
+
+    await mkdir(staleLibraryPath, { recursive: true });
+    await writeFile(join(staleLibraryPath, "SKILL.md"), "# Old Builtin\n", "utf8");
+    await symlink(externalBuiltinRoot, symlinkedSkillDir);
+
+    expect(libraryRepo.get("old-builtin-skill")).toEqual(
+      expect.objectContaining({
+        slug: "old-builtin-skill",
+        source: "installed",
+        origin: "filesystem",
+      })
+    );
+
+    const mountManager = new SkillMountManager({
+      getProviderRegistry: () => providers,
+      skillLibraryRepo: libraryRepo,
+      skillMountRepo: mountRepo,
+    });
+
+    const manager = new BuiltinSkillSyncManager({
+      builtinRoot,
+      getProviderRegistry: () => providers,
+      skillLibraryRepo: libraryRepo,
+      skillMountRepo: mountRepo,
+      skillMountMgr: mountManager,
+      settingsRepo,
+      now: () => 1000,
+    });
+
+    const result = await manager.sync();
+
+    expect(libraryRepo.get("old-builtin-skill")).toBeUndefined();
+    await expect(lstat(staleTargetPath)).rejects.toThrow();
+    await expect(lstat(staleLibraryPath)).rejects.toThrow();
+    expect(result.removed).toEqual([
+      {
+        skillSlug: "old-builtin-skill",
+        unmountedProviderIds: ["codex"],
       },
     ]);
   });
@@ -485,7 +673,8 @@ describe("BuiltinSkillSyncManager", () => {
     expect(libraryRepo.get("old-builtin-skill")).toEqual(
       expect.objectContaining({
         slug: "old-builtin-skill",
-        source: "local",
+        source: "installed",
+        origin: "filesystem",
         libraryPath: localSkillPath,
       })
     );

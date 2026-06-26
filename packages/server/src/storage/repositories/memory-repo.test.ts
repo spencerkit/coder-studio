@@ -32,7 +32,7 @@ describe("MemoryRepo", () => {
   it("stores each workspace in an encoded workspace file", () => {
     const entry = repo.create({
       workspaceId: "workspace/with spaces",
-      type: "project",
+      type: "wiki",
       content: "Keep memory outside the Git workspace.",
       source: { kind: "user" },
     });
@@ -50,7 +50,7 @@ describe("MemoryRepo", () => {
       entries: {
         [entry.id]: {
           workspaceId: "workspace/with spaces",
-          type: "project",
+          type: "wiki",
           content: "Keep memory outside the Git workspace.",
         },
       },
@@ -66,7 +66,7 @@ describe("MemoryRepo", () => {
   it("creates and reloads entries sorted by updated time descending", () => {
     const first = repo.create({
       workspaceId: "ws-1",
-      type: "project",
+      type: "wiki",
       content: "This was learned first.",
       source: { kind: "user" },
     });
@@ -107,14 +107,15 @@ describe("MemoryRepo", () => {
       repo.update({
         workspaceId: "ws-1",
         id: entry.id,
-        type: "bugfix",
+        type: "issue",
         content: "Updated content",
       })
     ).toEqual({
       id: entry.id,
       workspaceId: "ws-1",
-      type: "bugfix",
+      type: "issue",
       content: "Updated content",
+      status: "not_started",
       source: { kind: "user" },
       createdAt: entry.createdAt,
       updatedAt: now,
@@ -138,9 +139,9 @@ describe("MemoryRepo", () => {
   });
 
   it("filters and searches only content and type case-insensitively", () => {
-    const projectEntry = repo.create({
+    const wikiEntry = repo.create({
       workspaceId: "ws-1",
-      type: "project",
+      type: "wiki",
       content: "Do not dirty the Git workspace.",
       source: { kind: "user" },
     });
@@ -151,7 +152,7 @@ describe("MemoryRepo", () => {
       source: { kind: "agent" },
     });
 
-    expect(repo.list({ workspaceId: "ws-1", query: "dirty" })).toEqual([projectEntry]);
+    expect(repo.list({ workspaceId: "ws-1", query: "dirty" })).toEqual([wikiEntry]);
     expect(repo.list({ workspaceId: "ws-1", query: "todo" })).toHaveLength(1);
     expect(repo.list({ workspaceId: "ws-1", query: "agent" })).toEqual([]);
     expect(repo.list({ workspaceId: "ws-1", type: "todo" })).toHaveLength(1);
@@ -212,7 +213,7 @@ describe("MemoryRepo", () => {
     now += 1000;
     const created = repo.create({
       workspaceId,
-      type: "project",
+      type: "wiki",
       content: "Only the new taxonomy persists.",
       source: { kind: "user" },
     });
@@ -224,7 +225,7 @@ describe("MemoryRepo", () => {
         [created.id]: {
           id: created.id,
           workspaceId,
-          type: "project",
+          type: "wiki",
           content: "Only the new taxonomy persists.",
           source: { kind: "user" },
           createdAt: now,
@@ -275,6 +276,270 @@ describe("MemoryRepo", () => {
     );
 
     expect(repo.list({ workspaceId })).toEqual([]);
+  });
+
+  it("normalizes legacy stored aliases and returns entries sorted by updated time descending", () => {
+    const workspaceId = "ws-legacy-aliases";
+    const filePath = join(tempDir, "memory", "workspaces", `${workspaceId}.json`);
+    mkdirSync(join(tempDir, "memory", "workspaces"), { recursive: true });
+    writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          version: 1,
+          workspaceId,
+          entries: {
+            project: {
+              id: "project",
+              workspaceId,
+              type: "project",
+              content: "Legacy project memory.",
+              source: { kind: "user" },
+              createdAt: 1,
+              updatedAt: 1,
+            },
+            bugfix: {
+              id: "bugfix",
+              workspaceId,
+              type: "bugfix",
+              content: "Legacy bugfix memory.",
+              source: { kind: "agent" },
+              createdAt: 2,
+              updatedAt: 3,
+            },
+            feature: {
+              id: "feature",
+              workspaceId,
+              type: "feature",
+              content: "Legacy feature memory.",
+              source: { kind: "skill" },
+              createdAt: 3,
+              updatedAt: 2,
+            },
+          },
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    expect(
+      repo.list({ workspaceId }).map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        status: entry.status,
+      }))
+    ).toEqual([
+      { id: "bugfix", type: "issue", status: "not_started" },
+      { id: "feature", type: "wiki", status: undefined },
+      { id: "project", type: "wiki", status: undefined },
+    ]);
+  });
+
+  it("keeps entries with invalid stored statuses during normalization", () => {
+    const workspaceId = "ws-invalid-stored-statuses";
+    const filePath = join(tempDir, "memory", "workspaces", `${workspaceId}.json`);
+    mkdirSync(join(tempDir, "memory", "workspaces"), { recursive: true });
+    writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          version: 1,
+          workspaceId,
+          entries: {
+            issue: {
+              id: "issue",
+              workspaceId,
+              type: "issue",
+              status: "open",
+              content: "Discard the invalid actionable status.",
+              source: { kind: "user" },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+            project: {
+              id: "project",
+              workspaceId,
+              type: "project",
+              status: "open",
+              content: "Discard the invalid alias status.",
+              source: { kind: "user" },
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    expect(
+      repo.list({ workspaceId }).map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        status: entry.status,
+      }))
+    ).toEqual([
+      { id: "issue", type: "issue", status: "not_started" },
+      { id: "project", type: "wiki", status: undefined },
+    ]);
+  });
+
+  it("persists supplied status for actionable entries", () => {
+    const entry = repo.create({
+      workspaceId: "ws-1",
+      type: "issue",
+      status: "in_progress",
+      content: "Fix broken command routing.",
+      source: { kind: "user" },
+    });
+    const filePath = join(tempDir, "memory", "workspaces", "ws-1.json");
+
+    expect(entry.status).toBe("in_progress");
+    expect(JSON.parse(readFileSync(filePath, "utf-8")).entries[entry.id]).toMatchObject({
+      type: "issue",
+      status: "in_progress",
+    });
+  });
+
+  it("defaults missing status for actionable entries", () => {
+    const entry = repo.create({
+      workspaceId: "ws-1",
+      type: "todo",
+      content: "Run focused verification.",
+      source: { kind: "user" },
+    });
+
+    expect(entry.status).toBe("not_started");
+  });
+
+  it("omits status for non-actionable entries even when supplied", () => {
+    const entry = repo.create({
+      workspaceId: "ws-1",
+      type: "wiki",
+      status: "completed",
+      content: "Use pnpm for project scripts.",
+      source: { kind: "user" },
+    });
+
+    expect(entry).not.toHaveProperty("status");
+  });
+
+  it("removes stale status when updating an actionable entry to a non-actionable type", () => {
+    const entry = repo.create({
+      workspaceId: "ws-1",
+      type: "issue",
+      status: "in_progress",
+      content: "Fix stale status.",
+      source: { kind: "user" },
+    });
+    now += 1000;
+
+    const updated = repo.update({
+      workspaceId: "ws-1",
+      id: entry.id,
+      type: "note",
+    });
+
+    expect(updated).toMatchObject({
+      id: entry.id,
+      type: "note",
+      content: "Fix stale status.",
+    });
+    expect(updated).not.toHaveProperty("status");
+  });
+
+  it("defaults or uses supplied status when updating a non-actionable entry to an actionable type", () => {
+    const defaulted = repo.create({
+      workspaceId: "ws-1",
+      type: "note",
+      content: "Track without explicit status.",
+      source: { kind: "user" },
+    });
+    const supplied = repo.create({
+      workspaceId: "ws-1",
+      type: "wiki",
+      content: "Track with explicit status.",
+      source: { kind: "user" },
+    });
+    now += 1000;
+
+    expect(
+      repo.update({
+        workspaceId: "ws-1",
+        id: defaulted.id,
+        type: "issue",
+      }).status
+    ).toBe("not_started");
+    expect(
+      repo.update({
+        workspaceId: "ws-1",
+        id: supplied.id,
+        type: "todo",
+        status: "pending_verification",
+      }).status
+    ).toBe("pending_verification");
+  });
+
+  it("normalizes stored statuses while reading legacy entries", () => {
+    const workspaceId = "ws-legacy-statuses";
+    const filePath = join(tempDir, "memory", "workspaces", `${workspaceId}.json`);
+    mkdirSync(join(tempDir, "memory", "workspaces"), { recursive: true });
+    writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          version: 1,
+          workspaceId,
+          entries: {
+            valid: {
+              id: "valid",
+              workspaceId,
+              type: "issue",
+              status: "in_progress",
+              content: "Preserve this status.",
+              source: { kind: "user" },
+              createdAt: 1,
+              updatedAt: 4,
+            },
+            missing: {
+              id: "missing",
+              workspaceId,
+              type: "todo",
+              content: "Default this status.",
+              source: { kind: "user" },
+              createdAt: 1,
+              updatedAt: 3,
+            },
+            stale: {
+              id: "stale",
+              workspaceId,
+              type: "note",
+              status: "completed",
+              content: "Clear this stale status.",
+              source: { kind: "user" },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          },
+        },
+        null,
+        2
+      ) + "\n"
+    );
+
+    expect(
+      repo.list({ workspaceId }).map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        status: entry.status,
+      }))
+    ).toEqual([
+      { id: "valid", type: "issue", status: "in_progress" },
+      { id: "missing", type: "todo", status: "not_started" },
+      { id: "stale", type: "note", status: undefined },
+    ]);
   });
 
   it("removes a workspace memory file", () => {

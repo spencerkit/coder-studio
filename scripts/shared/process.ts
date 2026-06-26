@@ -75,12 +75,48 @@ export function runBackground(
  * Wait for all child processes to exit
  */
 export async function waitForProcesses(processes: ChildProcess[]): Promise<void> {
-  await Promise.all(
-    processes.map(
-      (p) =>
-        new Promise<void>((resolve) => {
-          p.on("close", () => resolve());
-        })
-    )
-  );
+  const settled = new Set<ChildProcess>();
+
+  await new Promise<void>((resolve, reject) => {
+    if (processes.length === 0) {
+      resolve();
+      return;
+    }
+
+    let rejected = false;
+
+    const rejectOnce = (processToSkip: ChildProcess, error: Error) => {
+      if (rejected) {
+        return;
+      }
+      rejected = true;
+      for (const processToKill of processes) {
+        if (processToKill !== processToSkip && !settled.has(processToKill)) {
+          processToKill.kill("SIGTERM");
+        }
+      }
+      reject(error);
+    };
+
+    for (const child of processes) {
+      child.on("close", (code, signal) => {
+        settled.add(child);
+        if (code !== 0) {
+          const suffix =
+            typeof code === "number" ? `code ${code}` : `signal ${signal ?? "unknown"}`;
+          rejectOnce(child, new Error(`Process exited with ${suffix}`));
+          return;
+        }
+
+        if (!rejected && settled.size === processes.length) {
+          resolve();
+        }
+      });
+
+      child.on("error", (err) => {
+        settled.add(child);
+        rejectOnce(child, err);
+      });
+    }
+  });
 }

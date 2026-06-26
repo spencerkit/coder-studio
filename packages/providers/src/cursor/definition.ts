@@ -1,6 +1,7 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ProviderConfig, ProviderDefinition } from "@coder-studio/core";
 import { debounceIdleHeuristics } from "../debounce-idle-heuristics.js";
-import { sharedFirstSkillMountDirectories } from "../skills/directories.js";
 import { type CursorConfig, cursorConfigSchema } from "./config-schema.js";
 import { buildCursorSupervisorEvalCommand } from "./supervisor-eval.js";
 
@@ -43,7 +44,7 @@ export const cursorDefinition: ProviderDefinition = {
   stability: "stable",
   supportsAgentInstructions: true,
   supportsSkillsMount: true,
-  skillMountDirectories: sharedFirstSkillMountDirectories(".cursor"),
+  skillMountDirectories: [join(homedir(), ".cursor", "skills")],
   capability: "full",
   capabilities: [
     { key: "interactive_session", supported: true, label: "Interactive session" },

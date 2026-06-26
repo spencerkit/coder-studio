@@ -21,9 +21,9 @@ describe("PageHeader", () => {
     expect(header).toHaveAttribute("data-level", "secondary");
     expect(leading).not.toBeNull();
     expect(actions).not.toBeNull();
-    expect(
-      within(leading as HTMLElement).getByRole("button", { name: "Back" })
-    ).toBeInTheDocument();
+    const backButton = within(leading as HTMLElement).getByRole("button", { name: "Back" });
+    expect(backButton).toBeInTheDocument();
+    expect(within(backButton).queryByText("Back")).toBeNull();
     expect(within(leading as HTMLElement).getByText("Agent Sessions")).toBeInTheDocument();
     expect(
       within(actions as HTMLElement).getByRole("button", { name: "Edit" })
@@ -38,6 +38,7 @@ describe("PageHeader", () => {
     expect(copy).not.toBeNull();
     expect(within(copy as HTMLElement).getByText("Workspace")).toBeInTheDocument();
     expect(within(copy as HTMLElement).getByText("Config")).toBeInTheDocument();
+    expect(screen.queryByText("Back")).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 

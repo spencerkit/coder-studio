@@ -1,7 +1,7 @@
 import type { Supervisor, UpdateStateView } from "@coder-studio/core";
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isWriterAtom, serverInfoAtom, sessionsAtom } from "../atoms";
+import { isWriterAtom, serverInfoAtom, sessionsAtom, workspacesAtom } from "../atoms";
 import {
   activeWorkspaceAtom,
   activeWorkspaceIdAtom,
@@ -240,6 +240,39 @@ describe("routeEventToAtom", () => {
 
     expect(store.get(openEditorPathsAtomFamily("ws-1"))).toEqual(["src/current.ts"]);
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/current.ts");
+  });
+
+  it("preserves editor pinned state when a workspace meta patch only updates part of ui state", () => {
+    const store = createStore();
+
+    routeEventToAtom(
+      "workspace.ws-1.meta",
+      {
+        path: "/tmp/ws-1",
+        targetRuntime: "native",
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+          editorPinned: false,
+          activeEditorPath: "src/initial.ts",
+        },
+      },
+      store
+    );
+
+    routeEventToAtom(
+      "workspace.ws-1.meta",
+      {
+        uiState: {
+          activeEditorPath: "src/next.ts",
+        },
+      },
+      store
+    );
+
+    expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("src/next.ts");
+    expect(store.get(workspacesAtom)["ws-1"]?.uiState.editorPinned).toBe(false);
   });
 
   it("marks the file tree stale when an fs.dirty event arrives", () => {

@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
+import type { Session } from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
+import { sessionsAtom } from "../../../../atoms/sessions";
 import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
+import { paneLayoutAtomFamily } from "../../../agent-panes/atoms/pane-layout";
 import {
   activeFilePathAtomFamily,
   type GitDiffPreview,
@@ -199,7 +202,9 @@ vi.mock("../../../code-editor/actions/use-code-editor-actions", () => ({
 }));
 
 vi.mock("./mobile-agent-sheet", () => ({
-  MobileAgentSheet: () => <div data-testid="mobile-agent-sheet" />,
+  MobileAgentSheet: ({ defaultMode }: { defaultMode?: "create" | "list" }) => (
+    <div data-testid="mobile-agent-sheet" data-default-mode={defaultMode ?? ""} />
+  ),
 }));
 
 vi.mock("./mobile-dock", () => ({
@@ -261,12 +266,84 @@ vi.mock("./mobile-files-sheet", () => ({
 }));
 
 vi.mock("./mobile-topbar", () => ({
-  MobileTopBar: () => <div data-testid="mobile-topbar" />,
+  MobileTopBar: ({
+    onToggleDrawer,
+    onOpenFiles,
+    onOpenTerminal,
+  }: {
+    onToggleDrawer: () => void;
+    onOpenFiles?: () => void;
+    onOpenTerminal?: () => void;
+  }) => (
+    <div data-testid="mobile-topbar">
+      <button type="button" onClick={onToggleDrawer}>
+        Toggle drawer
+      </button>
+      <button type="button" onClick={onOpenFiles}>
+        Topbar files
+      </button>
+      <button type="button" onClick={onOpenTerminal}>
+        Topbar terminal
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("./mobile-workspace-drawer", () => ({
-  MobileWorkspaceDrawer: () => null,
+  MobileWorkspaceDrawer: ({
+    isOpen,
+    activeSessionId,
+    sessionsByWorkspaceId,
+    onCreateSession,
+    onSelectSession,
+  }: {
+    isOpen: boolean;
+    activeSessionId?: string | null;
+    sessionsByWorkspaceId?: Record<
+      string,
+      Array<{
+        id: string;
+        workspaceId: string;
+        providerId: string;
+        title?: string;
+        state: string;
+      }>
+    >;
+    onCreateSession?: () => void;
+    onSelectSession?: (sessionId: string) => void;
+  }) =>
+    isOpen ? (
+      <div data-testid="mobile-workspace-drawer">
+        <div data-testid="drawer-active-session">{activeSessionId ?? ""}</div>
+        <pre data-testid="drawer-sessions">{JSON.stringify(sessionsByWorkspaceId ?? {})}</pre>
+        <button type="button" onClick={onCreateSession}>
+          Drawer create session
+        </button>
+        <button type="button" onClick={() => onSelectSession?.("sess-2")}>
+          Drawer select sess-2
+        </button>
+      </div>
+    ) : null,
 }));
+
+function createSession(
+  partial: Partial<Session> & Pick<Session, "id" | "terminalId" | "providerId">
+): Session {
+  return {
+    id: partial.id,
+    workspaceId: partial.workspaceId ?? "ws-test",
+    terminalId: partial.terminalId,
+    providerId: partial.providerId,
+    state: partial.state ?? "idle",
+    capability: partial.capability ?? "full",
+    startedAt: partial.startedAt ?? Date.now() - 10_000,
+    lastActiveAt: partial.lastActiveAt ?? Date.now() - 1_000,
+    title: partial.title,
+    endedAt: partial.endedAt,
+    completionPercent: partial.completionPercent,
+    errorReason: partial.errorReason,
+  };
+}
 
 function createSendCommandMock() {
   return vi.fn().mockImplementation(async (op: string) => {
@@ -295,12 +372,33 @@ function renderMobileView(
     activePath: string | null;
     openFiles: Record<string, OpenFile>;
     diffPreview?: GitDiffPreview | null;
+    sessions?: Session[];
+    mobileActiveSessionId?: string | null;
   } = { activePath: null, openFiles: {} }
 ) {
   const store = createStore();
   currentStore = store;
   store.set(connectionStatusAtom, "connected");
-  store.set(wsClientAtom, { sendCommand: createSendCommandMock() } as never);
+  const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+    if (op === "git.status") {
+      return {
+        branch: "main",
+        ahead: 0,
+        behind: 0,
+        staged: [],
+        modified: [],
+        deleted: [],
+        untracked: [],
+      };
+    }
+
+    if (op === "session.list") {
+      return options.sessions ?? [];
+    }
+
+    return null;
+  });
+  store.set(wsClientAtom, { sendCommand } as never);
   seedReadyWorkspaceState(store, {
     "ws-test": {
       id: "ws-test",
@@ -312,6 +410,7 @@ function renderMobileView(
         leftPanelWidth: 280,
         bottomPanelHeight: 200,
         focusMode: false,
+        activeSessionId: options.mobileActiveSessionId ?? undefined,
       },
     },
   });
@@ -320,6 +419,18 @@ function renderMobileView(
   store.set(openFilesAtomFamily("ws-test"), options.openFiles as never);
   if (options.diffPreview !== undefined) {
     store.set(gitDiffPreviewAtomFamily("ws-test"), options.diffPreview as never);
+  }
+  if (options.sessions) {
+    store.set(
+      sessionsAtom,
+      Object.fromEntries(options.sessions.map((session) => [session.id, session])) as never
+    );
+    store.set(paneLayoutAtomFamily("ws-test"), {
+      id: "mobile-root",
+      type: "leaf",
+      leafKind: "session",
+      sessionId: options.sessions[0]?.id,
+    } as never);
   }
 
   render(
@@ -366,7 +477,7 @@ describe("WorkspaceMobileView", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Topbar files" }));
     fireEvent.click(screen.getByRole("button", { name: "Open a.ts" }));
 
     expect(screen.getByRole("heading", { level: 2, name: "a.ts" })).toBeInTheDocument();
@@ -395,7 +506,7 @@ describe("WorkspaceMobileView", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Topbar files" }));
     fireEvent.click(screen.getByRole("button", { name: "Open a.ts" }));
 
     expect(screen.getByRole("heading", { level: 2, name: "a.ts" })).toBeInTheDocument();
@@ -443,7 +554,7 @@ describe("WorkspaceMobileView", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Topbar files" }));
     fireEvent.click(screen.getByRole("button", { name: "Open commit preview" }));
 
     await waitFor(() => {
@@ -502,7 +613,7 @@ describe("WorkspaceMobileView", () => {
       diffPreview,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Topbar files" }));
     expect(screen.queryByRole("heading", { level: 2, name: /Open Files|打开的文件/i })).toBeNull();
 
     act(() => {
@@ -540,11 +651,259 @@ describe("WorkspaceMobileView", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.click(screen.getByRole("button", { name: "Topbar files" }));
 
     expect(screen.getByTestId("mobile-files-sheet-root")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Sheet Explorer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Explorer" })).toBeInTheDocument();
+  });
+
+  it("opens the files sheet from the mobile topbar", async () => {
+    renderMobileView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Topbar files" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-files-sheet-root")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 2, name: "Explorer" })).toBeInTheDocument();
+    });
+  });
+
+  it("opens the terminal sheet from the mobile topbar", async () => {
+    renderMobileView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Topbar terminal" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 2, name: "label.terminal" })).toBeInTheDocument();
+    });
+  });
+
+  it("removes the mobile dock row and keeps the status bar inside the bottom stack", () => {
+    renderMobileView();
+
+    expect(screen.queryByTestId("mobile-dock")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mobile-bottom-stack")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-status-bar")).toBeInTheDocument();
+  });
+
+  it("keeps the empty-state guidance aligned with topbar access instead of the removed bottom bar", () => {
+    renderMobileView({
+      activePath: null,
+      openFiles: {},
+      sessions: [],
+    });
+
+    expect(screen.getByText("Start session")).toBeInTheDocument();
+    expect(screen.getByText("Use files or terminal to get started.")).toBeInTheDocument();
+    expect(screen.queryByText(/bottom bar/i)).not.toBeInTheDocument();
+  });
+
+  it("passes the current mobile sessions and screen-model actions into the drawer", async () => {
+    renderMobileView({
+      activePath: null,
+      openFiles: {},
+      mobileActiveSessionId: "sess-1",
+      sessions: [
+        createSession({
+          id: "sess-1",
+          workspaceId: "ws-test",
+          terminalId: "term-1",
+          providerId: "claude",
+          title: "Claude Repair CI",
+          state: "running",
+          lastActiveAt: 2,
+        }),
+        createSession({
+          id: "sess-2",
+          workspaceId: "ws-test",
+          terminalId: "term-2",
+          providerId: "codex",
+          title: "Codex Mobile Layout",
+          state: "idle",
+          lastActiveAt: 1,
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle drawer" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-workspace-drawer")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("drawer-active-session")).toHaveTextContent("sess-1");
+    expect(screen.getByTestId("drawer-sessions")).toHaveTextContent("sess-1");
+    expect(screen.getByTestId("drawer-sessions")).toHaveTextContent("sess-2");
+    expect(screen.getByTestId("drawer-sessions")).toHaveTextContent('"ws-test"');
+  });
+
+  it("passes loaded sessions for every workspace into the drawer grouping", async () => {
+    const store = renderMobileView({
+      activePath: null,
+      openFiles: {},
+      mobileActiveSessionId: "sess-1",
+      sessions: [
+        createSession({
+          id: "sess-1",
+          workspaceId: "ws-test",
+          terminalId: "term-1",
+          providerId: "claude",
+          title: "Claude Repair CI",
+          state: "running",
+          lastActiveAt: 2,
+        }),
+        createSession({
+          id: "sess-9",
+          workspaceId: "ws-2",
+          terminalId: "term-9",
+          providerId: "gemini",
+          title: "Gemini Sandbox",
+          state: "idle",
+          lastActiveAt: 1,
+        }),
+      ],
+    });
+
+    act(() => {
+      seedReadyWorkspaceState(store, {
+        "ws-test": {
+          id: "ws-test",
+          path: "/tmp/ws-test",
+          targetRuntime: "native",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: {
+            leftPanelWidth: 280,
+            bottomPanelHeight: 200,
+            focusMode: false,
+            activeSessionId: "sess-1",
+          },
+        },
+        "ws-2": {
+          id: "ws-2",
+          path: "/tmp/ws-2",
+          targetRuntime: "native",
+          openedAt: 2,
+          lastActiveAt: 2,
+          uiState: {
+            leftPanelWidth: 280,
+            bottomPanelHeight: 200,
+            focusMode: false,
+          },
+        },
+      });
+      store.set(activeWorkspaceIdAtom, "ws-test");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle drawer" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-workspace-drawer")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("drawer-sessions")).toHaveTextContent('"ws-test"');
+    expect(screen.getByTestId("drawer-sessions")).toHaveTextContent('"ws-2"');
+    expect(screen.getByTestId("drawer-sessions")).toHaveTextContent("sess-9");
+  });
+
+  it("closes the drawer and opens the existing create-session flow from the drawer action", async () => {
+    renderMobileView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle drawer" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-workspace-drawer")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Drawer create session" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mobile-workspace-drawer")).not.toBeInTheDocument();
+      expect(screen.getByTestId("mobile-agent-sheet")).toBeInTheDocument();
+    });
+  });
+
+  it("opens the agent sheet in create mode from drawer create even when sessions already exist", async () => {
+    renderMobileView({
+      activePath: null,
+      openFiles: {},
+      mobileActiveSessionId: "sess-1",
+      sessions: [
+        createSession({
+          id: "sess-1",
+          workspaceId: "ws-test",
+          terminalId: "term-1",
+          providerId: "claude",
+          title: "Claude Repair CI",
+          state: "running",
+          lastActiveAt: 2,
+        }),
+        createSession({
+          id: "sess-2",
+          workspaceId: "ws-test",
+          terminalId: "term-2",
+          providerId: "codex",
+          title: "Codex Mobile Layout",
+          state: "idle",
+          lastActiveAt: 1,
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle drawer" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-workspace-drawer")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Drawer create session" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mobile-workspace-drawer")).not.toBeInTheDocument();
+      expect(screen.getByTestId("mobile-agent-sheet")).toHaveAttribute(
+        "data-default-mode",
+        "create"
+      );
+    });
+  });
+
+  it("selects a session from the drawer and closes it", async () => {
+    renderMobileView({
+      activePath: null,
+      openFiles: {},
+      mobileActiveSessionId: "sess-1",
+      sessions: [
+        createSession({
+          id: "sess-1",
+          workspaceId: "ws-test",
+          terminalId: "term-1",
+          providerId: "claude",
+          title: "Claude Repair CI",
+          state: "running",
+          lastActiveAt: 2,
+        }),
+        createSession({
+          id: "sess-2",
+          workspaceId: "ws-test",
+          terminalId: "term-2",
+          providerId: "codex",
+          title: "Codex Mobile Layout",
+          state: "idle",
+          lastActiveAt: 1,
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle drawer" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-workspace-drawer")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Drawer select sess-2" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mobile-workspace-drawer")).not.toBeInTheDocument();
+    });
   });
 
   it("does not expose the dev browser sheet from the mobile dock", async () => {

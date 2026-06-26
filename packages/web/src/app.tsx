@@ -6,7 +6,8 @@
  * - desktop -> DesktopShell
  */
 
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { EmbeddedCanvasRoute } from "./features/canvas/routes/embedded-canvas-route";
 import { useViewport } from "./hooks/use-viewport";
 import { DesktopShell } from "./shells/desktop-shell";
 import { MobileShell } from "./shells/mobile-shell";
@@ -20,7 +21,10 @@ function ShellSwitch() {
 function App() {
   return (
     <BrowserRouter>
-      <ShellSwitch />
+      <Routes>
+        <Route path="/embedded/canvas/:workspaceId" element={<EmbeddedCanvasRoute />} />
+        <Route path="*" element={<ShellSwitch />} />
+      </Routes>
     </BrowserRouter>
   );
 }

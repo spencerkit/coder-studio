@@ -1,5 +1,5 @@
 import type { Workspace } from "@coder-studio/core";
-import { useAtomValue, useSetAtom, useStore } from "jotai";
+import { type Store, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback } from "react";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { workspacesAtom } from "../../../atoms/workspaces";
@@ -48,6 +48,25 @@ function stripLegacyDevBrowserTargetUrl(
   return restUiState;
 }
 
+const workspaceUiWriteSeqByStore = new WeakMap<Store, Map<string, number>>();
+
+function nextWorkspaceUiWriteSeq(store: Store, workspaceId: string): number {
+  const existing = workspaceUiWriteSeqByStore.get(store);
+  const sequences = existing ?? new Map<string, number>();
+
+  if (!existing) {
+    workspaceUiWriteSeqByStore.set(store, sequences);
+  }
+
+  const nextSeq = (sequences.get(workspaceId) ?? 0) + 1;
+  sequences.set(workspaceId, nextSeq);
+  return nextSeq;
+}
+
+function getLatestWorkspaceUiWriteSeq(store: Store, workspaceId: string): number {
+  return workspaceUiWriteSeqByStore.get(store)?.get(workspaceId) ?? 0;
+}
+
 export function useWorkspaceUiStatePersistence(workspaceId: string) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const wsClient = useAtomValue(wsClientAtom);
@@ -64,6 +83,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
       if (!workspace) {
         return false;
       }
+      const writeSeq = nextWorkspaceUiWriteSeq(store, workspaceId);
 
       const currentOpenEditorPaths = store.get(openEditorPathsAtomFamily(workspaceId));
       const currentActiveEditorPath = store.get(activeFilePathAtomFamily(workspaceId));
@@ -79,11 +99,12 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         workspace.uiState?.activeEditorPath !== undefined ||
         currentOpenEditorPaths.length > 0 ||
         currentActiveEditorPath !== null;
-      const shouldIncludeBrowserEditorState =
+      const shouldIncludeEditorTabState =
         workspace.uiState?.openEditorTabs !== undefined ||
         workspace.uiState?.activeEditorTab !== undefined ||
-        currentOpenEditorTabs.some((tab) => tab.kind === "browser") ||
-        currentActiveEditorTab?.kind === "browser";
+        currentOpenEditorTabs.some((tab) => tab.kind !== "file") ||
+        currentActiveEditorTab?.kind === "browser" ||
+        currentActiveEditorTab?.kind === "canvas";
 
       const nextUiState: Workspace["uiState"] = {
         ...baseUiState,
@@ -98,7 +119,7 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
               activeEditorPath: currentActiveEditorPath,
             }
           : {}),
-        ...(shouldIncludeBrowserEditorState
+        ...(shouldIncludeEditorTabState
           ? {
               openEditorTabs: currentOpenEditorTabs,
               activeEditorTab: currentActiveEditorTab,
@@ -138,7 +159,10 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
         }
 
         const persistedWorkspace = result.data;
-        if (isWorkspace(persistedWorkspace)) {
+        if (
+          isWorkspace(persistedWorkspace) &&
+          getLatestWorkspaceUiWriteSeq(store, workspaceId) === writeSeq
+        ) {
           setWorkspaces((previous) => ({
             ...previous,
             [workspaceId]: persistedWorkspace,

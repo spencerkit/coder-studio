@@ -6,7 +6,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DomainEvent } from "@coder-studio/core";
+import type { AutomationPermission, DomainEvent } from "@coder-studio/core";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
@@ -19,8 +19,11 @@ import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { AgentInstructionsPublisher } from "./agent-instructions/publisher.js";
 import { buildFastifyApp } from "./app.js";
+import { SessionTokenRepo } from "./auth/session-token-repo.js";
 import { AutomationAuditLog } from "./automation/audit-log.js";
 import { EventBus } from "./bus/event-bus.js";
+import { CanvasService } from "./canvas/service.js";
+import { registerAllCommands } from "./commands/index.js";
 import {
   ensureStateDir,
   parseServerConfig,
@@ -28,6 +31,10 @@ import {
   type ServerConfigInput,
 } from "./config.js";
 import { AutoFetchScheduler } from "./git/auto-fetch.js";
+import type { HostCommandContext } from "./host/context.js";
+import { RuntimeRegistry } from "./host/runtime-registry.js";
+import { RuntimeRouter } from "./host/runtime-router.js";
+import { WorkspaceRuntimeBindingStore } from "./host/workspace-runtime-binding.js";
 import { LspManager } from "./lsp/manager.js";
 import { LspToolInstallManager } from "./lsp-tools/install-manager.js";
 import { LspToolManager } from "./lsp-tools/manager.js";
@@ -45,6 +52,8 @@ import {
   buildProviderRuntimeStatus,
   type RuntimeStatusDeps,
 } from "./provider-runtime/runtime-status.js";
+import type { RuntimeHandle } from "./runtime/contract.js";
+import { createNativeRuntime } from "./runtime/native-runtime.js";
 import { SessionManager } from "./session/manager.js";
 import { SessionAnalysisRunner } from "./session-analysis/runner.js";
 import { SessionAnalysisService } from "./session-analysis/service.js";
@@ -57,6 +66,7 @@ import { SkillsHubClient } from "./skills/skills-hub-client.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { CanvasRepo } from "./storage/repositories/canvas-repo.js";
 import { CustomProviderRepo } from "./storage/repositories/custom-provider-repo.js";
 import { MemoryRepo } from "./storage/repositories/memory-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
@@ -96,14 +106,29 @@ import { dispatch } from "./ws/dispatch.js";
 import { FencingManager } from "./ws/fencing.js";
 import { WsHub } from "./ws/hub.js";
 
-import "./commands/index.js";
-
 const WS_KEEPALIVE_INTERVAL_MS = 15_000;
+
+function logStartupPhase(app: FastifyInstance | null, label: string, startedAt: number): void {
+  const elapsedMs = Date.now() - startedAt;
+  const message = `[startup] ${label}=${elapsedMs}ms`;
+  if (app) {
+    app.log.info(message);
+    return;
+  }
+
+  console.log(message);
+}
 
 export interface Server {
   app: FastifyInstance;
   stop: () => Promise<void>;
-  __test__?: { sessionMgr: SessionManager; commandContext: CommandContext };
+  __test__?: {
+    sessionMgr: SessionManager;
+    commandContext: CommandContext;
+    hostContext: HostCommandContext;
+    nativeRuntime: RuntimeHandle;
+    sessionTokenRepo: SessionTokenRepo;
+  };
 }
 
 export interface ServerRuntimeOptions {
@@ -113,6 +138,7 @@ export interface ServerRuntimeOptions {
 export async function createServer(
   configOverrides?: ServerConfigInput & ServerRuntimeOptions
 ): Promise<Server> {
+  const startupAt = Date.now();
   const config = parseServerConfig(configOverrides);
   const configuredStateDir = resolveConfiguredStateDir(config);
   const shouldCleanupStateRoot = configuredStateDir === IN_MEMORY_STATE_DIR;
@@ -126,8 +152,16 @@ export async function createServer(
   const activationMgr = new ActivationManager();
   const fencingMgr = new FencingManager();
   const wsHub = new WsHub({ eventBus, commandContext: null, config, fencingMgr });
+  const runtimeBindings = new WorkspaceRuntimeBindingStore();
+  const runtimeRegistry = new RuntimeRegistry();
+  const runtimeRouter = new RuntimeRouter({
+    runtimeRegistry,
+    bindings: runtimeBindings,
+    defaultRuntimeId: "native-default",
+  });
   let workspaceMgr: WorkspaceManager;
   let commandContext: CommandContext;
+  let hostContext: HostCommandContext;
   let agentInstructionPublisher: AgentInstructionsPublisher | undefined;
   let lspMgr: LspManager | null = null;
   const managedProcessRegistry = new ManagedProcessRegistry({
@@ -140,6 +174,7 @@ export async function createServer(
   const sessionRepo = new SessionRepo({
     filePath: join(stateRoot, "state", "sessions.json"),
   });
+  const sessionTokenRepo = new SessionTokenRepo();
 
   const terminalMgr = new TerminalManager({
     ptyHost: createPtyHost(),
@@ -210,7 +245,10 @@ export async function createServer(
     : {};
   const skillLibraryRepo = new SkillLibraryRepo({
     filePath: join(stateRoot, "state", "skills", "library-index.json"),
-    localSkillRoots: resolveDefaultLocalSkillRoots(),
+    builtinRoot: join(stateRoot, "state", "skills", "builtin"),
+    managedLibraryRoot: join(stateRoot, "state", "skills", "library"),
+    customSkillRoot: join(stateRoot, "state", "skills", "custom"),
+    externalSkillRoots: resolveDefaultLocalSkillRoots(),
   });
   const skillTargetRepo = new SkillTargetRepo({
     filePath: join(stateRoot, "state", "skills", "targets.json"),
@@ -248,7 +286,10 @@ export async function createServer(
     filePath: join(stateRoot, "state", "workspaces.json"),
   });
   const sessionMetadataRepo = new SessionMetadataRepo({
-    workspaceRepo,
+    workspaceLookup: {
+      list: () => workspaceMgr.list(),
+      get: (workspaceId) => workspaceMgr.get(workspaceId),
+    },
   });
   const sessionAnalysisRepo = new SessionAnalysisRepo({
     filePath: join(stateRoot, "state", "session-analysis.json"),
@@ -263,6 +304,13 @@ export async function createServer(
   const memoryRepo = new MemoryRepo({
     rootDir: join(stateRoot, "state", "memory", "workspaces"),
   });
+  const canvasRepo = new CanvasRepo({
+    rootDir: join(stateRoot, "state", "canvases", "workspaces"),
+  });
+  const canvasService = new CanvasService({
+    canvasRepo,
+    now: () => Date.now(),
+  });
   const builtinSkillSyncMgr = new BuiltinSkillSyncManager({
     builtinRoot: join(stateRoot, "state", "skills", "builtin"),
     getProviderRegistry: () => activeProviderRegistry,
@@ -272,6 +320,36 @@ export async function createServer(
     settingsRepo,
   });
   await builtinSkillSyncMgr.sync();
+  logStartupPhase(null, "builtinSkillSync", startupAt);
+
+  const hostBridge = {
+    issueSessionToken: (input: {
+      sessionId: string;
+      workspaceId: string;
+      providerId: string;
+      permissions: readonly AutomationPermission[];
+    }) => sessionTokenRepo.issue(input),
+    revokeSessionTokensBySessionId: (sessionId: string) => {
+      sessionTokenRepo.revokeBySessionId(sessionId);
+    },
+    getHostApiUrl: () =>
+      `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`,
+    emitDomainEvent: (event: DomainEvent) => {
+      eventBus.emit(event);
+    },
+    broadcast: (topic: string, payload: unknown) => {
+      wsHub.broadcast(topic, payload);
+    },
+    recordWorkspaceFetch: (workspaceId: string) => {
+      workspaceMgr.recordFetch(workspaceId);
+    },
+    sendToClient: (clientId: string, payload: unknown) => {
+      return wsHub.sendToClient(clientId as never, payload as never);
+    },
+    sendBinaryToClient: (clientId: string, payload: Buffer) => {
+      return wsHub.sendBinaryToClient(clientId as never, payload);
+    },
+  };
 
   const sessionMgr = new SessionManager({
     terminalMgr,
@@ -280,9 +358,7 @@ export async function createServer(
     broadcaster: wsHub,
     providerRegistry: activeProviderRegistry,
     providerConfigRepo,
-    runtimeContext: {
-      apiUrl: `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`,
-    },
+    hostBridge,
   });
 
   let supervisorMgr: SupervisorManager | undefined;
@@ -341,6 +417,7 @@ export async function createServer(
       await terminalMgr.closeForWorkspace(workspaceId);
       sessionMgr.deleteEndedForWorkspace(workspaceId);
       memoryRepo.removeWorkspace(workspaceId);
+      canvasRepo.removeWorkspace(workspaceId);
 
       for (const session of persistedSessions) {
         sessionRepo.delete(session.id);
@@ -370,11 +447,14 @@ export async function createServer(
   const app = await buildFastifyApp({
     wsHub,
     workspaceMgr,
+    skillLibraryRepo,
     webRoot: config.webRoot,
     config,
     authSessionRepo,
     authLoginBlockRepo,
+    sessionTokenRepo,
     appearanceAssetRepo,
+    canvasService,
     logger: {
       level: "info",
       transport: {
@@ -386,6 +466,7 @@ export async function createServer(
       },
     },
   });
+  logStartupPhase(app, "buildFastifyApp", startupAt);
 
   wsHub.setLogger(app.log);
   workspaceMgr.setLogger(app.log);
@@ -401,9 +482,6 @@ export async function createServer(
     }
     agentInstructionPublisher?.scheduleWorkspaceSync(workspaceId);
   });
-  workspaceMgr.hydrateWatchers();
-  await agentInstructionPublisher.syncAllOpenWorkspaces();
-
   const lspManifestStore = new FileManifestStore(resolveLspToolRoot(stateRoot));
   const lspToolMgr = new LspToolManager({
     manifestStore: lspManifestStore,
@@ -450,7 +528,62 @@ export async function createServer(
     logger: app.log,
   });
   await sessionMgr.hydrate();
+  logStartupPhase(app, "sessionHydrate", startupAt);
   supervisorMgr.start();
+
+  for (const workspace of workspaceMgr.list()) {
+    runtimeBindings.bindWorkspace(workspace.id, "native-default");
+  }
+  for (const session of sessionMgr.getAll()) {
+    runtimeBindings.bindSession(session);
+  }
+  for (const terminal of terminalMgr.getAll()) {
+    runtimeBindings.bindTerminal(terminal.toDTO());
+  }
+
+  eventBus.on<Extract<DomainEvent, { type: "workspace.meta.changed" }>>(
+    "workspace.meta.changed",
+    (event) => {
+      const workspace = workspaceMgr.get(event.workspaceId);
+      if (!workspace) {
+        runtimeBindings.unbindWorkspace(event.workspaceId);
+        return;
+      }
+
+      const runtimeId = workspace.targetRuntime === "native" ? "native-default" : "native-default";
+      runtimeBindings.bindWorkspace(workspace.id, runtimeId);
+    }
+  );
+  eventBus.on<Extract<DomainEvent, { type: "session.state.changed" }>>(
+    "session.state.changed",
+    (event) => {
+      if (event.session) {
+        runtimeBindings.bindSession(event.session);
+      }
+    }
+  );
+  eventBus.on<Extract<DomainEvent, { type: "session.lifecycle" }>>("session.lifecycle", (event) => {
+    if (event.event === "removed") {
+      runtimeBindings.removeSession(event.sessionId);
+    }
+  });
+  eventBus.on<Extract<DomainEvent, { type: "terminal.created" }>>("terminal.created", (event) => {
+    runtimeBindings.bindTerminal({
+      id: event.terminalId,
+      workspaceId: event.workspaceId,
+      kind: event.kind,
+      title: event.title,
+      cwd: event.cwd,
+      argv: [],
+      cols: 120,
+      rows: 30,
+      alive: true,
+      createdAt: Date.now(),
+    });
+  });
+  eventBus.on<Extract<DomainEvent, { type: "terminal.exited" }>>("terminal.exited", (event) => {
+    runtimeBindings.removeTerminal(event.terminalId);
+  });
 
   const providerInstallMgr = new ProviderInstallManager(activeProviderRegistry, {
     ...providerRuntimeDeps,
@@ -460,7 +593,7 @@ export async function createServer(
     ...providerRuntimeDeps,
     runCommand: providerMockOverrides?.runCommand ?? runCommandAsString,
     ptyHost: createPtyHost(),
-    broadcaster: wsHub,
+    hostBridge,
   });
 
   updateService = new UpdateService({
@@ -479,8 +612,6 @@ export async function createServer(
         .filter((session) => session.state === "starting" || session.state === "running").length,
     countActiveSupervisors: () => supervisorMgr?.countActive() ?? 0,
   });
-  updateService.start();
-
   monitoringService = new MonitoringService({
     broadcaster: wsHub,
     settingsRepo,
@@ -491,6 +622,75 @@ export async function createServer(
     hostCollector: new HostCollector(),
     processCollector: createProcessTableCollector(),
   });
+
+  hostContext = {
+    workspaceMgr,
+    sessionMgr,
+    terminalMgr,
+    settingsRepo,
+    memoryRepo,
+    activationMgr,
+    automationAuditLog,
+    broadcaster: wsHub,
+    autoFetch,
+    runtimeRouter,
+    runtimeBindings,
+    fencingMgr,
+    config,
+    updateService,
+    monitoringService,
+    customProviderRepo,
+    providerRegistry: activeProviderRegistry,
+    setProviderRegistry: (providers) => {
+      activeProviderRegistry = providers;
+      hostContext.providerRegistry = providers;
+      commandContext.providerRegistry = providers;
+      runtimeRegistry.setProviderRegistry(providers);
+      providerInstallMgr.setProviders(providers);
+    },
+  };
+
+  await registerAllCommands();
+
+  const nativeRuntime = await createNativeRuntime({
+    runtimeId: "native-default",
+    stateRoot,
+    hostBridge,
+    providerRegistry: activeProviderRegistry,
+    workspaceLookup: {
+      get: (workspaceId) => workspaceMgr.get(workspaceId),
+      list: () => workspaceMgr.list(),
+    },
+    providerRuntimeDeps,
+    contextOverrides: {
+      eventBus,
+      providerConfigRepo,
+      providerRegistry: activeProviderRegistry,
+      sessionMgr,
+      terminalMgr,
+      taskMgr,
+      lspMgr,
+      lspToolMgr,
+      lspToolInstallMgr,
+      supervisorMgr,
+      providerRuntimeDeps,
+      providerInstallMgr,
+      systemDependencyInstallMgr,
+      skillsHubClient,
+      skillInstallMgr,
+      skillMountMgr,
+      skillHealthMgr,
+      skillLibraryRepo,
+      skillTargetRepo,
+      skillMountRepo,
+      builtinSkillSyncMgr,
+      sessionMetadataRepo,
+      sessionAnalysisService,
+      workAnalysisService,
+      agentInstructionPublisher,
+    },
+  });
+  runtimeRegistry.register(nativeRuntime);
 
   commandContext = {
     workspaceMgr,
@@ -505,10 +705,13 @@ export async function createServer(
     fencingMgr,
     supervisorMgr,
     autoFetch,
+    runtimeRouter,
+    runtimeBindings,
     providerRuntimeDeps,
     providerInstallMgr,
     systemDependencyInstallMgr,
     activationMgr,
+    canvasService,
     config,
     lspMgr,
     lspToolMgr,
@@ -520,7 +723,9 @@ export async function createServer(
     workAnalysisService,
     setProviderRegistry: (providers) => {
       activeProviderRegistry = providers;
+      hostContext.providerRegistry = providers;
       commandContext.providerRegistry = providers;
+      runtimeRegistry.setProviderRegistry(providers);
       providerInstallMgr.setProviders(providers);
       sessionMgr.setProviderRegistry(providers);
       supervisorMgr?.setProviderRegistry(providers);
@@ -541,7 +746,6 @@ export async function createServer(
   };
 
   wsHub.setCommandContext(commandContext);
-  monitoringService.start();
 
   eventBus.on(
     "session.state.changed",
@@ -566,6 +770,7 @@ export async function createServer(
     host: config.host,
     port: config.port,
   });
+  logStartupPhase(app, "listen", startupAt);
 
   if (configOverrides?.writeRuntimeConfig ?? process.env.NODE_ENV === "production") {
     const runtime: RuntimeConfig = {
@@ -579,6 +784,20 @@ export async function createServer(
     process.env.CODER_STUDIO_RUNTIME_JSON_PATH = getRuntimePath();
     writeRuntimeConfig(runtime);
   }
+  logStartupPhase(app, "runtimeConfigWritten", startupAt);
+
+  const runPostListenWarmup = async (): Promise<void> => {
+    workAnalysisService.startAutoScan();
+    workspaceMgr.hydrateWatchers();
+    await agentInstructionPublisher.syncAllOpenWorkspaces();
+    updateService.start();
+    monitoringService.start();
+  };
+
+  void runPostListenWarmup().catch((error) => {
+    app.log.warn({ err: error }, "post-listen warmup failed");
+  });
+  logStartupPhase(app, "postListenWarmupScheduled", startupAt);
 
   const gcTimer = setTimeout(() => {
     runStartupGc(config.uploadsDir, app.log).catch((err) =>
@@ -622,7 +841,13 @@ export async function createServer(
   return {
     app,
     stop: stopServer,
-    __test__: { sessionMgr, commandContext },
+    __test__: {
+      sessionMgr,
+      commandContext,
+      hostContext,
+      nativeRuntime,
+      sessionTokenRepo,
+    },
   };
 }
 

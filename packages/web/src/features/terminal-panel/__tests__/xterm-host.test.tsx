@@ -517,15 +517,17 @@ describe("XtermHost", () => {
         }
       | undefined;
 
-    let links:
+    const links = await new Promise<
       | Array<{
           text: string;
           range: { start: { x: number; y: number }; end: { x: number; y: number } };
           activate(event: MouseEvent, text: string): void;
         }>
-      | undefined;
-    provider?.provideLinks(1, (nextLinks) => {
-      links = nextLinks;
+      | undefined
+    >((resolve) => {
+      provider?.provideLinks(1, (nextLinks) => {
+        resolve(nextLinks);
+      });
     });
 
     expect(links).toHaveLength(1);
@@ -552,7 +554,7 @@ describe("XtermHost", () => {
     expect(store.get(openEditorPathsAtomFamily("test-workspace"))).toEqual(["src/app.tsx"]);
   });
 
-  it("opens http links from terminal output in a new page", () => {
+  it("opens http links from terminal output in a new page", async () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     setMockBufferLines([[0, "Visit https://example.com/docs?x=1."]]);
 
@@ -580,15 +582,17 @@ describe("XtermHost", () => {
         }
       | undefined;
 
-    let links:
+    const links = await new Promise<
       | Array<{
           text: string;
           range: { start: { x: number; y: number }; end: { x: number; y: number } };
           activate(event: MouseEvent, text: string): void;
         }>
-      | undefined;
-    provider?.provideLinks(1, (nextLinks) => {
-      links = nextLinks;
+      | undefined
+    >((resolve) => {
+      provider?.provideLinks(1, (nextLinks) => {
+        resolve(nextLinks);
+      });
     });
 
     expect(links).toHaveLength(1);
@@ -607,6 +611,106 @@ describe("XtermHost", () => {
       "_blank",
       "noopener,noreferrer"
     );
+  });
+
+  it("rejoins wrapped workspace paths from terminal output in the editor", async () => {
+    const store = createStore();
+    store.set(workspacesAtom, {
+      "test-workspace": {
+        id: "test-workspace",
+        path: "/repo",
+        targetRuntime: "native",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 240,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(workspaceOrderAtom, ["test-workspace"]);
+    store.set(workspacesLoadStateAtom, "ready");
+    setMockBufferLines([
+      [0, "/repo/src/features/terminal-        ", false],
+      [1, "panel/links/terminal-link-provider.ts", true],
+    ]);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="wrapped-link-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    expect(mockTerminal.registerLinkProvider).toHaveBeenCalledTimes(1);
+    const provider = mockTerminal.registerLinkProvider.mock.calls[0]?.[0] as
+      | {
+          provideLinks(
+            bufferLineNumber: number,
+            callback: (
+              links:
+                | Array<{
+                    text: string;
+                    range: { start: { x: number; y: number }; end: { x: number; y: number } };
+                    activate(event: MouseEvent, text: string): void;
+                  }>
+                | undefined
+            ) => void
+          ): void;
+        }
+      | undefined;
+
+    const firstRowLinks = await new Promise<
+      | Array<{
+          text: string;
+          range: { start: { x: number; y: number }; end: { x: number; y: number } };
+          activate(event: MouseEvent, text: string): void;
+        }>
+      | undefined
+    >((resolve) => {
+      provider?.provideLinks(1, (nextLinks) => {
+        resolve(nextLinks);
+      });
+    });
+
+    const secondRowLinks = await new Promise<
+      | Array<{
+          text: string;
+          range: { start: { x: number; y: number }; end: { x: number; y: number } };
+          activate(event: MouseEvent, text: string): void;
+        }>
+      | undefined
+    >((resolve) => {
+      provider?.provideLinks(2, (nextLinks) => {
+        resolve(nextLinks);
+      });
+    });
+
+    expect(firstRowLinks).toHaveLength(1);
+    expect(firstRowLinks?.[0]).toMatchObject({
+      text: "/repo/src/features/terminal-panel/links/terminal-link-provider.ts",
+      range: {
+        start: { x: 1, y: 1 },
+        end: { x: 37, y: 2 },
+      },
+    });
+    expect(secondRowLinks).toHaveLength(1);
+    expect(secondRowLinks?.[0]?.text).toBe(
+      "/repo/src/features/terminal-panel/links/terminal-link-provider.ts"
+    );
+
+    await act(async () => {
+      secondRowLinks?.[0]?.activate(new MouseEvent("click"), secondRowLinks[0].text);
+      await Promise.resolve();
+    });
+
+    expect(store.get(pendingEditorNavigationAtomFamily("test-workspace"))).toMatchObject({
+      workspaceId: "test-workspace",
+      path: "src/features/terminal-panel/links/terminal-link-provider.ts",
+      line: undefined,
+      column: undefined,
+      source: "manual",
+    });
   });
 
   it("copies the terminal selection on desktop pointerup when copy-on-select is enabled", async () => {
@@ -3789,6 +3893,64 @@ describe("XtermHost", () => {
     );
   });
 
+  it("does not treat SGR mouse tracking sequences as submitted text", async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mouse-submit-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf("function");
+
+    await onDataCallback?.("\x1b[<35;17;18M");
+    await onDataCallback?.("\r");
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      "mouse-submit-terminal",
+      new TextEncoder().encode("\r"),
+      "submit",
+      undefined
+    );
+  });
+
+  it("preserves user text submitted after SGR mouse tracking sequences", async () => {
+    const store = createStore();
+    const sendTerminalInput = vi.fn().mockResolvedValue(undefined);
+
+    store.set(wsClientAtom, {
+      sendTerminalInput,
+      subscribe: vi.fn(() => () => {}),
+    } as never);
+
+    render(
+      <Provider store={store}>
+        <XtermHost terminalId="mouse-text-submit-terminal" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    const onDataCallback = mockTerminal.onData.mock.calls[0]?.[0];
+    expect(onDataCallback).toBeTypeOf("function");
+
+    await onDataCallback?.("\x1b[<35;17;18M");
+    await onDataCallback?.("fix the build\r");
+
+    expect(sendTerminalInput).toHaveBeenLastCalledWith(
+      "mouse-text-submit-terminal",
+      new TextEncoder().encode("fix the build\r"),
+      "submit",
+      "fix the build"
+    );
+  });
+
   it("renders pending image previews and shows overflow count in the third slot", () => {
     uploadHookMocks.pendingImages = [
       { id: "img-1", name: "first.png", previewUrl: "blob:first" },
@@ -5124,6 +5286,231 @@ describe("XtermHost", () => {
       "off"
     );
     expect(consoleSpy).toHaveBeenCalledWith("Failed to send terminal input:", expect.any(Error));
+  });
+
+  it("rebuilds terminal history when switching back to a previously rendered terminal", async () => {
+    const store = createStore();
+    const termABytes = new TextEncoder().encode("term a snapshot\n");
+    const termBBytes = new TextEncoder().encode("term b snapshot\n");
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const originalRequestAnimationFrame = global.requestAnimationFrame;
+    const originalCancelAnimationFrame = global.cancelAnimationFrame;
+
+    mockTerminal.cols = 132;
+    mockTerminal.rows = 36;
+
+    const sendCommand = vi.fn().mockImplementation((op: string, args: unknown) => {
+      if (op === "recovery.reconcile") {
+        const request = args as {
+          reason: string;
+          terminals: Array<{ terminalId: string; renderedSeq: number }>;
+        };
+        const terminal = request.terminals[0];
+
+        if (terminal?.terminalId === "term-a" && terminal.renderedSeq === 0) {
+          return Promise.resolve({
+            terminals: [
+              { terminalId: "term-a", action: "snapshot", headSeq: termABytes.byteLength },
+            ],
+          });
+        }
+
+        if (terminal?.terminalId === "term-a" && terminal.renderedSeq === termABytes.byteLength) {
+          return Promise.resolve({
+            terminals: [{ terminalId: "term-a", action: "noop", headSeq: termABytes.byteLength }],
+          });
+        }
+
+        if (terminal?.terminalId === "term-b" && terminal.renderedSeq === 0) {
+          return Promise.resolve({
+            terminals: [
+              { terminalId: "term-b", action: "snapshot", headSeq: termBBytes.byteLength },
+            ],
+          });
+        }
+
+        throw new Error(`Unexpected reconcile request: ${JSON.stringify(request)}`);
+      }
+
+      if (op === "terminal.snapshot") {
+        const request = args as { terminalId: string };
+        if (request.terminalId === "term-a") {
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 101,
+            size: termABytes.byteLength,
+            seq: termABytes.byteLength,
+            rows: 24,
+            cols: 80,
+            source: "headless",
+            bytes: termABytes,
+          } satisfies TerminalSnapshotPayload);
+        }
+
+        if (request.terminalId === "term-b") {
+          return Promise.resolve({
+            status: "ok",
+            transport: "binary",
+            streamId: 102,
+            size: termBBytes.byteLength,
+            seq: termBBytes.byteLength,
+            rows: 24,
+            cols: 80,
+            source: "headless",
+            bytes: termBBytes,
+          } satisfies TerminalSnapshotPayload);
+        }
+      }
+
+      return Promise.resolve({ status: "ok" });
+    });
+    const probeConnection = vi.fn().mockResolvedValue({ ok: true });
+
+    global.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    }) as typeof requestAnimationFrame;
+    global.cancelAnimationFrame = vi.fn() as typeof cancelAnimationFrame;
+
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, {
+      sendCommand,
+      subscribe: vi.fn(() => () => {}),
+      getStatus: vi.fn(() => "connected"),
+      probeConnection,
+      onStatus: vi.fn(() => () => {}),
+    } as never);
+
+    setGlobalRecoveryCoordinator(
+      createRecoveryCoordinator({
+        wsClient: {
+          getStatus: vi.fn(() => "connected"),
+          probeConnection,
+          onStatus: vi.fn(() => () => {}),
+          subscribe: vi.fn(() => () => {}),
+        } as never,
+        sendCommand: async (op, innerArgs, options) => {
+          try {
+            const data = await sendCommand(op, innerArgs as never, options);
+            return { ok: true, data };
+          } catch (error) {
+            return {
+              ok: false,
+              error: {
+                code: "command_error",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
+        applyReplay: vi.fn(),
+        applySnapshot: vi.fn(),
+      })
+    );
+
+    const { rerender } = render(
+      <Provider store={store}>
+        <XtermHost terminalId="term-a" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(16);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectTerminalWriteData(termABytes);
+    });
+
+    rerender(
+      <Provider store={store}>
+        <XtermHost terminalId="term-b" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(32);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expectTerminalWriteData(termBBytes);
+    });
+
+    rerender(
+      <Provider store={store}>
+        <XtermHost terminalId="term-a" workspaceId="test-workspace" />
+      </Provider>
+    );
+
+    await act(async () => {
+      const callback = rafCallbacks.shift();
+      callback?.(48);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(
+        sendCommand.mock.calls.filter(
+          ([op, args]) =>
+            op === "recovery.reconcile" &&
+            (args as { terminals: Array<{ terminalId: string }> }).terminals[0]?.terminalId ===
+              "term-a"
+        )
+      ).toHaveLength(2);
+    });
+
+    const termAReconcileCalls = sendCommand.mock.calls
+      .filter(
+        ([op, args]) =>
+          op === "recovery.reconcile" &&
+          (
+            args as {
+              terminals: Array<{ terminalId: string; renderedSeq: number }>;
+            }
+          ).terminals[0]?.terminalId === "term-a"
+      )
+      .map(([op, args]) => [op, args]);
+
+    expect(termAReconcileCalls).toHaveLength(2);
+    expect(termAReconcileCalls[0]).toEqual([
+      "recovery.reconcile",
+      {
+        reason: "initial_mount",
+        terminals: [{ terminalId: "term-a", renderedSeq: 0 }],
+      },
+    ]);
+    expect(termAReconcileCalls[1]).toEqual([
+      "recovery.reconcile",
+      {
+        reason: "initial_mount",
+        terminals: [{ terminalId: "term-a", renderedSeq: 0 }],
+      },
+    ]);
+
+    expect(
+      sendCommand.mock.calls.filter(
+        ([op, args]) =>
+          op === "terminal.snapshot" && (args as { terminalId: string }).terminalId === "term-a"
+      )
+    ).toHaveLength(2);
+
+    expect(
+      mockTerminal.write.mock.calls.filter(([written]) => written === termABytes)
+    ).toHaveLength(2);
+
+    global.requestAnimationFrame = originalRequestAnimationFrame;
+    global.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
   it("buffers live output until replay finishes and drops overlapping bytes", async () => {

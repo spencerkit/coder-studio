@@ -16,6 +16,14 @@ import { activeWorkspaceIdAtom } from "../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { CommandResultError } from "../../ws/client";
 import {
+  editorPaneActiveFilePathAtomFamily,
+  editorPaneModeAtomFamily,
+  editorPaneOpenEditorPathsAtomFamily,
+  editorPanePendingNavigationAtomFamily,
+  getEditorPaneStateKey,
+} from "../agent-panes/atoms/editor-panes";
+import {
+  activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   editorModeAtomFamily,
   editorRefreshTokenAtomFamily,
@@ -25,6 +33,7 @@ import {
   gitStateAtomFamily,
   type OpenFile,
   openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
   openFilesAtomFamily,
 } from "../workspace/atoms";
 import { OpenEditorsSection } from "../workspace/views/shared/open-editors-section";
@@ -268,6 +277,60 @@ describe("CodeEditorHost", () => {
     expect(mockRegistryUpdateFromDisk).not.toHaveBeenCalled();
   });
 
+  it("opens skill files through the skill file read command", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "skills.files.read") {
+        return {
+          kind: "text",
+          content: "# My Review Skill\n",
+          baseHash: "skill-hash-1",
+          encoding: "utf-8",
+          displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+        };
+      }
+
+      if (op === "file.read") {
+        throw new Error("skill files must not use file.read");
+      }
+
+      return null;
+    });
+    const { store } = setupStore({ activePath: "skill:my-review-skill/SKILL.md", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "skills.files.read",
+        {
+          skillSlug: "my-review-skill",
+          path: "SKILL.md",
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand.mock.calls.some(([op]) => op === "file.read")).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("# My Review Skill");
+    });
+    expectCurrentFilePathTitle("/root/.agents/skills/my-review-skill/SKILL.md");
+    expect(store.get(openFilesAtomFamily("ws-1"))["skill:my-review-skill/SKILL.md"]).toMatchObject({
+      kind: "text",
+      path: "skill:my-review-skill/SKILL.md",
+      displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+      content: "# My Review Skill\n",
+      savedContent: "# My Review Skill\n",
+      baseHash: "skill-hash-1",
+      isDirty: false,
+    });
+    expect(mockRegistryUpdateFromDisk).not.toHaveBeenCalled();
+  });
+
   it("saves system agent instructions through the provider-specific write command", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "agentInstructions.system.read") {
@@ -337,6 +400,79 @@ describe("CodeEditorHost", () => {
       expect(store.get(openFilesAtomFamily("ws-1"))["agent-system:codex"]).toMatchObject({
         savedContent: "# Codex\n\n- Prefer focused answers.\n",
         baseHash: "system-hash-2",
+        isDirty: false,
+      });
+    });
+  });
+
+  it("saves skill files through the skill file write command", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "skills.files.read") {
+        return {
+          kind: "text",
+          content: "# My Review Skill\n",
+          baseHash: "skill-hash-1",
+          encoding: "utf-8",
+          displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+        };
+      }
+
+      if (op === "skills.files.write") {
+        return {
+          newHash: "skill-hash-2",
+        };
+      }
+
+      if (op === "file.write") {
+        throw new Error("skill files must not use file.write");
+      }
+
+      return null;
+    });
+    const { store } = setupStore({ activePath: "skill:my-review-skill/SKILL.md", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    const editor = await screen.findByRole("textbox", { name: "Editor content" });
+    fireEvent.change(editor, {
+      target: { value: "# My Review Skill\n\n- Prefer focused answers.\n" },
+    });
+
+    await waitFor(() => {
+      expect(
+        store.get(openFilesAtomFamily("ws-1"))["skill:my-review-skill/SKILL.md"]
+      ).toMatchObject({
+        isDirty: true,
+      });
+    });
+
+    pressSaveShortcut();
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "skills.files.write",
+        {
+          skillSlug: "my-review-skill",
+          path: "SKILL.md",
+          content: "# My Review Skill\n\n- Prefer focused answers.\n",
+          baseHash: "skill-hash-1",
+        },
+        undefined
+      );
+    });
+
+    expect(sendCommand.mock.calls.some(([op]) => op === "file.write")).toBe(false);
+    await waitFor(() => {
+      expect(
+        store.get(openFilesAtomFamily("ws-1"))["skill:my-review-skill/SKILL.md"]
+      ).toMatchObject({
+        savedContent: "# My Review Skill\n\n- Prefer focused answers.\n",
+        baseHash: "skill-hash-2",
+        displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
         isDirty: false,
       });
     });
@@ -534,6 +670,57 @@ describe("CodeEditorHost", () => {
       path: "agent-system:codex",
       savedContent: "# Codex\n\nUpdated on disk\n",
       baseHash: "system-hash-2",
+      isDirty: false,
+    });
+    expect(mockRegistryUpdateFromDisk).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a clean skill buffer through the virtual path and keeps the display path", async () => {
+    let readCount = 0;
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "skills.files.read") {
+        readCount += 1;
+        return {
+          kind: "text",
+          content:
+            readCount === 1 ? "# My Review Skill\n" : "# My Review Skill\n\nUpdated on disk\n",
+          baseHash: readCount === 1 ? "skill-hash-1" : "skill-hash-2",
+          encoding: "utf-8",
+          displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+        };
+      }
+
+      if (op === "file.read") {
+        throw new Error("skill files must not use file.read");
+      }
+
+      return null;
+    });
+    const { store } = setupStore({ activePath: "skill:my-review-skill/SKILL.md", sendCommand });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("# My Review Skill");
+    });
+
+    act(() => {
+      store.set(editorRefreshTokenAtomFamily("ws-1"), 1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("Updated on disk");
+    });
+    expectCurrentFilePathTitle("/root/.agents/skills/my-review-skill/SKILL.md");
+    expect(store.get(openFilesAtomFamily("ws-1"))["skill:my-review-skill/SKILL.md"]).toMatchObject({
+      path: "skill:my-review-skill/SKILL.md",
+      displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+      savedContent: "# My Review Skill\n\nUpdated on disk\n",
+      baseHash: "skill-hash-2",
       isDirty: false,
     });
     expect(mockRegistryUpdateFromDisk).not.toHaveBeenCalled();
@@ -1389,6 +1576,137 @@ describe("CodeEditorHost", () => {
     await waitFor(() => {
       expect(store.get(editorModeAtomFamily("ws-1"))).toBe("preview");
     });
+  });
+
+  it("switches .csc files between source edit and canvas preview from the mode buttons", async () => {
+    const { store } = setupStore({
+      activePath: ".coder-studio/canvases/auth-gate.csc",
+      openEditorPaths: [".coder-studio/canvases/auth-gate.csc"],
+      openFiles: {
+        ".coder-studio/canvases/auth-gate.csc": {
+          kind: "text",
+          path: ".coder-studio/canvases/auth-gate.csc",
+          content: '{"kind":"architecture_canvas"}',
+          savedContent: '{"kind":"architecture_canvas"}',
+          baseHash: "canvas-hash",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <CodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("architecture_canvas");
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => {
+      const previewTab = screen.getByRole("tab", { selected: true });
+      expect(previewTab).toHaveAttribute("title", ".coder-studio/canvases/auth-gate.csc");
+      expect(within(previewTab).getByText("auth-gate")).toBeInTheDocument();
+      expect(within(previewTab).getByText("ARCH")).toBeInTheDocument();
+    });
+
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("preview");
+    expect(store.get(activeEditorTabAtomFamily("ws-1"))).toEqual({
+      kind: "canvas",
+      id: "canvas:.coder-studio/canvases/auth-gate.csc",
+      title: "auth-gate",
+      sourcePath: ".coder-studio/canvases/auth-gate.csc",
+      artifactType: "architecture_canvas",
+      canvasId: ".coder-studio/canvases/auth-gate.csc",
+    });
+    expect(store.get(openEditorTabsAtomFamily("ws-1"))).toEqual([
+      {
+        kind: "canvas",
+        id: "canvas:.coder-studio/canvases/auth-gate.csc",
+        title: "auth-gate",
+        sourcePath: ".coder-studio/canvases/auth-gate.csc",
+        artifactType: "architecture_canvas",
+        canvasId: ".coder-studio/canvases/auth-gate.csc",
+      },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("architecture_canvas");
+    });
+
+    expect(store.get(editorModeAtomFamily("ws-1"))).toBe("edit");
+    expect(store.get(activeEditorTabAtomFamily("ws-1"))).toEqual({
+      kind: "file",
+      path: ".coder-studio/canvases/auth-gate.csc",
+      pinned: true,
+    });
+  });
+
+  it("switches pane-local .csc files between source edit and canvas preview from the mode buttons", async () => {
+    const { store } = setupStore({
+      activePath: null,
+      openEditorPaths: [],
+      openFiles: {
+        ".coder-studio/canvases/auth-gate.csc": {
+          kind: "text",
+          path: ".coder-studio/canvases/auth-gate.csc",
+          content: '{"kind":"architecture_canvas"}',
+          savedContent: '{"kind":"architecture_canvas"}',
+          baseHash: "canvas-hash",
+          isDirty: false,
+        },
+      },
+    });
+    const paneStateKey = getEditorPaneStateKey("ws-1", "pane-1");
+    store.set(
+      editorPaneActiveFilePathAtomFamily(paneStateKey),
+      ".coder-studio/canvases/auth-gate.csc"
+    );
+    store.set(editorPaneOpenEditorPathsAtomFamily(paneStateKey), [
+      ".coder-studio/canvases/auth-gate.csc",
+    ]);
+
+    function PaneCodeEditorHost() {
+      const editorState = useCodeEditorActions({
+        activeFilePathAtom: editorPaneActiveFilePathAtomFamily(paneStateKey),
+        editorModeAtom: editorPaneModeAtomFamily(paneStateKey),
+        openEditorPathsAtom: editorPaneOpenEditorPathsAtomFamily(paneStateKey),
+        pendingNavigationAtom: editorPanePendingNavigationAtomFamily(paneStateKey),
+        persistEditorUiState: false,
+      });
+
+      return <CodeEditorHost editorState={editorState} />;
+    }
+
+    render(
+      <Provider store={store}>
+        <PaneCodeEditorHost />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("monaco-host")).toHaveTextContent("architecture_canvas");
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => {
+      const previewTab = screen.getByRole("tab", { selected: true });
+      expect(previewTab).toHaveAttribute("title", ".coder-studio/canvases/auth-gate.csc");
+      expect(within(previewTab).getByText("auth-gate")).toBeInTheDocument();
+      expect(within(previewTab).getByText("ARCH")).toBeInTheDocument();
+    });
+
+    expect(store.get(editorPaneModeAtomFamily(paneStateKey))).toBe("preview");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monaco-host")).toHaveTextContent("architecture_canvas");
+    });
+
+    expect(store.get(editorPaneModeAtomFamily(paneStateKey))).toBe("edit");
   });
 
   it("defaults markdown files into preview mode after load", async () => {

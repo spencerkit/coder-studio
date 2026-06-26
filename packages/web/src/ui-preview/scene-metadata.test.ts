@@ -18,6 +18,7 @@ describe("ui preview scene metadata", () => {
   it("registers the desktop review scene ids", () => {
     expect(UI_PREVIEW_SCENE_METADATA.map((scene) => scene.id)).toEqual(
       expect.arrayContaining([
+        "workspace-custom-skills-review",
         "readme-desktop-hero",
         "readme-desktop-review",
         "readme-mobile-progress",
@@ -126,5 +127,19 @@ describe("ui preview scene metadata", () => {
     expect(desktopWorkspaceScene?.description.toLowerCase()).toContain("appearance");
     expect(mobileWorkspaceScene?.source).toBe("real-route");
     expect(mobileWorkspaceScene?.description.toLowerCase()).toContain("appearance");
+  });
+
+  it("registers a dedicated custom skills workspace review scene", () => {
+    const scene = UI_PREVIEW_SCENE_METADATA.find(
+      (entry) => entry.id === "workspace-custom-skills-review"
+    );
+
+    expect(scene?.devices).toEqual(["desktop"]);
+    expect(scene?.themes).toEqual(["mint-dark"]);
+    expect(scene?.locales).toEqual(["en"]);
+    expect(scene?.capture?.selector).toBe(".workspace-page");
+    expect(scene?.description.toLowerCase()).toContain("custom skills");
+    expect(scene?.description.toLowerCase()).toContain("create");
+    expect(scene?.description.toLowerCase()).toContain("edit");
   });
 });

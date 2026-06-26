@@ -1,49 +1,93 @@
 import { Topics } from "../protocol/topics.js";
 import type { AutomationPermission } from "./automation.js";
+import { CanvasArtifactKind } from "./canvas.js";
 
 export type UiActionRiskLevel = "read" | "write" | "dangerous";
 export type UiPanelId = "terminal" | "explorer" | "search" | "git" | "skills" | "agentInstructions";
 export type UiCommandId = "quickOpen.open" | "commandPalette.open";
 
+type EditorOpenFileUiActionIntent = {
+  type: "editor.openFile";
+  workspaceId?: string;
+  path: string;
+  line?: number;
+  column?: number;
+  target?: "active" | "newPane" | { paneId: string };
+};
+
+type EditorCloseFileUiActionIntent = {
+  type: "editor.closeFile";
+  workspaceId?: string;
+  path: string;
+};
+
+type BrowserOpenUrlUiActionIntent = {
+  type: "browser.openUrl";
+  workspaceId?: string;
+  url: string;
+  target?: "preview" | "external";
+};
+
+type BrowserCloseUrlUiActionIntent = {
+  type: "browser.closeUrl";
+  workspaceId?: string;
+  url: string;
+};
+
+export type CanvasOpenUiActionIntent = {
+  type: "canvas.open";
+  workspaceId?: string;
+  title: string;
+  artifactType: CanvasArtifactKind;
+  sourcePath: string;
+  canvasId?: string;
+};
+
+export type CanvasOpenUiActionDispatchIntent = {
+  type: "canvas.open";
+  workspaceId?: string;
+  canvasId?: string;
+  title?: string;
+  artifactType?: CanvasArtifactKind;
+  sourcePath?: string;
+};
+
+type WorkspaceFocusUiActionIntent = {
+  type: "workspace.focus";
+  workspaceId: string;
+};
+
+type PanelShowUiActionIntent = {
+  type: "panel.show";
+  workspaceId?: string;
+  panel: UiPanelId;
+};
+
+type CommandRunUiActionIntent = {
+  type: "command.run";
+  commandId: UiCommandId;
+  args?: Record<string, unknown>;
+};
+
 export type UiActionIntent =
-  | {
-      type: "editor.openFile";
-      workspaceId?: string;
-      path: string;
-      line?: number;
-      column?: number;
-      target?: "active" | "newPane" | { paneId: string };
-    }
-  | {
-      type: "editor.closeFile";
-      workspaceId?: string;
-      path: string;
-    }
-  | {
-      type: "browser.openUrl";
-      workspaceId?: string;
-      url: string;
-      target?: "preview" | "external";
-    }
-  | {
-      type: "browser.closeUrl";
-      workspaceId?: string;
-      url: string;
-    }
-  | {
-      type: "workspace.focus";
-      workspaceId: string;
-    }
-  | {
-      type: "panel.show";
-      workspaceId?: string;
-      panel: UiPanelId;
-    }
-  | {
-      type: "command.run";
-      commandId: UiCommandId;
-      args?: Record<string, unknown>;
-    };
+  | EditorOpenFileUiActionIntent
+  | EditorCloseFileUiActionIntent
+  | BrowserOpenUrlUiActionIntent
+  | BrowserCloseUrlUiActionIntent
+  | CanvasOpenUiActionIntent
+  | WorkspaceFocusUiActionIntent
+  | PanelShowUiActionIntent
+  | CommandRunUiActionIntent;
+
+export type UiActionDispatchIntent =
+  | EditorOpenFileUiActionIntent
+  | EditorCloseFileUiActionIntent
+  | BrowserOpenUrlUiActionIntent
+  | BrowserCloseUrlUiActionIntent
+  | CanvasOpenUiActionDispatchIntent
+  | WorkspaceFocusUiActionIntent
+  | PanelShowUiActionIntent
+  | CommandRunUiActionIntent;
 
 export interface UiActionDescriptor {
   type: UiActionIntent["type"];
@@ -57,7 +101,7 @@ export interface UiActionDescriptor {
 }
 
 export interface UiActionDispatchRequest {
-  intent: UiActionIntent;
+  intent: UiActionDispatchIntent;
   source?: {
     kind: "agent" | "user" | "system";
     sessionId?: string;
@@ -78,6 +122,10 @@ export interface UiActionEvent {
   intent: UiActionIntent;
   source?: UiActionDispatchRequest["source"];
   dispatchedAt: number;
+}
+
+export interface UiActionEventRequest extends Omit<UiActionDispatchRequest, "intent"> {
+  intent: UiActionIntent;
 }
 
 export const ALLOWED_UI_COMMAND_IDS: readonly UiCommandId[] = [
@@ -141,6 +189,27 @@ const UI_ACTION_CAPABILITIES: UiActionDescriptor[] = [
     riskLevel: "read",
     available: true,
     examples: ["coder-studio ui close-url --url http://127.0.0.1:5173 --json"],
+  },
+  {
+    type: "canvas.open",
+    cli: "coder-studio ui open-canvas --canvas <canvas-id>",
+    description:
+      "Open a persisted canvas artifact in the built-in editor. Canonical dispatch payloads are sourcePath-first; canvasId remains a compatibility identifier and CLI path.",
+    inputSchema: {
+      workspaceId: "string optional",
+      title: "string required for canonical sourcePath payloads",
+      artifactType:
+        "architecture_canvas | report_canvas required for canonical sourcePath payloads",
+      sourcePath: "workspace-relative string required for canonical sourcePath payloads",
+      canvasId: "string optional compatibility identifier",
+    },
+    permissions: ["ui:navigate"],
+    riskLevel: "read",
+    available: true,
+    examples: [
+      '{"type":"canvas.open","workspaceId":"ws_123","title":"Runtime Flow","artifactType":"architecture_canvas","sourcePath":".coder-studio/canvases/runtime-flow.csc"}',
+      "coder-studio ui open-canvas --workspace ws_123 --canvas canvas_123 --json",
+    ],
   },
   {
     type: "workspace.focus",
@@ -225,6 +294,7 @@ export function normalizeLocalhostUrl(url: string): string {
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
     hostname === "::1" ||
+    hostname === "[::1]" ||
     hostname.endsWith(".localhost");
   if (!isLocalhost) {
     throw new Error("browser.openUrl only supports localhost URLs");
@@ -233,7 +303,7 @@ export function normalizeLocalhostUrl(url: string): string {
   return parsed.toString();
 }
 
-export function validateUiActionIntent(intent: UiActionIntent): UiActionIntent {
+export function validateUiActionIntent(intent: UiActionDispatchIntent): UiActionDispatchIntent {
   switch (intent.type) {
     case "editor.openFile": {
       if (!isSafeWorkspaceRelativePath(intent.path)) {
@@ -253,6 +323,66 @@ export function validateUiActionIntent(intent: UiActionIntent): UiActionIntent {
       return { ...intent, url: normalizeLocalhostUrl(intent.url) };
     case "browser.closeUrl":
       return { ...intent, url: normalizeLocalhostUrl(intent.url) };
+    case "canvas.open": {
+      const { canvasId: _rawCanvasId, ...restIntent } = intent;
+      const canvasId = intent.canvasId?.trim() || undefined;
+
+      const hasAnyMetadata =
+        intent.title !== undefined ||
+        intent.artifactType !== undefined ||
+        intent.sourcePath !== undefined;
+      const hasAllMetadata =
+        intent.title !== undefined &&
+        intent.artifactType !== undefined &&
+        intent.sourcePath !== undefined;
+      if (hasAnyMetadata && !hasAllMetadata) {
+        throw new Error(
+          "canvas.open requires title, artifactType, and sourcePath when metadata is provided"
+        );
+      }
+
+      if (!canvasId && !hasAllMetadata) {
+        throw new Error("canvas.open requires canvasId or sourcePath metadata");
+      }
+
+      if (!hasAllMetadata) {
+        return {
+          ...restIntent,
+          ...(canvasId ? { canvasId } : {}),
+        };
+      }
+
+      const sourcePathInput = intent.sourcePath;
+      const titleInput = intent.title;
+      const artifactType = intent.artifactType;
+      if (sourcePathInput === undefined || titleInput === undefined || artifactType === undefined) {
+        throw new Error(
+          "canvas.open requires title, artifactType, and sourcePath when metadata is provided"
+        );
+      }
+
+      const sourcePath = sourcePathInput.trim();
+      if (!isSafeWorkspaceRelativePath(sourcePath)) {
+        throw new Error("canvas.open sourcePath must be workspace-relative");
+      }
+
+      const title = titleInput.trim();
+      if (!title) {
+        throw new Error("canvas.open title must not be empty");
+      }
+
+      if (!CanvasArtifactKind.safeParse(artifactType).success) {
+        throw new Error("canvas.open artifactType must be architecture_canvas or report_canvas");
+      }
+
+      return {
+        ...restIntent,
+        ...(canvasId ? { canvasId } : {}),
+        artifactType,
+        title,
+        sourcePath,
+      };
+    }
     case "workspace.focus":
       if (!intent.workspaceId) {
         throw new Error("workspace.focus requires workspaceId");
@@ -268,13 +398,11 @@ export function validateUiActionIntent(intent: UiActionIntent): UiActionIntent {
   }
 }
 
-export function normalizeUiActionDispatchRequest(
-  request: UiActionDispatchRequest
-): UiActionDispatchRequest {
+export function normalizeUiActionDispatchRequest<T extends UiActionDispatchRequest>(request: T): T {
   return {
     ...request,
     intent: validateUiActionIntent(request.intent),
-  };
+  } as T;
 }
 
 export function resolveUiActionWorkspaceId(
@@ -298,7 +426,7 @@ function createRequestId(): string {
 }
 
 export function createUiActionEvent(input: {
-  request: UiActionDispatchRequest;
+  request: UiActionEventRequest;
   workspaceId: string;
   dispatchedAt: number;
 }): UiActionEvent {

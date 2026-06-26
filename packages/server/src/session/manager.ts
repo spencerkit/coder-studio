@@ -6,21 +6,30 @@
  */
 
 import type {
+  AutomationPermission,
   DomainEvent,
   ProviderDefinition,
   Session,
   SessionState,
   TerminalInputActivity,
 } from "@coder-studio/core";
-import { deriveSessionTitle, normalizeSessionTitleInput } from "@coder-studio/core";
+import {
+  AUTOMATION_PERMISSIONS_ENV,
+  deriveSessionTitle,
+  normalizeSessionTitleInput,
+  SCOPED_SESSION_AUTOMATION_PERMISSIONS,
+} from "@coder-studio/core";
+import { SessionTokenRepo } from "../auth/session-token-repo.js";
 import type { EventBus, Unsubscribe } from "../bus/event-bus.js";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
+import type { RuntimeHostBridge } from "../runtime/contract.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { type SessionRow, sessionToRow } from "../storage/repositories/session-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { RenderOptions } from "../terminal/snapshot-render.js";
 import type { TerminalSpec } from "../terminal/types.js";
 import type { Broadcaster } from "../ws/hub.js";
+import { resolveAutomationEntryPath as defaultResolveAutomationEntryPath } from "./automation-entry-path.js";
 import { PtyStateDetector } from "./pty-state-detector.js";
 import { createShadowComparator, type ShadowComparator } from "./state-shadow-comparator.js";
 import type { SessionDatabase } from "./types.js";
@@ -54,7 +63,10 @@ export interface SessionManagerDeps {
   broadcaster: Broadcaster;
   providerRegistry: ProviderDefinition[];
   providerConfigRepo: ProviderConfigRepo;
+  hostBridge?: RuntimeHostBridge;
+  sessionTokenRepo?: SessionTokenRepo;
   runtimeContext?: SessionRuntimeContext;
+  resolveAutomationEntryPath?: () => string;
   logger?: SessionLogger;
 }
 
@@ -261,9 +273,19 @@ export class SessionManager {
   private comparators = new Map<string, ShadowComparator>();
   private detectorUnsubscribes = new Map<string, Unsubscribe>();
   private readonly logger: SessionLogger;
+  private readonly hostBridge: RuntimeHostBridge;
+  private readonly automationEntryPathResolver: () => string;
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.logger = deps.logger ?? NOOP_SESSION_LOGGER;
+    this.hostBridge =
+      deps.hostBridge ??
+      createCompatHostBridge({
+        sessionTokenRepo: deps.sessionTokenRepo ?? new SessionTokenRepo(),
+        apiUrl: deps.runtimeContext?.apiUrl,
+      });
+    this.automationEntryPathResolver =
+      deps.resolveAutomationEntryPath ?? defaultResolveAutomationEntryPath;
 
     this.deps.eventBus.on("terminal.exited", (event: TerminalExitedEvent) => {
       this.onTerminalExit(event.terminalId, event.exitCode);
@@ -280,62 +302,80 @@ export class SessionManager {
   async create(req: CreateSessionRequest): Promise<Session> {
     const sessionId = generateSessionId();
     const launchConfig = this.getLaunchConfig(req.providerId, req.provider);
-
-    // Build command from provider (pass config and context)
-    const cmd = req.provider.buildCommand(launchConfig, {
-      workspacePath: req.workspacePath,
+    const permissions = [
+      ...SCOPED_SESSION_AUTOMATION_PERMISSIONS,
+    ] as readonly AutomationPermission[];
+    const tokenRecord = this.hostBridge.issueSessionToken({
       sessionId,
-    });
-
-    // Create terminal spec
-    const terminalSpec: TerminalSpec = {
-      workspaceId: req.workspaceId,
-      kind: "agent",
-      argv: cmd.argv,
-      cwd: cmd.cwd,
-      env: {
-        ...cmd.env,
-        CODER_STUDIO: "1",
-        CODER_STUDIO_WORKSPACE_ID: req.workspaceId,
-        CODER_STUDIO_SESSION_ID: sessionId,
-        CODER_STUDIO_PROVIDER_ID: req.providerId,
-        ...(this.deps.runtimeContext?.apiUrl
-          ? { CODER_STUDIO_API_URL: this.deps.runtimeContext.apiUrl }
-          : {}),
-      },
-      title: req.provider.displayName,
-      themeBackground: req.themeBackground,
-    };
-
-    // Create terminal (delegates to TerminalManager)
-    const terminal = this.deps.terminalMgr.create(terminalSpec);
-
-    // Register session only after terminal creation succeeds so failed creates
-    // do not leak half-created sessions into memory or hydration state.
-    const active = new ActiveSession({
-      id: sessionId,
       workspaceId: req.workspaceId,
       providerId: req.providerId,
-      terminalId: terminal.id,
-      capability: req.provider.capability,
-      state: "starting",
-      draft: req.draft,
+      permissions,
     });
+    try {
+      const automationEntryPath = this.automationEntryPathResolver();
 
-    this.sessions.set(sessionId, active);
-    this.terminalToSession.set(terminal.id, sessionId);
-    this.attachShadowDetector(active, req.provider);
+      // Build command from provider (pass config and context)
+      const cmd = req.provider.buildCommand(launchConfig, {
+        workspacePath: req.workspacePath,
+        sessionId,
+      });
 
-    // Persist initial (`starting`) row so subsequent update() calls have a
-    // target to UPDATE and so a crash between here and the optimistic idle
-    // promotion below still leaves a sane DB state.
-    this.deps.db.insert(active.toRow());
+      // Create terminal spec
+      const terminalSpec: TerminalSpec = {
+        workspaceId: req.workspaceId,
+        kind: "agent",
+        argv: cmd.argv,
+        cwd: cmd.cwd,
+        env: {
+          ...cmd.env,
+          CODER_STUDIO: "1",
+          CODER_STUDIO_WORKSPACE_ID: req.workspaceId,
+          CODER_STUDIO_SESSION_ID: sessionId,
+          CODER_STUDIO_PROVIDER_ID: req.providerId,
+          CODER_STUDIO_SESSION_TOKEN: tokenRecord.token,
+          CODER_STUDIO_AUTOMATION_ENTRY: automationEntryPath,
+          [AUTOMATION_PERMISSIONS_ENV]: permissions.join(","),
+          ...(this.hostBridge.getHostApiUrl()
+            ? { CODER_STUDIO_API_URL: this.hostBridge.getHostApiUrl() }
+            : {}),
+        },
+        title: req.provider.displayName,
+        themeBackground: req.themeBackground,
+      };
 
-    // Emit the initial `starting` snapshot so clients can latch session
-    // creation before any optimistic transition fires.
-    this.emitStateChanged(active, null, "starting");
+      // Create terminal (delegates to TerminalManager)
+      const terminal = this.deps.terminalMgr.create(terminalSpec);
 
-    return active.toDTO();
+      // Register session only after terminal creation succeeds so failed creates
+      // do not leak half-created sessions into memory or hydration state.
+      const active = new ActiveSession({
+        id: sessionId,
+        workspaceId: req.workspaceId,
+        providerId: req.providerId,
+        terminalId: terminal.id,
+        capability: req.provider.capability,
+        state: "starting",
+        draft: req.draft,
+      });
+
+      this.sessions.set(sessionId, active);
+      this.terminalToSession.set(terminal.id, sessionId);
+      this.attachShadowDetector(active, req.provider);
+
+      // Persist initial (`starting`) row so subsequent update() calls have a
+      // target to UPDATE and so a crash between here and the optimistic idle
+      // promotion below still leaves a sane DB state.
+      this.deps.db.insert(active.toRow());
+
+      // Emit the initial `starting` snapshot so clients can latch session
+      // creation before any optimistic transition fires.
+      this.emitStateChanged(active, null, "starting");
+
+      return active.toDTO();
+    } catch (error) {
+      this.hostBridge.revokeSessionTokensBySessionId(sessionId);
+      throw error;
+    }
   }
 
   /**
@@ -467,6 +507,7 @@ export class SessionManager {
       this.sessions.delete(session.id);
       this.terminalToSession.delete(session.terminalId);
       this.cleanupDetector(session.id);
+      this.hostBridge.revokeSessionTokensBySessionId(session.id);
     }
   }
 
@@ -731,6 +772,7 @@ export class SessionManager {
     this.sessions.delete(sessionId);
     this.terminalToSession.delete(session.terminalId);
     this.cleanupDetector(sessionId);
+    this.hostBridge.revokeSessionTokensBySessionId(sessionId);
 
     // Delete from database
     this.deps.db.delete(sessionId);
@@ -1210,6 +1252,7 @@ export class SessionManager {
     session.exitCode = exitCode;
     this.terminalToSession.delete(session.terminalId);
     this.cleanupDetector(session.id);
+    this.hostBridge.revokeSessionTokensBySessionId(session.id);
 
     this.deps.db.update(session.id, {
       state: "ended",
@@ -1301,4 +1344,30 @@ class ActiveSession {
       ...(this.draft !== undefined ? { draft: this.draft } : {}),
     });
   }
+}
+
+function createCompatHostBridge(input: {
+  sessionTokenRepo: SessionTokenRepo;
+  apiUrl?: string;
+}): RuntimeHostBridge {
+  return {
+    issueSessionToken(args) {
+      const record = input.sessionTokenRepo.issue(args);
+      return { token: record.token };
+    },
+    revokeSessionTokensBySessionId(sessionId) {
+      input.sessionTokenRepo.revokeBySessionId(sessionId);
+    },
+    getHostApiUrl() {
+      return input.apiUrl;
+    },
+    emitDomainEvent() {},
+    broadcast() {},
+    sendToClient() {
+      return false;
+    },
+    sendBinaryToClient() {
+      return false;
+    },
+  };
 }

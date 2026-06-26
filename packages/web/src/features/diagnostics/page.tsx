@@ -578,7 +578,7 @@ export function DiagnosticsPage({
           ) : (
             <PageHeader
               title={t("diagnostics.title")}
-              titleAs="h1"
+              titleAs="h3"
               level="secondary"
               onBack={handleBack}
               backLabel={t("action.back")}

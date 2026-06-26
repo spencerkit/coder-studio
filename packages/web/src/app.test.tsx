@@ -13,6 +13,10 @@ vi.mock("./shells/mobile-shell", () => ({
   MobileShell: () => <div data-testid="mobile-shell">MobileShell</div>,
 }));
 
+vi.mock("./features/canvas/routes/embedded-canvas-route", () => ({
+  EmbeddedCanvasRoute: () => <div data-testid="embedded-canvas-route">EmbeddedCanvasRoute</div>,
+}));
+
 function setMatchMediaMock(predicate: (query: string) => boolean) {
   const matchMedia = vi.fn((query: string) => ({
     addEventListener: vi.fn(),
@@ -84,5 +88,28 @@ describe("App shell selection", () => {
 
     expect(screen.getByTestId("mobile-shell")).toBeInTheDocument();
     expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
+  });
+
+  it("renders the embedded canvas route outside the app shells", () => {
+    setMatchMediaMock(() => false);
+    window.history.replaceState(
+      {},
+      "",
+      "/embedded/canvas/ws-1?sourcePath=.coder-studio%2Fcanvases%2Fruntime-flow.csc"
+    );
+    const store = createStore();
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(authenticatedAtom, true);
+
+    render(
+      <Provider store={store}>
+        <App />
+      </Provider>
+    );
+
+    expect(screen.getByTestId("embedded-canvas-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
   });
 });

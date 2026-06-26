@@ -3,6 +3,7 @@
  */
 
 import {
+  type CustomTerminalProfile,
   DEFAULT_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   isMonitoringSampleIntervalMs,
   isUpdateCheckIntervalSec,
@@ -48,6 +49,40 @@ const PERSONALIZATION_OVERRIDE_FIELDS = [
   "glassIntensity",
   "surfaceOpacity",
 ] as const;
+
+const TrimmedNonEmptyStringSchema = z.string().trim().min(1);
+const CustomTerminalProfileIdSchema = z.custom<CustomTerminalProfile["id"]>(
+  (value) => typeof value === "string" && value.startsWith("custom:"),
+  {
+    message: "Custom terminal profile ids must start with custom:",
+  }
+);
+const CustomTerminalProfileSchema: z.ZodType<CustomTerminalProfile> = z.object({
+  id: CustomTerminalProfileIdSchema,
+  label: TrimmedNonEmptyStringSchema,
+  command: TrimmedNonEmptyStringSchema,
+  args: z.array(z.string()).optional(),
+  icon: z.string().optional(),
+});
+
+const CustomTerminalProfilesSchema: z.ZodType<CustomTerminalProfile[]> = z
+  .array(CustomTerminalProfileSchema)
+  .superRefine((profiles, issueCtx) => {
+    const seen = new Set<string>();
+
+    for (const [index, profile] of profiles.entries()) {
+      if (!seen.has(profile.id)) {
+        seen.add(profile.id);
+        continue;
+      }
+
+      issueCtx.addIssue({
+        code: "custom",
+        message: `Duplicate terminal profile id: ${profile.id}`,
+        path: [index, "id"],
+      });
+    }
+  });
 
 // Settings schema
 const SettingsSchema = z.object({
@@ -128,6 +163,12 @@ const SettingsSchema = z.object({
       workspaceAttributionEnabled: z.boolean().optional(),
       subprocessDrilldownEnabled: z.boolean().optional(),
       sampleIntervalMs: z.number().int().refine(isMonitoringSampleIntervalMs).optional(),
+    })
+    .optional(),
+  terminal: z
+    .object({
+      defaultProfileId: z.string().nullable().optional(),
+      profiles: CustomTerminalProfilesSchema.optional(),
     })
     .optional(),
   providers: z.record(z.string(), z.unknown()).optional(),
@@ -212,9 +253,11 @@ registerCommand(
 
     // Flatten settings to key-value pairs
     const flatSettings = flattenSettings(nonProviderSettings);
+    const nullDeleteKeys = resolveNullSettingsKeysToDelete(flatSettings);
 
-    for (const key of overrideKeysToDelete) {
+    for (const key of [...overrideKeysToDelete, ...nullDeleteKeys]) {
       ctx.settingsRepo.delete(key);
+      delete flatSettings[key];
     }
 
     for (const [key, value] of Object.entries(flatSettings)) {
@@ -376,6 +419,10 @@ function compactProviderConfig(config: Record<string, unknown>): Record<string, 
       return true;
     })
   );
+}
+
+function resolveNullSettingsKeysToDelete(settings: Record<string, unknown>): string[] {
+  return settings["terminal.defaultProfileId"] === null ? ["terminal.defaultProfileId"] : [];
 }
 
 function resolveAppearancePersonalizationOverrideKeysToDelete(

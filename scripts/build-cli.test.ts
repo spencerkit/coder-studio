@@ -54,4 +54,10 @@ describe("build-cli", () => {
       "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
     });
   });
+
+  it("emits the automation entry as an ESM build output", async () => {
+    const buildOptions = await createCliBuildOptions("esm");
+
+    expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/automation-entry.ts"));
+  });
 });

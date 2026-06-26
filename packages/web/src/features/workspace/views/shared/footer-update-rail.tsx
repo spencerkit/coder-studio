@@ -86,7 +86,7 @@ export function FooterUpdateRail() {
   };
 
   const openDetails = () => {
-    navigate("/settings?section=about");
+    navigate("/more/about/update-status");
   };
 
   if (!updateState) {

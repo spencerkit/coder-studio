@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../../atoms/app-ui";
@@ -30,7 +30,7 @@ function createDefaultProviders() {
 }
 
 describe("MobileAgentSheet", () => {
-  it("renders semantic icons for create-session and provider launch actions", () => {
+  it("renders a create-session semantic icon and monogram provider launch icons", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
@@ -79,7 +79,6 @@ describe("MobileAgentSheet", () => {
     expect(
       firstView.container.querySelector('[data-icon-semantic="agent.action.newSession"]')
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Create Session" })).toBeInTheDocument();
 
     firstView.unmount();
 
@@ -100,12 +99,17 @@ describe("MobileAgentSheet", () => {
 
     expect(
       providerView.container.querySelector('[data-icon-semantic="agent.provider.claude"]')
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       providerView.container.querySelector('[data-icon-semantic="agent.provider.codex"]')
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Claude" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Codex" })).toBeInTheDocument();
+    ).toBeNull();
+
+    expect(
+      providerView.container.querySelector(".mobile-agent-provider-icon--claude")
+    ).toHaveTextContent("CL");
+    expect(
+      providerView.container.querySelector(".mobile-agent-provider-icon--codex")
+    ).toHaveTextContent("CO");
   });
 
   it("renders every provider returned by the launcher in create mode", () => {
@@ -121,6 +125,7 @@ describe("MobileAgentSheet", () => {
         createProvider("gemini", "Gemini CLI", "Gemini"),
         createProvider("cursor", "Cursor Agent", "Cursor"),
         createProvider("opencode", "OpenCode"),
+        createProvider("mistral", "Mistral Agent", "Mistral"),
       ],
       states: {
         claude: {
@@ -173,6 +178,16 @@ describe("MobileAgentSheet", () => {
           loading: false,
           installJob: null,
         },
+        mistral: {
+          runtime: {
+            available: true,
+            autoInstallSupported: true,
+            installReadiness: "ready",
+            manualGuideKeys: [],
+          },
+          loading: false,
+          installJob: null,
+        },
       },
       launch,
     });
@@ -197,6 +212,21 @@ describe("MobileAgentSheet", () => {
     expect(screen.getByRole("button", { name: "Gemini" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cursor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "OpenCode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mistral" })).toBeInTheDocument();
+    expect(screen.getByText("CL")).toBeInTheDocument();
+    expect(screen.getByText("CO")).toBeInTheDocument();
+    expect(screen.getByText("GE")).toBeInTheDocument();
+    expect(screen.getByText("CU")).toBeInTheDocument();
+    expect(screen.getByText("OP")).toBeInTheDocument();
+    expect(screen.getByText("MI")).toBeInTheDocument();
+    expect(screen.getByText("GE").closest(".mobile-agent-provider-icon--gemini")).not.toBeNull();
+    expect(screen.getByText("CU").closest(".mobile-agent-provider-icon--cursor")).not.toBeNull();
+    expect(screen.getByText("OP").closest(".mobile-agent-provider-icon--opencode")).not.toBeNull();
+    const mistralIcon = screen.getByText("MI").closest(".mobile-agent-provider-icon--mistral");
+    expect(mistralIcon).not.toBeNull();
+    expect(mistralIcon?.className).toMatch(
+      /mobile-agent-provider-icon--tone-(accent|info|success|warning)/
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Gemini" }));
 
@@ -420,7 +450,10 @@ describe("MobileAgentSheet", () => {
 
     expect(screen.queryByText("Then run npm install -g @openai/codex.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Open Diagnostics" })).toBeNull();
-    expect(screen.getByText("Start Codex session")).toBeInTheDocument();
+    expect(screen.queryByText("Start Codex session")).toBeNull();
+    expect(
+      within(screen.getByRole("button", { name: "Codex" })).getByText("Start new session")
+    ).toBeInTheDocument();
   });
 
   it("renders session state in the mobile agent list", () => {

@@ -11,6 +11,8 @@ import {
   fileTreeAtomFamily,
   fileTreeStaleAtomFamily,
   loadedDirsAtomFamily,
+  openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
   openFilesAtomFamily,
 } from "../../atoms";
 import { FileTreePanel } from "./file-tree-panel";
@@ -1957,6 +1959,47 @@ describe("FileTreePanel", () => {
       source: "file-tree",
       requestId: expect.any(Number),
     });
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      { kind: "file", path: "src/app.tsx", pinned: false },
+    ]);
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([]);
+  });
+
+  it("pins a file tab when a file-tree row is double-clicked", async () => {
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand: vi.fn().mockResolvedValue({}) } as never);
+    store.set(
+      fileTreeAtomFamily("ws-test"),
+      new Map([
+        [
+          ".",
+          [
+            {
+              path: "src/app.tsx",
+              name: "app.tsx",
+              kind: "file",
+            },
+          ],
+        ],
+      ])
+    );
+
+    render(
+      <Provider store={store}>
+        <FileTreePanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    fireEvent.doubleClick(await screen.findByText("app.tsx"));
+
+    await waitFor(() => {
+      expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+    });
+
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      { kind: "file", path: "src/app.tsx", pinned: true },
+    ]);
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual(["src/app.tsx"]);
   });
 
   it("keeps expanded directories populated after refreshing the file tree", async () => {

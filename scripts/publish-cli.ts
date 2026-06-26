@@ -162,7 +162,6 @@ export async function assertCliPublishArtifacts(
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
-  await assertFile(resolve(cliDir, "dist/web/dev-browser-sw.js"));
   assertBundleRuntimeDependenciesDeclared(
     pkg.dependencies,
     await collectBareImports(resolve(cliDir, "dist/esm"), [

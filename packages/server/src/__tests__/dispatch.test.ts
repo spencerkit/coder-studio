@@ -4,7 +4,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { WorkspaceRuntimeBindingStore } from "../host/workspace-runtime-binding.js";
 import type { CommandContext } from "../ws/dispatch.js";
+import {
+  clearHostCommandsForTest,
+  clearRuntimeCommandsForTest,
+  registerRuntimeCommand,
+} from "../ws/index.js";
 import "../commands/workspace-activity.js";
 import "../commands/ui-actions.js";
 import { dispatch, getRegisteredCommands, registerCommand } from "../ws/dispatch.js";
@@ -13,6 +19,7 @@ describe("Command Dispatch", () => {
   let ctx: CommandContext;
 
   beforeEach(() => {
+    const runtimeBindings = new WorkspaceRuntimeBindingStore();
     ctx = {
       workspaceMgr: {},
       sessionMgr: {},
@@ -23,11 +30,24 @@ describe("Command Dispatch", () => {
         registerViewer: vi.fn(),
         unregisterViewer: vi.fn(),
       },
+      activationMgr: {
+        getLease: vi.fn(),
+      },
+      runtimeRouter: {
+        executeOnTarget: vi.fn(),
+      },
+      runtimeBindings,
+      settingsRepo: {},
+      providerRegistry: [],
     } as CommandContext;
+    clearHostCommandsForTest();
+    clearRuntimeCommandsForTest();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    clearHostCommandsForTest();
+    clearRuntimeCommandsForTest();
   });
 
   describe("registerCommand", () => {
@@ -232,6 +252,121 @@ describe("Command Dispatch", () => {
 
       expect(result.ok).toBe(true);
       expect(broadcast).toHaveBeenCalled();
+    });
+
+    it("routes explicit runtime commands through the runtime router", async () => {
+      registerRuntimeCommand(
+        "runtime.echo",
+        z.object({
+          workspaceId: z.string(),
+          value: z.number(),
+        }),
+        {
+          resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+          handler: async () => ({ echoed: true }),
+        }
+      );
+      const executeOnTarget = vi.fn().mockResolvedValue({ echoed: 42 });
+      ctx = {
+        ...ctx,
+        runtimeRouter: {
+          executeOnTarget,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "runtime-echo-1",
+          op: "runtime.echo",
+          args: {
+            workspaceId: "ws-1",
+            value: 42,
+          },
+        },
+        ctx,
+        "runtime-client"
+      );
+
+      expect(result).toEqual({
+        kind: "result",
+        id: "runtime-echo-1",
+        ok: true,
+        data: { echoed: 42 },
+      });
+      expect(executeOnTarget).toHaveBeenCalledWith(
+        { kind: "workspace", workspaceId: "ws-1" },
+        "runtime.echo",
+        { workspaceId: "ws-1", value: 42 },
+        { authContext: undefined, clientId: "runtime-client" }
+      );
+    });
+
+    it("authorizes terminal.read session tokens via runtime binding projections", async () => {
+      registerCommand(
+        "terminal.read",
+        z.object({
+          terminalId: z.string(),
+        }),
+        async (args) => ({
+          terminalId: args.terminalId,
+        })
+      );
+      const runtimeBindings = new WorkspaceRuntimeBindingStore();
+      runtimeBindings.bindSession({
+        id: "sess-other",
+        workspaceId: "ws-1",
+        terminalId: "term-1",
+        providerId: "codex",
+        state: "running",
+        capability: "full",
+        startedAt: 1,
+        lastActiveAt: 1,
+      });
+      const findSessionIdByTerminal = vi.fn(() => {
+        throw new Error("dispatch should use runtime binding projections for terminal scope");
+      });
+      ctx = {
+        ...ctx,
+        broadcaster: {
+          getRequestMetadata: () =>
+            ({
+              coderStudioAuthContext: {
+                mode: "session_token",
+                token: "token-1",
+                sessionId: "sess-allowed",
+                workspaceId: "ws-1",
+                providerId: "codex",
+                permissions: ["terminal:read"],
+                createdAt: 1,
+              },
+            }) as never,
+        } as never,
+        runtimeBindings,
+        sessionMgr: {
+          findSessionIdByTerminal,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "terminal-read-auth-1",
+          op: "terminal.read",
+          args: {
+            terminalId: "term-1",
+          },
+        },
+        ctx,
+        "session-token-client"
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toEqual({
+        code: "permission_denied",
+        message: "Token is not authorized for the requested session",
+      });
+      expect(findSessionIdByTerminal).not.toHaveBeenCalled();
     });
   });
 });

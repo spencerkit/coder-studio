@@ -1,4 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { posix } from "node:path";
+import { markdownUsesMermaid } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
@@ -11,6 +14,7 @@ import { loadPreviewResource, resolvePreviewResourcePath } from "../preview/reso
 import { PreviewSessionStore } from "../preview/session-store.js";
 
 type PreviewKind = "markdown" | "html";
+type PreviewScriptPolicy = "none" | "self" | "relaxed";
 
 interface PreviewSessionBody {
   workspaceId: string;
@@ -27,25 +31,47 @@ interface PreviewSessionUpdateBody {
 
 type WorkspaceLookup = { path: string } | null | undefined;
 
-function getPreviewContentSecurityPolicy(allowScripts: boolean): string {
-  const scriptPolicy = allowScripts
-    ? "script-src 'self' 'unsafe-inline'; script-src-attr 'unsafe-inline'"
-    : "script-src 'none'";
+const require = createRequire(import.meta.url);
+const MERMAID_RUNTIME_PATH = require.resolve("mermaid/dist/mermaid.min.js");
+const MARKDOWN_MERMAID_INIT_SCRIPT = [
+  "if (typeof window.mermaid !== 'undefined') {",
+  "  window.mermaid.initialize({ startOnLoad: true, securityLevel: 'strict' });",
+  "}",
+].join("\n");
+let mermaidRuntimePromise: Promise<Buffer> | null = null;
 
-  return `default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; ${scriptPolicy}; base-uri 'none'; form-action 'none'`;
+function getPreviewContentSecurityPolicy(scriptPolicy: PreviewScriptPolicy): string {
+  const resolvedScriptPolicy =
+    scriptPolicy === "relaxed"
+      ? "script-src 'self' 'unsafe-inline'; script-src-attr 'unsafe-inline'"
+      : scriptPolicy === "self"
+        ? "script-src 'self'"
+        : "script-src 'none'";
+
+  return `default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; ${resolvedScriptPolicy}; base-uri 'none'; form-action 'none'`;
 }
 
-function getEffectivePreviewAllowScripts(session: {
+function getSessionPreviewScriptPolicy(session: {
   kind: PreviewKind;
   allowScripts: boolean;
-}): boolean {
-  return session.kind === "html" && session.allowScripts;
+  content: string;
+}): PreviewScriptPolicy {
+  if (session.kind === "html") {
+    return session.allowScripts ? "relaxed" : "none";
+  }
+
+  return markdownUsesMermaid(session.content) ? "self" : "none";
 }
 
 function resolvePreviewAssetWorkspacePath(entryPath: string, rawPath: string): string {
   const normalizedRawPath = rawPath.replaceAll("\\", "/");
   const relativeAssetPath = posix.relative(posix.dirname(entryPath), normalizedRawPath);
   return resolvePreviewResourcePath(entryPath, relativeAssetPath);
+}
+
+async function loadMermaidRuntime(): Promise<Buffer> {
+  mermaidRuntimePromise ??= readFile(MERMAID_RUNTIME_PATH);
+  return mermaidRuntimePromise;
 }
 
 const previewSessionCreateSchema = z.object({
@@ -68,6 +94,23 @@ export function registerPreviewRoutes(
     previewSessions: PreviewSessionStore;
   }
 ): void {
+  app.get("/api/preview/assets/mermaid.min.js", async (_request, reply) => {
+    const script = await loadMermaidRuntime();
+    return reply
+      .header("Content-Type", "application/javascript; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .send(script);
+  });
+
+  app.get("/api/preview/assets/markdown-mermaid-init.js", async (_request, reply) => {
+    return reply
+      .header("Content-Type", "application/javascript; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .send(MARKDOWN_MERMAID_INIT_SCRIPT);
+  });
+
   app.post("/api/preview/session", async (request, reply) => {
     const parsed = previewSessionCreateSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -143,9 +186,12 @@ export function registerPreviewRoutes(
         entryPath: session.entryPath,
         sessionId: session.id,
         workspaceRootPath: workspace.path,
+        preserveRootRelativePrefixes:
+          session.kind === "markdown" ? ["/api/preview/assets/"] : undefined,
       });
-      const allowScripts = getEffectivePreviewAllowScripts(session);
-      const contentSecurityPolicy = getPreviewContentSecurityPolicy(allowScripts);
+      const scriptPolicy = getSessionPreviewScriptPolicy(session);
+      const allowScripts = scriptPolicy !== "none";
+      const contentSecurityPolicy = getPreviewContentSecurityPolicy(scriptPolicy);
 
       const response = reply
         .header("Content-Type", "text/html; charset=utf-8")

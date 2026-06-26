@@ -31,7 +31,7 @@ export default defineConfig(({ command, isPreview }) => {
             proxy.on("error", (err) => {
               console.log("WS proxy error:", err);
             });
-            proxy.on("proxyReqWs", (proxyReq, req, socket) => {
+            proxy.on("proxyReqWs", (_proxyReq, req, _socket) => {
               console.log("WS proxy upgrade:", req.url);
             });
           },
@@ -44,14 +44,6 @@ export default defineConfig(({ command, isPreview }) => {
         },
         "/api": {
           target: backendHttpTarget,
-        },
-        "/api/dev-proxy": {
-          target: backendHttpTarget,
-        },
-        "/dev-browser/session": {
-          target: backendHttpTarget,
-          ws: true,
-          changeOrigin: true,
         },
       },
     },
@@ -79,6 +71,8 @@ export default defineConfig(({ command, isPreview }) => {
             ) {
               return "xterm";
             }
+
+            return undefined;
           },
         },
       },

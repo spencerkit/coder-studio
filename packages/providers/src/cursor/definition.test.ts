@@ -49,12 +49,9 @@ describe("cursorDefinition", () => {
     expect(cursorDefinition.idleHeuristics?.idleDebounceMs).toBe(4000);
   });
 
-  it("supports skills mount through Cursor and shared skill directories", () => {
+  it("supports skills mount only through the Cursor-native skills directory", () => {
     expect(cursorDefinition.supportsSkillsMount).toBe(true);
-    expect(cursorDefinition.skillMountDirectories).toEqual([
-      join(homedir(), ".agents", "skills"),
-      join(homedir(), ".cursor", "skills"),
-    ]);
+    expect(cursorDefinition.skillMountDirectories).toEqual([join(homedir(), ".cursor", "skills")]);
   });
 
   it("supports agent_instructions_generate in headless mode", () => {

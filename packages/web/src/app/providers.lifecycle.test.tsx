@@ -938,6 +938,20 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("falls back to auth disabled when /auth/status cannot be reached", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
+
+    const store = createStore();
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(store.get(authEnabledAtom)).toBe(false);
+      expect(store.get(authenticatedAtom)).toBe(false);
+    });
+  });
+
   it("does not connect or recover the websocket before login when auth is required", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: true, authenticated: false }),

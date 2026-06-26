@@ -1,13 +1,16 @@
 /**
  * Command handlers
  *
- * This file imports all command handlers to register them with the dispatch system.
+ * Imported for side effects so handlers register with the dispatch registry.
+ * The explicit registration functions are phase-1 bootstrap affordances that
+ * currently preserve this static behavior.
  */
 
 import "./workspace.js";
 import "./workspace-activity.js";
 import "./automation.js";
 import "./ui-actions.js";
+import "./canvas.js";
 import "./activation.js";
 import "./connection.js";
 import "./recovery.js";
@@ -34,3 +37,12 @@ import "./updates.js";
 import "./monitoring.js";
 import "./work-analysis.js";
 import "./memory.js";
+
+export async function registerHostCommands(): Promise<void> {}
+
+export async function registerRuntimeCommands(): Promise<void> {}
+
+export async function registerAllCommands(): Promise<void> {
+  await registerHostCommands();
+  await registerRuntimeCommands();
+}

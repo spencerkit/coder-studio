@@ -7,6 +7,7 @@ import {
   deriveEditorModeForPath,
   editorModeAtomFamily,
   gitDiffPreviewAtomFamily,
+  openEditorTabsAtomFamily,
   openFilesAtomFamily,
 } from "../../workspace/atoms";
 import { type PendingEditorNavigation, pendingEditorNavigationAtomFamily } from "../atoms";
@@ -16,6 +17,7 @@ export function useOpenLocation(workspaceId: string): {
   clearPendingNavigation(path: string): void;
 } {
   const diffPreview = useAtomValue(gitDiffPreviewAtomFamily(workspaceId));
+  const openEditorTabs = useAtomValue(openEditorTabsAtomFamily(workspaceId));
   const openFiles = useAtomValue(openFilesAtomFamily(workspaceId));
   const setActiveFilePath = useSetAtom(activeFilePathAtomFamily(workspaceId));
   const setActiveEditorTab = useSetAtom(activeEditorTabAtomFamily(workspaceId));
@@ -39,7 +41,13 @@ export function useOpenLocation(workspaceId: string): {
       }
 
       setActiveFilePath(input.path);
-      setActiveEditorTab({ kind: "file", path: input.path });
+      setActiveEditorTab(
+        openEditorTabs.find((tab) => tab.kind === "file" && tab.path === input.path) ?? {
+          kind: "file",
+          path: input.path,
+          pinned: false,
+        }
+      );
 
       if (!openFiles[input.path]) {
         // Existing editor load flow is keyed off activeFilePath. Setting it is
@@ -54,6 +62,7 @@ export function useOpenLocation(workspaceId: string): {
     [
       diffPreview,
       openFiles,
+      openEditorTabs,
       setActiveEditorTab,
       setActiveFilePath,
       setDiffPreview,

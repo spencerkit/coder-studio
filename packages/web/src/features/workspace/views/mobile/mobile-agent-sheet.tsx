@@ -27,11 +27,6 @@ interface MobileAgentSheetProps {
 
 type AgentSheetMode = "sessions" | "providers";
 
-const PROVIDER_ICON_SEMANTICS = {
-  claude: "agent.provider.claude",
-  codex: "agent.provider.codex",
-} as const;
-
 function formatSessionLabel(session: Session) {
   if (session.title?.trim()) {
     return session.title.trim();
@@ -68,15 +63,35 @@ function formatProviderLabel(provider: Pick<ProviderListItem, "badge" | "display
   return provider.badge || provider.displayName || provider.id;
 }
 
-function renderProviderIcon(provider: ProviderListItem) {
-  const semantic = PROVIDER_ICON_SEMANTICS[provider.id as keyof typeof PROVIDER_ICON_SEMANTICS];
-  if (semantic) {
-    return <ThemedIcon semantic={semantic} size={16} />;
+function formatProviderMonogram(provider: Pick<ProviderListItem, "badge" | "displayName" | "id">) {
+  const label = formatProviderLabel(provider).trim();
+  const monogramSource = label || provider.id;
+  return monogramSource.slice(0, 2).toUpperCase();
+}
+
+const knownProviderIconClasses = new Set(["claude", "codex", "gemini", "cursor", "opencode"]);
+const fallbackProviderTones = ["accent", "info", "success", "warning"] as const;
+
+function getProviderFallbackToneClass(providerId: string) {
+  if (knownProviderIconClasses.has(providerId)) {
+    return "";
   }
 
+  const toneIndex =
+    Array.from(providerId).reduce((sum, char) => sum + char.charCodeAt(0), 0) %
+    fallbackProviderTones.length;
+
+  return `mobile-agent-provider-icon--tone-${fallbackProviderTones[toneIndex]}`;
+}
+
+function renderProviderIcon(provider: ProviderListItem) {
+  const fallbackToneClass = getProviderFallbackToneClass(provider.id);
   return (
-    <span aria-hidden="true" className="agent-provider-card-monogram">
-      {formatProviderLabel(provider).slice(0, 2).toUpperCase()}
+    <span
+      aria-hidden="true"
+      className={`mobile-agent-provider-icon mobile-agent-provider-icon--${provider.id}${fallbackToneClass ? ` ${fallbackToneClass}` : ""}`}
+    >
+      <span className="mobile-agent-provider-icon__label">{formatProviderMonogram(provider)}</span>
     </span>
   );
 }
@@ -191,7 +206,7 @@ export function MobileAgentSheet({
           {
             id: provider.id,
             label,
-            description: guideMessage || t("mobile.agent.start_session", { provider: label }),
+            description: guideMessage || undefined,
             meta: busy ? t("mobile.agent.starting") : t("mobile.agent.start_new_session"),
             icon: renderProviderIcon(provider),
             disabled: !canLaunchSession || busy,
@@ -220,7 +235,7 @@ export function MobileAgentSheet({
 
   return (
     <MobileSelectSheet
-      className="mobile-select-sheet--command"
+      className="mobile-select-sheet--command mobile-agent-sheet--providers"
       title={mode === "sessions" ? t("mobile.agent.title") : t("session.provider_select")}
       sections={mode === "sessions" ? sessionSections : providerSections}
       selectedId={mode === "sessions" ? (activeSession?.id ?? null) : null}

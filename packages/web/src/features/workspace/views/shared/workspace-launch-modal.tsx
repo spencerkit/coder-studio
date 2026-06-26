@@ -1,8 +1,9 @@
 import { useAtomValue } from "jotai";
 import { ArrowUp, X } from "lucide-react";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import {
+  ConfirmDialog,
   EmptyState,
   IconButton,
   Input,
@@ -53,8 +54,10 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const locale = useAtomValue(localeAtom) as LocaleCode;
   const t = useTranslation();
   const createFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const [showClearRecentConfirm, setShowClearRecentConfirm] = useState(false);
   const {
     browsing,
+    clearRecentWorkspaces,
     closeCreateFolder,
     currentPath,
     createFolderError,
@@ -76,6 +79,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     parentPath,
     recentWorkspaces,
     rootPaths,
+    removeRecentWorkspace,
     selectedPath,
     submitCreateFolder,
     updateNewFolderName,
@@ -108,27 +112,49 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const recentSection =
     !historyLoading && recentWorkspaces.length > 0 ? (
       <section className="launch-recent" aria-labelledby="launch-recent-title">
-        <div className="launch-section-title" id="launch-recent-title">
-          {t("workspace.launch.recent_title")}
+        <div className="launch-section-header">
+          <div className="launch-section-title" id="launch-recent-title">
+            {t("workspace.launch.recent_title")}
+          </div>
+          <button
+            type="button"
+            className="launch-section-action"
+            onClick={() => setShowClearRecentConfirm(true)}
+            disabled={loading}
+            aria-label={t("workspace.launch.clear_recent_workspaces")}
+          >
+            {t("workspace.launch.clear_all")}
+          </button>
         </div>
         <div className="launch-recent-list">
           {recentWorkspaces.map((entry) => (
-            <button
-              key={entry.path}
-              className="launch-recent-row"
-              type="button"
-              aria-label={t("workspace.launch.open_recent", { name: entry.name })}
-              disabled={loading}
-              onClick={() => void openWorkspaceByPath(entry.path)}
-            >
-              <span className="launch-recent-row__header">
-                <span className="launch-recent-row__name">{entry.name}</span>
-                <span className="launch-recent-row__time">
-                  {formatDate(entry.lastOpenedAt, locale)}
+            <div key={entry.path} className="launch-recent-item">
+              <IconButton
+                aria-label={t("workspace.launch.remove_recent", { name: entry.name })}
+                className="launch-recent-remove"
+                disabled={loading}
+                icon={<X size={14} />}
+                size="sm"
+                onClick={() => {
+                  void removeRecentWorkspace(entry.path);
+                }}
+              />
+              <button
+                className="launch-recent-row"
+                type="button"
+                aria-label={t("workspace.launch.open_recent", { name: entry.name })}
+                disabled={loading}
+                onClick={() => void openWorkspaceByPath(entry.path)}
+              >
+                <span className="launch-recent-row__header">
+                  <span className="launch-recent-row__name">{entry.name}</span>
+                  <span className="launch-recent-row__time">
+                    {formatDate(entry.lastOpenedAt, locale)}
+                  </span>
                 </span>
-              </span>
-              <span className="launch-recent-row__path">{entry.path}</span>
-            </button>
+                <span className="launch-recent-row__path">{entry.path}</span>
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -292,58 +318,94 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
 
   if (isMobile) {
     return (
-      <Sheet
-        title={launchTitle}
-        body={launchBody}
-        footer={launchFooter}
-        fullscreen
-        bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen mobile-launch-sheet"
-        contentClassName="mobile-sheet--launch"
-        onClose={onClose}
-      />
+      <>
+        <Sheet
+          title={launchTitle}
+          body={launchBody}
+          footer={launchFooter}
+          fullscreen
+          bodyClassName="mobile-sheet__body--flush mobile-sheet__body--fullscreen mobile-launch-sheet"
+          contentClassName="mobile-sheet--launch"
+          onClose={onClose}
+        />
+
+        {showClearRecentConfirm ? (
+          <ConfirmDialog
+            open
+            onOpenChange={setShowClearRecentConfirm}
+            title={t("workspace.launch.clear_recent_confirm_title")}
+            description={t("workspace.launch.clear_recent_confirm_description")}
+            cancelText={t("action.cancel")}
+            confirmText={t("workspace.launch.clear_all")}
+            tone="danger"
+            onConfirm={() => {
+              void clearRecentWorkspaces();
+              setShowClearRecentConfirm(false);
+            }}
+          />
+        ) : null}
+      </>
     );
   }
 
   return (
-    <WorkbenchLayer
-      ariaLabel={launchTitle}
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      open
-    >
-      <div className="launch-modal">
-        <div className="launch-header">
-          <div className="launch-header-left">
-            <div className="launch-title">{launchTitle}</div>
-            <div className="launch-hint">{launchHint}</div>
+    <>
+      <WorkbenchLayer
+        ariaLabel={launchTitle}
+        onOpenChange={(open) => {
+          if (!open) {
+            onClose();
+          }
+        }}
+        open
+      >
+        <div className="launch-modal">
+          <div className="launch-header">
+            <div className="launch-header-left">
+              <div className="launch-title">{launchTitle}</div>
+              <div className="launch-hint">{launchHint}</div>
+            </div>
+            <div className="launch-header-right">
+              <IconButton
+                aria-label={t("action.close")}
+                className="launch-close-btn"
+                icon={<X size={16} />}
+                onClick={onClose}
+                size="sm"
+              />
+            </div>
           </div>
-          <div className="launch-header-right">
-            <IconButton
-              aria-label={t("action.close")}
-              className="launch-close-btn"
-              icon={<X size={16} />}
-              onClick={onClose}
-              size="sm"
-            />
+
+          {launchBody}
+
+          <div className="launch-footer">
+            <button
+              className="launch-start-btn launch-start-btn--desktop"
+              onClick={() => void handleOpen()}
+              disabled={loading || !selectedPath}
+            >
+              {loading ? t("workspace.launch.starting") : t("workspace.launch.start")}
+            </button>
           </div>
         </div>
+      </WorkbenchLayer>
 
-        {launchBody}
-
-        <div className="launch-footer">
-          <button
-            className="launch-start-btn launch-start-btn--desktop"
-            onClick={() => void handleOpen()}
-            disabled={loading || !selectedPath}
-          >
-            {loading ? t("workspace.launch.starting") : t("workspace.launch.start")}
-          </button>
-        </div>
-      </div>
-    </WorkbenchLayer>
+      {showClearRecentConfirm ? (
+        <ConfirmDialog
+          open
+          onOpenChange={setShowClearRecentConfirm}
+          title={t("workspace.launch.clear_recent_confirm_title")}
+          description={t("workspace.launch.clear_recent_confirm_description")}
+          cancelText={t("action.cancel")}
+          confirmText={t("workspace.launch.clear_all")}
+          tone="danger"
+          onConfirm={() => {
+            void clearRecentWorkspaces();
+            setShowClearRecentConfirm(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

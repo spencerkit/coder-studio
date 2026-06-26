@@ -28,6 +28,7 @@ interface PreviewRewriteInput {
   sessionId: string;
   workspaceRootPath: string;
   baseWorkspacePath?: string;
+  preserveRootRelativePrefixes?: string[];
 }
 
 export function encodePathSegments(inputPath: string): string {
@@ -39,12 +40,18 @@ export function encodePathSegments(inputPath: string): string {
 
 export function rewritePreviewHtmlResourceUrls(
   html: string,
-  input: { sessionId: string; workspaceRootPath: string; entryPath: string }
+  input: {
+    sessionId: string;
+    workspaceRootPath: string;
+    entryPath: string;
+    preserveRootRelativePrefixes?: string[];
+  }
 ): string {
   const rewriteInput = {
     sessionId: input.sessionId,
     workspaceRootPath: input.workspaceRootPath,
     baseWorkspacePath: input.entryPath,
+    preserveRootRelativePrefixes: input.preserveRootRelativePrefixes,
   };
   const htmlWithStyleBlocks = html.replace(
     STYLE_BLOCK_PATTERN,
@@ -234,6 +241,10 @@ function rewritePreviewResourceUrl(rawValue: string, input: PreviewRewriteInput)
   const decodedPath = decodePathSegments(trimmedValue.replaceAll("\\", "/"));
 
   if (decodedPath.startsWith("/")) {
+    if (input.preserveRootRelativePrefixes?.some((prefix) => decodedPath.startsWith(prefix))) {
+      return rawValue;
+    }
+
     const workspaceRelativePath =
       resolveWorkspaceRelativePath(input.workspaceRootPath, decodedPath) ??
       normalizeWorkspaceRelativePath(decodedPath.slice(1));

@@ -937,9 +937,15 @@ function ReadmeMobileProgressWorkspace() {
       className="mobile-shell mobile-shell--stacked mobile-shell--motion-reduced"
       data-testid="mobile-shell"
     >
-      <MobileTopBar activeWorkspace={workspace} drawerOpen={false} onToggleDrawer={() => {}} />
+      <MobileTopBar
+        activeWorkspace={workspace}
+        drawerOpen={false}
+        onToggleDrawer={() => {}}
+        onOpenFiles={() => {}}
+        onOpenTerminal={() => {}}
+      />
       <main className="mobile-shell__viewport">
-        <div className="mobile-shell__content" style={{ gap: "12px", paddingBottom: "144px" }}>
+        <div className="mobile-shell__content" style={{ gap: "12px", paddingBottom: "88px" }}>
           <section className="mobile-shell__agent-stage" style={{ flex: "0 0 420px" }}>
             <SessionCard
               sessionId="session-readme-mobile"
@@ -960,9 +966,6 @@ function ReadmeMobileProgressWorkspace() {
         data-testid="mobile-bottom-stack"
         style={{ "--mobile-keyboard-inset": "0px" } as CSSProperties}
       >
-        <div className="mobile-dock-shell">
-          <MobileDock activeItem="agent" onSelectItem={() => {}} />
-        </div>
         <WorkspaceStatusBar workspaceId={workspace.id} gitState={readmeMobileGitState} />
       </div>
     </div>
@@ -1108,18 +1111,21 @@ function FooterUpdateRailPreviewShell({
       className={`${className} mobile-shell mobile-shell--stacked mobile-shell--motion-reduced`}
       data-testid="mobile-shell"
     >
-      <MobileTopBar activeWorkspace={workspace} drawerOpen={false} onToggleDrawer={() => {}} />
+      <MobileTopBar
+        activeWorkspace={workspace}
+        drawerOpen={false}
+        onToggleDrawer={() => {}}
+        onOpenFiles={() => {}}
+        onOpenTerminal={() => {}}
+      />
       <main className="mobile-shell__viewport">
-        <div className="mobile-shell__content" style={{ paddingBottom: "144px" }} />
+        <div className="mobile-shell__content" style={{ paddingBottom: "88px" }} />
       </main>
       <div
         className="mobile-shell__bottom-stack"
         data-testid="mobile-bottom-stack"
         style={{ "--mobile-keyboard-inset": "0px" } as CSSProperties}
       >
-        <div className="mobile-dock-shell">
-          <MobileDock activeItem="agent" onSelectItem={() => {}} />
-        </div>
         <WorkspaceStatusBar workspaceId={workspace.id} gitState={readmeDesktopGitStatus} />
       </div>
     </div>
@@ -1803,7 +1809,10 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
       ),
     }),
     scene("provider-error-state", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/providers"],
+        path: "/more/settings/providers",
+      }),
       seed: (context) => ({ ...context }),
       render: () => (
         <div className="settings-page">

@@ -11,6 +11,7 @@ import {
 } from "@coder-studio/core";
 import { LoginPage } from "../../features/auth";
 import { SessionGatePage } from "../../features/auth/session-gate";
+import { MoreFeaturesPage } from "../../features/more";
 import { NotFoundPage } from "../../features/not-found";
 import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
@@ -256,8 +257,9 @@ const previewSkillsLibrary = [
     displayName: "Frontend Design",
     description: "Design and verify production frontend UI changes in the workspace.",
     version: "1.4.0",
-    source: "skillhub" as const,
-    libraryPath: "/Users/spencer/.coder-studio/skills/frontend-design",
+    source: "installed" as const,
+    origin: "skillhub" as const,
+    libraryPath: "/Users/spencer/.coder-studio/state/skills/library/frontend-design",
     installState: "installed" as const,
     installedAt: 1715731200000,
     updatedAt: 1715731200000,
@@ -266,6 +268,138 @@ const previewSkillsLibrary = [
     errorCount: 0,
   },
 ];
+
+const previewCustomSkillsLibrary = [
+  {
+    slug: "review-ops-skill",
+    displayName: "Review Ops Skill",
+    description: "Run structured acceptance and rollout checks before shipping a change.",
+    version: "local",
+    source: "custom" as const,
+    origin: "filesystem" as const,
+    libraryPath: "/Users/spencer/.coder-studio/state/skills/custom/review-ops-skill",
+    installState: "installed" as const,
+    installedAt: 1715731200000,
+    updatedAt: 1715731200000,
+    mountedProviderIds: ["codex", "claude"],
+    mountStatus: "fully_mounted" as const,
+    errorCount: 0,
+  },
+  {
+    slug: "session-audit-helper",
+    displayName: "Session Audit Helper",
+    description: "Inspect long-running sessions and summarize follow-up actions for handoff.",
+    version: "local",
+    source: "custom" as const,
+    origin: "filesystem" as const,
+    libraryPath: "/Users/spencer/.coder-studio/state/skills/custom/session-audit-helper",
+    installState: "installed" as const,
+    installedAt: 1715731200000,
+    updatedAt: 1715731200000,
+    mountedProviderIds: ["codex"],
+    mountStatus: "partially_mounted" as const,
+    errorCount: 0,
+  },
+];
+
+const previewCustomSkillMounts = [
+  {
+    providerId: "codex",
+    skillSlug: "review-ops-skill",
+    enabled: true,
+    sourcePath: "/Users/spencer/.coder-studio/state/skills/custom/review-ops-skill",
+    targetPath: "/Users/spencer/.codex/skills/review-ops-skill",
+    mountModeResolved: "symlink" as const,
+    status: "mounted" as const,
+    lastSyncedAt: 1715731200000,
+  },
+  {
+    providerId: "claude",
+    skillSlug: "review-ops-skill",
+    enabled: true,
+    sourcePath: "/Users/spencer/.coder-studio/state/skills/custom/review-ops-skill",
+    targetPath: "/Users/spencer/.claude/skills/review-ops-skill",
+    mountModeResolved: "symlink" as const,
+    status: "mounted" as const,
+    lastSyncedAt: 1715731200000,
+  },
+  {
+    providerId: "codex",
+    skillSlug: "session-audit-helper",
+    enabled: true,
+    sourcePath: "/Users/spencer/.coder-studio/state/skills/custom/session-audit-helper",
+    targetPath: "/Users/spencer/.codex/skills/session-audit-helper",
+    mountModeResolved: "symlink" as const,
+    status: "mounted" as const,
+    lastSyncedAt: 1715731200000,
+  },
+];
+
+const previewCustomSkillFiles = {
+  "review-ops-skill": [
+    {
+      path: "SKILL.md",
+      kind: "file" as const,
+      content: [
+        "---",
+        "name: review-ops-skill",
+        "description: Acceptance and rollout reviewer",
+        "---",
+        "",
+        "# Review Ops Skill",
+        "",
+        "Use this skill to verify acceptance, rollout safety, and release readiness.",
+        "",
+        "- Review the changed files",
+        "- Verify tests and screenshots",
+        "- Summarize launch risks",
+        "",
+      ].join("\n"),
+    },
+    { path: "refs", kind: "dir" as const },
+    {
+      path: "refs/checklist.md",
+      kind: "file" as const,
+      content: [
+        "# Acceptance Checklist",
+        "",
+        "- Confirm core flow",
+        "- Capture screenshots",
+        "- Note residual risk",
+        "",
+      ].join("\n"),
+    },
+    { path: "templates", kind: "dir" as const },
+    {
+      path: "templates/report.md",
+      kind: "file" as const,
+      content: ["# Release Report", "", "## Summary", "", "- Pending", ""].join("\n"),
+    },
+  ],
+  "session-audit-helper": [
+    {
+      path: "SKILL.md",
+      kind: "file" as const,
+      content: [
+        "---",
+        "name: session-audit-helper",
+        "description: Session audit helper",
+        "---",
+        "",
+        "# Session Audit Helper",
+        "",
+        "Audit recent sessions and capture next steps.",
+        "",
+      ].join("\n"),
+    },
+    { path: "refs", kind: "dir" as const },
+    {
+      path: "refs/summary.md",
+      kind: "file" as const,
+      content: "# Summary\n",
+    },
+  ],
+};
 
 const fileTreeMap = new Map<string, FileNode[]>();
 fileTreeMap.set(".", [
@@ -963,17 +1097,20 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
         targets: previewSkillTargets,
         mounts: previewSkillMounts,
       },
-      skillsRecommendations: [
-        {
-          slug: "test-automation",
-          displayName: "Test Automation",
-          description: "Detect and run the most relevant project checks.",
-          reason: "This workspace has pnpm scripts for test, build, and lint.",
-          sourceQuery: "workspace scripts",
-          score: 0.88,
-          installed: false,
-        },
-      ],
+      skillsRecommendations: {
+        entries: [
+          {
+            slug: "test-automation",
+            displayName: "Test Automation",
+            description: "Detect and run the most relevant project checks.",
+            reason: "This workspace has pnpm scripts for test, build, and lint.",
+            sourceQuery: "workspace scripts",
+            score: 0.88,
+            installed: false,
+          },
+        ],
+        hasMore: false,
+      },
       skillsVersionChecks: [
         {
           slug: "frontend-design",
@@ -982,6 +1119,25 @@ function buildWorkspaceSeed(context: UiPreviewSceneContext, sessions: Session[] 
           status: "up_to_date",
         },
       ],
+    },
+  };
+}
+
+function buildWorkspaceCustomSkillsReviewSeed(context: UiPreviewSceneContext) {
+  const base = buildWorkspaceSeed(context);
+
+  return {
+    ...base,
+    commands: {
+      ...base.commands,
+      skillsLibraryList: [...previewCustomSkillsLibrary, ...previewSkillsLibrary],
+      skillsHealthScan: {
+        targets: previewSkillTargets,
+        mounts: [...previewCustomSkillMounts, ...previewSkillMounts],
+      },
+      skillsRecommendations: { entries: [], hasMore: false },
+      skillsLocalFileEntriesBySlug: previewCustomSkillFiles,
+      skillsVersionChecks: [],
     },
   };
 }
@@ -1308,32 +1464,47 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
       render: () => <WelcomePage />,
     }),
     scene("settings-general", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/general"],
+        path: "/more/settings/general",
+      }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("settings-appearance", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/appearance"],
+        path: "/more/settings/appearance",
+      }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("settings-providers", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/providers"],
+        path: "/more/settings/providers",
+      }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("settings-shortcuts", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/shortcuts"],
+        path: "/more/settings/shortcuts",
+      }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("settings-monitoring", {
-      router: () => ({ initialEntries: ["/settings?section=monitoring"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/analysis/monitoring"],
+        path: "/more/analysis/monitoring",
+      }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("settings-mobile-root", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({ initialEntries: ["/more/settings"], path: "/more/settings" }),
       seed: (context) => buildSettingsSeed({ ...context, device: "mobile" }),
       render: () => <SettingsPage />,
     }),
@@ -1353,6 +1524,15 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
     scene("workspace-desktop", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildWorkspaceSeed(context),
+      render: () => (
+        <WorkspaceRouteGate>
+          <WorkspaceDesktopView />
+        </WorkspaceRouteGate>
+      ),
+    }),
+    scene("workspace-custom-skills-review", {
+      router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
+      seed: (context) => buildWorkspaceCustomSkillsReviewSeed(context),
       render: () => (
         <WorkspaceRouteGate>
           <WorkspaceDesktopView />

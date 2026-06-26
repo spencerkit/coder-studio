@@ -7,19 +7,33 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectionStatusAtom, wsClientAtom } from "../../../../atoms/connection";
-import { activeWorkspaceIdAtom } from "../../../../atoms/workspaces";
+import { activeWorkspaceIdAtom, workspacesAtom } from "../../../../atoms/workspaces";
 import { seedReadyWorkspaceState } from "../../../../test-utils/workspace-state";
 import {
   activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   editorViewVisibleAtomFamily,
   openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
   openFilesAtomFamily,
 } from "../../atoms";
 import { type DesktopSidebarView, desktopSidebarViewAtomFamily } from "../../atoms/layout";
 import { WorkspaceDesktopView } from "./workspace-desktop-view";
 
 let lastWsSubscribeSpy: ReturnType<typeof vi.fn> | null = null;
+
+function browserTab(id: string, url: string | null) {
+  return {
+    kind: "browser" as const,
+    id,
+    url,
+    devicePreset: "desktop" as const,
+    viewportWidth: null,
+    viewportHeight: null,
+    orientation: "portrait" as const,
+    userAgentMode: "desktop" as const,
+  };
+}
 
 vi.mock("../../../../lib/i18n", () => ({
   useTranslation: () => (key: string) => {
@@ -386,6 +400,42 @@ describe("WorkspaceDesktopView", () => {
     expect(screen.getByTestId("agent-panes").closest(".agent-panes")).not.toHaveAttribute(
       "aria-hidden"
     );
+  });
+
+  it("restores the desktop editor as floating after refresh when persisted as unpinned with an active browser tab", () => {
+    const store = renderDesktopView("explorer");
+    const persistedBrowserTab = browserTab("browser-1", "http://127.0.0.1:5173/");
+
+    act(() => {
+      const currentWorkspaces = store.get(workspacesAtom);
+      const currentWorkspace = currentWorkspaces["ws-test"];
+      if (!currentWorkspace) {
+        throw new Error("Expected test workspace to exist");
+      }
+
+      store.set(workspacesAtom, {
+        ...currentWorkspaces,
+        "ws-test": {
+          ...currentWorkspace,
+          uiState: {
+            ...currentWorkspace.uiState,
+            editorPinned: false,
+          } as never,
+        },
+      });
+      store.set(editorViewVisibleAtomFamily("ws-test"), true);
+      store.set(openEditorTabsAtomFamily("ws-test"), [persistedBrowserTab]);
+      store.set(activeEditorTabAtomFamily("ws-test"), persistedBrowserTab);
+      store.set(activeFilePathAtomFamily("ws-test"), null);
+    });
+
+    const editorHost = screen.getByTestId("code-editor-host");
+    const overlay = editorHost.closest(".workspace-main-stage__editor-overlay");
+    const agentPanes = screen.getByTestId("agent-panes").closest(".agent-panes");
+
+    expect(editorHost).toHaveAttribute("data-editor-pinned", "false");
+    expect(overlay).toHaveClass("workspace-main-stage__editor-overlay--floating");
+    expect(agentPanes).not.toHaveAttribute("aria-hidden");
   });
 
   it("toggles the desktop editor between pinned and floating overlay modes", () => {

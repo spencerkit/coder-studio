@@ -1,14 +1,19 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Result } from "@coder-studio/core";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildFastifyApp } from "../app.js";
+import { SessionTokenRepo } from "../auth/session-token-repo.js";
 import { EventBus } from "../bus/event-bus.js";
+import "../commands/memory.js";
 import { AuthLoginBlockRepo } from "../storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "../storage/repositories/auth-session-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
+import { ActivationManager } from "../ws/activation.js";
+import type { CommandContext } from "../ws/dispatch.js";
 import { FencingManager } from "../ws/fencing.js";
 import { WsHub } from "../ws/hub.js";
 
@@ -19,6 +24,94 @@ describe("auth login protection", () => {
   let stateDir: string;
   let app: FastifyInstance;
   let webRoot: string;
+  let sessionTokenRepo: SessionTokenRepo;
+  let wsHub: WsHub;
+
+  async function createApp(options: { authEnabled: boolean; password?: string }) {
+    const eventBus = new EventBus();
+    const fencingMgr = new FencingManager();
+    const config = {
+      host: "127.0.0.1",
+      port: 0,
+      stateDir,
+      uploadsDir: join(tempDir, "uploads"),
+      logLevel: "info" as const,
+      webRoot,
+      auth: {
+        enabled: options.authEnabled,
+        password: options.password,
+      },
+    };
+    const nextWsHub = new WsHub({
+      eventBus,
+      commandContext: null,
+      config,
+      fencingMgr,
+    });
+    const workspaceMgr = new WorkspaceManager({
+      workspaceRepo: new WorkspaceRepo({
+        filePath: join(tempDir, "state", "workspaces.json"),
+      }),
+      eventBus,
+      broadcaster: nextWsHub,
+    });
+
+    const nextApp = await buildFastifyApp({
+      wsHub: nextWsHub,
+      webRoot,
+      workspaceMgr,
+      config,
+      authSessionRepo: new AuthSessionRepo({
+        filePath: join(tempDir, "state", "auth-sessions.json"),
+      }),
+      authLoginBlockRepo: new AuthLoginBlockRepo({
+        filePath: join(tempDir, "state", "auth-login-blocks.json"),
+      }),
+      sessionTokenRepo,
+      logger: false,
+    });
+
+    nextWsHub.setCommandContext({
+      workspaceMgr: {
+        get: (workspaceId: string) =>
+          workspaceId === "ws-1" ? { id: "ws-1", path: "/workspace" } : undefined,
+      },
+      sessionMgr: {},
+      terminalMgr: {},
+      taskMgr: {},
+      eventBus,
+      broadcaster: nextWsHub,
+      settingsRepo: {},
+      providerConfigRepo: {},
+      providerRegistry: [],
+      fencingMgr,
+      supervisorMgr: {},
+      autoFetch: {
+        unregisterViewer: () => undefined,
+      },
+      activationMgr: new ActivationManager(),
+      lspMgr: {},
+      memoryRepo: {
+        list: () => [],
+        get: () => undefined,
+        create: () => {
+          throw new Error("Unexpected memory.create");
+        },
+        update: () => {
+          throw new Error("Unexpected memory.update");
+        },
+        delete: () => {
+          throw new Error("Unexpected memory.delete");
+        },
+      },
+    } as unknown as CommandContext);
+
+    await nextApp.ready();
+    return {
+      app: nextApp,
+      wsHub: nextWsHub,
+    };
+  }
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "coder-studio-auth-"));
@@ -30,52 +123,17 @@ describe("auth login protection", () => {
       '<!doctype html><html><body><div id="root">shell</div></body></html>'
     );
 
-    const eventBus = new EventBus();
-    const fencingMgr = new FencingManager();
-    const config = {
-      host: "127.0.0.1",
-      port: 0,
-      stateDir,
-      uploadsDir: join(tempDir, "uploads"),
-      logLevel: "info" as const,
-      webRoot,
-      auth: {
-        enabled: true,
-        password: "sekrit",
-      },
-    };
-    const wsHub = new WsHub({
-      eventBus,
-      commandContext: null as never,
-      config,
-      fencingMgr,
-    });
-
-    app = await buildFastifyApp({
-      wsHub,
-      webRoot,
-      workspaceMgr: new WorkspaceManager({
-        workspaceRepo: new WorkspaceRepo({
-          filePath: join(tempDir, "state", "workspaces.json"),
-        }),
-        eventBus,
-        broadcaster: wsHub,
-      }),
-      config,
-      authSessionRepo: new AuthSessionRepo({
-        filePath: join(tempDir, "state", "auth-sessions.json"),
-      }),
-      authLoginBlockRepo: new AuthLoginBlockRepo({
-        filePath: join(tempDir, "state", "auth-login-blocks.json"),
-      }),
-      logger: false,
-    });
+    sessionTokenRepo = new SessionTokenRepo();
+    const created = await createApp({ authEnabled: true, password: "sekrit" });
+    app = created.app;
+    wsHub = created.wsHub;
   });
 
   afterEach(async () => {
     if (app) {
       await app.close();
     }
+    wsHub?.destroy();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -267,6 +325,127 @@ describe("auth login protection", () => {
       ok: false,
       error: "Authentication required",
     });
+  });
+
+  it("rejects websocket upgrades without cookie or bearer auth", async () => {
+    await expect(app.injectWS("/ws")).rejects.toThrow("Unexpected server response: 401");
+  });
+
+  it("accepts websocket upgrades with a valid loopback bearer token", async () => {
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+    });
+
+    const socket = await app.injectWS("/ws", {
+      headers: {
+        authorization: `Bearer ${tokenRecord.token}`,
+        "x-forwarded-for": "127.0.0.1",
+      },
+    });
+
+    socket.terminate();
+  });
+
+  it("decorates auth-disabled websocket requests with a valid session token context", async () => {
+    await app.close();
+    wsHub.destroy();
+    const created = await createApp({ authEnabled: false });
+    app = created.app;
+    wsHub = created.wsHub;
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["memory:read"],
+    });
+
+    const socket = await app.injectWS("/ws", {
+      headers: {
+        authorization: `Bearer ${tokenRecord.token}`,
+        "x-forwarded-for": "127.0.0.1",
+      },
+    });
+    const resultPromise = new Promise<Result>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Timed out waiting for result")), 2_000);
+      socket.on("message", (data) => {
+        const message = JSON.parse(data.toString()) as Result;
+        if (message.kind === "result" && message.id === "memory-list-1") {
+          clearTimeout(timeout);
+          resolve(message);
+        }
+      });
+    });
+
+    socket.send(
+      JSON.stringify({
+        kind: "command",
+        id: "memory-list-1",
+        op: "memory.list",
+        args: { workspaceId: "ws-1" },
+      })
+    );
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: true,
+      data: [],
+    });
+    socket.terminate();
+  });
+
+  it("rejects websocket upgrades with an invalid bearer token", async () => {
+    await expect(
+      app.injectWS("/ws", {
+        headers: {
+          authorization: "Bearer invalid-token",
+          "x-forwarded-for": "127.0.0.1",
+        },
+      })
+    ).rejects.toThrow("Unexpected server response: 401");
+  });
+
+  it("does not allow non-websocket routes to use bearer auth as a cookie substitute", async () => {
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/internal/openapi.json",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${tokenRecord.token}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      error: "Authentication required",
+    });
+  });
+
+  it("rejects bearer-auth websocket upgrades from non-loopback requests", async () => {
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+    });
+
+    await expect(
+      app.injectWS("/ws", {
+        headers: {
+          authorization: `Bearer ${tokenRecord.token}`,
+          "x-forwarded-for": "198.51.100.24",
+        },
+      })
+    ).rejects.toThrow("Unexpected server response: 401");
   });
 
   it("does not redirect bare reserved backend namespaces to the auth page", async () => {

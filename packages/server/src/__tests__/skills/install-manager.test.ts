@@ -110,6 +110,77 @@ describe("SkillInstallManager", () => {
       await expect(lstat(join(uninstalledSkillDir, "code-review"))).rejects.toBeTruthy();
       expect(skillMountRepo.get("uninstalled-agent", "code-review")).toBeUndefined();
       expect(skillMountRepo.get("unconfigured-agent", "code-review")).toBeUndefined();
+      expect(skillLibraryRepo.get("code-review")).toEqual(
+        expect.objectContaining({
+          slug: "code-review",
+          source: "installed",
+          origin: "skillhub",
+        })
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects Skill Hub installs when a custom skill already owns the slug", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-install-conflict-custom-"));
+    try {
+      const libraryRoot = join(tempDir, "library");
+      const customSkillPath = join(tempDir, "state", "skills", "custom", "code-review");
+      await mkdir(customSkillPath, { recursive: true });
+      await writeFile(join(customSkillPath, "SKILL.md"), "# Custom Code Review\n");
+
+      const skillLibraryRepo = new SkillLibraryRepo({
+        filePath: join(tempDir, "library-index.json"),
+        customSkillRoot: join(tempDir, "state", "skills", "custom"),
+      });
+      skillLibraryRepo.set({
+        slug: "code-review",
+        displayName: "Code Review",
+        description: "Custom version",
+        version: "local",
+        source: "custom",
+        origin: "filesystem",
+        libraryPath: customSkillPath,
+        installState: "installed",
+        installedAt: 1,
+        updatedAt: 1,
+      });
+
+      const manager = new SkillInstallManager({
+        skillsHubClient: {
+          info: vi.fn(async () => ({
+            slug: "code-review",
+            name: "Code Review",
+            description: "Review code changes before merge",
+            version: "1.2.3",
+          })),
+          stageInstall: vi.fn(async () => {
+            throw new Error("stageInstall should not run");
+          }),
+          readStagedSkill: vi.fn(async () => "skill body"),
+          cleanupStage: vi.fn(async () => undefined),
+        } as never,
+        skillLibraryRepo,
+        libraryRoot,
+      });
+
+      const started = await manager.start("code-review");
+      const finished = await waitForJob(manager, started.jobId);
+
+      expect(finished?.status).toBe("failed");
+      expect(finished?.failure).toMatchObject({
+        code: "unknown_failure",
+        message: "A skill with slug code-review already exists",
+      });
+      expect(skillLibraryRepo.get("code-review")).toEqual(
+        expect.objectContaining({
+          source: "custom",
+          origin: "filesystem",
+          libraryPath: customSkillPath,
+        })
+      );
+      await expect(lstat(customSkillPath)).resolves.toBeTruthy();
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

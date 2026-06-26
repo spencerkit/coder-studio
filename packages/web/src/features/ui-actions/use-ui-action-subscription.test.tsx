@@ -3,7 +3,7 @@
 import { Topics, type UiActionEvent } from "@coder-studio/core";
 import { act, render, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { commandPaletteOpenAtom, quickOpenOpenAtom } from "../../atoms/app-ui";
 import { wsClientAtom } from "../../atoms/connection";
 import { workspacesAtom } from "../../atoms/workspaces";
@@ -27,6 +27,32 @@ import {
 } from "../workspace/atoms/layout";
 import { useUiActionSubscription } from "./use-ui-action-subscription";
 
+const { persistUiStateSpy } = vi.hoisted(() => ({
+  persistUiStateSpy: vi.fn(),
+}));
+
+vi.mock("../workspace/actions/use-workspace-ui-state-persistence", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../workspace/actions/use-workspace-ui-state-persistence")
+    >();
+
+  return {
+    ...actual,
+    useWorkspaceUiStatePersistence: (workspaceId: string) => {
+      const result = actual.useWorkspaceUiStatePersistence(workspaceId);
+
+      return {
+        ...result,
+        persistUiState: async (patch: Parameters<typeof result.persistUiState>[0]) => {
+          persistUiStateSpy(patch);
+          return result.persistUiState(patch);
+        },
+      };
+    },
+  };
+});
+
 function Harness({ workspaceId }: { workspaceId: string }) {
   useUiActionSubscription(workspaceId);
   return null;
@@ -48,16 +74,52 @@ function createWorkspace(id: string) {
   };
 }
 
-function setupHarness() {
+function createWsClientMocks() {
   let handler: ((topic: string, payload: unknown, seq: number) => void) | null = null;
   const unsubscribe = vi.fn();
   const subscribe = vi.fn((_topics: string[], nextHandler: typeof handler) => {
     handler = nextHandler;
     return unsubscribe;
   });
+  const sendCommand = vi.fn(async (op: string, args: unknown) => {
+    if (op === "workspace.uiState.set") {
+      const { workspaceId, uiState } = args as {
+        workspaceId: string;
+        uiState: (ReturnType<typeof createWorkspace> & { uiState: unknown })["uiState"];
+      };
+
+      return {
+        ...createWorkspace(workspaceId),
+        uiState,
+      };
+    }
+
+    return null;
+  });
+
+  return {
+    get handler() {
+      return handler;
+    },
+    subscribe,
+    unsubscribe,
+    sendCommand,
+  };
+}
+
+function setupHarness(options?: { initialWsClient?: unknown }) {
+  const wsClientMocks = createWsClientMocks();
   const store = createStore();
   store.set(workspacesAtom, { "ws-1": createWorkspace("ws-1") } as never);
-  store.set(wsClientAtom, { subscribe } as never);
+  store.set(
+    wsClientAtom,
+    (options && "initialWsClient" in options
+      ? options.initialWsClient
+      : {
+          subscribe: wsClientMocks.subscribe,
+          sendCommand: wsClientMocks.sendCommand,
+        }) as never
+  );
 
   const view = render(
     <Provider store={store}>
@@ -67,11 +129,19 @@ function setupHarness() {
 
   const emit = async (payload: unknown) => {
     await act(async () => {
-      handler?.(Topics.workspaceUiAction("ws-1"), payload, 1);
+      wsClientMocks.handler?.(Topics.workspaceUiAction("ws-1"), payload, 1);
     });
   };
 
-  return { emit, store, subscribe, unsubscribe, ...view };
+  return {
+    emit,
+    store,
+    subscribe: wsClientMocks.subscribe,
+    unsubscribe: wsClientMocks.unsubscribe,
+    sendCommand: wsClientMocks.sendCommand,
+    wsClient: { subscribe: wsClientMocks.subscribe, sendCommand: wsClientMocks.sendCommand },
+    ...view,
+  };
 }
 
 function createEvent(intent: UiActionEvent["intent"]): UiActionEvent {
@@ -88,6 +158,10 @@ function browserTab(id: string, url: string | null): WorkspaceBrowserEditorTab {
 }
 
 describe("useUiActionSubscription", () => {
+  beforeEach(() => {
+    persistUiStateSpy.mockClear();
+  });
+
   it("skips subscription when the ws client mock does not implement subscribe", () => {
     const store = createStore();
     store.set(workspacesAtom, { "ws-1": createWorkspace("ws-1") } as never);
@@ -185,6 +259,296 @@ describe("useUiActionSubscription", () => {
       }),
     ]);
     expect(store.get(activeEditorTabAtomFamily("ws-1"))).toEqual(openEditorTabs[0]);
+  });
+
+  it("opens and activates a canvas tab from canvas.open events", async () => {
+    const { emit, store } = setupHarness();
+
+    await emit(
+      createEvent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      })
+    );
+
+    expect(store.get(editorViewVisibleAtomFamily("ws-1"))).toBe(true);
+    expect(store.get(openEditorTabsAtomFamily("ws-1"))).toEqual([
+      {
+        kind: "canvas",
+        id: "canvas:canvas-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      },
+    ]);
+    expect(store.get(activeEditorTabAtomFamily("ws-1"))).toEqual({
+      kind: "canvas",
+      id: "canvas:canvas-1",
+      canvasId: "canvas-1",
+      title: "Runtime Flow",
+      artifactType: "architecture_canvas",
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+    });
+  });
+
+  it("persists canvas tabs opened from canvas.open events via workspace.uiState.set", async () => {
+    const { emit, sendCommand } = setupHarness();
+
+    await emit(
+      createEvent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalled();
+    });
+
+    expect(sendCommand.mock.calls[0]?.[0]).toBe("workspace.uiState.set");
+    expect(sendCommand.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        uiState: expect.objectContaining({
+          editorViewVisible: true,
+          openEditorTabs: [
+            {
+              kind: "canvas",
+              id: "canvas:canvas-1",
+              canvasId: "canvas-1",
+              title: "Runtime Flow",
+              artifactType: "architecture_canvas",
+              sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+            },
+          ],
+          activeEditorTab: {
+            kind: "canvas",
+            id: "canvas:canvas-1",
+            canvasId: "canvas-1",
+            title: "Runtime Flow",
+            artifactType: "architecture_canvas",
+            sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+          },
+        }),
+      })
+    );
+  });
+
+  it("persists mixed tabs while replacing an existing canvas tab with the same canvasId", async () => {
+    const { emit, sendCommand, store } = setupHarness();
+    const existingBrowserTab = browserTab("browser-1", "http://127.0.0.1:5173/");
+    const replacedCanvasTab = {
+      kind: "canvas" as const,
+      id: "canvas:canvas-1",
+      canvasId: "canvas-1",
+      title: "Old Runtime Flow",
+      artifactType: "architecture_canvas" as const,
+      sourcePath: ".coder-studio/canvases/canvas-1-old.canvas.json",
+    };
+    const expectedCanvasTab = {
+      kind: "canvas" as const,
+      id: "canvas:canvas-1",
+      canvasId: "canvas-1",
+      title: "Runtime Flow",
+      artifactType: "architecture_canvas" as const,
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+    };
+    const expectedTabs = [
+      { kind: "file" as const, path: "src/index.ts" },
+      existingBrowserTab,
+      expectedCanvasTab,
+    ];
+
+    store.set(editorViewVisibleAtomFamily("ws-1"), false);
+    store.set(openEditorPathsAtomFamily("ws-1"), ["src/index.ts"]);
+    store.set(openEditorTabsAtomFamily("ws-1"), [
+      { kind: "file", path: "src/index.ts" },
+      existingBrowserTab,
+      replacedCanvasTab,
+    ]);
+    store.set(activeFilePathAtomFamily("ws-1"), "src/index.ts");
+    store.set(activeEditorTabAtomFamily("ws-1"), existingBrowserTab);
+
+    await emit(
+      createEvent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      })
+    );
+
+    expect(persistUiStateSpy).toHaveBeenCalledWith({
+      editorViewVisible: true,
+      openEditorTabs: expectedTabs,
+      activeEditorTab: expectedCanvasTab,
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalled();
+    });
+
+    expect(sendCommand.mock.calls[0]?.[0]).toBe("workspace.uiState.set");
+    expect(sendCommand.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        uiState: expect.objectContaining({
+          editorViewVisible: true,
+          openEditorTabs: expectedTabs,
+          activeEditorTab: expectedCanvasTab,
+        }),
+      })
+    );
+  });
+
+  it("reuses a source-path-first canvas tab when a later canvas.open event resolves a canvasId", async () => {
+    const { emit, store } = setupHarness();
+    const existingCanvasTab = {
+      kind: "canvas" as const,
+      id: "canvas:.coder-studio/canvases/runtime-flow.csc",
+      title: "Runtime Flow",
+      artifactType: "architecture_canvas" as const,
+      sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+    };
+
+    store.set(openEditorTabsAtomFamily("ws-1"), [existingCanvasTab]);
+    store.set(activeEditorTabAtomFamily("ws-1"), existingCanvasTab);
+
+    await emit(
+      createEvent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      })
+    );
+
+    expect(store.get(openEditorTabsAtomFamily("ws-1"))).toEqual([
+      {
+        kind: "canvas",
+        id: "canvas:canvas-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+      },
+    ]);
+  });
+
+  it("matches source-path-first canvas tabs by sourcePath when canvasId is absent", async () => {
+    const { emit, store } = setupHarness();
+    const runtimeFlowTab = {
+      kind: "canvas" as const,
+      id: "canvas:.coder-studio/canvases/runtime-flow.csc",
+      title: "Runtime Flow",
+      artifactType: "architecture_canvas" as const,
+      sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+    };
+    const auditTab = {
+      kind: "canvas" as const,
+      id: "canvas:.coder-studio/canvases/audit.csc",
+      title: "Old Audit",
+      artifactType: "report_canvas" as const,
+      sourcePath: ".coder-studio/canvases/audit.csc",
+    };
+
+    store.set(openEditorTabsAtomFamily("ws-1"), [runtimeFlowTab, auditTab]);
+    store.set(activeEditorTabAtomFamily("ws-1"), runtimeFlowTab);
+
+    await emit(
+      createEvent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        title: "Audit",
+        artifactType: "report_canvas",
+        sourcePath: ".coder-studio/canvases/audit.csc",
+      })
+    );
+
+    expect(store.get(openEditorTabsAtomFamily("ws-1"))).toEqual([
+      runtimeFlowTab,
+      {
+        kind: "canvas",
+        id: "canvas:.coder-studio/canvases/audit.csc",
+        title: "Audit",
+        artifactType: "report_canvas",
+        sourcePath: ".coder-studio/canvases/audit.csc",
+      },
+    ]);
+  });
+
+  it("persists canvas tabs after ws client becomes available post-mount", async () => {
+    const { emit, store, sendCommand, subscribe, wsClient } = setupHarness({
+      initialWsClient: null,
+    });
+
+    expect(subscribe).not.toHaveBeenCalled();
+
+    act(() => {
+      store.set(wsClientAtom, wsClient as never);
+    });
+
+    await waitFor(() => {
+      expect(subscribe).toHaveBeenCalledWith(
+        [Topics.workspaceUiAction("ws-1")],
+        expect.any(Function)
+      );
+    });
+
+    await emit(
+      createEvent({
+        type: "canvas.open",
+        workspaceId: "ws-1",
+        canvasId: "canvas-late",
+        title: "Late Client Canvas",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/canvas-late.canvas.json",
+      })
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalled();
+    });
+
+    expect(sendCommand.mock.calls[0]?.[0]).toBe("workspace.uiState.set");
+    expect(sendCommand.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        uiState: expect.objectContaining({
+          openEditorTabs: [
+            {
+              kind: "canvas",
+              id: "canvas:canvas-late",
+              canvasId: "canvas-late",
+              title: "Late Client Canvas",
+              artifactType: "architecture_canvas",
+              sourcePath: ".coder-studio/canvases/canvas-late.canvas.json",
+            },
+          ],
+          activeEditorTab: {
+            kind: "canvas",
+            id: "canvas:canvas-late",
+            canvasId: "canvas-late",
+            title: "Late Client Canvas",
+            artifactType: "architecture_canvas",
+            sourcePath: ".coder-studio/canvases/canvas-late.canvas.json",
+          },
+        }),
+      })
+    );
   });
 
   it("closes a matching file tab from editor.closeFile events", async () => {

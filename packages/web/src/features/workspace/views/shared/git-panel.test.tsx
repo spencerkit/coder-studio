@@ -2991,7 +2991,7 @@ describe("GitPanel", () => {
     expect(changesSection).not.toBeNull();
 
     fireEvent.click(
-      within(changesSection as HTMLElement).getByRole("button", { name: "放弃全部" })
+      within(changesSection as HTMLElement).getByRole("button", { name: "撤销全部" })
     );
 
     expect(screen.getByText("放弃所有更改")).toBeInTheDocument();
@@ -3146,7 +3146,7 @@ describe("GitPanel", () => {
     expect(changesSection).not.toBeNull();
 
     fireEvent.click(
-      within(changesSection as HTMLElement).getByRole("button", { name: "放弃全部" })
+      within(changesSection as HTMLElement).getByRole("button", { name: "撤销全部" })
     );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -3357,15 +3357,35 @@ describe("GitPanel", () => {
     expect(screen.queryByText("未跟踪")).toBeNull();
     expect(screen.getByPlaceholderText("输入提交信息...")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "刷新" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "放弃全部" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "暂存全部" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "撤销全部" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "添加全部" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "取消暂存全部" })).toBeInTheDocument();
+
+    const stagedSection = screen.getByText("已暂存").closest(".git-panel-section");
+    expect(stagedSection).not.toBeNull();
+    expect(
+      within(stagedSection as HTMLElement).getByRole("button", { name: "取消暂存全部" })
+    ).toBeInTheDocument();
+    expect(
+      within(stagedSection as HTMLElement).queryByText("取消暂存全部")
+    ).not.toBeInTheDocument();
+
+    const changesSection = screen.getByText("更改").closest(".git-panel-section");
+    expect(changesSection).not.toBeNull();
+    expect(
+      within(changesSection as HTMLElement).getByRole("button", { name: "添加全部" })
+    ).toBeInTheDocument();
+    expect(
+      within(changesSection as HTMLElement).getByRole("button", { name: "撤销全部" })
+    ).toBeInTheDocument();
+    expect(within(changesSection as HTMLElement).queryByText("添加全部")).not.toBeInTheDocument();
+    expect(within(changesSection as HTMLElement).queryByText("撤销全部")).not.toBeInTheDocument();
 
     const commitBlock = screen.getByPlaceholderText("输入提交信息...").closest(".git-commit-block");
     expect(commitBlock).not.toBeNull();
     expect(within(commitBlock as HTMLElement).queryByRole("button", { name: "放弃" })).toBeNull();
     expect(
-      within(commitBlock as HTMLElement).queryByRole("button", { name: "暂存全部" })
+      within(commitBlock as HTMLElement).queryByRole("button", { name: "添加全部" })
     ).toBeNull();
     expect(
       within(commitBlock as HTMLElement).getByRole("button", { name: "提交" })

@@ -5,6 +5,15 @@ import { useEffect, useState } from "react";
 import { ConfirmDialog, IconButton, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import {
+  getSkillPathDragPayload,
+  hasSkillPathDragType,
+  isSkillPathDragPayload,
+  SKILL_PATH_DRAG_END_EVENT,
+  SKILL_PATH_DRAG_START_EVENT,
+  type SkillPathDragPayload,
+  toSkillDragEditorPath,
+} from "../../../../lib/skill-path-drag";
+import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
   isWorkspacePathDragPayload,
@@ -43,6 +52,42 @@ function getEditorPaneTitle(path: string | null, fallbackTitle: string): string 
   return getFileName(path);
 }
 
+function resolveDroppedEditorPath(
+  dataTransfer: DataTransfer | null | undefined,
+  workspaceId: string
+): string | null {
+  const workspacePayload = getWorkspacePathDragPayload(dataTransfer);
+  if (workspacePayload) {
+    if (workspacePayload.workspaceId !== workspaceId || workspacePayload.kind !== "file") {
+      return null;
+    }
+
+    return workspacePayload.path;
+  }
+
+  const skillPayload = getSkillPathDragPayload(dataTransfer);
+  return skillPayload?.kind === "file" ? toSkillDragEditorPath(skillPayload) : null;
+}
+
+function isHandledNonFileDrop(
+  dataTransfer: DataTransfer | null | undefined,
+  workspaceId: string,
+  workspacePathDragPayload: WorkspacePathDragPayload | null,
+  skillPathDragPayload: SkillPathDragPayload | null
+): boolean {
+  if (hasWorkspacePathDragType(dataTransfer)) {
+    const payload = getWorkspacePathDragPayload(dataTransfer) ?? workspacePathDragPayload;
+    return payload?.workspaceId === workspaceId && payload.kind === "dir";
+  }
+
+  if (hasSkillPathDragType(dataTransfer)) {
+    const payload = getSkillPathDragPayload(dataTransfer) ?? skillPathDragPayload;
+    return payload?.kind === "dir";
+  }
+
+  return false;
+}
+
 interface EditorPaneCardProps {
   dragState?: {
     isDragging: boolean;
@@ -71,6 +116,9 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const [isFileDropTarget, setIsFileDropTarget] = useState(false);
   const [workspacePathDragPayload, setWorkspacePathDragPayload] =
     useState<WorkspacePathDragPayload | null>(null);
+  const [skillPathDragPayload, setSkillPathDragPayload] = useState<SkillPathDragPayload | null>(
+    null
+  );
   const editorPaneStateKey = getEditorPaneStateKey(workspaceId, paneId);
   const activeFilePathAtom = editorPaneActiveFilePathAtomFamily(editorPaneStateKey);
   const editorModeAtom = editorPaneModeAtomFamily(editorPaneStateKey);
@@ -112,7 +160,8 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
   const shouldRenderFileDropOverlay =
     isFileDropTarget ||
     (workspacePathDragPayload?.workspaceId === workspaceId &&
-      workspacePathDragPayload.kind === "file");
+      workspacePathDragPayload.kind === "file") ||
+    skillPathDragPayload?.kind === "file";
 
   useEffect(() => {
     const handleWorkspacePathDragStart = (event: Event) => {
@@ -132,6 +181,24 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    const handleSkillPathDragStart = (event: Event) => {
+      const payload = event instanceof CustomEvent ? event.detail : null;
+      setSkillPathDragPayload(isSkillPathDragPayload(payload) ? payload : null);
+    };
+    const handleSkillPathDragEnd = () => {
+      setSkillPathDragPayload(null);
+      setIsFileDropTarget(false);
+    };
+
+    window.addEventListener(SKILL_PATH_DRAG_START_EVENT, handleSkillPathDragStart);
+    window.addEventListener(SKILL_PATH_DRAG_END_EVENT, handleSkillPathDragEnd);
+    return () => {
+      window.removeEventListener(SKILL_PATH_DRAG_START_EVENT, handleSkillPathDragStart);
+      window.removeEventListener(SKILL_PATH_DRAG_END_EVENT, handleSkillPathDragEnd);
+    };
+  }, []);
+
   const requestClosePane = () => {
     if (isDirtyTextFile) {
       setCloseConfirmOpen(true);
@@ -145,14 +212,37 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
     onClosePane(paneId);
   };
   const handleWorkspaceFileDragEnter = (event: DragEvent<HTMLDivElement>) => {
-    if (!onOpenFile || !hasWorkspacePathDragType(event.dataTransfer)) {
+    if (!onOpenFile) {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-    setIsFileDropTarget(true);
+    const hasWorkspacePath = hasWorkspacePathDragType(event.dataTransfer);
+    const hasSkillPath = hasSkillPathDragType(event.dataTransfer);
+    if (!hasWorkspacePath && !hasSkillPath) {
+      return;
+    }
+
+    if (resolveDroppedEditorPath(event.dataTransfer, workspaceId)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setIsFileDropTarget(true);
+      return;
+    }
+
+    if (
+      isHandledNonFileDrop(
+        event.dataTransfer,
+        workspaceId,
+        workspacePathDragPayload,
+        skillPathDragPayload
+      )
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "none";
+      setIsFileDropTarget(false);
+    }
   };
   const handleWorkspaceFileDragLeave = (event: DragEvent<HTMLDivElement>) => {
     const nextTarget = event.relatedTarget;
@@ -163,20 +253,31 @@ export const EditorPaneCard: FC<EditorPaneCardProps> = ({
     setIsFileDropTarget(false);
   };
   const handleWorkspaceFileDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (!onOpenFile || !hasWorkspacePathDragType(event.dataTransfer)) {
+    if (!onOpenFile) {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    setIsFileDropTarget(false);
-
-    const payload = getWorkspacePathDragPayload(event.dataTransfer);
-    if (!payload || payload.workspaceId !== workspaceId || payload.kind !== "file") {
+    const path = resolveDroppedEditorPath(event.dataTransfer, workspaceId);
+    if (path) {
+      setIsFileDropTarget(false);
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenFile(paneId, path);
       return;
     }
 
-    onOpenFile(paneId, payload.path);
+    if (
+      isHandledNonFileDrop(
+        event.dataTransfer,
+        workspaceId,
+        workspacePathDragPayload,
+        skillPathDragPayload
+      )
+    ) {
+      setIsFileDropTarget(false);
+      event.preventDefault();
+      event.stopPropagation();
+    }
   };
 
   return (

@@ -6,7 +6,7 @@ import type {
   WorktreeInfo,
 } from "@coder-studio/core";
 import { CommandPalette } from "../../features/command-palette";
-import { SettingsPage } from "../../features/settings";
+import { MoreFeaturesPage } from "../../features/more";
 import { TerminalPanel } from "../../features/terminal-panel";
 import { TopBar } from "../../features/topbar";
 import { FileTreePanel } from "../../features/workspace/views/shared/file-tree-panel";
@@ -392,7 +392,10 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
       ),
     }),
     scene("settings-density-review", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/general"],
+        path: "/more/settings/general",
+      }),
       seed: (context) => ({
         ...buildWorkspaceSeed(context),
         commands: {
@@ -414,10 +417,13 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
           },
         },
       }),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("settings-light-theme-review", {
-      router: () => ({ initialEntries: ["/settings"], path: "/settings" }),
+      router: () => ({
+        initialEntries: ["/more/settings/appearance"],
+        path: "/more/settings/appearance",
+      }),
       seed: (context) => ({
         ...buildWorkspaceSeed(context),
         commands: {
@@ -439,7 +445,7 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
           },
         },
       }),
-      render: () => <SettingsPage />,
+      render: () => <MoreFeaturesPage />,
     }),
     scene("desktop-overlay-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),

@@ -29,6 +29,10 @@ interface SkillInfoLike {
   version?: string;
 }
 
+function canOverwriteWithSkillHubInstall(existing: SkillLibraryEntry | undefined): boolean {
+  return !existing || (existing.source === "installed" && existing.origin === "skillhub");
+}
+
 export class SkillInstallManager {
   private readonly jobs = new Map<string, SkillInstallJobSnapshot>();
   private readonly activeJobIdsBySlug = new Map<string, string>();
@@ -88,6 +92,11 @@ export class SkillInstallManager {
       markStep(job, "stage-install", "running");
       this.jobs.set(job.jobId, job);
 
+      const existing = this.deps.skillLibraryRepo.get(job.slug);
+      if (!canOverwriteWithSkillHubInstall(existing)) {
+        throw new Error(`A skill with slug ${job.slug} already exists`);
+      }
+
       const info = (await this.deps.skillsHubClient.info(job.slug).catch(() => undefined)) as
         | SkillInfoLike
         | undefined;
@@ -145,7 +154,8 @@ export class SkillInstallManager {
       displayName: info?.name?.trim() || slug,
       description: info?.description?.trim() || undefined,
       version: info?.version?.trim() || "1",
-      source: "skillhub",
+      source: "installed",
+      origin: "skillhub",
       libraryPath,
       installState: "installed",
       installedAt: existing?.installedAt ?? now,

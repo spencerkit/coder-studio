@@ -11,6 +11,8 @@ interface MobileTopBarProps {
   activeWorkspace: Workspace | null;
   drawerOpen: boolean;
   fullscreenController?: WorkspaceFullscreenController;
+  onOpenFiles: () => void;
+  onOpenTerminal: () => void;
   onToggleDrawer: () => void;
 }
 
@@ -18,6 +20,8 @@ export function MobileTopBar({
   activeWorkspace,
   drawerOpen,
   fullscreenController,
+  onOpenFiles,
+  onOpenTerminal,
   onToggleDrawer,
 }: MobileTopBarProps) {
   const t = useTranslation();
@@ -43,6 +47,18 @@ export function MobileTopBar({
       </button>
 
       <div className="mobile-topbar__actions">
+        <IconButton
+          onClick={onOpenFiles}
+          aria-label={t("mobile.dock.open_files")}
+          className="mobile-topbar__icon-button"
+          icon={<ThemedIcon semantic="mobile.dock.files" size={18} />}
+        />
+        <IconButton
+          onClick={onOpenTerminal}
+          aria-label={t("mobile.dock.open_terminal")}
+          className="mobile-topbar__icon-button"
+          icon={<ThemedIcon semantic="mobile.dock.terminal" size={18} />}
+        />
         <IconButton
           aria-label={t("more.title")}
           className="mobile-topbar__icon-button"

@@ -628,6 +628,23 @@ function renderMobileShell({
   return { store, sendCommand, sendTerminalInput, ...view };
 }
 
+async function openWorkspaceDrawer(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Switch workspace" }));
+  return screen.findByRole("complementary", { name: "Workspace drawer" });
+}
+
+async function openWorkspaceDrawerCreateFlow(user: ReturnType<typeof userEvent.setup>) {
+  await openWorkspaceDrawer(user);
+  await user.click(screen.getByRole("button", { name: "Create session in Alpha" }));
+  return screen.findByRole("region", { name: "Select Agent sheet" });
+}
+
+function getWorkspaceDrawerSessionRow(sessionName: string) {
+  return screen
+    .getByRole("button", { name: `Switch to agent ${sessionName}` })
+    .closest(".mobile-workspace-drawer__child-session-row");
+}
+
 beforeEach(() => {
   window.matchMedia = vi.fn((query: string) => ({
     matches: query === "(max-width: 899px), (pointer: coarse)",
@@ -654,24 +671,30 @@ afterEach(() => {
 });
 
 describe("MobileShell Phase 2 workspace", () => {
-  it("renders mobile workspace chrome on /workspace", async () => {
+  it("renders the workspace topbar actions on /workspace and opens the connected sheets", async () => {
+    const user = userEvent.setup();
     renderMobileShell({ initialEntry: "/workspace" });
 
     expect(screen.getByRole("button", { name: "Switch workspace" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Switch active agent" })).not.toBeInTheDocument();
-    const agentButton = screen.getByRole("button", { name: "Open Agent sheet" });
     const filesButton = screen.getByRole("button", { name: "Open Files sheet" });
     const terminalButton = screen.getByRole("button", { name: "Open Terminal sheet" });
-    expect(agentButton).toBeInTheDocument();
+    const moreFeaturesButton = screen.getByRole("button", { name: "More Features" });
+    const fullscreenButton = screen.getByRole("button", { name: "Enter Fullscreen" });
     expect(filesButton).toBeInTheDocument();
     expect(terminalButton).toBeInTheDocument();
-    expect(agentButton.querySelector('[data-icon-semantic="mobile.dock.agent"]')).toBeTruthy();
+    expect(moreFeaturesButton).toBeInTheDocument();
+    expect(fullscreenButton).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Agent sheet" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Mobile agents" })).not.toBeInTheDocument();
+    expect(screen.queryByText("已连接")).not.toBeInTheDocument();
     expect(filesButton.querySelector('[data-icon-semantic="mobile.dock.files"]')).toBeTruthy();
     expect(
       terminalButton.querySelector('[data-icon-semantic="mobile.dock.terminal"]')
     ).toBeTruthy();
-    expect(screen.queryByRole("tablist", { name: "Mobile agents" })).not.toBeInTheDocument();
-    expect(screen.queryByText("已连接")).not.toBeInTheDocument();
+    expect(
+      moreFeaturesButton.querySelector('[data-icon-semantic="nav.workspaceMenu"]')
+    ).toBeTruthy();
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
     expect(screen.getByTestId("mobile-session-card")).not.toHaveAttribute("data-readonly", "true");
     expect(document.querySelector(".mobile-shell__agent-stage .supervisor-card")).not.toBeNull();
@@ -686,6 +709,21 @@ describe("MobileShell Phase 2 workspace", () => {
       "mobile-shell__agent-stage"
     );
     expect(screen.queryByRole("textbox", { name: "Agent composer" })).not.toBeInTheDocument();
+
+    await user.click(filesButton);
+
+    expect(screen.getByRole("tablist", { name: "Files sheet tabs" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /back|返回/i }));
+
+    expect(screen.queryByRole("tablist", { name: "Files sheet tabs" })).not.toBeInTheDocument();
+
+    await user.click(terminalButton);
+
+    expect(screen.getByTestId("mobile-terminal-panel")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Terminal sheet" })).toHaveClass(
+      "mobile-sheet--fullscreen"
+    );
   });
 
   it("opens the mobile supervisor sheet when the shared strip-row details action is tapped", async () => {
@@ -893,9 +931,9 @@ describe("MobileShell Phase 2 workspace", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the workspace drawer and switches active workspace", async () => {
+  it("expands a non-active workspace from the mobile drawer without switching it", async () => {
     const user = userEvent.setup();
-    const sendCommand = vi.fn(async (op: string) => {
+    const sendCommand = vi.fn(async (op: string, args?: { workspaceId?: string }) => {
       if (op === "workspace.lastViewedTarget.set") {
         return {
           workspaceId: "ws-2",
@@ -903,21 +941,34 @@ describe("MobileShell Phase 2 workspace", () => {
         };
       }
 
+      if (op === "session.list" && args?.workspaceId === "ws-2") {
+        return [
+          createSession({
+            id: "sess_beta_1",
+            workspaceId: "ws-2",
+            terminalId: "term-beta-1",
+            providerId: "gemini",
+            state: "idle",
+            title: "Beta Gemini",
+          }),
+        ];
+      }
+
       return undefined;
     });
     const { store } = renderMobileShell({ initialEntry: "/workspace", sendCommand });
 
     await user.click(screen.getByRole("button", { name: "Switch workspace" }));
-    await user.click(screen.getByRole("button", { name: "Switch to workspace Beta" }));
+    await user.click(screen.getByRole("button", { name: "Expand workspace Beta" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "workspace.lastViewedTarget.set",
-        { workspaceId: "ws-2", sessionId: undefined },
-        undefined
-      );
+      expect(sendCommand).toHaveBeenCalledWith("session.list", { workspaceId: "ws-2" }, undefined);
     });
-    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-1");
+    expect(
+      screen.queryByRole("button", { name: "Create session in Beta" })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to agent Beta Gemini" })).toBeInTheDocument();
   });
 
   it("closes the active workspace from the mobile workspace drawer and falls back to the next workspace", async () => {
@@ -1007,19 +1058,33 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("shows a more-features trigger instead of the workspace menu trigger", async () => {
+  it("keeps workspace-only topbar actions and removes the legacy agent trigger", async () => {
     renderMobileShell({ initialEntry: "/workspace" });
 
+    expect(screen.getByRole("button", { name: "Open Files sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Terminal sheet" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "More Features" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enter Fullscreen" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Agent sheet" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Workspace Menu" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Open more actions" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quick Actions" })).not.toBeInTheDocument();
   });
 
-  it("preserves shared IconButton compatibility classes on mobile topbar icon-only triggers", async () => {
+  it("preserves shared button compatibility classes on mobile topbar icon actions", async () => {
     removeFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
+    expect(screen.getByRole("button", { name: "Open Files sheet" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "mobile-topbar__icon-button"
+    );
+    expect(screen.getByRole("button", { name: "Open Terminal sheet" })).toHaveClass(
+      "btn",
+      "btn-ghost",
+      "mobile-topbar__icon-button"
+    );
     expect(screen.getByRole("button", { name: "More Features" })).toHaveClass(
       "btn",
       "btn-ghost",
@@ -1045,19 +1110,22 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByRole("button", { name: /^About & Updates/ })).toBeInTheDocument();
   });
 
-  it("shows a fullscreen toggle to the right of the more-features trigger when the browser supports fullscreen", async () => {
+  it("shows topbar action order as files, terminal, more features, fullscreen", async () => {
     installFullscreenApiForMobileShell();
     renderMobileShell({ initialEntry: "/workspace" });
 
+    const filesButton = screen.getByRole("button", { name: "Open Files sheet" });
+    const terminalButton = screen.getByRole("button", { name: "Open Terminal sheet" });
     const moreFeaturesButton = screen.getByRole("button", { name: "More Features" });
     const fullscreenButton = await screen.findByRole("button", { name: "Enter Fullscreen" });
     const actionButtons = Array.from(
       document.querySelector(".mobile-topbar__actions")?.children ?? []
     );
 
-    expect(actionButtons[0]).toBe(moreFeaturesButton);
-    expect(moreFeaturesButton.nextElementSibling).toBe(fullscreenButton);
-    expect(actionButtons[1]).toBe(fullscreenButton);
+    expect(actionButtons[0]).toBe(filesButton);
+    expect(actionButtons[1]).toBe(terminalButton);
+    expect(actionButtons[2]).toBe(moreFeaturesButton);
+    expect(actionButtons[3]).toBe(fullscreenButton);
   });
 
   it("keeps the fullscreen toggle visible on mobile when the browser does not support fullscreen", async () => {
@@ -1126,7 +1194,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("LoginPage")).not.toBeInTheDocument();
   });
 
-  it("renders SettingsPage on mobile /settings while auth status is still unknown", () => {
+  it("shows the loading shell on mobile /settings while auth status is still unknown", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, null);
@@ -1141,9 +1209,10 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("SettingsPage")).toBeInTheDocument();
+    expect(screen.getByText("正在连接工作区...")).toBeInTheDocument();
+    expect(document.querySelector(".app-loading-shell")).toBeTruthy();
+    expect(screen.queryByText("SettingsPage")).not.toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/settings");
-    expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
   it("renders DiagnosticsPage on mobile /diagnostics while auth status is still unknown", () => {
@@ -1451,7 +1520,7 @@ describe("MobileShell Phase 2 workspace", () => {
 
   it("shows the global reconnecting banner on non-workspace mobile routes", () => {
     renderMobileShell({
-      initialEntry: "/settings",
+      initialEntry: "/more/settings/terminal",
       locale: "zh",
       connectionStatus: "reconnecting",
       withWorkspaces: false,
@@ -1469,65 +1538,59 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByText("Page not found")).toBeInTheDocument();
   });
 
-  it("switches the active session from the dock selector", async () => {
+  it("switches the active session from the workspace drawer", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    expect(screen.getByRole("region", { name: "Agent Sessions sheet" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create Session" })).toBeInTheDocument();
-    const activeRow = screen
-      .getByRole("button", {
-        name: "Codex",
-        description: /Switch to agent Codex CODEX/,
-      })
-      .closest(".mobile-select-sheet__item-row");
-    const inactiveRow = screen
-      .getByRole("button", {
-        name: "Claude",
-        description: /Switch to agent Claude CLAUDE/,
-      })
-      .closest(".mobile-select-sheet__item-row");
-    expect(activeRow).not.toBeNull();
-    expect(inactiveRow).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Switch workspace" }));
+    expect(screen.getByRole("complementary", { name: "Workspace drawer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create session in Alpha" })).toBeInTheDocument();
     expect(
-      within(activeRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Create session in Beta" })
+    ).not.toBeInTheDocument();
     expect(
-      within(inactiveRow as HTMLElement).getByRole("button", { name: "Close Current Session" })
-    ).toBeInTheDocument();
+      screen.getByRole("button", {
+        name: "Switch to agent Codex",
+      })
+    ).toHaveAttribute("aria-current", "page");
+
     await user.click(
       screen.getByRole("button", {
-        name: "Claude",
-        description: /Switch to agent Claude CLAUDE/,
+        name: "Switch to agent Claude",
       })
     );
 
     expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_1");
   });
 
-  it("renders the agent sheet as a fullscreen mobile sheet on mobile", async () => {
+  it("opens the create-only agent sheet from the workspace drawer", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Switch workspace" }));
+    await user.click(screen.getByRole("button", { name: "Create session in Alpha" }));
 
-    expect(screen.getByRole("region", { name: "Agent Sessions sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
     expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
     expect(document.querySelector(".mobile-shell__bottom-stack .mobile-sheet-layer")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Agent Sessions sheet" })).not.toBeInTheDocument();
   });
 
   it("dismisses the agent sheet when tapping the backdrop", async () => {
     const user = userEvent.setup();
-    renderMobileShell();
+    renderMobileShell({
+      sessions: [],
+      paneLayout: {
+        id: "root",
+        type: "leaf",
+      },
+    });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Create Session" }));
     await user.click(screen.getByRole("button", { name: "Dismiss current sheet" }));
 
     await waitFor(() => {
-      expect(
-        screen.queryByRole("region", { name: "Agent Sessions sheet" })
-      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Select Agent sheet" })).not.toBeInTheDocument();
     });
   });
 
@@ -1587,8 +1650,7 @@ describe("MobileShell Phase 2 workspace", () => {
       },
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    await user.click(screen.getByRole("button", { name: "Create Session" }));
+    await openWorkspaceDrawerCreateFlow(user);
 
     await user.click(screen.getByRole("button", { name: /Codex/ }));
 
@@ -1667,8 +1729,7 @@ describe("MobileShell Phase 2 workspace", () => {
       },
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    await user.click(screen.getByRole("button", { name: "Create Session" }));
+    await openWorkspaceDrawerCreateFlow(user);
 
     expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
 
@@ -1694,27 +1755,13 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByRole("button", { name: "Open Diagnostics" })).toBeInTheDocument();
   }, 15_000);
 
-  it("switches from session mode to provider mode inside a single mobile select sheet", async () => {
-    const user = userEvent.setup();
-    renderMobileShell();
+  it("does not expose the legacy /agent route after moving session switching into the workspace drawer", () => {
+    renderMobileShell({ initialEntry: "/agent" });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-
-    expect(screen.getByRole("region", { name: "Agent Sessions sheet" })).toBeInTheDocument();
-    expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
-
-    await user.click(screen.getByRole("button", { name: "Create Session" }));
-
-    expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
-    expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
-
-    await user.click(screen.getByRole("button", { name: "Back" }));
-
-    expect(screen.getByRole("region", { name: "Agent Sessions sheet" })).toBeInTheDocument();
-    expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(1);
+    expect(screen.getByText("Page not found")).toBeInTheDocument();
   });
 
-  it("creates a new agent from the mobile session sheet", async () => {
+  it("creates a new agent from the workspace drawer create flow", async () => {
     const user = userEvent.setup();
     const hydratedSessions = [
       createSession({
@@ -1792,14 +1839,8 @@ describe("MobileShell Phase 2 workspace", () => {
       },
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    await user.click(screen.getByRole("button", { name: "Create Session" }));
-    await user.click(
-      screen.getByRole("button", {
-        name: "Codex",
-        description: "Start Codex session Start new session",
-      })
-    );
+    await openWorkspaceDrawerCreateFlow(user);
+    await user.click(screen.getByRole("button", { name: "Codex" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
@@ -1835,25 +1876,24 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("closes the agent sheet once when selecting an existing session", async () => {
+  it("closes the workspace drawer once when selecting an existing session", async () => {
     const user = userEvent.setup();
     renderMobileShell();
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Switch workspace" }));
     await user.click(
       screen.getByRole("button", {
-        name: "Claude",
-        description: /Switch to agent Claude CLAUDE/,
+        name: "Switch to agent Claude",
       })
     );
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("region", { name: "Agent Sessions sheet" })
+        screen.queryByRole("complementary", { name: "Workspace drawer" })
       ).not.toBeInTheDocument();
     });
 
-    expect(document.querySelectorAll(".mobile-sheet-layer")).toHaveLength(0);
+    expect(document.querySelectorAll(".mobile-drawer-layer")).toHaveLength(0);
   });
 
   it("closes the active agent from the current session row action", async () => {
@@ -1883,13 +1923,8 @@ describe("MobileShell Phase 2 workspace", () => {
 
     renderMobileShell({ sendCommand });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    const activeRow = screen
-      .getByRole("button", {
-        name: "Codex",
-        description: /Switch to agent Codex CODEX/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    await openWorkspaceDrawer(user);
+    const activeRow = getWorkspaceDrawerSessionRow("Codex");
     expect(activeRow).not.toBeNull();
 
     await user.click(
@@ -2031,14 +2066,8 @@ describe("MobileShell Phase 2 workspace", () => {
     });
     closeStore = store;
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    await user.click(screen.getByRole("button", { name: "Create Session" }));
-    await user.click(
-      screen.getByRole("button", {
-        name: "Codex",
-        description: "Start Codex session Start new session",
-      })
-    );
+    await openWorkspaceDrawerCreateFlow(user);
+    await user.click(screen.getByRole("button", { name: "Codex" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
@@ -2056,13 +2085,8 @@ describe("MobileShell Phase 2 workspace", () => {
     );
     expect(createdLayout.children?.[1]).not.toHaveProperty("closeBehavior");
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    const createdRow = screen
-      .getByRole("button", {
-        name: "Codex 2",
-        description: /Switch to agent Codex 2 CODEX/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    await openWorkspaceDrawer(user);
+    const createdRow = getWorkspaceDrawerSessionRow("Codex 2");
     expect(createdRow).not.toBeNull();
 
     await user.click(
@@ -2170,26 +2194,15 @@ describe("MobileShell Phase 2 workspace", () => {
       },
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    await user.click(screen.getByRole("button", { name: "Create Session" }));
-    await user.click(
-      screen.getByRole("button", {
-        name: "Codex",
-        description: "Start Codex session Start new session",
-      })
-    );
+    await openWorkspaceDrawerCreateFlow(user);
+    await user.click(screen.getByRole("button", { name: "Codex" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    const createdRow = screen
-      .getByRole("button", {
-        name: "Codex 2",
-        description: /Switch to agent Codex 2 CODEX/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    await openWorkspaceDrawer(user);
+    const createdRow = getWorkspaceDrawerSessionRow("Codex 2");
     expect(createdRow).not.toBeNull();
 
     await user.click(
@@ -2350,13 +2363,8 @@ describe("MobileShell Phase 2 workspace", () => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_3");
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    const geminiRow = screen
-      .getByRole("button", {
-        name: "Gemini",
-        description: /Switch to agent Gemini GEMINI/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    await openWorkspaceDrawer(user);
+    const geminiRow = getWorkspaceDrawerSessionRow("Gemini");
     expect(geminiRow).not.toBeNull();
 
     await user.click(
@@ -2371,12 +2379,7 @@ describe("MobileShell Phase 2 workspace", () => {
       );
     });
 
-    await user.click(
-      screen.getByRole("button", {
-        name: "Codex",
-        description: /Switch to agent Codex CODEX/,
-      })
-    );
+    await user.click(screen.getByRole("button", { name: "Switch to agent Codex" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_2");
@@ -2427,13 +2430,8 @@ describe("MobileShell Phase 2 workspace", () => {
 
     renderMobileShell({ sendCommand });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    const inactiveRow = screen
-      .getByRole("button", {
-        name: "Claude",
-        description: /Switch to agent Claude CLAUDE/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    await openWorkspaceDrawer(user);
+    const inactiveRow = getWorkspaceDrawerSessionRow("Claude");
     expect(inactiveRow).not.toBeNull();
 
     await user.click(
@@ -2497,14 +2495,9 @@ describe("MobileShell Phase 2 workspace", () => {
       });
     });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await openWorkspaceDrawer(user);
 
-    const hiddenRow = screen
-      .getByRole("button", {
-        name: "Remote Codex",
-        description: /Switch to agent Remote Codex CODEX/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    const hiddenRow = getWorkspaceDrawerSessionRow("Remote Codex");
     expect(hiddenRow).not.toBeNull();
 
     await user.click(
@@ -2534,18 +2527,18 @@ describe("MobileShell Phase 2 workspace", () => {
     });
   });
 
-  it("persists the global target when a mobile session is selected from the agent sheet", async () => {
+  it("switches to a non-active workspace only when its session is selected from the drawer", async () => {
     const user = userEvent.setup();
-    const sendCommand = vi.fn(async (op: string) => {
+    const sendCommand = vi.fn(async (op: string, args?: { workspaceId?: string }) => {
       if (op === "workspace.lastViewedTarget.set") {
         return {
-          workspaceId: "ws-1",
-          sessionId: "sess_1",
+          workspaceId: "ws-2",
+          sessionId: "sess_beta_1",
           updatedAt: 10,
         };
       }
 
-      if (op === "session.list") {
+      if (op === "session.list" && args?.workspaceId === "ws-1") {
         return [
           createSession({
             id: "sess_1",
@@ -2564,16 +2557,29 @@ describe("MobileShell Phase 2 workspace", () => {
         ];
       }
 
+      if (op === "session.list" && args?.workspaceId === "ws-2") {
+        return [
+          createSession({
+            id: "sess_beta_1",
+            workspaceId: "ws-2",
+            terminalId: "term-beta-1",
+            providerId: "gemini",
+            state: "idle",
+            title: "Beta Gemini",
+          }),
+        ];
+      }
+
       return undefined;
     });
 
-    renderMobileShell({ sendCommand });
+    const { store } = renderMobileShell({ sendCommand });
 
-    await user.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
+    await user.click(screen.getByRole("button", { name: "Switch workspace" }));
+    await user.click(screen.getByRole("button", { name: "Expand workspace Beta" }));
     await user.click(
       screen.getByRole("button", {
-        name: "Claude",
-        description: /Switch to agent Claude CLAUDE/,
+        name: "Switch to agent Beta Gemini",
       })
     );
 
@@ -2581,11 +2587,16 @@ describe("MobileShell Phase 2 workspace", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "workspace.lastViewedTarget.set",
         {
-          workspaceId: "ws-1",
-          sessionId: "sess_1",
+          workspaceId: "ws-2",
+          sessionId: "sess_beta_1",
         },
         undefined
       );
+    });
+
+    await waitFor(() => {
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+      expect(screen.getByTestId("mobile-session-card")).toHaveTextContent("sess_beta_1");
     });
   });
 
@@ -2895,13 +2906,8 @@ describe("MobileShell Phase 2 workspace", () => {
       "closeBehavior"
     );
 
-    await userEvent.click(await screen.findByRole("button", { name: "Open Agent sheet" }));
-    const restoredRow = screen
-      .getByRole("button", {
-        name: "New Mobile Codex",
-        description: /Switch to agent New Mobile Codex CODEX/,
-      })
-      .closest(".mobile-select-sheet__item-row");
+    await userEvent.click(screen.getByRole("button", { name: "Switch workspace" }));
+    const restoredRow = getWorkspaceDrawerSessionRow("New Mobile Codex");
     expect(restoredRow).not.toBeNull();
 
     await userEvent.click(
@@ -3152,17 +3158,13 @@ describe("MobileShell Phase 2 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Create Session" }));
 
     expect(screen.getByRole("region", { name: "Select Agent sheet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Claude" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", {
-        name: "Claude",
-        description: "Start Claude session Start new session",
-      })
+      within(screen.getByRole("button", { name: "Claude" })).getByText("Start new session")
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Codex" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", {
-        name: "Codex",
-        description: "Start Codex session Start new session",
-      })
+      within(screen.getByRole("button", { name: "Codex" })).getByText("Start new session")
     ).toBeInTheDocument();
   });
 
@@ -3179,18 +3181,17 @@ describe("MobileShell Phase 2 workspace", () => {
     });
 
     expect(screen.getByRole("button", { name: "切换工作区" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "打开 Agent 面板" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开文件面板" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开终端面板" })).toBeInTheDocument();
     expect(screen.getByText("为当前工作区启动一个新的 Agent 会话。")).toBeInTheDocument();
-    expect(screen.getByText("文件和终端可继续通过底部栏访问。")).toBeInTheDocument();
+    expect(screen.getByText("文件和终端可继续通过顶部栏访问。")).toBeInTheDocument();
     expect(document.querySelector(".mobile-shell__empty-kicker")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "切换工作区" }));
 
     expect(screen.getByRole("complementary", { name: "工作区抽屉" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关闭工作区抽屉" })).toBeInTheDocument();
-    expect(screen.getByText("选择工作区")).toBeInTheDocument();
+    expect(screen.queryByText("选择工作区")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建工作区" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "打开文件面板" }));
@@ -3395,9 +3396,9 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByTestId("mobile-code-editor")).not.toBeInTheDocument();
   });
 
-  it("opens the terminal sheet from the dock", async () => {
+  it("opens the terminal sheet from the workspace topbar", async () => {
     const user = userEvent.setup();
-    renderMobileShell();
+    renderMobileShell({ initialEntry: "/workspace" });
 
     await user.click(screen.getByRole("button", { name: "Open Terminal sheet" }));
 

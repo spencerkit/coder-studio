@@ -10,7 +10,6 @@ import { MonitoringPage } from "../../features/monitoring";
 import { MoreFeaturesPage } from "../../features/more";
 import { NotFoundPage } from "../../features/not-found";
 import { ToastContainer } from "../../features/notifications";
-import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
 import { WorkAnalyticsPage } from "../../features/work-analysis";
 import { WorkspaceMobileView } from "../../features/workspace/views/mobile/workspace-mobile-view";
@@ -36,7 +35,6 @@ export function MobileShell() {
   const location = useLocation();
   const authUnknown = authEnabled === null;
   const shouldBypassAuthLoading =
-    location.pathname.startsWith("/settings") ||
     location.pathname.startsWith("/analytics") ||
     location.pathname.startsWith("/monitoring") ||
     location.pathname.startsWith("/diagnostics") ||
@@ -80,7 +78,6 @@ export function MobileShell() {
                 </WorkspaceRouteGate>
               }
             />
-            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         )}

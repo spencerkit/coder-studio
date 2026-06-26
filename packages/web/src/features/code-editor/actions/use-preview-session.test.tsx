@@ -213,4 +213,36 @@ describe("usePreviewSession", () => {
 
     unmount();
   });
+
+  it("allows scripts for markdown previews when the content contains mermaid fences", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: "session-1",
+        previewUrl: "/api/preview/session/session-1/README.md",
+        revision: 1,
+      }),
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result, unmount } = renderHook(() =>
+      usePreviewSession({
+        enabled: true,
+        workspaceId: "ws-1",
+        filePath: "README.md",
+        content: "```mermaid\ngraph TD\nA[README] --> B[Preview]\n```",
+        kind: "markdown",
+      })
+    );
+
+    await waitFor(() => expect(result.current.iframeSrc).toContain("rev=1"));
+    expect(result.current.allowScripts).toBe(true);
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      allowScripts: true,
+      kind: "markdown",
+    });
+
+    unmount();
+  });
 });

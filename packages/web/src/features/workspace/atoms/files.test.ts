@@ -36,13 +36,13 @@ describe("workspace editor tabs", () => {
       normalizeWorkspaceEditorTabs([
         { kind: "file", path: "src/app.tsx" },
         { kind: "browser", id: "dev-browser", url: null },
-        { kind: "file", path: "src/app.tsx" },
+        { kind: "file", path: "src/app.tsx", pinned: false },
         { kind: "browser", id: "dev-browser", url: null },
         { kind: "file", path: "" },
         { kind: "browser", id: "   " },
       ])
     ).toEqual([
-      { kind: "file", path: "src/app.tsx" },
+      { kind: "file", path: "src/app.tsx", pinned: true },
       {
         kind: "browser",
         id: "dev-browser",
@@ -54,6 +54,12 @@ describe("workspace editor tabs", () => {
         userAgentMode: "desktop",
       },
     ]);
+  });
+
+  it("preserves preview file tabs when they are already marked unpinned", () => {
+    expect(
+      normalizeWorkspaceEditorTabs([{ kind: "file", path: "src/preview.ts", pinned: false }])
+    ).toEqual([{ kind: "file", path: "src/preview.ts", pinned: false }]);
   });
 
   it("keeps duplicate same-url browser tabs when ids differ", () => {
@@ -130,6 +136,26 @@ describe("workspace editor tabs", () => {
         userAgentMode: "mobile",
       },
     ]);
+  });
+
+  it("deduplicates canvas tabs by sourcePath", () => {
+    expect(
+      normalizeWorkspaceEditorTabs([
+        {
+          kind: "canvas",
+          id: "canvas:.coder-studio/canvases/runtime-flow.csc",
+          title: "Runtime Flow",
+          sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+        },
+        {
+          kind: "canvas",
+          id: "canvas:legacy-id",
+          title: "Runtime Flow",
+          sourcePath: ".coder-studio/canvases/runtime-flow.csc",
+          canvasId: "canvas-1",
+        },
+      ])
+    ).toHaveLength(1);
   });
 
   it("creates browser editor tabs with normalized urls", () => {

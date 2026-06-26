@@ -1,4 +1,8 @@
-import type { WorkspaceMemoryEntry, WorkspaceMemoryType } from "@coder-studio/core";
+import type {
+  WorkspaceMemoryEntry,
+  WorkspaceMemoryStatus,
+  WorkspaceMemoryType,
+} from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useState } from "react";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
@@ -7,6 +11,7 @@ import { workspaceTopic } from "../../../ws";
 interface MemoryCreateInput {
   content: string;
   type: WorkspaceMemoryType;
+  status?: WorkspaceMemoryStatus;
 }
 
 interface MemoryUpdateInput extends MemoryCreateInput {

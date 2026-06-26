@@ -16,7 +16,11 @@ import {
   focusedEditorPaneIdAtomFamily,
 } from "../../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
-import { activeFilePathAtomFamily } from "../../workspace/atoms/files";
+import {
+  activeEditorTabAtomFamily,
+  activeFilePathAtomFamily,
+  openEditorTabsAtomFamily,
+} from "../../workspace/atoms/files";
 import { QuickOpen } from "./quick-open";
 
 function seedWorkspace(store: ReturnType<typeof createStore>) {
@@ -169,5 +173,56 @@ describe("QuickOpen", () => {
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(focusedEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/app.tsx");
+  });
+
+  it("opens .csc quick open selections as canvas tabs", async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      files: [
+        {
+          path: ".coder-studio/canvases/auth-gate.csc",
+          name: "auth-gate.csc",
+          kind: "file",
+        },
+      ],
+    });
+    const store = createStore();
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspace(store);
+    store.set(quickOpenOpenAtom, true);
+
+    render(
+      <Provider store={store}>
+        <QuickOpen />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Go to File|跳转到文件/i }), {
+      target: { value: "auth" },
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+
+    fireEvent.click(screen.getByRole("option", { name: /auth-gate\.csc/i }));
+
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      {
+        kind: "canvas",
+        id: "canvas:.coder-studio/canvases/auth-gate.csc",
+        title: "auth-gate",
+        sourcePath: ".coder-studio/canvases/auth-gate.csc",
+        canvasId: ".coder-studio/canvases/auth-gate.csc",
+      },
+    ]);
+    expect(store.get(activeEditorTabAtomFamily("ws-test"))).toEqual({
+      kind: "canvas",
+      id: "canvas:.coder-studio/canvases/auth-gate.csc",
+      title: "auth-gate",
+      sourcePath: ".coder-studio/canvases/auth-gate.csc",
+      canvasId: ".coder-studio/canvases/auth-gate.csc",
+    });
+    expect(store.get(quickOpenOpenAtom)).toBe(false);
   });
 });

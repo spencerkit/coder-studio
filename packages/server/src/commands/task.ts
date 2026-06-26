@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import type { RuntimeCommandContext } from "../runtime/context.js";
 import { discoverTasks } from "../tasks/discovery.js";
-import { type CommandContext, registerCommand } from "../ws/dispatch.js";
 
 const workspaceSchema = z.object({
   workspaceId: z.string(),
@@ -15,71 +16,92 @@ const taskRunSchema = z.object({
     .optional(),
 });
 
-function getWorkspaceOrThrow(ctx: CommandContext, workspaceId: string) {
-  const workspace = ctx.workspaceMgr.get(workspaceId);
+function getWorkspaceOrThrow(ctx: RuntimeCommandContext, workspaceId: string) {
+  const workspace = ctx.workspaceLookup.get(workspaceId);
   if (!workspace) {
     throw { code: "workspace_not_found", message: `Workspace not found: ${workspaceId}` };
   }
   return workspace;
 }
 
-registerCommand("task.discover", workspaceSchema, async (args, ctx) => {
-  const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
-  const result = await discoverTasks({ workspaceId: args.workspaceId, rootPath: workspace.path });
-  const tasks = ctx.taskMgr.setDiscoveredTasks(args.workspaceId, result.tasks);
-  return { tasks, warnings: result.warnings };
-});
-
-registerCommand("task.list", workspaceSchema, async (args, ctx) => {
-  getWorkspaceOrThrow(ctx, args.workspaceId);
-  const existing = ctx.taskMgr.list(args.workspaceId);
-  if (existing.length > 0) {
-    return existing;
-  }
-
-  const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
-  const result = await discoverTasks({ workspaceId: args.workspaceId, rootPath: workspace.path });
-  return ctx.taskMgr.setDiscoveredTasks(args.workspaceId, result.tasks);
-});
-
-registerCommand("task.run", taskRunSchema, async (args, ctx) => {
-  const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
-  if (ctx.taskMgr.list(args.workspaceId).length === 0) {
+registerRuntimeCommand("task.discover", workspaceSchema, {
+  resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+  handler: async (args, ctx) => {
+    const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
     const result = await discoverTasks({ workspaceId: args.workspaceId, rootPath: workspace.path });
-    ctx.taskMgr.setDiscoveredTasks(args.workspaceId, result.tasks);
-  }
-
-  return ctx.taskMgr.run({
-    workspaceId: args.workspaceId,
-    workspacePath: workspace.path,
-    taskId: args.taskId,
-    themeBackground: args.themeBackground,
-  });
+    const tasks = ctx.taskMgr.setDiscoveredTasks(args.workspaceId, result.tasks);
+    return { tasks, warnings: result.warnings };
+  },
 });
 
-registerCommand("task.rerun", taskRunSchema, async (args, ctx) => {
-  const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
-  return ctx.taskMgr.rerun({
-    workspaceId: args.workspaceId,
-    workspacePath: workspace.path,
-    taskId: args.taskId,
-    themeBackground: args.themeBackground,
-  });
+registerRuntimeCommand("task.list", workspaceSchema, {
+  resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+  handler: async (args, ctx) => {
+    getWorkspaceOrThrow(ctx, args.workspaceId);
+    const existing = ctx.taskMgr.list(args.workspaceId);
+    if (existing.length > 0) {
+      return existing;
+    }
+
+    const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+    const result = await discoverTasks({ workspaceId: args.workspaceId, rootPath: workspace.path });
+    return ctx.taskMgr.setDiscoveredTasks(args.workspaceId, result.tasks);
+  },
 });
 
-registerCommand(
+registerRuntimeCommand("task.run", taskRunSchema, {
+  resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+  handler: async (args, ctx) => {
+    const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+    if (ctx.taskMgr.list(args.workspaceId).length === 0) {
+      const result = await discoverTasks({
+        workspaceId: args.workspaceId,
+        rootPath: workspace.path,
+      });
+      ctx.taskMgr.setDiscoveredTasks(args.workspaceId, result.tasks);
+    }
+
+    return ctx.taskMgr.run({
+      workspaceId: args.workspaceId,
+      workspacePath: workspace.path,
+      taskId: args.taskId,
+      themeBackground: args.themeBackground,
+    });
+  },
+});
+
+registerRuntimeCommand("task.rerun", taskRunSchema, {
+  resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+  handler: async (args, ctx) => {
+    const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+    return ctx.taskMgr.rerun({
+      workspaceId: args.workspaceId,
+      workspacePath: workspace.path,
+      taskId: args.taskId,
+      themeBackground: args.themeBackground,
+    });
+  },
+});
+
+registerRuntimeCommand(
   "task.stop",
   z.object({
     workspaceId: z.string(),
     runId: z.string(),
   }),
-  async (args, ctx) => {
-    getWorkspaceOrThrow(ctx, args.workspaceId);
-    return ctx.taskMgr.stop({ workspaceId: args.workspaceId, runId: args.runId });
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      getWorkspaceOrThrow(ctx, args.workspaceId);
+      return ctx.taskMgr.stop({ workspaceId: args.workspaceId, runId: args.runId });
+    },
   }
 );
 
-registerCommand("task.history", workspaceSchema, async (args, ctx) => {
-  getWorkspaceOrThrow(ctx, args.workspaceId);
-  return ctx.taskMgr.history(args.workspaceId);
+registerRuntimeCommand("task.history", workspaceSchema, {
+  resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+  handler: async (args, ctx) => {
+    getWorkspaceOrThrow(ctx, args.workspaceId);
+    return ctx.taskMgr.history(args.workspaceId);
+  },
 });

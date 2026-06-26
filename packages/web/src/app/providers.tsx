@@ -663,6 +663,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         setAuthEnabled(Boolean(data.authEnabled));
         store.set(authenticatedAtom, Boolean(data.authenticated) || data.authEnabled === false);
       } catch {
+        setAuthEnabled(false);
         store.set(authenticatedAtom, false);
       }
     };
@@ -1314,10 +1315,16 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
         return;
       }
 
+      const normalizedUiState = patch.uiState
+        ? normalizeWorkspaceEditorUiState({
+            ...(existing?.uiState ?? {}),
+            ...patch.uiState,
+          } as Workspace["uiState"])
+        : undefined;
       const normalizedPatch: Partial<Workspace> = patch.uiState
         ? {
             ...patch,
-            uiState: normalizeWorkspaceEditorUiState(patch.uiState),
+            uiState: normalizedUiState,
           }
         : patch;
 

@@ -14,17 +14,17 @@ import {
   removeWorktree,
   resolveWorktreePath,
 } from "../git/worktree.js";
-import type { CommandContext } from "../ws/dispatch.js";
-import { registerCommand } from "../ws/dispatch.js";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import type { RuntimeCommandContext } from "../runtime/context.js";
 import { emitGitStateChanged } from "./git-events.js";
 
 async function findRelatedWorkspaceIds(
-  ctx: CommandContext,
+  ctx: RuntimeCommandContext,
   workspacePath: string
 ): Promise<string[]> {
   const targetCommonDir = await getGitCommonDirPath(workspacePath);
   const relatedWorkspaceIds = await Promise.all(
-    ctx.workspaceMgr.list().map(async (workspace) => {
+    ctx.workspaceLookup.list().map(async (workspace) => {
       try {
         const commonDir = await getGitCommonDirPath(workspace.path);
         return commonDir === targetCommonDir ? workspace.id : null;
@@ -37,126 +37,144 @@ async function findRelatedWorkspaceIds(
   return relatedWorkspaceIds.filter((workspaceId): workspaceId is string => Boolean(workspaceId));
 }
 
-function emitWorktreeChangedForWorkspaceIds(ctx: CommandContext, workspaceIds: string[]) {
+function emitWorktreeChangedForWorkspaceIds(ctx: RuntimeCommandContext, workspaceIds: string[]) {
   for (const workspaceId of workspaceIds) {
-    if (!ctx.workspaceMgr.get(workspaceId)) {
+    if (!ctx.workspaceLookup.get(workspaceId)) {
       continue;
     }
-    emitGitStateChanged(ctx, workspaceId, { worktreeChanged: true });
+    emitGitStateChanged(ctx as never, workspaceId, { worktreeChanged: true });
   }
 }
 
-function isWorkspaceOpenForPath(ctx: CommandContext, workspacePath: string): boolean {
+function isWorkspaceOpenForPath(ctx: RuntimeCommandContext, workspacePath: string): boolean {
   const targetPath = path.resolve(workspacePath);
-  return ctx.workspaceMgr
+  return ctx.workspaceLookup
     .list()
     .some((openWorkspace) => path.resolve(openWorkspace.path) === targetPath);
 }
 
 // worktree.list
-registerCommand("worktree.list", z.object({ workspaceId: z.string() }), async (args, ctx) => {
-  const workspace = ctx.workspaceMgr.get(args.workspaceId);
-  if (!workspace) {
-    throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-  }
-  return { worktrees: await listWorktrees(workspace.path) };
-});
-
-// worktree.status
-registerCommand(
-  "worktree.status",
-  z.object({ workspaceId: z.string(), worktreePath: z.string() }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
+registerRuntimeCommand("worktree.list", z.object({ workspaceId: z.string() }), {
+  resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+  handler: async (args, ctx) => {
+    const workspace = ctx.workspaceLookup.get(args.workspaceId);
     if (!workspace) {
       throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
     }
+    return { worktrees: await listWorktrees(workspace.path) };
+  },
+});
 
-    const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
-    return { status: await getWorktreeStatus(worktreePath) };
+// worktree.status
+registerRuntimeCommand(
+  "worktree.status",
+  z.object({ workspaceId: z.string(), worktreePath: z.string() }),
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
+
+      const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
+      return { status: await getWorktreeStatus(worktreePath) };
+    },
   }
 );
 
 // worktree.diff
-registerCommand(
+registerRuntimeCommand(
   "worktree.diff",
   z.object({
     workspaceId: z.string(),
     worktreePath: z.string(),
     staged: z.boolean().optional().default(false),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
-    return { diff: await getWorktreeDiff(worktreePath, args.staged) };
+      const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
+      return { diff: await getWorktreeDiff(worktreePath, args.staged) };
+    },
   }
 );
 
 // worktree.tree
-registerCommand(
+registerRuntimeCommand(
   "worktree.tree",
   z.object({ workspaceId: z.string(), worktreePath: z.string() }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
-    return { tree: await getWorktreeTree(worktreePath) };
+      const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
+      return { tree: await getWorktreeTree(worktreePath) };
+    },
   }
 );
 
 // worktree.create
-registerCommand(
+registerRuntimeCommand(
   "worktree.create",
   z.object({
     workspaceId: z.string(),
     branch: z.string(),
     path: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
-    const worktree = await createWorktree(workspace.path, args.branch, args.path);
-    emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
-    return { worktree };
+      const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
+      const worktree = await createWorktree(workspace.path, args.branch, args.path);
+      emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
+      return { worktree };
+    },
   }
 );
 
 // worktree.remove
-registerCommand(
+registerRuntimeCommand(
   "worktree.remove",
   z.object({
     workspaceId: z.string(),
     worktreePath: z.string(),
     force: z.boolean().optional().default(false),
   }),
-  async (args, ctx) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
-    const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
-    if (isWorkspaceOpenForPath(ctx, worktreePath)) {
-      throw {
-        code: "worktree_in_use",
-        message: `Cannot remove an open worktree workspace: ${worktreePath}`,
-      };
-    }
+      const relatedWorkspaceIds = await findRelatedWorkspaceIds(ctx, workspace.path);
+      const worktreePath = await resolveWorktreePath(workspace.path, args.worktreePath);
+      if (isWorkspaceOpenForPath(ctx, worktreePath)) {
+        throw {
+          code: "worktree_in_use",
+          message: `Cannot remove an open worktree workspace: ${worktreePath}`,
+        };
+      }
 
-    await removeWorktree(workspace.path, worktreePath, args.force);
-    emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
-    return {};
+      await removeWorktree(workspace.path, worktreePath, args.force);
+      emitWorktreeChangedForWorkspaceIds(ctx, relatedWorkspaceIds);
+      return {};
+    },
   }
 );

@@ -20,6 +20,9 @@ describe("MobilePageHeader", () => {
     expect(header).toHaveClass("page-header--secondary");
     expect(header).toHaveAttribute("data-level", "secondary");
     expect(leading).not.toBeNull();
+    const backButton = within(leading as HTMLElement).getByRole("button", { name: "Back" });
+    expect(backButton).toBeInTheDocument();
+    expect(within(backButton).queryByText("Back")).toBeNull();
     expect(within(leading as HTMLElement).getByText("Open Workspace")).toBeInTheDocument();
     expect(screen.queryByText("WORKSPACE")).not.toBeInTheDocument();
   });

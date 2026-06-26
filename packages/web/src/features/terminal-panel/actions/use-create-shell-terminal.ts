@@ -29,7 +29,7 @@ export function useCreateShellTerminal(workspaceId: string | null) {
   const themeBackground = useTerminalThemeBackground();
 
   return {
-    async createShellTerminal(args: { cwdPath?: string } = {}) {
+    async createShellTerminal(args: { cwdPath?: string; profileId?: string } = {}) {
       if (!workspaceId) {
         pushToast({
           kind: "warning",
@@ -43,6 +43,7 @@ export function useCreateShellTerminal(workspaceId: string | null) {
         const result = await dispatch<TerminalDto>("terminal.create", {
           workspaceId,
           cwdPath: args.cwdPath,
+          profileId: args.profileId,
           themeBackground,
         });
 

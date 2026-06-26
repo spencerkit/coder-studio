@@ -120,5 +120,6 @@ describe("session hydrate restart", () => {
         state: "ended",
       }),
     ]);
+    expect(server.__test__?.sessionTokenRepo.listBySessionId("sess-hydrated")).toEqual([]);
   });
 });

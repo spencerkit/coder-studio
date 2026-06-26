@@ -75,4 +75,52 @@ describe("WorkspaceHistoryStore", () => {
     });
     expect(history.find((entry) => entry.path === "/repo/kept")).toBeUndefined();
   });
+
+  it("removes a stored history entry by path while preserving the remaining order", () => {
+    store.recordOpen("/repo/alpha", 100);
+    store.recordOpen("/repo/beta", 200);
+    store.recordOpen("/repo/gamma", 300);
+
+    const nextHistory = store.remove("/repo/beta");
+
+    expect(nextHistory).toEqual([
+      {
+        path: "/repo/gamma",
+        name: "gamma",
+        lastOpenedAt: 300,
+      },
+      {
+        path: "/repo/alpha",
+        name: "alpha",
+        lastOpenedAt: 100,
+      },
+    ]);
+    expect(store.list()).toEqual(nextHistory);
+  });
+
+  it("returns the current history unchanged when removing a path that is not present", () => {
+    store.recordOpen("/repo/alpha", 100);
+
+    const nextHistory = store.remove("/repo/missing");
+
+    expect(nextHistory).toEqual([
+      {
+        path: "/repo/alpha",
+        name: "alpha",
+        lastOpenedAt: 100,
+      },
+    ]);
+    expect(store.list()).toEqual(nextHistory);
+  });
+
+  it("clears the stored history and removes the persisted key", () => {
+    store.recordOpen("/repo/alpha", 100);
+    store.recordOpen("/repo/beta", 200);
+
+    const nextHistory = store.clear();
+
+    expect(nextHistory).toEqual([]);
+    expect(store.list()).toEqual([]);
+    expect(settingsRepo.get(WORKSPACE_HISTORY_KEY)).toBeUndefined();
+  });
 });

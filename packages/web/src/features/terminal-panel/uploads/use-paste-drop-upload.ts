@@ -2,6 +2,7 @@ import { atom, useAtom, useSetAtom, useStore } from "jotai";
 import { atomFamily } from "jotai-family";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../../lib/i18n";
+import { getSkillPathDragPayload, hasSkillPathDragType } from "../../../lib/skill-path-drag";
 import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
@@ -332,6 +333,35 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
     [pushToast, runSequence, t, workspaceId]
   );
 
+  const handleSkillPathDrop = useCallback(
+    async (dataTransfer: DataTransfer | null | undefined) => {
+      const payload = getSkillPathDragPayload(dataTransfer);
+      if (!payload) {
+        pushToast({
+          kind: "error",
+          title: t("terminal.upload.drop_failed"),
+          body: t("terminal.upload.drop_read_failed"),
+          duration: 3_000,
+        });
+        return;
+      }
+
+      await runSequence(async () => `${quoteShellSingle(payload.absolutePath)} `, {
+        trackBusy: false,
+        onError: (error) => {
+          console.debug("Skill path drop failed:", error);
+          pushToast({
+            kind: "error",
+            title: t("terminal.upload.drop_failed"),
+            body: t("terminal.upload.drop_insert_failed"),
+            duration: 3_000,
+          });
+        },
+      });
+    },
+    [pushToast, runSequence, t]
+  );
+
   const handleClipboardPaste = useCallback(async () => {
     if (!enabled) {
       return;
@@ -437,17 +467,28 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
         return;
       }
 
-      if (!hasWorkspacePathDragType(event.dataTransfer)) {
+      if (
+        !hasWorkspacePathDragType(event.dataTransfer) &&
+        !hasSkillPathDragType(event.dataTransfer)
+      ) {
         return;
       }
 
       event.preventDefault();
       event.stopPropagation();
-      void handleWorkspacePathDrop(event.dataTransfer);
+      if (hasWorkspacePathDragType(event.dataTransfer)) {
+        void handleWorkspacePathDrop(event.dataTransfer);
+        return;
+      }
+
+      void handleSkillPathDrop(event.dataTransfer);
     };
 
     const onDragOver = (event: DragEvent) => {
-      if (hasWorkspacePathDragType(event.dataTransfer)) {
+      if (
+        hasWorkspacePathDragType(event.dataTransfer) ||
+        hasSkillPathDragType(event.dataTransfer)
+      ) {
         event.preventDefault();
         return;
       }
@@ -467,7 +508,14 @@ export function usePasteDropUpload(opts: Options): PasteDropUploadActions {
       element.removeEventListener("drop", onDrop, { capture: true });
       element.removeEventListener("dragover", onDragOver, { capture: true });
     };
-  }, [collectPendingFiles, containerRef, enabled, handleFiles, handleWorkspacePathDrop]);
+  }, [
+    collectPendingFiles,
+    containerRef,
+    enabled,
+    handleFiles,
+    handleSkillPathDrop,
+    handleWorkspacePathDrop,
+  ]);
 
   return {
     busy,

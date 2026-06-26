@@ -125,7 +125,7 @@ describe("MonitoringContent", () => {
 
     expect(await screen.findByText("Host overview")).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { level: 1, name: "Performance monitoring" })
+      screen.queryByRole("heading", { level: 3, name: "Performance monitoring" })
     ).not.toBeInTheDocument();
   });
 
@@ -195,7 +195,7 @@ describe("MonitoringContent", () => {
 
     expect(await screen.findByTestId("monitoring-page")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Performance monitoring" })
+      screen.getByRole("heading", { level: 3, name: "Performance monitoring" })
     ).toBeInTheDocument();
   });
 

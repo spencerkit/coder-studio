@@ -14,11 +14,13 @@ import {
 import { paneLayoutAtomFamily } from "../../agent-panes/atoms/pane-layout";
 import { pendingEditorNavigationAtomFamily } from "../../code-editor/atoms";
 import {
+  activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
   loadedDirsAtomFamily,
   openEditorPathsAtomFamily,
+  openEditorTabsAtomFamily,
   openFilesAtomFamily,
 } from "../atoms";
 import { useFileActions } from "./use-file-actions";
@@ -397,6 +399,41 @@ describe("useFileActions rename behavior", () => {
 
     expect(store.get(activeEditorPaneIdAtomFamily("ws-test"))).toBeNull();
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe("src/standalone.ts");
+  });
+
+  it("opens .csc explorer files as canvas tabs", async () => {
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    store.set(fileTreeAtomFamily("ws-test"), new Map([[".", []]]));
+
+    const { result } = renderHook(() => useFileActions({ workspaceId: "ws-test" }), {
+      wrapper: wrapperFor(store),
+    });
+
+    await act(async () => {
+      result.current.handleSelectFile(".coder-studio/canvases/auth-gate.csc");
+      await Promise.resolve();
+    });
+
+    expect(store.get(activeFilePathAtomFamily("ws-test"))).toBeNull();
+    expect(store.get(openEditorPathsAtomFamily("ws-test"))).toEqual([]);
+    expect(store.get(openEditorTabsAtomFamily("ws-test"))).toEqual([
+      {
+        kind: "canvas",
+        id: "canvas:.coder-studio/canvases/auth-gate.csc",
+        title: "auth-gate",
+        sourcePath: ".coder-studio/canvases/auth-gate.csc",
+        canvasId: ".coder-studio/canvases/auth-gate.csc",
+      },
+    ]);
+    expect(store.get(activeEditorTabAtomFamily("ws-test"))).toEqual({
+      kind: "canvas",
+      id: "canvas:.coder-studio/canvases/auth-gate.csc",
+      title: "auth-gate",
+      sourcePath: ".coder-studio/canvases/auth-gate.csc",
+      canvasId: ".coder-studio/canvases/auth-gate.csc",
+    });
   });
 
   it("preserves loaded expanded descendants while refreshing the root tree", async () => {

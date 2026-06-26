@@ -288,15 +288,15 @@
   --z-local-overlay: 240;
   --z-sheet-backdrop: 300;
   --z-sheet: 310;
-  --z-modal-backdrop: 320;
-  --z-modal: 330;
+  --z-modal-backdrop: 380;
+  --z-modal: 390;
   --z-drawer-backdrop: 340;
   --z-drawer: 350;
   --z-workbench-backdrop: 360;
   --z-workbench: 370;
-  --z-popover: 380;
-  --z-tooltip: 390;
-  --z-toast: 400;
+  --z-popover: 400;
+  --z-tooltip: 410;
+  --z-toast: 420;
 
   /* ========== Visual稿别名 (short aliases) ========== */
   --text: var(--text-primary);

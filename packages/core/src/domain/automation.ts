@@ -1,5 +1,7 @@
 import { listUiActionCapabilities } from "./ui-actions.js";
 
+export const AUTOMATION_PERMISSIONS_ENV = "CODER_STUDIO_AUTOMATION_PERMISSIONS";
+
 export const DEFAULT_AGENT_AUTOMATION_PERMISSIONS = [
   "workspace:read",
   "session:read",
@@ -14,6 +16,16 @@ export const DEFAULT_AGENT_AUTOMATION_PERMISSIONS = [
 
 export type AutomationPermission = (typeof DEFAULT_AGENT_AUTOMATION_PERMISSIONS)[number];
 export type AutomationRiskLevel = "read" | "write" | "dangerous";
+
+export const SCOPED_SESSION_AUTOMATION_PERMISSIONS = [
+  "session:read",
+  "terminal:read",
+  "git:read",
+  "memory:read",
+  "memory:write",
+  "ui:navigate",
+  "ui:command",
+] as const satisfies readonly AutomationPermission[];
 
 export interface IdentifyInput {
   env?: Record<string, string | undefined>;
@@ -138,13 +150,14 @@ const MVP_CAPABILITIES: AutomationCapability[] = [
     description: "Create a workspace memory entry.",
     inputSchema: {
       workspaceId: "string",
-      type: "feature | todo | bugfix | project | note",
+      type: "wiki | issue | todo | note",
       content: "string",
+      status: "not_started | in_progress | pending_verification | completed optional",
     },
     output: "Created workspace memory entry as JSON.",
     permissions: ["memory:write"],
     riskLevel: "write",
-    examples: ['coder-studio memory add --workspace ws_123 --type project --content "..." --json'],
+    examples: ['coder-studio memory add --workspace ws_123 --type wiki --content "..." --json'],
     available: true,
   },
   {
@@ -154,8 +167,9 @@ const MVP_CAPABILITIES: AutomationCapability[] = [
     inputSchema: {
       workspaceId: "string",
       id: "string",
-      type: "feature | todo | bugfix | project | note optional",
+      type: "wiki | issue | todo | note optional",
       content: "string optional",
+      status: "not_started | in_progress | pending_verification | completed optional",
     },
     output: "Updated workspace memory entry as JSON.",
     permissions: ["memory:write"],
@@ -176,11 +190,48 @@ const MVP_CAPABILITIES: AutomationCapability[] = [
   },
 ];
 
+const AUTOMATION_PERMISSION_SET = new Set<AutomationPermission>(
+  DEFAULT_AGENT_AUTOMATION_PERMISSIONS
+);
+
+export function parseAutomationPermissionsEnv(value?: string): AutomationPermission[] {
+  if (!value) {
+    return [];
+  }
+
+  const permissions: AutomationPermission[] = [];
+  const seen = new Set<AutomationPermission>();
+
+  for (const token of value.split(",")) {
+    const normalized = token.trim();
+    if (!normalized) {
+      return [];
+    }
+
+    if (!AUTOMATION_PERMISSION_SET.has(normalized as AutomationPermission)) {
+      return [];
+    }
+
+    const permission = normalized as AutomationPermission;
+    if (seen.has(permission)) {
+      continue;
+    }
+
+    seen.add(permission);
+    permissions.push(permission);
+  }
+
+  return permissions;
+}
+
 export function buildIdentifyResult(input: IdentifyInput = {}): IdentifyResult {
   const env = input.env ?? process.env;
   if (env.CODER_STUDIO !== "1") {
     return { insideCoderStudio: false };
   }
+
+  const scopedPermissionsEnv = env[AUTOMATION_PERMISSIONS_ENV];
+  const scopedPermissions = parseAutomationPermissionsEnv(scopedPermissionsEnv);
 
   return {
     insideCoderStudio: true,
@@ -190,7 +241,8 @@ export function buildIdentifyResult(input: IdentifyInput = {}): IdentifyResult {
     providerId: env.CODER_STUDIO_PROVIDER_ID,
     cwd: input.cwd ?? process.cwd(),
     apiUrl: env.CODER_STUDIO_API_URL,
-    permissions: DEFAULT_AGENT_AUTOMATION_PERMISSIONS,
+    permissions:
+      scopedPermissionsEnv === undefined ? DEFAULT_AGENT_AUTOMATION_PERMISSIONS : scopedPermissions,
   };
 }
 

@@ -1,5 +1,6 @@
-import { FileCode2, Globe, X } from "lucide-react";
+import { FileCode2, Globe, PanelsTopLeft, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "../../../../lib/i18n";
 import type { OpenFile, WorkspaceEditorTab } from "../../../workspace/atoms";
 
@@ -12,8 +13,13 @@ interface CodeEditorTabsHeaderProps {
   emptyLabel?: string;
   onActivateEditorTab?: (tab: WorkspaceEditorTab) => void;
   onActivateOpenFile: (path: string) => void;
+  onCloseAllEditorTabs?: () => void;
   onCloseEditorTab?: (tab: WorkspaceEditorTab) => void;
+  onCloseEditorTabsToRight?: (tab: WorkspaceEditorTab) => void;
   onCloseOpenFilePath?: (path: string) => void;
+  onCloseOtherEditorTabs?: (tab: WorkspaceEditorTab) => void;
+  onCloseSavedEditorTabs?: () => void;
+  onKeepOpenEditorTab?: (tab: WorkspaceEditorTab) => void;
   openEditorTabs?: WorkspaceEditorTab[];
   openEditorPaths: string[];
   openFiles: Record<string, OpenFile>;
@@ -90,7 +96,28 @@ function isSameEditorTab(left: WorkspaceEditorTab | null | undefined, right: Wor
     return left.path === right.path;
   }
 
+  if (left.kind === "canvas" && right.kind === "canvas") {
+    if (left.canvasId && right.canvasId) {
+      return left.canvasId === right.canvasId;
+    }
+
+    return left.sourcePath === right.sourcePath;
+  }
+
   return false;
+}
+
+interface TabContextMenuState {
+  tab: WorkspaceEditorTab;
+  x: number;
+  y: number;
+}
+
+interface TabContextMenuItem {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  onSelect: () => void;
 }
 
 export function CodeEditorTabsHeader({
@@ -102,8 +129,13 @@ export function CodeEditorTabsHeader({
   emptyLabel,
   onActivateEditorTab,
   onActivateOpenFile,
+  onCloseAllEditorTabs,
   onCloseEditorTab,
+  onCloseEditorTabsToRight,
   onCloseOpenFilePath,
+  onCloseOtherEditorTabs,
+  onCloseSavedEditorTabs,
+  onKeepOpenEditorTab,
   openEditorTabs,
   openEditorPaths,
   openFiles,
@@ -113,6 +145,8 @@ export function CodeEditorTabsHeader({
   workspaceRootPath,
 }: CodeEditorTabsHeaderProps) {
   const t = useTranslation();
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [contextMenu, setContextMenu] = useState<TabContextMenuState | null>(null);
   const visibleEditorTabs =
     openEditorTabs ?? openEditorPaths.map((path): WorkspaceEditorTab => ({ kind: "file", path }));
   const fileTabPaths = visibleEditorTabs.flatMap((tab) => (tab.kind === "file" ? [tab.path] : []));
@@ -130,6 +164,128 @@ export function CodeEditorTabsHeader({
   ]
     .filter(Boolean)
     .join(" ");
+  const openContextMenu = useCallback((event: MouseEvent<HTMLElement>, tab: WorkspaceEditorTab) => {
+    event.preventDefault();
+    setContextMenu({ tab, x: event.clientX, y: event.clientY });
+  }, []);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const contextMenuItems = useMemo<TabContextMenuItem[]>(() => {
+    if (!contextMenu) {
+      return [];
+    }
+
+    const tab = contextMenu.tab;
+    const items: TabContextMenuItem[] = [];
+    if (tab.kind === "file" && tab.pinned === false && onKeepOpenEditorTab) {
+      items.push({
+        id: "keep-open",
+        label: t("code_editor.keep_tab_open"),
+        onSelect: () => onKeepOpenEditorTab(tab),
+      });
+    }
+
+    items.push(
+      {
+        id: "close",
+        label: t("action.close"),
+        disabled: !onCloseEditorTab && !(tab.kind === "file" && onCloseOpenFilePath),
+        onSelect: () => {
+          if (onCloseEditorTab) {
+            onCloseEditorTab(tab);
+          } else if (tab.kind === "file") {
+            onCloseOpenFilePath?.(tab.path);
+          }
+        },
+      },
+      {
+        id: "close-others",
+        label: t("code_editor.close_other_tabs"),
+        disabled: !onCloseOtherEditorTabs,
+        onSelect: () => onCloseOtherEditorTabs?.(tab),
+      },
+      {
+        id: "close-to-right",
+        label: t("code_editor.close_tabs_to_right"),
+        disabled: !onCloseEditorTabsToRight,
+        onSelect: () => onCloseEditorTabsToRight?.(tab),
+      },
+      {
+        id: "close-saved",
+        label: t("code_editor.close_saved_tabs"),
+        disabled: !onCloseSavedEditorTabs,
+        onSelect: () => onCloseSavedEditorTabs?.(),
+      },
+      {
+        id: "close-all",
+        label: t("action.close_all"),
+        disabled: !onCloseAllEditorTabs,
+        onSelect: () => onCloseAllEditorTabs?.(),
+      }
+    );
+
+    return items;
+  }, [
+    contextMenu,
+    onCloseAllEditorTabs,
+    onCloseEditorTab,
+    onCloseEditorTabsToRight,
+    onCloseOpenFilePath,
+    onCloseOtherEditorTabs,
+    onCloseSavedEditorTabs,
+    onKeepOpenEditorTab,
+    t,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!contextMenu || !menuRef.current) {
+      return;
+    }
+
+    const rect = menuRef.current.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(8, contextMenu.x),
+      Math.max(8, window.innerWidth - rect.width - 8)
+    );
+    const top = Math.min(
+      Math.max(8, contextMenu.y),
+      Math.max(8, window.innerHeight - rect.height - 8)
+    );
+    menuRef.current.style.left = `${left}px`;
+    menuRef.current.style.top = `${top}px`;
+    menuRef.current.focus();
+  }, [contextMenu, contextMenuItems]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      if (!(event.target instanceof Node)) {
+        return;
+      }
+
+      if (menuRef.current?.contains(event.target)) {
+        return;
+      }
+
+      closeContextMenu();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeContextMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeContextMenu, contextMenu]);
 
   return (
     <header className={headerClassName}>
@@ -172,6 +328,7 @@ export function CodeEditorTabsHeader({
                       className={tabClassName}
                       title={tab.url ?? t("dev_browser.title")}
                       onClick={() => onActivateEditorTab?.(tab)}
+                      onContextMenu={(event) => openContextMenu(event, tab)}
                     >
                       <span className="code-editor-tab__icon" aria-hidden="true">
                         <Globe size={14} />
@@ -180,6 +337,66 @@ export function CodeEditorTabsHeader({
                         <span className="code-editor-tab__name">
                           {tab.url ?? t("dev_browser.title")}
                         </span>
+                      </span>
+                    </button>
+                    {onCloseEditorTab ? (
+                      <button
+                        type="button"
+                        className="code-editor-tab__close"
+                        aria-label={closeLabel}
+                        title={closeLabel}
+                        onClick={handleCloseTab}
+                      >
+                        <X size={13} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              if (tab.kind === "canvas") {
+                const isActive = isSameEditorTab(activeEditorTab, tab);
+                const tabItemClassName = [
+                  "code-editor-tab-item",
+                  "code-editor-tab-item--canvas",
+                  isActive ? "code-editor-tab-item--active" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                const tabClassName = [
+                  "code-editor-tab",
+                  "code-editor-tab--canvas",
+                  isActive ? "code-editor-tab--active" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                const closeLabel = t("code_editor.close_editor_tab", { name: tab.title });
+                const handleCloseTab = (event: MouseEvent<HTMLButtonElement>) => {
+                  event.stopPropagation();
+                  onCloseEditorTab?.(tab);
+                };
+
+                return (
+                  <div key={tab.id} className={tabItemClassName}>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={tabClassName}
+                      title={tab.sourcePath}
+                      onClick={() => onActivateEditorTab?.(tab)}
+                      onContextMenu={(event) => openContextMenu(event, tab)}
+                    >
+                      <span className="code-editor-tab__icon" aria-hidden="true">
+                        <PanelsTopLeft size={14} />
+                      </span>
+                      <span className="code-editor-tab__copy">
+                        <span className="code-editor-tab__name">{tab.title}</span>
+                        {tab.artifactType ? (
+                          <span className="code-editor-tab__folder">
+                            {tab.artifactType === "architecture_canvas" ? "ARCH" : "REPORT"}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
                     {onCloseEditorTab ? (
@@ -206,12 +423,14 @@ export function CodeEditorTabsHeader({
                 ? isSameEditorTab(activeEditorTab, tab)
                 : path === activeFilePath;
               const isDirty = isDirtyFile(openFile);
+              const isPreview = tab.pinned === false;
               const parentFolder =
                 (fileNameCounts[fileName] ?? 0) > 1 ? getParentFolderName(path) : null;
               const tabItemClassName = [
                 "code-editor-tab-item",
                 isActive ? "code-editor-tab-item--active" : "",
                 isDirty ? "code-editor-tab-item--dirty" : "",
+                isPreview ? "code-editor-tab-item--preview" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -219,6 +438,7 @@ export function CodeEditorTabsHeader({
                 "code-editor-tab",
                 isActive ? "code-editor-tab--active" : "",
                 isDirty ? "code-editor-tab--dirty" : "",
+                isPreview ? "code-editor-tab--preview" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -232,6 +452,14 @@ export function CodeEditorTabsHeader({
 
                 onCloseOpenFilePath?.(path);
               };
+              const handleDoubleClickTab = (event: MouseEvent<HTMLButtonElement>) => {
+                if (!isPreview || !onKeepOpenEditorTab) {
+                  return;
+                }
+
+                event.preventDefault();
+                onKeepOpenEditorTab(tab);
+              };
 
               return (
                 <div key={path} className={tabItemClassName}>
@@ -241,9 +469,11 @@ export function CodeEditorTabsHeader({
                     aria-selected={isActive}
                     className={tabClassName}
                     title={fullPath}
+                    onContextMenu={(event) => openContextMenu(event, tab)}
                     onClick={() =>
                       onActivateEditorTab ? onActivateEditorTab(tab) : onActivateOpenFile(path)
                     }
+                    onDoubleClick={handleDoubleClickTab}
                   >
                     <span className="code-editor-tab__icon" aria-hidden="true">
                       {getFileTypeLabel(path)}
@@ -319,6 +549,42 @@ export function CodeEditorTabsHeader({
             </div>
           ) : null}
         </nav>
+      ) : null}
+      {contextMenu ? (
+        <div className="file-context-menu-layer">
+          <div
+            ref={menuRef}
+            role="menu"
+            tabIndex={-1}
+            aria-label={t("code_editor.editor_tab_actions")}
+            className="file-context-menu code-editor-tab-context-menu"
+            style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y }}
+          >
+            <div className="file-context-menu__section">
+              <div className="file-context-menu__section-items">
+                {contextMenuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="menuitem"
+                    className="file-context-menu__item"
+                    disabled={item.disabled}
+                    onClick={() => {
+                      if (item.disabled) {
+                        return;
+                      }
+
+                      item.onSelect();
+                      closeContextMenu();
+                    }}
+                  >
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </header>
   );

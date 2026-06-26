@@ -9,8 +9,8 @@ import type {
 } from "@coder-studio/core";
 import { Topics } from "@coder-studio/core";
 import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
+import type { RuntimeHostBridge } from "../runtime/contract.js";
 import type { PtyHost, PtyProcess } from "../terminal/types.js";
-import type { Broadcaster } from "../ws/hub.js";
 import { SYSTEM_DEPENDENCY_DEFINITIONS } from "./definitions.js";
 import { detectSystemDependencyInteraction } from "./interaction-detector.js";
 import { buildSystemDependencyRuntimeStatus } from "./runtime-status.js";
@@ -25,7 +25,8 @@ interface InstallSession {
 
 export interface SystemDependencyInstallManagerDeps extends RuntimeStatusDeps {
   ptyHost: PtyHost;
-  broadcaster: Pick<Broadcaster, "sendToClient">;
+  hostBridge?: Pick<RuntimeHostBridge, "sendToClient">;
+  broadcaster?: { sendToClient(clientId: string, payload: unknown): boolean };
 }
 
 interface InFlightStart {
@@ -380,7 +381,7 @@ export class SystemDependencyInstallManager {
 
     session.seq += 1;
     if (session.routeClientId) {
-      this.deps.broadcaster.sendToClient(session.routeClientId, {
+      this.getSendToClient()(session.routeClientId, {
         kind: "event",
         topic: Topics.systemDependencyInstallOutput(jobId),
         seq: session.seq,
@@ -403,6 +404,12 @@ export class SystemDependencyInstallManager {
     if (installStep) {
       installStep.stdoutExcerpt = excerpt(chunk);
     }
+  }
+
+  private getSendToClient(): (clientId: string, payload: unknown) => boolean {
+    return (
+      this.deps.hostBridge?.sendToClient ?? this.deps.broadcaster?.sendToClient ?? (() => false)
+    );
   }
 
   private async handleExit(jobId: string, event: PtyExitEvent): Promise<void> {

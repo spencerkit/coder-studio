@@ -15,13 +15,17 @@ interface SessionMetadataWorkspace {
   path: string;
 }
 
-interface SessionMetadataWorkspaceRepo {
+interface SessionMetadataWorkspaceLookup {
   list(): SessionMetadataWorkspace[];
-  findById(id: string): SessionMetadataWorkspace | undefined;
+  get(workspaceId: string): SessionMetadataWorkspace | undefined;
 }
 
 export interface SessionMetadataRepoOptions {
-  workspaceRepo: SessionMetadataWorkspaceRepo;
+  workspaceLookup?: SessionMetadataWorkspaceLookup;
+  workspaceRepo?: {
+    list(): SessionMetadataWorkspace[];
+    findById(id: string): SessionMetadataWorkspace | undefined;
+  };
 }
 
 interface SessionMetadataLocation {
@@ -81,15 +85,28 @@ function normalizeFileMetadata(value: unknown): Record<string, AgentSessionMetad
 }
 
 export class SessionMetadataRepo {
-  private readonly workspaceRepo: SessionMetadataWorkspaceRepo;
+  private readonly workspaceLookup: SessionMetadataWorkspaceLookup;
 
   constructor(input: SessionMetadataRepoOptions) {
-    this.workspaceRepo = input.workspaceRepo;
+    if (input.workspaceLookup) {
+      this.workspaceLookup = input.workspaceLookup;
+      return;
+    }
+
+    if (input.workspaceRepo) {
+      this.workspaceLookup = {
+        list: () => input.workspaceRepo!.list(),
+        get: (workspaceId: string) => input.workspaceRepo!.findById(workspaceId),
+      };
+      return;
+    }
+
+    throw new Error("SessionMetadataRepo requires workspaceLookup or workspaceRepo");
   }
 
   upsert(metadata: AgentSessionMetadata): AgentSessionMetadata {
     const normalized = normalizeMetadata(metadata);
-    const workspace = this.workspaceRepo.findById(normalized.workspaceId);
+    const workspace = this.workspaceLookup.get(normalized.workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found for session metadata: ${normalized.workspaceId}`);
     }
@@ -132,7 +149,7 @@ export class SessionMetadataRepo {
   }
 
   private findSessionLocation(sessionId: string): SessionMetadataLocation | undefined {
-    for (const workspace of this.workspaceRepo.list()) {
+    for (const workspace of this.workspaceLookup.list()) {
       const fileMetadata = this.loadWorkspaceFileMetadata(workspace.path);
       if (Object.prototype.hasOwnProperty.call(fileMetadata, sessionId)) {
         return {

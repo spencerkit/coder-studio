@@ -23,7 +23,7 @@ vi.mock("../../../hooks/use-viewport", () => ({
 
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  location: { pathname: "/settings" },
+  location: { pathname: "/more/settings/general" },
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -64,7 +64,7 @@ describe("CommandPalette", () => {
   beforeEach(() => {
     viewportMocks.viewport = "desktop";
     routerMocks.navigate.mockReset();
-    routerMocks.location.pathname = "/settings";
+    routerMocks.location.pathname = "/more/settings/general";
   });
 
   it("switches workspaces by setting the active id in memory and navigating to /workspace", () => {
@@ -371,7 +371,7 @@ describe("CommandPalette", () => {
 
     fireEvent.keyDown(palette!, { key: "Enter" });
 
-    expect(routerMocks.navigate).toHaveBeenCalledWith("/settings");
+    expect(routerMocks.navigate).toHaveBeenCalledWith("/more/settings/general");
     expect(store.get(commandPaletteOpenAtom)).toBe(false);
   });
 

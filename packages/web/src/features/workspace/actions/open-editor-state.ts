@@ -3,10 +3,12 @@ import type { Store } from "jotai/vanilla/store";
 import {
   activeEditorTabAtomFamily,
   activeFilePathAtomFamily,
+  createWorkspaceCanvasEditorTab,
   editorViewVisibleAtomFamily,
   openEditorPathsAtomFamily,
   openEditorTabsAtomFamily,
   type WorkspaceBrowserEditorTab,
+  type WorkspaceCanvasEditorTab,
   type WorkspaceEditorTab,
   type WorkspaceFileEditorTab,
 } from "../atoms";
@@ -111,7 +113,43 @@ function normalizeWorkspaceFileEditorTab(entry: unknown): WorkspaceFileEditorTab
   return {
     kind: "file",
     path: candidate.path.trim(),
+    pinned: typeof candidate.pinned === "boolean" ? candidate.pinned : true,
   };
+}
+
+function normalizeWorkspaceCanvasEditorTab(entry: unknown): WorkspaceCanvasEditorTab | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const candidate = entry as Partial<WorkspaceCanvasEditorTab>;
+  if (candidate.kind !== "canvas") {
+    return null;
+  }
+
+  if (typeof candidate.sourcePath !== "string" || candidate.sourcePath.trim().length === 0) {
+    return null;
+  }
+
+  if (typeof candidate.title !== "string" || candidate.title.trim().length === 0) {
+    return null;
+  }
+
+  if (
+    candidate.artifactType !== undefined &&
+    candidate.artifactType !== "architecture_canvas" &&
+    candidate.artifactType !== "report_canvas"
+  ) {
+    return null;
+  }
+
+  return createWorkspaceCanvasEditorTab({
+    id: typeof candidate.id === "string" ? candidate.id : undefined,
+    title: candidate.title,
+    artifactType: candidate.artifactType,
+    sourcePath: candidate.sourcePath,
+    canvasId: typeof candidate.canvasId === "string" ? candidate.canvasId : undefined,
+  });
 }
 
 function normalizeWorkspaceEditorTab(
@@ -119,7 +157,9 @@ function normalizeWorkspaceEditorTab(
   legacyUrl: string | null
 ): WorkspaceEditorTab | null {
   return (
-    normalizeWorkspaceBrowserEditorTab(entry, legacyUrl) ?? normalizeWorkspaceFileEditorTab(entry)
+    normalizeWorkspaceBrowserEditorTab(entry, legacyUrl) ??
+    normalizeWorkspaceCanvasEditorTab(entry) ??
+    normalizeWorkspaceFileEditorTab(entry)
   );
 }
 
@@ -133,6 +173,7 @@ function normalizeWorkspaceEditorTabs(
 
   const seenFilePaths = new Set<string>();
   const seenBrowserIds = new Set<string>();
+  const seenCanvasSourcePaths = new Set<string>();
   const next: WorkspaceEditorTab[] = [];
 
   for (const entry of value) {
@@ -151,6 +192,16 @@ function normalizeWorkspaceEditorTabs(
       continue;
     }
 
+    if (normalizedTab.kind === "canvas") {
+      if (seenCanvasSourcePaths.has(normalizedTab.sourcePath)) {
+        continue;
+      }
+
+      seenCanvasSourcePaths.add(normalizedTab.sourcePath);
+      next.push(normalizedTab);
+      continue;
+    }
+
     if (seenFilePaths.has(normalizedTab.path)) {
       continue;
     }
@@ -162,19 +213,35 @@ function normalizeWorkspaceEditorTabs(
   return next;
 }
 
-function appendMissingActiveBrowserTab(
+function appendMissingActiveNonFileTab(
   openEditorTabs: WorkspaceEditorTab[],
   activeEditorTab: WorkspaceEditorTab | null
 ): WorkspaceEditorTab[] {
+  if (activeEditorTab?.kind === "browser") {
+    if (openEditorTabs.some((tab) => tab.kind === "browser" && tab.id === activeEditorTab.id)) {
+      return openEditorTabs;
+    }
+
+    return [...openEditorTabs, activeEditorTab];
+  }
+
+  if (activeEditorTab?.kind === "canvas") {
+    if (
+      openEditorTabs.some(
+        (tab) => tab.kind === "canvas" && tab.sourcePath === activeEditorTab.sourcePath
+      )
+    ) {
+      return openEditorTabs;
+    }
+
+    return [...openEditorTabs, activeEditorTab];
+  }
+
   if (activeEditorTab?.kind !== "browser") {
     return openEditorTabs;
   }
 
-  if (openEditorTabs.some((tab) => tab.kind === "browser" && tab.id === activeEditorTab.id)) {
-    return openEditorTabs;
-  }
-
-  return [...openEditorTabs, activeEditorTab];
+  return openEditorTabs;
 }
 
 function hasOwnProperty<T extends object>(value: T, key: PropertyKey): boolean {
@@ -280,6 +347,9 @@ export function normalizeWorkspaceEditorUiStatePatch(
   const hasOpenEditorTabs = hasOwnProperty(uiState, "openEditorTabs");
   const hasActiveEditorTab = hasOwnProperty(uiState, "activeEditorTab");
   const legacyBrowserTargetUrl = readLegacyDevBrowserTargetUrl(uiState);
+  const normalizedActiveEditorTab = hasActiveEditorTab
+    ? normalizeWorkspaceEditorTab(uiState.activeEditorTab, legacyBrowserTargetUrl)
+    : null;
 
   if (
     !hasOpenEditorPaths &&
@@ -307,7 +377,15 @@ export function normalizeWorkspaceEditorUiStatePatch(
       const activeEditorPath = normalizeActiveEditorPath(uiState.activeEditorPath);
       next.activeEditorPath = activeEditorPath;
 
-      if (activeEditorPath && !openEditorPaths.includes(activeEditorPath)) {
+      const isActivePreviewFileTab =
+        normalizedActiveEditorTab?.kind === "file" &&
+        normalizedActiveEditorTab.path === activeEditorPath &&
+        normalizedActiveEditorTab.pinned === false;
+      if (
+        activeEditorPath &&
+        !openEditorPaths.includes(activeEditorPath) &&
+        !isActivePreviewFileTab
+      ) {
         next.openEditorPaths = [...openEditorPaths, activeEditorPath];
       }
     }
@@ -327,23 +405,17 @@ export function normalizeWorkspaceEditorUiStatePatch(
     next.openEditorTabs = openEditorTabs;
 
     if (hasActiveEditorTab) {
-      const activeEditorTab = normalizeWorkspaceEditorTab(
-        uiState.activeEditorTab,
-        legacyBrowserTargetUrl
-      );
+      const activeEditorTab = normalizedActiveEditorTab;
       next.activeEditorTab = activeEditorTab;
-      if (activeEditorTab?.kind === "browser") {
-        next.openEditorTabs = appendMissingActiveBrowserTab(openEditorTabs, activeEditorTab);
+      if (activeEditorTab?.kind === "browser" || activeEditorTab?.kind === "canvas") {
+        next.openEditorTabs = appendMissingActiveNonFileTab(openEditorTabs, activeEditorTab);
       }
     }
   } else if (hasActiveEditorTab) {
-    const activeEditorTab = normalizeWorkspaceEditorTab(
-      uiState.activeEditorTab,
-      legacyBrowserTargetUrl
-    );
+    const activeEditorTab = normalizedActiveEditorTab;
     next.activeEditorTab = activeEditorTab;
-    if (activeEditorTab?.kind === "browser") {
-      next.openEditorTabs = appendMissingActiveBrowserTab([], activeEditorTab);
+    if (activeEditorTab?.kind === "browser" || activeEditorTab?.kind === "canvas") {
+      next.openEditorTabs = appendMissingActiveNonFileTab([], activeEditorTab);
     }
   }
 

@@ -142,6 +142,18 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     capture: { selector: ".workspace-page" },
   },
   {
+    id: "workspace-custom-skills-review",
+    title: "Workspace / Custom Skills Review",
+    category: "page",
+    source: "real-route",
+    description:
+      "Desktop workspace scene seeded with custom skills so the skills sidebar can be reviewed with real list, detail, create, and edit interactions.",
+    devices: ["desktop"],
+    themes: ["mint-dark"],
+    locales: ["en"],
+    capture: { selector: ".workspace-page" },
+  },
+  {
     id: "workspace-mobile",
     title: "Workspace / Mobile",
     category: "page",

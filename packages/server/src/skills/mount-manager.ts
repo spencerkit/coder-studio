@@ -1,4 +1,14 @@
-import { copyFile, lstat, mkdir, readdir, readlink, rm, symlink, unlink } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  readdir,
+  readlink,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { ProviderDefinition, SkillMountRelation } from "@coder-studio/core";
 import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
@@ -14,6 +24,8 @@ export interface SkillMountPlan {
   providerId: string;
   skillSlug: string;
   enabled: boolean;
+  preferredMode?: "auto" | "copy";
+  mountedOverrides?: Array<{ relativePath: string; content: string }>;
 }
 
 export class SkillMountManager {
@@ -74,14 +86,30 @@ export class SkillMountManager {
       await unlinkSafe(existing.targetPath);
     }
 
+    const shouldCopyMount =
+      input.preferredMode === "copy" || (input.mountedOverrides?.length ?? 0) > 0;
+
     let mountModeResolved: SkillMountRelation["mountModeResolved"] = "symlink";
-    try {
-      await rm(targetPath, { recursive: true, force: true });
-      await symlink(libraryEntry.libraryPath, targetPath);
-    } catch {
+    if (shouldCopyMount) {
       mountModeResolved = "copy";
       await rm(targetPath, { recursive: true, force: true });
       await copyRecursively(libraryEntry.libraryPath, targetPath);
+    } else {
+      try {
+        await rm(targetPath, { recursive: true, force: true });
+        await symlink(libraryEntry.libraryPath, targetPath);
+      } catch {
+        mountModeResolved = "copy";
+        await rm(targetPath, { recursive: true, force: true });
+        await copyRecursively(libraryEntry.libraryPath, targetPath);
+      }
+    }
+
+    for (const override of input.mountedOverrides ?? []) {
+      const overridePath = join(targetPath, override.relativePath);
+      await mkdir(dirname(overridePath), { recursive: true });
+      await unlinkIfSymlink(overridePath);
+      await writeFile(overridePath, override.content, "utf8");
     }
 
     const relation: SkillMountRelation = {
@@ -131,6 +159,17 @@ async function unlinkSafe(path: string): Promise<void> {
     await unlink(path);
   } catch {
     await rm(path, { recursive: true, force: true });
+  }
+}
+
+async function unlinkIfSymlink(path: string): Promise<void> {
+  try {
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink()) {
+      await unlink(path);
+    }
+  } catch {
+    return;
   }
 }
 

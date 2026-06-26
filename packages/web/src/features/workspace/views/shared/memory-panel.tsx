@@ -1,11 +1,16 @@
 import {
+  isActionableWorkspaceMemoryType,
+  WORKSPACE_MEMORY_STATUSES,
   WORKSPACE_MEMORY_TYPES,
   type WorkspaceMemoryEntry,
-  type WorkspaceMemoryType,
+  WorkspaceMemoryStatus,
+  type WorkspaceMemoryStatus as WorkspaceMemoryStatusType,
+  WorkspaceMemoryType,
+  type WorkspaceMemoryType as WorkspaceMemoryTypeType,
 } from "@coder-studio/core";
 import { useAtomValue } from "jotai";
 import { Pencil, Trash2, X } from "lucide-react";
-import { type FC, useEffect, useMemo, useState } from "react";
+import { type FC, useEffect, useId, useMemo, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import { Button } from "../../../../components/ui/button";
 import { ConfirmDialog } from "../../../../components/ui/confirm-dialog";
@@ -28,10 +33,11 @@ interface MemoryPanelProps {
 
 interface MemoryDraft {
   content: string;
-  type: WorkspaceMemoryType;
+  type: WorkspaceMemoryTypeType;
+  status?: WorkspaceMemoryStatusType;
 }
 
-const DEFAULT_MEMORY_TYPE: WorkspaceMemoryType = "project";
+const DEFAULT_MEMORY_TYPE: WorkspaceMemoryTypeType = WorkspaceMemoryType.Wiki;
 
 const EMPTY_DRAFT: MemoryDraft = {
   content: "",
@@ -39,7 +45,7 @@ const EMPTY_DRAFT: MemoryDraft = {
 };
 
 function formatMemoryType(
-  type: WorkspaceMemoryType,
+  type: WorkspaceMemoryTypeType,
   t: (key: string, params?: Record<string, string | number>) => string
 ): string {
   return t(`workspace.memory.types.${type}`);
@@ -64,17 +70,43 @@ function memoryLabel(entry: WorkspaceMemoryEntry): string {
 }
 
 function formatMemoryTypeBadge(
-  type: WorkspaceMemoryType,
+  type: WorkspaceMemoryTypeType,
   t: (key: string, params?: Record<string, string | number>) => string
 ): string {
   return formatMemoryType(type, t).toLowerCase();
 }
 
+function formatMemoryStatus(
+  status: WorkspaceMemoryStatusType,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string {
+  return t(`workspace.memory.statuses.${status}`);
+}
+
 function draftFromEntry(entry: WorkspaceMemoryEntry): MemoryDraft {
+  const status = normalizeDraftStatus(entry.type, entry.status);
+
   return {
     content: entry.content,
     type: entry.type,
+    ...(status ? { status } : {}),
   };
+}
+
+function createDefaultDraft(type: WorkspaceMemoryTypeType = DEFAULT_MEMORY_TYPE): MemoryDraft {
+  return {
+    content: "",
+    type,
+    ...(isActionableWorkspaceMemoryType(type) ? { status: WorkspaceMemoryStatus.NotStarted } : {}),
+  };
+}
+
+function normalizeDraftStatus(type: WorkspaceMemoryTypeType, status?: WorkspaceMemoryStatusType) {
+  if (!isActionableWorkspaceMemoryType(type)) {
+    return undefined;
+  }
+
+  return status ?? WorkspaceMemoryStatus.NotStarted;
 }
 
 function formatActiveCount(
@@ -88,11 +120,17 @@ function formatActiveCount(
 
 export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 0 }) => {
   const t = useTranslation();
+  const memoryTypeLabelId = useId();
   const locale = useAtomValue(localeAtom) === "zh" ? "zh" : "en";
-  const memoryTypeOptions: ReadonlyArray<SelectOption<WorkspaceMemoryType>> =
+  const memoryTypeOptions: ReadonlyArray<SelectOption<WorkspaceMemoryTypeType>> =
     WORKSPACE_MEMORY_TYPES.map((type) => ({
       value: type,
       label: formatMemoryType(type, t),
+    }));
+  const statusOptions: ReadonlyArray<SelectOption<WorkspaceMemoryStatusType>> =
+    WORKSPACE_MEMORY_STATUSES.map((status) => ({
+      value: status,
+      label: formatMemoryStatus(status, t),
     }));
   const {
     createMemory,
@@ -105,7 +143,7 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
     updateMemory,
   } = useMemoryPanel(workspaceId);
   const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<WorkspaceMemoryType | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<WorkspaceMemoryTypeType | "all">("all");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<WorkspaceMemoryEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<(typeof entries)[number] | null>(null);
@@ -139,7 +177,7 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
 
   const startNewMemory = () => {
     setEditingEntry(null);
-    setCreateDraft(EMPTY_DRAFT);
+    setCreateDraft(createDefaultDraft());
     setCreateDialogOpen(true);
   };
 
@@ -159,6 +197,7 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
     const payload = {
       content: createDraft.content,
       type: createDraft.type,
+      ...(createDraft.status ? { status: createDraft.status } : {}),
     };
     const saved = editingEntry
       ? await updateMemory({
@@ -189,10 +228,14 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
     formDraft: MemoryDraft,
     setFormDraft: (updater: (current: MemoryDraft) => MemoryDraft) => void
   ) => {
+    const actionableType = isActionableWorkspaceMemoryType(formDraft.type);
+
     return (
       <div className="memory-panel__form">
-        <label className="memory-panel__field">
-          <span className="memory-panel__label">{t("workspace.memory.type_label")}</span>
+        <div className="memory-panel__field">
+          <span id={memoryTypeLabelId} className="memory-panel__label">
+            {t("workspace.memory.type_label")}
+          </span>
           <Select
             desktopMode="listbox"
             className="workspace-sidebar-control memory-panel__select"
@@ -200,15 +243,37 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
             mobileSheetTitle={t("workspace.memory.type_label")}
             options={memoryTypeOptions}
             value={formDraft.type}
-            aria-label={t("workspace.memory.type_label")}
+            aria-labelledby={memoryTypeLabelId}
             onValueChange={(value) =>
               setFormDraft((current) => ({
                 ...current,
                 type: value,
+                status: normalizeDraftStatus(value, current.status),
               }))
             }
           />
-        </label>
+        </div>
+
+        {actionableType ? (
+          <div className="memory-panel__field">
+            <span className="memory-panel__label">{t("workspace.memory.status_label")}</span>
+            <Select
+              desktopMode="listbox"
+              className="workspace-sidebar-control memory-panel__select"
+              mobileSheetPresentation="inline"
+              mobileSheetTitle={t("workspace.memory.status_label")}
+              options={statusOptions}
+              value={formDraft.status ?? WorkspaceMemoryStatus.NotStarted}
+              aria-label={t("workspace.memory.status_label")}
+              onValueChange={(value) =>
+                setFormDraft((current) => ({
+                  ...current,
+                  status: value,
+                }))
+              }
+            />
+          </div>
+        ) : null}
 
         <label className="memory-panel__field">
           <span className="memory-panel__label">{t("workspace.memory.content_label")}</span>
@@ -322,10 +387,19 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
                       </button>
                       <div className="memory-panel__item-meta">
                         <span className="memory-panel__item-meta-main">
-                          <span
-                            className={`memory-panel__badge memory-panel__badge--${entry.type}`}
-                          >
-                            {formatMemoryTypeBadge(entry.type, t)}
+                          <span className="memory-panel__item-badges">
+                            <span
+                              className={`memory-panel__badge memory-panel__badge--${entry.type}`}
+                            >
+                              {formatMemoryTypeBadge(entry.type, t)}
+                            </span>
+                            {entry.status ? (
+                              <span
+                                className={`memory-panel__badge memory-panel__badge--status memory-panel__badge--status-${entry.status}`}
+                              >
+                                {formatMemoryStatus(entry.status, t).toLowerCase()}
+                              </span>
+                            ) : null}
                           </span>
                           <span>{formatRelativeTime(entry.updatedAt, locale)}</span>
                         </span>

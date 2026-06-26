@@ -119,6 +119,49 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     }
   }, [dispatch]);
 
+  const removeRecentWorkspace = useCallback(
+    async (path: string) => {
+      if (!path) {
+        return false;
+      }
+
+      try {
+        const result = await dispatch<WorkspaceHistoryEntry[]>("workspace.history.remove", {
+          path,
+        });
+
+        if (!result.ok) {
+          setError(result.error?.message || t("workspace.launch.open_failed"));
+          return false;
+        }
+
+        setRecentWorkspaces(Array.isArray(result.data) ? result.data : []);
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        return false;
+      }
+    },
+    [dispatch, t]
+  );
+
+  const clearRecentWorkspaces = useCallback(async () => {
+    try {
+      const result = await dispatch<WorkspaceHistoryEntry[]>("workspace.history.clear", {});
+
+      if (!result.ok) {
+        setError(result.error?.message || t("workspace.launch.open_failed"));
+        return false;
+      }
+
+      setRecentWorkspaces(Array.isArray(result.data) ? result.data : []);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return false;
+    }
+  }, [dispatch, t]);
+
   useEffect(() => {
     void loadDirectory();
     void loadWorkspaceHistory();
@@ -349,7 +392,9 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     recentWorkspaces,
     rootPaths,
     closeCreateFolder,
+    clearRecentWorkspaces,
     selectedPath,
+    removeRecentWorkspace,
     submitCreateFolder,
     updateNewFolderName,
   };

@@ -29,16 +29,24 @@ function getRuleBlocks(selector: string) {
 }
 
 describe("pane-layout vertical divider styles", () => {
-  it("keeps stacked pane dividers visible on shared workspace surfaces", () => {
+  it("keeps stacked pane divider hit areas transparent and below editor overlays", () => {
+    const baseDivider = getRuleBlocks(".pane-layout-divider").join("\n");
     const divider = getRuleBlocks(".pane-layout-vertical-divider").join("\n");
     const dividerLine = getRuleBlocks(".pane-layout-vertical-divider::after").join("\n");
+    const hoverDividerLine = getRuleBlocks(".pane-layout-divider:hover::after").join("\n");
 
+    expect(baseDivider).toContain("z-index: var(--z-inline)");
+    expect(baseDivider).not.toContain("z-index: var(--z-inline-raised)");
+    expect(baseDivider).not.toContain("z-index: var(--z-modal");
+    expect(baseDivider).not.toContain("z-index: var(--z-popover");
+    expect(baseDivider).not.toContain("z-index: var(--z-tooltip");
+    expect(baseDivider).toContain("background: transparent");
     expect(divider).toContain("width: 100%");
     expect(divider).toContain("height: 10px");
     expect(divider).toContain("margin-top: -5px");
     expect(divider).toContain("margin-bottom: -5px");
-    expect(divider).toContain("background: linear-gradient(");
-    expect(divider).toContain("var(--component-mix-status-info-fg-24pct-transparent)");
-    expect(dividerLine).toContain("var(--component-mix-border-default-78pct-status-info-fg-22pct)");
+    expect(divider).toContain("background: transparent");
+    expect(dividerLine).toContain("background: transparent");
+    expect(hoverDividerLine).toContain("background: transparent");
   });
 });

@@ -45,15 +45,27 @@ describe("memory panel styles", () => {
       (match) => match[0]
     ).join("\n");
 
-    expect(badgeVariants).toContain(".memory-panel__badge--feature");
+    expect(badgeVariants).toContain(".memory-panel__badge--wiki");
+    expect(badgeVariants).toContain(".memory-panel__badge--issue");
     expect(badgeVariants).toContain(".memory-panel__badge--todo");
-    expect(badgeVariants).toContain(".memory-panel__badge--bugfix");
-    expect(badgeVariants).toContain(".memory-panel__badge--project");
     expect(badgeVariants).toContain(".memory-panel__badge--note");
+    expect(badgeVariants).not.toContain(".memory-panel__badge--feature");
+    expect(badgeVariants).not.toContain(".memory-panel__badge--bugfix");
+    expect(badgeVariants).not.toContain(".memory-panel__badge--project");
     expect(badgeVariants).not.toContain("workflow");
     expect(badgeVariants).not.toContain("decision");
     expect(badgeVariants).not.toContain("project_fact");
     expect(badgeVariants).not.toContain("task_context");
     expect(badgeVariants).not.toContain("preference");
+  });
+
+  it("defines dedicated status badge variants for actionable memory states", () => {
+    const css = readFileSync(`${process.cwd()}/src/styles/components.css`, "utf8");
+
+    expect(css).toContain(".memory-panel__badge--status {");
+    expect(css).toContain(".memory-panel__badge--status-not_started {");
+    expect(css).toContain(".memory-panel__badge--status-in_progress {");
+    expect(css).toContain(".memory-panel__badge--status-pending_verification {");
+    expect(css).toContain(".memory-panel__badge--status-completed {");
   });
 });

@@ -3,6 +3,7 @@
  */
 
 export * from "./copy.js";
+export * from "./dev-cli-shim.js";
 export * from "./esbuild.js";
 export * from "./logger.js";
 export * from "./paths.js";

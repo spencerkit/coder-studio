@@ -29,6 +29,18 @@ function getRuleBlock(selector: string) {
   return blocks.at(-1) ?? "";
 }
 
+function getCustomProperty(block: string, name: string): string | null {
+  const matcher = new RegExp(`${name}:\\s*([^;]+);`, "g");
+  let value: string | null = null;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = matcher.exec(block)) !== null) {
+    value = match[1]?.trim() ?? null;
+  }
+
+  return value;
+}
+
 describe("base.css theme-sensitive shells", () => {
   it("keeps the app loading shell on semantic material tokens", () => {
     const shell = getRuleBlock(".app-loading-shell");
@@ -175,6 +187,11 @@ describe("base.css desktop typography foundation", () => {
     expect(tokensStylesheet).toContain("--z-popover:");
     expect(tokensStylesheet).toContain("--z-tooltip:");
     expect(tokensStylesheet).toContain("--z-toast:");
+
+    expect(getCustomProperty(tokensStylesheet, "--z-modal-backdrop")).toBe("380");
+    expect(getCustomProperty(tokensStylesheet, "--z-modal")).toBe("390");
+    expect(getCustomProperty(tokensStylesheet, "--z-workbench-backdrop")).toBe("360");
+    expect(getCustomProperty(tokensStylesheet, "--z-workbench")).toBe("370");
   });
 
   it("maps base text elements onto semantic typography tokens", () => {

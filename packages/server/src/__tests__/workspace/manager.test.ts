@@ -69,6 +69,17 @@ describe("WorkspaceManager", () => {
       expect(workspace.uiState).toBeDefined();
     });
 
+    it("persists explicit targetRuntime and wslDistro on new workspaces", async () => {
+      const workspace = await manager.open({
+        path: testDir,
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      });
+
+      expect(workspace.targetRuntime).toBe("wsl");
+      expect(workspace.wslDistro).toBe("Ubuntu-24.04");
+    });
+
     it("triggers open-time auto fetch for new workspaces", async () => {
       const autoFetch = {
         triggerOpenTimeFetch: vi.fn(),

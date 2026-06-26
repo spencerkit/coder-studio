@@ -357,7 +357,7 @@ const WorkspaceDesktopScene: FC = () => {
     null
   );
   const [editorRestoreOpening, setEditorRestoreOpening] = useState(false);
-  const [editorPinned, setEditorPinned] = useState(true);
+  const [editorPinned, setEditorPinned] = useState(workspace?.uiState.editorPinned ?? true);
   const [floatingEditorGeometry, setFloatingEditorGeometry] =
     useState<FloatingEditorGeometry | null>(null);
   const [floatingEditorInteractionKind, setFloatingEditorInteractionKind] = useState<
@@ -368,6 +368,7 @@ const WorkspaceDesktopScene: FC = () => {
   const floatingEditorRef = useRef<HTMLDivElement>(null);
   const floatingEditorInteractionRef = useRef<FloatingEditorInteraction | null>(null);
   const floatingEditorInteractionCleanupRef = useRef<(() => void) | null>(null);
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
   const editorRestoreStyle = useMemo<CSSProperties | undefined>(() => {
     if (!editorRestorePosition) {
       return undefined;
@@ -391,6 +392,10 @@ const WorkspaceDesktopScene: FC = () => {
       lastActiveEditorPathRef.current = activeFilePath;
     }
   }, [activeFilePath]);
+
+  useEffect(() => {
+    setEditorPinned(workspace?.uiState.editorPinned ?? true);
+  }, [workspace?.id, workspace?.uiState.editorPinned]);
 
   const handleEditorRestoreStart = () => {
     if (editorRestoreOpeningTimerRef.current !== null) {
@@ -633,6 +638,11 @@ const WorkspaceDesktopScene: FC = () => {
     };
   };
 
+  const handleToggleEditorPinned = (nextPinned: boolean) => {
+    setEditorPinned(nextPinned);
+    void persistUiState({ editorPinned: nextPinned });
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isEditableTarget(event.target)) {
@@ -814,7 +824,7 @@ const WorkspaceDesktopScene: FC = () => {
                   onBeginFloatingEditorMove={(event) =>
                     beginFloatingEditorInteraction("move", event)
                   }
-                  onToggleEditorPinned={setEditorPinned}
+                  onToggleEditorPinned={handleToggleEditorPinned}
                 />
               </div>
             ) : null}

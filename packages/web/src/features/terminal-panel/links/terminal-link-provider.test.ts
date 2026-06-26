@@ -46,24 +46,37 @@ function createProvider(
   return { provider, openWorkspaceFile };
 }
 
-function provideLinks(
+async function provideLinks(
   provider: ReturnType<typeof createTerminalWorkspaceLinkProvider>,
   row: number
 ) {
-  let links: CapturedLink[] | undefined;
-  provider.provideLinks(row, (nextLinks) => {
-    links = nextLinks as CapturedLink[] | undefined;
+  const links = await new Promise<CapturedLink[] | undefined>((resolve) => {
+    provider.provideLinks(row, (nextLinks) => {
+      resolve(nextLinks as CapturedLink[] | undefined);
+    });
   });
+
   return links;
 }
 
 describe("createTerminalWorkspaceLinkProvider", () => {
-  it("starts a workspace path link at the path instead of adjacent label text", () => {
+  it("invokes the callback synchronously for immediate links", () => {
+    const { provider } = createProvider([[0, createBufferLine("Visit https://example.com/docs")]]);
+    let synchronouslyResolved = false;
+
+    provider.provideLinks(1, () => {
+      synchronouslyResolved = true;
+    });
+
+    expect(synchronouslyResolved).toBe(true);
+  });
+
+  it("starts a workspace path link at the path instead of adjacent label text", async () => {
     const { provider, openWorkspaceFile } = createProvider([
       [0, createBufferLine("更新文件:.stitch/designs/overlay-editor-header-scope.html")],
     ]);
 
-    const links = provideLinks(provider, 1);
+    const links = await provideLinks(provider, 1);
 
     expect(links).toHaveLength(1);
     expect(links?.[0]).toMatchObject({
@@ -84,7 +97,7 @@ describe("createTerminalWorkspaceLinkProvider", () => {
     });
   });
 
-  it("opens absolute workspace paths that wrap across terminal rows", () => {
+  it("opens absolute workspace paths that wrap across terminal rows", async () => {
     const { provider, openWorkspaceFile } = createProvider(
       [
         [0, createBufferLine("'/root/.coder-studio/uploads/ws_1779420655702_45iqdg5vv/", false)],
@@ -93,8 +106,8 @@ describe("createTerminalWorkspaceLinkProvider", () => {
       "/root/.coder-studio/uploads/ws_1779420655702_45iqdg5vv"
     );
 
-    const firstRowLinks = provideLinks(provider, 1);
-    const secondRowLinks = provideLinks(provider, 2);
+    const firstRowLinks = await provideLinks(provider, 1);
+    const secondRowLinks = await provideLinks(provider, 2);
 
     expect(firstRowLinks).toHaveLength(1);
     expect(firstRowLinks?.[0]).toMatchObject({
@@ -123,23 +136,60 @@ describe("createTerminalWorkspaceLinkProvider", () => {
     });
   });
 
-  it("does not open the wrapped tail of an absolute path outside the workspace", () => {
+  it("does not open the wrapped tail of an absolute path outside the workspace", async () => {
     const { provider, openWorkspaceFile } = createProvider([
       [0, createBufferLine("'/root/.coder-studio/uploads/ws_1779420655702_45iqdg5vv/", false)],
       [1, createBufferLine("2026-06-09/7e4ffb70-image.png' ", true)],
     ]);
 
-    expect(provideLinks(provider, 1)).toBeUndefined();
-    expect(provideLinks(provider, 2)).toBeUndefined();
+    await expect(provideLinks(provider, 1)).resolves.toBeUndefined();
+    await expect(provideLinks(provider, 2)).resolves.toBeUndefined();
     expect(openWorkspaceFile).not.toHaveBeenCalled();
   });
 
-  it("keeps line and column suffixes out of the workspace file path", () => {
+  it("rejoins wrapped workspace paths across padded terminal rows", async () => {
+    const { provider, openWorkspaceFile } = createProvider(
+      [
+        [
+          0,
+          createBufferLine(
+            "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-        ",
+            false
+          ),
+        ],
+        [1, createBufferLine("panel/links/terminal-link-provider.ts", true)],
+      ],
+      "/home/spencer/workspace/coder-studio"
+    );
+
+    const firstRowLinks = await provideLinks(provider, 1);
+    const secondRowLinks = await provideLinks(provider, 2);
+
+    expect(firstRowLinks).toHaveLength(1);
+    expect(firstRowLinks?.[0]?.text).toBe(
+      "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-panel/links/terminal-link-provider.ts"
+    );
+    expect(secondRowLinks).toHaveLength(1);
+    expect(secondRowLinks?.[0]?.text).toBe(
+      "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-panel/links/terminal-link-provider.ts"
+    );
+
+    secondRowLinks?.[0]?.activate(new MouseEvent("click"), secondRowLinks[0].text);
+    expect(openWorkspaceFile).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      path: "packages/web/src/features/terminal-panel/links/terminal-link-provider.ts",
+      line: undefined,
+      column: undefined,
+      source: "manual",
+    });
+  });
+
+  it("keeps line and column suffixes out of the workspace file path", async () => {
     const { provider, openWorkspaceFile } = createProvider([
       [0, createBufferLine("at /root/workspace/coder-studio/packages/web/src/main.tsx:12:3")],
     ]);
 
-    const links = provideLinks(provider, 1);
+    const links = await provideLinks(provider, 1);
 
     expect(links).toHaveLength(1);
     expect(links?.[0]?.text).toBe("/root/workspace/coder-studio/packages/web/src/main.tsx:12:3");
@@ -152,5 +202,80 @@ describe("createTerminalWorkspaceLinkProvider", () => {
       column: 3,
       source: "manual",
     });
+  });
+
+  it("does not link truncated workspace paths on their own", async () => {
+    const { provider, openWorkspaceFile } = createProvider(
+      [
+        [
+          0,
+          createBufferLine(
+            "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-"
+          ),
+        ],
+      ],
+      "/home/spencer/workspace/coder-studio"
+    );
+
+    await expect(provideLinks(provider, 1)).resolves.toBeUndefined();
+    expect(openWorkspaceFile).not.toHaveBeenCalled();
+  });
+
+  it("rejoins workspace paths split across adjacent non-wrapped rows", async () => {
+    const { provider, openWorkspaceFile } = createProvider(
+      [
+        [
+          0,
+          createBufferLine(
+            "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-"
+          ),
+        ],
+        [1, createBufferLine("panel/links/terminal-link-provider.ts")],
+      ],
+      "/home/spencer/workspace/coder-studio"
+    );
+
+    const firstRowLinks = await provideLinks(provider, 1);
+    const secondRowLinks = await provideLinks(provider, 2);
+
+    expect(firstRowLinks).toHaveLength(1);
+    expect(firstRowLinks?.[0]?.text).toBe(
+      "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-panel/links/terminal-link-provider.ts"
+    );
+
+    expect(secondRowLinks).toHaveLength(1);
+    expect(secondRowLinks?.[0]?.text).toBe(
+      "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-panel/links/terminal-link-provider.ts"
+    );
+
+    secondRowLinks?.[0]?.activate(new MouseEvent("click"), secondRowLinks[0].text);
+    expect(openWorkspaceFile).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      path: "packages/web/src/features/terminal-panel/links/terminal-link-provider.ts",
+      line: undefined,
+      column: undefined,
+      source: "manual",
+    });
+  });
+
+  it("rejoins workspace paths across padded adjacent rows", async () => {
+    const { provider } = createProvider(
+      [
+        [
+          0,
+          createBufferLine(
+            "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-        "
+          ),
+        ],
+        [1, createBufferLine("panel/links/terminal-link-provider.ts")],
+      ],
+      "/home/spencer/workspace/coder-studio"
+    );
+
+    const firstRowLinks = await provideLinks(provider, 1);
+    expect(firstRowLinks).toHaveLength(1);
+    expect(firstRowLinks?.[0]?.text).toBe(
+      "/home/spencer/workspace/coder-studio/packages/web/src/features/terminal-panel/links/terminal-link-provider.ts"
+    );
   });
 });

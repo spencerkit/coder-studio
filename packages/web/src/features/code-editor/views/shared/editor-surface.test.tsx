@@ -36,8 +36,21 @@ vi.mock("../../../../lib/i18n", () => ({
 }));
 
 vi.mock("../../components/monaco-host", () => ({
-  MonacoHost: ({ readOnly }: { readOnly?: boolean }) => (
-    <div data-testid="monaco-host" data-read-only={String(Boolean(readOnly))} />
+  MonacoHost: ({
+    readOnly,
+    standalone,
+    workspaceRootPath,
+  }: {
+    readOnly?: boolean;
+    standalone?: boolean;
+    workspaceRootPath?: string;
+  }) => (
+    <div
+      data-testid="monaco-host"
+      data-read-only={String(Boolean(readOnly))}
+      data-standalone={String(Boolean(standalone))}
+      data-workspace-root-path={workspaceRootPath ?? ""}
+    />
   ),
 }));
 
@@ -122,6 +135,23 @@ vi.mock("../../components/document-preview", () => ({
 vi.mock("../../../dev-browser/dev-browser-surface", () => ({
   DevBrowserSurface: ({ workspaceId }: { workspaceId?: string }) => (
     <div data-testid="dev-browser-surface" data-workspace-id={workspaceId ?? ""} />
+  ),
+}));
+
+vi.mock("./canvas-surface", () => ({
+  CanvasSurface: ({
+    workspaceId,
+    tab,
+  }: {
+    workspaceId: string;
+    tab: { canvasId: string; title: string };
+  }) => (
+    <div
+      data-testid="canvas-surface"
+      data-workspace-id={workspaceId}
+      data-canvas-id={tab.canvasId}
+      data-title={tab.title}
+    />
   ),
 }));
 
@@ -235,6 +265,73 @@ describe("EditorSurface", () => {
     expect(screen.getByTestId("monaco-host")).toHaveAttribute("data-read-only", "false");
   });
 
+  it("preserves preview file tab styling from open editor tab metadata", () => {
+    const state = createState({
+      activeFilePath: "package.json",
+      activeEditorTab: { kind: "file", path: "package.json", pinned: false },
+      currentFile: {
+        kind: "text",
+        path: "package.json",
+        content: "{}\n",
+        savedContent: "{}\n",
+        baseHash: "hash-package",
+        isDirty: false,
+      },
+      openEditorPaths: [],
+      openEditorTabs: [{ kind: "file", path: "package.json", pinned: false }],
+      openFiles: {
+        "package.json": {
+          kind: "text",
+          path: "package.json",
+          content: "{}\n",
+          savedContent: "{}\n",
+          baseHash: "hash-package",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByRole("tab", { name: /package\.json/ })).toHaveClass(
+      "code-editor-tab--preview"
+    );
+  });
+
+  it("renders skill text files in standalone Monaco mode without a workspace root", () => {
+    const state = createState({
+      activeFilePath: "skill:my-review-skill/SKILL.md",
+      activeEditorTab: { kind: "file", path: "skill:my-review-skill/SKILL.md" },
+      currentFile: {
+        kind: "text",
+        path: "skill:my-review-skill/SKILL.md",
+        displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+        content: "# My Review Skill\n",
+        savedContent: "# My Review Skill\n",
+        baseHash: "skill-hash-1",
+        isDirty: false,
+      },
+      openEditorTabs: [{ kind: "file", path: "skill:my-review-skill/SKILL.md" }],
+      openEditorPaths: ["skill:my-review-skill/SKILL.md"],
+      openFiles: {
+        "skill:my-review-skill/SKILL.md": {
+          kind: "text",
+          path: "skill:my-review-skill/SKILL.md",
+          displayPath: "/root/.agents/skills/my-review-skill/SKILL.md",
+          content: "# My Review Skill\n",
+          savedContent: "# My Review Skill\n",
+          baseHash: "skill-hash-1",
+          isDirty: false,
+        },
+      },
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("monaco-host")).toHaveAttribute("data-standalone", "true");
+    expect(screen.getByTestId("monaco-host")).toHaveAttribute("data-workspace-root-path", "");
+  });
+
   it("renders document preview for markdown files in preview mode", () => {
     const state = createState({
       mode: "preview",
@@ -289,6 +386,42 @@ describe("EditorSurface", () => {
     render(<EditorSurface state={state} />);
 
     expect(screen.getByTestId("document-preview")).toHaveAttribute("data-allow-scripts", "true");
+  });
+
+  it("renders the canvas surface when the active editor tab is a canvas", () => {
+    const state = createState({
+      activeFilePath: null,
+      activeEditorTab: {
+        kind: "canvas",
+        id: "canvas:canvas-1",
+        canvasId: "canvas-1",
+        title: "Runtime Flow",
+        artifactType: "architecture_canvas",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      },
+      openEditorTabs: [
+        {
+          kind: "canvas",
+          id: "canvas:canvas-1",
+          canvasId: "canvas-1",
+          title: "Runtime Flow",
+          artifactType: "architecture_canvas",
+          sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+        },
+      ],
+      openEditorPaths: [],
+      currentFile: undefined,
+      isTextFile: false,
+      isImageFile: false,
+      canPreview: false,
+      canEdit: false,
+      canDiff: false,
+    });
+
+    render(<EditorSurface state={state} />);
+
+    expect(screen.getByTestId("canvas-surface")).toHaveAttribute("data-workspace-id", "ws-1");
+    expect(screen.getByTestId("canvas-surface")).toHaveAttribute("data-canvas-id", "canvas-1");
   });
 
   it("renders Monaco diff when diff kind is text", () => {

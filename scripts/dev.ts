@@ -3,7 +3,18 @@
  * Runs both frontend and backend dev servers concurrently
  */
 
-import { error, info, log, SERVER_DIR, step, success, WEB_DIR } from "./shared/index.js";
+import {
+  buildDevServerEnv,
+  CLI_DIR,
+  error,
+  info,
+  log,
+  ROOT_DIR,
+  SERVER_DIR,
+  step,
+  success,
+  WEB_DIR,
+} from "./shared/index.js";
 import { isDirectExecution, runBackground, waitForProcesses } from "./shared/process.js";
 
 const VITE_PORT = 5173;
@@ -24,11 +35,16 @@ async function dev(): Promise<void> {
   const serverProcess = runBackground("pnpm", ["tsx", "watch", "src/server.ts"], {
     cwd: SERVER_DIR,
     stdio: "inherit",
-    env: {
-      ...process.env,
-      HOST: SERVER_HOST,
-      PORT: String(SERVER_PORT),
-    },
+    env: buildDevServerEnv({
+      rootDir: ROOT_DIR,
+      cliDir: CLI_DIR,
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        HOST: SERVER_HOST,
+        PORT: String(SERVER_PORT),
+      },
+    }),
   });
 
   const processes = [viteProcess, serverProcess];

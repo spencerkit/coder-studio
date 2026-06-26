@@ -9,6 +9,7 @@ import {
   isPublicStaticPath,
 } from "../web-ui-routing.js";
 import { AuthLoginProtection, resolveClientIp } from "./login-protection.js";
+import type { SessionAutomationTokenRecord, SessionTokenRepo } from "./session-token-repo.js";
 
 const AUTH_COOKIE_NAME = "coder_studio_auth";
 
@@ -60,6 +61,17 @@ interface AuthDeps {
   config: ServerConfig;
   authSessionRepo: AuthSessionRepo;
   authLoginBlockRepo: AuthLoginBlockRepo;
+  sessionTokenRepo?: SessionTokenRepo;
+}
+
+export type RequestAuthContext =
+  | { mode: "browser" }
+  | ({ mode: "session_token" } & SessionAutomationTokenRecord);
+
+declare module "fastify" {
+  interface FastifyRequest {
+    coderStudioAuthContext?: RequestAuthContext;
+  }
 }
 
 const isFrontendNavigationRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
@@ -69,7 +81,79 @@ const isFrontendNavigationRequest = (request: FastifyRequest, deps: AuthDeps): b
   return isFrontendNavigationRequestForWebUi(request);
 };
 
+const LOOPBACK_IPS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+function getBearerToken(request: FastifyRequest): string | null {
+  const header = request.headers.authorization;
+  if (!header) {
+    return null;
+  }
+
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const token = match[1]?.trim();
+  return token ? token : null;
+}
+
+function getTrustedClientIp(request: FastifyRequest): string | null {
+  const ip = resolveClientIp({
+    headers: request.headers,
+    ip: request.ip ?? "",
+  }).trim();
+
+  return ip ? ip.toLowerCase() : null;
+}
+
+function isLoopbackRequest(request: FastifyRequest): boolean {
+  const ip = getTrustedClientIp(request);
+  if (!ip) {
+    return false;
+  }
+
+  return LOOPBACK_IPS.has(ip);
+}
+
+function authenticateSessionToken(
+  request: FastifyRequest,
+  deps: AuthDeps
+): SessionAutomationTokenRecord | null {
+  if (getRequestPathname(request.url) !== "/ws") {
+    return null;
+  }
+
+  const token = getBearerToken(request);
+  if (!token) {
+    return null;
+  }
+
+  if (!isLoopbackRequest(request)) {
+    return null;
+  }
+
+  return deps.sessionTokenRepo?.get(token) ?? null;
+}
+
+function decorateSessionTokenAuth(request: FastifyRequest, deps: AuthDeps): boolean {
+  const tokenRecord = authenticateSessionToken(request, deps);
+  if (tokenRecord) {
+    request.coderStudioAuthContext = {
+      mode: "session_token",
+      ...tokenRecord,
+    };
+    return true;
+  }
+
+  return false;
+}
+
 const isAuthenticatedRequest = (request: FastifyRequest, deps: AuthDeps): boolean => {
+  if (decorateSessionTokenAuth(request, deps)) {
+    return true;
+  }
+
   if (!deps.config.auth.enabled) {
     return true;
   }
@@ -81,11 +165,19 @@ const isAuthenticatedRequest = (request: FastifyRequest, deps: AuthDeps): boolea
   }
 
   const token = decodeAuthCookieValue(authCookie);
-  return deps.authSessionRepo.touch(token, Date.now());
+  const authenticated = deps.authSessionRepo.touch(token, Date.now());
+  if (authenticated) {
+    request.coderStudioAuthContext = { mode: "browser" };
+  }
+  return authenticated;
 };
 
 export const createAuthGuard = (deps: AuthDeps) => {
   return async (request: FastifyRequest, reply: FastifyReply) => {
+    if (decorateSessionTokenAuth(request, deps)) {
+      return;
+    }
+
     if (
       !deps.config.auth.enabled ||
       isPublicPath(request.url) ||

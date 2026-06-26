@@ -198,6 +198,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
     cancelDelete,
     confirmDelete,
     handleSelectFile,
+    handlePinFile,
     loadChildren,
     loadSearchResults,
     openCreateDialog,
@@ -454,6 +455,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                   selectedPath={activeFilePath}
                   isContextTarget={contextTargetPath === node.path}
                   onSelectFile={handleSelectFile}
+                  onPinFile={handlePinFile}
                   onOpenContextMenu={openRowContextMenu}
                   onBeginLongPress={beginRowLongPress}
                   onUpdateLongPress={updateLongPress}
@@ -478,6 +480,7 @@ export const FileTreePanel: FC<FileTreePanelProps> = ({
                 contextTargetPath={contextTargetPath}
                 onRequestCreate={openCreateDialog}
                 onSelectFile={handleSelectFile}
+                onPinFile={handlePinFile}
                 onLoadChildren={loadChildren}
                 onToggleDirs={applyExpandedDirs}
                 isLoadingDir={isLoadingDir}
@@ -535,6 +538,7 @@ interface FileSearchResultRowProps {
   selectedPath: string | null;
   isContextTarget: boolean;
   onSelectFile: (path: string) => void;
+  onPinFile: (path: string) => void;
   onOpenContextMenu: (
     event: ReactMouseEvent<HTMLElement>,
     node: FileNode,
@@ -557,6 +561,7 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
   selectedPath,
   isContextTarget,
   onSelectFile,
+  onPinFile,
   onOpenContextMenu,
   onBeginLongPress,
   onUpdateLongPress,
@@ -590,6 +595,10 @@ const FileSearchResultRow: FC<FileSearchResultRowProps> = ({
         }
 
         onSelectFile(node.path);
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        onPinFile(node.path);
       }}
       onContextMenu={
         variant === "desktop" ? (event) => onOpenContextMenu(event, node, surface) : undefined
@@ -628,6 +637,7 @@ interface FileTreeNodeProps {
   contextTargetPath: string | null;
   onRequestCreate: (mode: "file" | "folder", baseDir: string | null) => void;
   onSelectFile: (path: string) => void;
+  onPinFile: (path: string) => void;
   onLoadChildren: (dirPath: string) => void;
   onToggleDirs: (nextPaths: Iterable<string>) => void;
   isLoadingDir: string | null;
@@ -658,6 +668,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
   contextTargetPath,
   onRequestCreate,
   onSelectFile,
+  onPinFile,
   onLoadChildren,
   onToggleDirs,
   isLoadingDir,
@@ -737,6 +748,14 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
         draggable={variant === "desktop" ? true : undefined}
         onDragStart={variant === "desktop" ? handleDragStart : undefined}
         onClick={handleClick}
+        onDoubleClick={
+          !isFolder
+            ? (event) => {
+                event.preventDefault();
+                onPinFile(node.path);
+              }
+            : undefined
+        }
         onContextMenu={
           variant === "desktop" ? (event) => onOpenContextMenu(event, node, "tree") : undefined
         }
@@ -826,6 +845,7 @@ const FileTreeNode: FC<FileTreeNodeProps> = ({
               contextTargetPath={contextTargetPath}
               onRequestCreate={onRequestCreate}
               onSelectFile={onSelectFile}
+              onPinFile={onPinFile}
               onLoadChildren={onLoadChildren}
               onToggleDirs={onToggleDirs}
               defaultExpandedRootPaths={defaultExpandedRootPaths}

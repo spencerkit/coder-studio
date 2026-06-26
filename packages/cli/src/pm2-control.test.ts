@@ -326,6 +326,73 @@ describe("pm2-control", () => {
     );
   });
 
+  it("keeps waiting while the managed process is still launching", async () => {
+    start.mockImplementationOnce(
+      (_config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
+        callback(null, [{ pm_id: 1 }]);
+      }
+    );
+
+    describeProcess
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [])
+      )
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 424242, pm2_env: { status: "launching", restart_time: 0 } }])
+      )
+      .mockImplementation(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 424242, pm2_env: { status: "online", restart_time: 0 } }])
+      );
+
+    const pendingStart = startManagedServer({
+      script: "/cli/dist/esm/server-runner.js",
+      cwd: "/repo",
+      waitMs: 120,
+    });
+
+    setTimeout(() => {
+      writeRuntimeConfig({
+        host: "127.0.0.1",
+        port: 4187,
+        pid: 424242,
+        token: "test-token",
+        serverInstanceId: "server-1",
+        startedAt: Date.now(),
+      });
+    }, 10);
+
+    await expect(pendingStart).resolves.toBeUndefined();
+  });
+
+  it("times out when the managed process stays online but never writes runtime.json", async () => {
+    start.mockImplementationOnce(
+      (_config: unknown, callback: (error: Error | null, apps: unknown[]) => void) => {
+        callback(null, [{ pm_id: 1 }]);
+      }
+    );
+
+    describeProcess
+      .mockImplementationOnce(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [])
+      )
+      .mockImplementation(
+        (_name: string, callback: (error: Error | null, result: unknown[]) => void) =>
+          callback(null, [{ pid: 424242, pm2_env: { status: "online", restart_time: 0 } }])
+      );
+
+    await expect(
+      startManagedServer({
+        script: "/cli/dist/esm/server-runner.js",
+        cwd: "/repo",
+        waitMs: 50,
+      })
+    ).rejects.toThrow("runtime readiness timed out after 50ms");
+  });
+
   it("includes only the current startup error log excerpt when background startup fails", async () => {
     const { errFile } = getLogPaths();
     mkdirSync(dirname(errFile), { recursive: true });

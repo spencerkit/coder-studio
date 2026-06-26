@@ -167,7 +167,11 @@ async function listStaleLocalBuiltinArtifacts(
 ): Promise<Map<string, StaleLocalBuiltinArtifact>> {
   const artifacts = new Map<string, StaleLocalBuiltinArtifact>();
   for (const entry of libraryEntries) {
-    if (entry.source !== "local" || currentSlugs.has(entry.slug)) {
+    if (
+      entry.source !== "installed" ||
+      entry.origin !== "filesystem" ||
+      currentSlugs.has(entry.slug)
+    ) {
       continue;
     }
 
@@ -184,26 +188,51 @@ async function listStaleLocalBuiltinArtifacts(
 }
 
 async function resolveLocalBuiltinArtifactPath(
-  targetPath: string,
+  discoveredPath: string,
   skillSlug: string
 ): Promise<string | undefined> {
   let stat: Awaited<ReturnType<typeof lstat>>;
   try {
-    stat = await lstat(targetPath);
+    stat = await lstat(discoveredPath);
   } catch {
     return undefined;
   }
 
-  if (!stat.isSymbolicLink()) {
+  if (stat.isSymbolicLink()) {
+    const linkTarget = await readlink(discoveredPath).catch(() => undefined);
+    if (!linkTarget) {
+      return undefined;
+    }
+
+    const resolvedTarget = resolve(dirname(discoveredPath), linkTarget);
+    if (
+      !isCoderStudioBuiltinArtifactPath(resolvedTarget, skillSlug) ||
+      !(await hasSkillMarkdown(resolvedTarget))
+    ) {
+      return undefined;
+    }
+
+    return resolvedTarget;
+  }
+
+  const parentPath = dirname(discoveredPath);
+  let parentStat: Awaited<ReturnType<typeof lstat>>;
+  try {
+    parentStat = await lstat(parentPath);
+  } catch {
     return undefined;
   }
 
-  const linkTarget = await readlink(targetPath).catch(() => undefined);
-  if (!linkTarget) {
+  if (!parentStat.isSymbolicLink()) {
     return undefined;
   }
 
-  const resolvedTarget = resolve(dirname(targetPath), linkTarget);
+  const parentLinkTarget = await readlink(parentPath).catch(() => undefined);
+  if (!parentLinkTarget) {
+    return undefined;
+  }
+
+  const resolvedTarget = join(resolve(dirname(parentPath), parentLinkTarget), skillSlug);
   if (
     !isCoderStudioBuiltinArtifactPath(resolvedTarget, skillSlug) ||
     !(await hasSkillMarkdown(resolvedTarget))

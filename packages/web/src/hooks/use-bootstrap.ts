@@ -14,6 +14,10 @@ import {
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
 import {
+  normalizePaneLayout,
+  paneLayoutAtomFamily,
+} from "../features/agent-panes/atoms/pane-layout";
+import {
   hydrateWorkspaceEditorState,
   normalizeWorkspaceEditorUiState,
 } from "../features/workspace/actions/open-editor-state";
@@ -120,6 +124,10 @@ export function useBootstrap() {
           for (const workspace of nextWorkspaces) {
             wsMap[workspace.id] = workspace;
             hydrateWorkspaceEditorState(store, workspace.id, workspace.uiState);
+            const paneLayout = normalizePaneLayout(workspace.uiState?.paneLayout);
+            if (paneLayout) {
+              store.set(paneLayoutAtomFamily(workspace.id), paneLayout);
+            }
           }
 
           setWorkspaces(wsMap);

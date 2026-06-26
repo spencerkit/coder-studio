@@ -8,14 +8,27 @@ import {
 } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommandContext } from "../ws/dispatch.js";
-import { dispatch } from "../ws/dispatch.js";
+import { dispatch, executeRuntimeCommand } from "../ws/dispatch.js";
 
 import "../commands/recovery.js";
 import "../commands/terminal.js";
 import { clearPendingTerminalInput, registerPendingTerminalInput } from "../commands/terminal.js";
 
-function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
+function createSettingsRepoStub(settings: Record<string, unknown> = {}) {
   return {
+    get: vi.fn((key: string) => settings[key]),
+    getAll: vi.fn(() => ({ ...settings })),
+    set: vi.fn(),
+    delete: vi.fn(),
+    listKeys: vi.fn(() => Object.keys(settings)),
+  };
+}
+
+function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
+  const sendCommand = vi.fn();
+  let runtimeCtxRef: CommandContext;
+
+  const ctx = {
     db: {} as never,
     workspaceMgr: {
       get: vi.fn().mockReturnValue({
@@ -60,11 +73,87 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       sendToClient: vi.fn(),
       sendBinaryToClient: vi.fn(),
     } as never,
+    runtimeBindings: {
+      findWorkspaceIdByTerminalId: vi.fn(() => "ws-1"),
+      findSessionIdByTerminalId: vi.fn(() => "sess-1"),
+      findWorkspaceIdBySessionId: vi.fn(() => "ws-1"),
+      getRuntimeIdForWorkspace: vi.fn(() => "native-default"),
+    } as never,
+    runtimeRouter: {
+      executeOnTarget: vi.fn(async (target, op, args, meta) => {
+        sendCommand(op, args, meta?.clientId);
+        return executeRuntimeCommand(
+          op,
+          args,
+          {
+            runtimeId: "native-default",
+            workspaceLookup: {
+              get: (workspaceId: string) => runtimeCtxRef.workspaceMgr.get(workspaceId) as never,
+              list: () =>
+                typeof runtimeCtxRef.workspaceMgr.list === "function"
+                  ? (runtimeCtxRef.workspaceMgr.list() as never)
+                  : [],
+            },
+            hostBridge: {
+              issueSessionToken: () => ({ token: "" }),
+              revokeSessionTokensBySessionId: () => {},
+              getHostApiUrl: () => undefined,
+              emitDomainEvent: (event) => runtimeCtxRef.eventBus.emit(event),
+              broadcast: (topic, payload) => runtimeCtxRef.broadcaster.broadcast(topic, payload),
+              recordWorkspaceFetch: (workspaceId) =>
+                runtimeCtxRef.workspaceMgr.recordFetch?.(workspaceId),
+              sendToClient: (clientId, payload) =>
+                typeof runtimeCtxRef.broadcaster.sendToClient === "function"
+                  ? runtimeCtxRef.broadcaster.sendToClient(clientId as never, payload as never)
+                  : false,
+              sendBinaryToClient: (clientId, payload) =>
+                typeof runtimeCtxRef.broadcaster.sendBinaryToClient === "function"
+                  ? runtimeCtxRef.broadcaster.sendBinaryToClient(clientId as never, payload)
+                  : false,
+            },
+            eventBus: runtimeCtxRef.eventBus,
+            providerConfigRepo: runtimeCtxRef.providerConfigRepo,
+            providerRegistry: runtimeCtxRef.providerRegistry,
+            sessionMgr: runtimeCtxRef.sessionMgr,
+            terminalMgr: runtimeCtxRef.terminalMgr,
+            taskMgr: runtimeCtxRef.taskMgr as never,
+            lspMgr: runtimeCtxRef.lspMgr,
+            lspToolMgr: runtimeCtxRef.lspToolMgr,
+            lspToolInstallMgr: runtimeCtxRef.lspToolInstallMgr,
+            supervisorMgr: runtimeCtxRef.supervisorMgr,
+            providerRuntimeDeps: runtimeCtxRef.providerRuntimeDeps,
+            providerInstallMgr: runtimeCtxRef.providerInstallMgr,
+            systemDependencyInstallMgr: runtimeCtxRef.systemDependencyInstallMgr,
+            skillsHubClient: runtimeCtxRef.skillsHubClient,
+            skillInstallMgr: runtimeCtxRef.skillInstallMgr,
+            skillMountMgr: runtimeCtxRef.skillMountMgr,
+            skillHealthMgr: runtimeCtxRef.skillHealthMgr,
+            skillLibraryRepo: runtimeCtxRef.skillLibraryRepo,
+            skillTargetRepo: runtimeCtxRef.skillTargetRepo,
+            skillMountRepo: runtimeCtxRef.skillMountRepo,
+            builtinSkillSyncMgr: runtimeCtxRef.builtinSkillSyncMgr,
+            sessionMetadataRepo: runtimeCtxRef.sessionMetadataRepo,
+            sessionAnalysisService: runtimeCtxRef.sessionAnalysisService,
+            workAnalysisService: runtimeCtxRef.workAnalysisService,
+            agentInstructionPublisher: runtimeCtxRef.agentInstructionPublisher,
+          } as never,
+          meta
+        );
+      }),
+    } as never,
     fencingMgr: {} as never,
     supervisorMgr: {} as never,
     providerRegistry: [],
+    activationMgr: { getLease: vi.fn(() => ({ wsClientId: "client-1" })) } as never,
+    autoFetch: {} as never,
+    settingsRepo: createSettingsRepoStub() as never,
+    providerConfigRepo: {} as never,
+    lspMgr: {} as never,
+    __sendCommand: sendCommand,
     ...overrides,
   };
+  runtimeCtxRef = ctx as CommandContext;
+  return runtimeCtxRef;
 }
 
 describe("terminal commands", () => {
@@ -157,6 +246,9 @@ describe("terminal commands", () => {
       text: "ready\n",
     });
     expect(ctx.terminalMgr.getRingBufferTail).toHaveBeenCalledWith("term-1", 4096);
+    expect(
+      (ctx as CommandContext & { __sendCommand: ReturnType<typeof vi.fn> }).__sendCommand
+    ).toHaveBeenCalledWith("terminal.read", { terminalId: "term-1" }, undefined);
   });
 
   it("returns binary metadata and sends replay payload to requesting client", async () => {
@@ -310,6 +402,94 @@ describe("terminal commands", () => {
     }
   });
 
+  it("returns configured and resolved defaults from terminal.profiles.list", async () => {
+    vi.stubEnv("SHELL", "/bin/zsh");
+    const ctx = createContext({
+      settingsRepo: createSettingsRepoStub({
+        "terminal.defaultProfileId": "custom:ops",
+        "terminal.profiles": [
+          {
+            id: "custom:ops",
+            label: "Ops Shell",
+            command: "/usr/bin/env",
+            args: ["bash"],
+            icon: "rocket",
+          },
+        ],
+      }) as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-profiles-list-1",
+        op: "terminal.profiles.list",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      configuredDefaultProfileId: "custom:ops",
+      resolvedDefaultProfileId: "custom:ops",
+    });
+    expect(result.data).toMatchObject({
+      profiles: expect.arrayContaining([
+        expect.objectContaining({
+          id: "custom:ops",
+          label: "Ops Shell",
+          source: "custom",
+          runtime: "native",
+          icon: "rocket",
+        }),
+      ]),
+    });
+  });
+
+  it("accepts omitted args for terminal.profiles.list and trims persisted custom profiles", async () => {
+    vi.stubEnv("SHELL", "/bin/zsh");
+    const ctx = createContext({
+      settingsRepo: createSettingsRepoStub({
+        "terminal.defaultProfileId": "custom:ops",
+        "terminal.profiles": [
+          {
+            id: "custom:ops",
+            label: "  Ops Shell  ",
+            command: "  /usr/bin/env  ",
+            args: ["bash"],
+            icon: "rocket",
+          },
+        ],
+      }) as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-profiles-list-no-args-1",
+        op: "terminal.profiles.list",
+        args: undefined,
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      configuredDefaultProfileId: "custom:ops",
+      resolvedDefaultProfileId: "custom:ops",
+      profiles: expect.arrayContaining([
+        expect.objectContaining({
+          id: "custom:ops",
+          label: "Ops Shell",
+          source: "custom",
+          runtime: "native",
+          icon: "rocket",
+        }),
+      ]),
+    });
+  });
+
   it("uses the current user shell when creating shell terminals", async () => {
     vi.stubEnv("SHELL", "/bin/zsh");
     const ctx = createContext();
@@ -333,6 +513,120 @@ describe("terminal commands", () => {
         title: "zsh",
       })
     );
+    expect(
+      (ctx as CommandContext & { __sendCommand: ReturnType<typeof vi.fn> }).__sendCommand
+    ).toHaveBeenCalledWith(
+      "terminal.spawn",
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        argv: ["/bin/zsh", "-i"],
+        title: "zsh",
+      }),
+      undefined
+    );
+  });
+
+  it("passes the requested terminal profile through terminal.create", async () => {
+    const ctx = createContext({
+      settingsRepo: createSettingsRepoStub({
+        "terminal.profiles": [
+          {
+            id: "custom:tooling",
+            label: "Tooling",
+            command: "npm",
+            args: ["run", "dev"],
+          },
+        ],
+      }) as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-create-profile-1",
+        op: "terminal.create",
+        args: {
+          workspaceId: "ws-1",
+          profileId: "custom:tooling",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(ctx.terminalMgr.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        kind: "shell",
+        argv: ["npm", "run", "dev"],
+        title: "Tooling",
+        cwd: "/tmp/workspace",
+      })
+    );
+    expect(
+      (ctx as CommandContext & { __sendCommand: ReturnType<typeof vi.fn> }).__sendCommand
+    ).toHaveBeenCalledWith(
+      "terminal.spawn",
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        argv: ["npm", "run", "dev"],
+        title: "Tooling",
+      }),
+      undefined
+    );
+  });
+
+  it("returns terminal_profile_unavailable for an explicit missing profile", async () => {
+    vi.stubEnv("SHELL", "/bin/zsh");
+    const ctx = createContext();
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-create-profile-missing-1",
+        op: "terminal.create",
+        args: {
+          workspaceId: "ws-1",
+          profileId: "custom:missing",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "terminal_profile_unavailable",
+      message: "Terminal profile unavailable: custom:missing",
+    });
+    expect(ctx.terminalMgr.create).not.toHaveBeenCalled();
+  });
+
+  it("returns unknown_op when terminal.spawn is dispatched directly", async () => {
+    const ctx = createContext();
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-spawn-direct-dispatch-1",
+        op: "terminal.spawn",
+        args: {
+          workspaceId: "ws-1",
+          argv: ["/bin/zsh", "-i"],
+          title: "zsh",
+          cwd: "/tmp/workspace",
+          cols: 120,
+          rows: 30,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "unknown_op",
+      message: "Unknown operation: terminal.spawn",
+    });
+    expect(ctx.terminalMgr.create).not.toHaveBeenCalled();
   });
 
   it("returns terminal_spawn_failed when shell terminal creation throws a terminal spawn error", async () => {

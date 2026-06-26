@@ -73,6 +73,9 @@ vi.mock("./automation-command-client.js", () => ({
 import { main } from "./cli";
 import { parseArgs, RUNTIME_CONFIG_ERROR } from "./parse-args";
 
+const MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON =
+  '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}';
+
 beforeEach(() => {
   readCliConfig.mockReturnValue(null);
   writeCliConfig.mockImplementation(() => undefined);
@@ -167,7 +170,7 @@ describe("main", () => {
     expect(startManagedServer).toHaveBeenCalledWith({
       script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
       cwd: process.cwd(),
-      waitMs: 5000,
+      waitMs: 15000,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
     expect(logSpy).toHaveBeenCalledWith("Run `coder-studio status` to inspect the server.");
@@ -315,7 +318,7 @@ describe("main", () => {
     expect(startManagedServer).toHaveBeenCalledWith({
       script: expect.stringMatching(/server-runner\.(ts|js|mjs)$/),
       cwd: process.cwd(),
-      waitMs: 5000,
+      waitMs: 15000,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
   });
@@ -592,6 +595,20 @@ describe("main", () => {
     );
   });
 
+  it("prints canvas help examples with escaped newlines in document-json", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["help"]);
+
+    const output = logSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain(
+      `coder-studio canvas create --workspace ws_123 --kind architecture_canvas --title "Runtime Flow" --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --open --json`
+    );
+    expect(output).toContain(
+      `coder-studio canvas update --workspace ws_123 --canvas canvas_123 --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --json`
+    );
+  });
+
   it("prints workspace list output through the Coder Studio command API", async () => {
     callCoderStudioCommand.mockResolvedValueOnce([{ id: "ws-1", path: "/repo" }]);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -824,20 +841,236 @@ describe("main", () => {
     });
   });
 
+  it("prints UI open-canvas dispatch output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      accepted: true,
+      requestId: "req-open-canvas",
+      topic: "workspace.ws-1.ui.action",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["ui", "open-canvas", "--workspace", "ws-1", "--canvas", "canvas-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "uiAction.dispatch",
+      args: {
+        workspaceId: "ws-1",
+        intent: {
+          type: "canvas.open",
+          workspaceId: "ws-1",
+          canvasId: "canvas-1",
+        },
+        source: { kind: "agent" },
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      accepted: true,
+      requestId: "req-open-canvas",
+      topic: "workspace.ws-1.ui.action",
+    });
+  });
+
   it("prints memory list output through the Coder Studio command API", async () => {
     callCoderStudioCommand.mockResolvedValueOnce([{ id: "mem-1", workspaceId: "ws-1" }]);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    await main(["memory", "list", "--workspace", "ws-1", "--type", "decision", "--json"]);
+    await main(["memory", "list", "--workspace", "ws-1", "--type", "wiki", "--json"]);
 
     expect(callCoderStudioCommand).toHaveBeenCalledWith({
       apiUrl: undefined,
       op: "memory.list",
-      args: { workspaceId: "ws-1", type: "decision" },
+      args: { workspaceId: "ws-1", type: "wiki" },
     });
     expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual([
       { id: "mem-1", workspaceId: "ws-1" },
     ]);
+  });
+
+  it("prints canvas list output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce([{ id: "canvas-1", workspaceId: "ws-1" }]);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["canvas", "list", "--workspace", "ws-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "canvas.list",
+      args: { workspaceId: "ws-1" },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual([
+      { id: "canvas-1", workspaceId: "ws-1" },
+    ]);
+  });
+
+  it("maps canvas create options to canvas.create", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ id: "canvas-1", workspaceId: "ws-1" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const document = MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON;
+
+    await main([
+      "canvas",
+      "create",
+      "--workspace",
+      "ws-1",
+      "--kind",
+      "architecture_canvas",
+      "--title",
+      "Runtime Flow",
+      "--document-json",
+      document,
+      "--open",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "canvas.create",
+      args: {
+        workspaceId: "ws-1",
+        kind: "architecture_canvas",
+        title: "Runtime Flow",
+        document: {
+          summary: "Runtime flow",
+          diagram: {
+            dsl: "mermaid",
+            source: "flowchart LR\nWebUI[Web UI] --> Server[Runtime Server]",
+          },
+          annotations: [],
+        },
+        openInEditor: true,
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      id: "canvas-1",
+      workspaceId: "ws-1",
+    });
+  });
+
+  it("maps canvas update options to canvas.update", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ id: "canvas-1", workspaceId: "ws-1" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const document = MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON;
+
+    await main([
+      "canvas",
+      "update",
+      "--workspace",
+      "ws-1",
+      "--canvas-id",
+      "canvas-1",
+      "--document-json",
+      document,
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "canvas.update",
+      args: {
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        document: {
+          summary: "Runtime flow",
+          diagram: {
+            dsl: "mermaid",
+            source: "flowchart LR\nWebUI[Web UI] --> Server[Runtime Server]",
+          },
+          annotations: [],
+        },
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      id: "canvas-1",
+      workspaceId: "ws-1",
+    });
+  });
+
+  it("prints canvas render output through the Coder Studio command API", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({ id: "canvas-1", format: "svg" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["canvas", "render", "--workspace", "ws-1", "--canvas", "canvas-1", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "canvas.render",
+      args: {
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      id: "canvas-1",
+      format: "svg",
+    });
+  });
+
+  it("maps canvas render source paths to canvas.render", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      format: "svg",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "canvas",
+      "render",
+      "--workspace",
+      "ws-1",
+      "--source-path",
+      ".coder-studio/canvases/canvas-1.canvas.json",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "canvas.render",
+      args: {
+        workspaceId: "ws-1",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      format: "svg",
+    });
+  });
+
+  it("maps canvas render canvas ids and source paths together to canvas.render", async () => {
+    callCoderStudioCommand.mockResolvedValueOnce({
+      canvasId: "canvas-1",
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      format: "svg",
+    });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "canvas",
+      "render",
+      "--workspace",
+      "ws-1",
+      "--canvas",
+      "canvas-1",
+      "--source-path",
+      ".coder-studio/canvases/canvas-1.canvas.json",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: undefined,
+      op: "canvas.render",
+      args: {
+        workspaceId: "ws-1",
+        canvasId: "canvas-1",
+        sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      },
+    });
+    expect(JSON.parse(logSpy.mock.calls[0]?.[0] as string)).toEqual({
+      canvasId: "canvas-1",
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      format: "svg",
+    });
   });
 
   it("uses CODER_STUDIO_WORKSPACE_ID for memory commands when workspace is omitted", async () => {
@@ -877,9 +1110,11 @@ describe("main", () => {
       "--workspace",
       "ws-1",
       "--type",
-      "decision",
+      "issue",
       "--content",
-      "Persist decisions outside the repo.",
+      "Verify memory status forwarding.",
+      "--status",
+      "pending_verification",
       "--tag",
       "Architecture",
       "--tag",
@@ -894,9 +1129,9 @@ describe("main", () => {
       op: "memory.create",
       args: {
         workspaceId: "ws-1",
-        type: "decision",
-        content: "Persist decisions outside the repo.",
-        tags: ["Architecture", "Testing"],
+        type: "issue",
+        content: "Verify memory status forwarding.",
+        status: "pending_verification",
         sourceHint: { skillSlug: "coder-studio-memory" },
       },
     });
@@ -914,6 +1149,8 @@ describe("main", () => {
       "ws-1",
       "--content",
       "Updated content",
+      "--status",
+      "completed",
       "--tag",
       "storage",
       "--json",
@@ -927,7 +1164,7 @@ describe("main", () => {
         workspaceId: "ws-1",
         id: "mem-1",
         content: "Updated content",
-        tags: ["storage"],
+        status: "completed",
       },
     });
     expect(callCoderStudioCommand).toHaveBeenNthCalledWith(2, {
@@ -1124,7 +1361,7 @@ describe("parseArgs", () => {
         "--workspace",
         "ws-1",
         "--type",
-        "decision",
+        "wiki",
         "--tag",
         "Architecture",
         "--json",
@@ -1133,7 +1370,7 @@ describe("parseArgs", () => {
       command: "memory",
       memoryCommand: "list",
       workspaceId: "ws-1",
-      memoryType: "decision",
+      memoryType: "wiki",
       tags: ["Architecture"],
       json: true,
     });
@@ -1171,6 +1408,18 @@ describe("parseArgs", () => {
     });
   });
 
+  it("parses UI open-canvas command", () => {
+    expect(
+      parseArgs(["ui", "open-canvas", "--workspace", "ws-1", "--canvas", "canvas-1", "--json"])
+    ).toEqual({
+      command: "ui",
+      uiCommand: "open-canvas",
+      workspaceId: "ws-1",
+      canvasId: "canvas-1",
+      json: true,
+    });
+  });
+
   it("parses memory search command with query text", () => {
     expect(parseArgs(["memory", "search", "testing", "--workspace", "ws-1"])).toEqual({
       command: "memory",
@@ -1189,7 +1438,7 @@ describe("parseArgs", () => {
     });
   });
 
-  it("parses memory add command with content fields, tags, and skill source", () => {
+  it("parses memory add command with content fields, status, tags, and skill source", () => {
     expect(
       parseArgs([
         "memory",
@@ -1197,9 +1446,11 @@ describe("parseArgs", () => {
         "--workspace",
         "ws-1",
         "--type",
-        "decision",
+        "issue",
         "--content",
-        "Persist decisions.",
+        "Verify memory status forwarding.",
+        "--status",
+        "pending_verification",
         "--tag",
         "Architecture",
         "--tag",
@@ -1212,8 +1463,9 @@ describe("parseArgs", () => {
       command: "memory",
       memoryCommand: "add",
       workspaceId: "ws-1",
-      memoryType: "decision",
-      content: "Persist decisions.",
+      memoryType: "issue",
+      content: "Verify memory status forwarding.",
+      memoryStatus: "pending_verification",
       tags: ["Architecture", "Testing"],
       skillSlug: "coder-studio-memory",
       json: true,
@@ -1244,6 +1496,8 @@ describe("parseArgs", () => {
         "ws-1",
         "--content",
         "Updated content",
+        "--status",
+        "completed",
         "--tag",
         "storage",
       ])
@@ -1253,6 +1507,7 @@ describe("parseArgs", () => {
       memoryId: "mem-1",
       workspaceId: "ws-1",
       content: "Updated content",
+      memoryStatus: "completed",
       tags: ["storage"],
     });
     expect(parseArgs(["memory", "delete", "mem-1", "--workspace", "ws-1"])).toEqual({
@@ -1261,6 +1516,368 @@ describe("parseArgs", () => {
       memoryId: "mem-1",
       workspaceId: "ws-1",
     });
+  });
+
+  it("parses canvas create command with required options", () => {
+    expect(
+      parseArgs([
+        "canvas",
+        "create",
+        "--workspace",
+        "ws-1",
+        "--kind",
+        "architecture_canvas",
+        "--title",
+        "Runtime Flow",
+        "--document-json",
+        MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON,
+        "--open",
+        "--json",
+      ])
+    ).toEqual({
+      command: "canvas",
+      canvasCommand: "create",
+      workspaceId: "ws-1",
+      kind: "architecture_canvas",
+      title: "Runtime Flow",
+      documentJson: MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON,
+      openInEditor: true,
+      json: true,
+    });
+  });
+
+  it("parses canvas list command with workspace id", () => {
+    expect(parseArgs(["canvas", "list", "--workspace", "ws-1", "--json"])).toEqual({
+      command: "canvas",
+      canvasCommand: "list",
+      workspaceId: "ws-1",
+      json: true,
+    });
+  });
+
+  it("parses canvas update command with workspace, canvas id, and document", () => {
+    expect(
+      parseArgs([
+        "canvas",
+        "update",
+        "--workspace",
+        "ws-1",
+        "--canvas-id",
+        "canvas-1",
+        "--title",
+        "Updated Runtime Flow",
+        "--document-json",
+        MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON,
+        "--json",
+      ])
+    ).toEqual({
+      command: "canvas",
+      canvasCommand: "update",
+      workspaceId: "ws-1",
+      canvasId: "canvas-1",
+      title: "Updated Runtime Flow",
+      documentJson: MINIMAL_ARCHITECTURE_CANVAS_DOCUMENT_JSON,
+      json: true,
+    });
+  });
+
+  it("parses canvas render command with workspace and canvas-id alias", () => {
+    expect(
+      parseArgs(["canvas", "render", "--workspace", "ws-1", "--canvas-id", "canvas-1", "--json"])
+    ).toEqual({
+      command: "canvas",
+      canvasCommand: "render",
+      workspaceId: "ws-1",
+      canvasId: "canvas-1",
+      json: true,
+    });
+  });
+
+  it("parses canvas render command with workspace and canvas id", () => {
+    expect(
+      parseArgs(["canvas", "render", "--workspace", "ws-1", "--canvas", "canvas-1", "--json"])
+    ).toEqual({
+      command: "canvas",
+      canvasCommand: "render",
+      workspaceId: "ws-1",
+      canvasId: "canvas-1",
+      json: true,
+    });
+  });
+
+  it("parses canvas render command with workspace and source path", () => {
+    expect(
+      parseArgs([
+        "canvas",
+        "render",
+        "--workspace",
+        "ws-1",
+        "--source-path",
+        ".coder-studio/canvases/canvas-1.canvas.json",
+        "--json",
+      ])
+    ).toEqual({
+      command: "canvas",
+      canvasCommand: "render",
+      workspaceId: "ws-1",
+      sourcePath: ".coder-studio/canvases/canvas-1.canvas.json",
+      json: true,
+    });
+  });
+
+  it("clears canvas args when switching from update to render", () => {
+    expect(() =>
+      parseArgs([
+        "canvas",
+        "update",
+        "--workspace",
+        "ws-1",
+        "--canvas",
+        "c1",
+        "--document-json",
+        "{}",
+        "render",
+      ])
+    ).toThrow("Missing canvas or source-path value");
+  });
+
+  it("clears canvas args when switching from create to update", () => {
+    expect(() =>
+      parseArgs([
+        "canvas",
+        "create",
+        "--workspace",
+        "ws-1",
+        "--kind",
+        "architecture_canvas",
+        "--title",
+        "T",
+        "--document-json",
+        "{}",
+        "update",
+      ])
+    ).toThrow("Missing canvas value");
+  });
+
+  it("clears update-only canvas args when switching to list", () => {
+    expect(
+      parseArgs([
+        "canvas",
+        "update",
+        "--workspace",
+        "ws-1",
+        "--canvas",
+        "c1",
+        "--document-json",
+        "{}",
+        "list",
+      ])
+    ).toEqual({
+      command: "canvas",
+      canvasCommand: "list",
+      workspaceId: "ws-1",
+    });
+  });
+
+  it("retains pre-subcommand memory options for parse compatibility", () => {
+    expect(parseArgs(["memory", "--type", "wiki", "list", "--json"])).toEqual({
+      command: "memory",
+      memoryCommand: "list",
+      memoryType: "wiki",
+      json: true,
+    });
+    expect(parseArgs(["memory", "--tag", "Architecture", "list", "--workspace", "ws-1"])).toEqual({
+      command: "memory",
+      memoryCommand: "list",
+      workspaceId: "ws-1",
+      tags: ["Architecture"],
+    });
+    expect(parseArgs(["memory", "--type", "issue", "--content", "x", "add"])).toEqual({
+      command: "memory",
+      memoryCommand: "add",
+      memoryType: "issue",
+      content: "x",
+    });
+  });
+
+  it("retains pre-subcommand memory status for update", () => {
+    expect(
+      parseArgs([
+        "memory",
+        "--status",
+        "completed",
+        "update",
+        "mem-1",
+        "--workspace",
+        "ws-1",
+        "--content",
+        "x",
+      ])
+    ).toEqual({
+      command: "memory",
+      memoryCommand: "update",
+      memoryId: "mem-1",
+      workspaceId: "ws-1",
+      content: "x",
+      memoryStatus: "completed",
+    });
+  });
+
+  it("rejects memory status on subcommands that do not write status", () => {
+    expect(() => parseArgs(["memory", "list", "--status", "completed"])).toThrow(
+      "Unknown option: --status"
+    );
+    expect(() => parseArgs(["memory", "--status", "completed", "list"])).toThrow(
+      "Unknown option: --status"
+    );
+    expect(() =>
+      parseArgs(["memory", "search", "testing", "--workspace", "ws-1", "--status", "completed"])
+    ).toThrow("Unknown option: --status");
+    expect(() =>
+      parseArgs(["memory", "delete", "mem-1", "--workspace", "ws-1", "--status", "completed"])
+    ).toThrow("Unknown option: --status");
+  });
+
+  it("clears memory status when switching memory subcommands", () => {
+    expect(
+      parseArgs([
+        "memory",
+        "add",
+        "--workspace",
+        "ws-1",
+        "--type",
+        "issue",
+        "--content",
+        "Verify memory status forwarding.",
+        "--status",
+        "completed",
+        "memory",
+        "update",
+        "mem-1",
+        "--workspace",
+        "ws-1",
+        "--content",
+        "x",
+      ])
+    ).toEqual({
+      command: "memory",
+      memoryCommand: "update",
+      memoryId: "mem-1",
+      workspaceId: "ws-1",
+      content: "x",
+    });
+  });
+
+  it("clears memory-only args when switching from memory to another automation command", () => {
+    const cases: Array<{ argv: string[]; expected: ReturnType<typeof parseArgs> }> = [
+      {
+        argv: ["memory", "--status", "completed", "workspace", "list", "--json"],
+        expected: {
+          command: "workspace",
+          workspaceCommand: "list",
+          json: true,
+        },
+      },
+      {
+        argv: [
+          "memory",
+          "add",
+          "--workspace",
+          "ws-memory",
+          "--type",
+          "issue",
+          "--content",
+          "x",
+          "--status",
+          "completed",
+          "workspace",
+          "list",
+          "--json",
+        ],
+        expected: {
+          command: "workspace",
+          workspaceCommand: "list",
+          json: true,
+        },
+      },
+      {
+        argv: [
+          "memory",
+          "add",
+          "--workspace",
+          "ws-memory",
+          "--type",
+          "issue",
+          "--content",
+          "x",
+          "--status",
+          "completed",
+          "git",
+          "status",
+          "--workspace",
+          "ws-git",
+          "--json",
+        ],
+        expected: {
+          command: "git",
+          gitCommand: "status",
+          workspaceId: "ws-git",
+          json: true,
+        },
+      },
+      {
+        argv: [
+          "memory",
+          "--status",
+          "completed",
+          "--type",
+          "issue",
+          "--content",
+          "x",
+          "--tag",
+          "Architecture",
+          "git",
+          "status",
+          "--workspace",
+          "ws-1",
+          "--json",
+        ],
+        expected: {
+          command: "git",
+          gitCommand: "status",
+          workspaceId: "ws-1",
+          json: true,
+        },
+      },
+      {
+        argv: [
+          "memory",
+          "--status",
+          "completed",
+          "--type",
+          "issue",
+          "--content",
+          "x",
+          "--tag",
+          "Architecture",
+          "ui",
+          "show-panel",
+          "--panel",
+          "terminal",
+          "--json",
+        ],
+        expected: {
+          command: "ui",
+          uiCommand: "show-panel",
+          panel: "terminal",
+          json: true,
+        },
+      },
+    ];
+
+    for (const { argv, expected } of cases) {
+      expect(parseArgs(argv)).toEqual(expected);
+    }
   });
 
   it("parses server alias as serve", () => {
@@ -1475,17 +2092,41 @@ describe("parseArgs", () => {
       "Missing memory id value"
     );
     expect(() => parseArgs(["memory", "add", "--workspace", "ws-1"])).toThrow("Missing type value");
-    expect(() => parseArgs(["memory", "add", "--type", "decision"])).toThrow(
-      "Missing content value"
-    );
+    expect(() => parseArgs(["memory", "add", "--type", "issue"])).toThrow("Missing content value");
     expect(() => parseArgs(["memory", "search", "--workspace", "ws-1"])).toThrow(
       "Missing query value"
     );
   });
 
+  it("requires canvas command arguments", () => {
+    expect(() => parseArgs(["canvas"])).toThrow("Missing canvas subcommand");
+    expect(() => parseArgs(["canvas", "list"])).toThrow("Missing workspace value");
+    expect(() =>
+      parseArgs(["canvas", "create", "--workspace", "ws-1", "--kind", "architecture_canvas"])
+    ).toThrow("Missing title value");
+    expect(() =>
+      parseArgs([
+        "canvas",
+        "create",
+        "--workspace",
+        "ws-1",
+        "--kind",
+        "architecture_canvas",
+        "--title",
+        "Runtime Flow",
+      ])
+    ).toThrow("Missing document-json value");
+    expect(() =>
+      parseArgs(["canvas", "update", "--workspace", "ws-1", "--document-json", "{}"])
+    ).toThrow("Missing canvas value");
+    expect(() => parseArgs(["canvas", "render", "--workspace", "ws-1"])).toThrow(
+      "Missing canvas or source-path value"
+    );
+  });
+
   it("rejects legacy title flags on memory commands", () => {
     expect(() =>
-      parseArgs(["memory", "add", "--workspace", "ws-1", "--type", "decision", "--title", "t"])
+      parseArgs(["memory", "add", "--workspace", "ws-1", "--type", "issue", "--title", "t"])
     ).toThrow("Unknown option: --title");
     expect(() =>
       parseArgs(["memory", "update", "mem-1", "--workspace", "ws-1", "--title", "t"])

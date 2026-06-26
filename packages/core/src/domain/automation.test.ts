@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildIdentifyResult,
   DEFAULT_AGENT_AUTOMATION_PERMISSIONS,
   listAutomationCapabilities,
+  SCOPED_SESSION_AUTOMATION_PERMISSIONS,
 } from "./automation.js";
 
 describe("automation domain", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.CODER_STUDIO_AUTOMATION_PERMISSIONS;
+  });
+
   it("returns outside-Coder-Studio when env marker is absent", () => {
     expect(buildIdentifyResult({ env: {} })).toEqual({ insideCoderStudio: false });
   });
@@ -33,6 +39,93 @@ describe("automation domain", () => {
       apiUrl: "http://127.0.0.1:4173",
       permissions: DEFAULT_AGENT_AUTOMATION_PERMISSIONS,
     });
+  });
+
+  it("reads scoped automation permissions from env when present", () => {
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: SCOPED_SESSION_AUTOMATION_PERMISSIONS.join(", "),
+        },
+      }).permissions
+    ).toEqual(SCOPED_SESSION_AUTOMATION_PERMISSIONS);
+  });
+
+  it("treats an explicitly empty scoped permission env as authoritative and returns no permissions", () => {
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "",
+        },
+      }).permissions
+    ).toEqual([]);
+  });
+
+  it("treats an invalid scoped permission env as authoritative and returns no permissions", () => {
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "invalid:permission, nope",
+        },
+      }).permissions
+    ).toEqual([]);
+  });
+
+  it("treats mixed valid and invalid scoped permission env tokens as invalid", () => {
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "session:read,invalid:permission",
+        },
+      }).permissions
+    ).toEqual([]);
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "invalid:permission,session:read",
+        },
+      }).permissions
+    ).toEqual([]);
+  });
+
+  it("treats blank scoped permission env tokens as invalid", () => {
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "session:read,",
+        },
+      }).permissions
+    ).toEqual([]);
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: ",session:read",
+        },
+      }).permissions
+    ).toEqual([]);
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "session:read,,git:read",
+        },
+      }).permissions
+    ).toEqual([]);
+    expect(
+      buildIdentifyResult({
+        env: {
+          CODER_STUDIO: "1",
+          CODER_STUDIO_AUTOMATION_PERMISSIONS: "session:read, ,git:read",
+        },
+      }).permissions
+    ).toEqual([]);
   });
 
   it("lists capabilities allowed by caller permissions", () => {
@@ -79,24 +172,24 @@ describe("automation domain", () => {
     expect(memoryAdd).toMatchObject({
       permissions: ["memory:write"],
       riskLevel: "write",
-      examples: [
-        'coder-studio memory add --workspace ws_123 --type project --content "..." --json',
-      ],
+      examples: ['coder-studio memory add --workspace ws_123 --type wiki --content "..." --json'],
     });
     expect(memoryAdd?.examples).toEqual([
-      'coder-studio memory add --workspace ws_123 --type project --content "..." --json',
+      'coder-studio memory add --workspace ws_123 --type wiki --content "..." --json',
     ]);
     expect(memoryAdd?.inputSchema).toEqual({
       workspaceId: "string",
-      type: "feature | todo | bugfix | project | note",
+      type: "wiki | issue | todo | note",
       content: "string",
+      status: "not_started | in_progress | pending_verification | completed optional",
     });
     expect(memoryAdd?.inputSchema).not.toHaveProperty("tags");
     expect(memoryUpdate?.inputSchema).toEqual({
       workspaceId: "string",
       id: "string",
-      type: "feature | todo | bugfix | project | note optional",
+      type: "wiki | issue | todo | note optional",
       content: "string optional",
+      status: "not_started | in_progress | pending_verification | completed optional",
     });
     expect(memoryUpdate?.inputSchema).not.toHaveProperty("tags");
     expect(memoryUpdate).toMatchObject({
@@ -108,10 +201,17 @@ describe("automation domain", () => {
     expect(memoryExamples).toSatisfy((examples) =>
       examples.every((example) => !example.includes("--tag"))
     );
+    expect(memoryExamples).toSatisfy((examples) =>
+      examples.every((example) => !example.includes("--type project"))
+    );
     expect(memoryAdd?.inputSchema.type).not.toContain("project_fact");
     expect(memoryUpdate?.inputSchema.type).not.toContain("project_fact");
     expect(memoryExamples).toSatisfy((examples) =>
       examples.every((example) => !example.includes("project_fact"))
+    );
+    expect(JSON.stringify(memoryCapabilities)).not.toContain("bugfix");
+    expect(JSON.stringify(memoryCapabilities)).not.toContain(
+      "feature | todo | bugfix | project | note"
     );
   });
 
@@ -170,5 +270,120 @@ describe("automation domain", () => {
         (capability) => capability.name
       )
     ).toEqual(["memory.add", "memory.update", "memory.delete"]);
+  });
+
+  it("lists scoped capabilities without workspace.list while preserving session, terminal, git, memory, and ui actions", () => {
+    const capabilities = listAutomationCapabilities({
+      permissions: SCOPED_SESSION_AUTOMATION_PERMISSIONS,
+    });
+    const capabilityNames = capabilities.map((capability) => capability.name);
+
+    expect(capabilityNames).not.toContain("workspace.list");
+    expect(capabilityNames).toEqual(
+      expect.arrayContaining([
+        "session.list",
+        "terminal.read",
+        "git.status",
+        "git.diff",
+        "memory.list",
+        "memory.search",
+        "memory.get",
+        "memory.add",
+        "memory.update",
+        "memory.delete",
+        "ui.editor.openFile",
+        "ui.editor.closeFile",
+        "ui.browser.openUrl",
+        "ui.browser.closeUrl",
+        "ui.workspace.focus",
+        "ui.panel.show",
+        "ui.command.run",
+      ])
+    );
+  });
+
+  it("prints scoped capabilities in the cli without workspace.list", async () => {
+    process.env.CODER_STUDIO_AUTOMATION_PERMISSIONS =
+      SCOPED_SESSION_AUTOMATION_PERMISSIONS.join(", ");
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { printCapabilities } = await import("../../../cli/src/automation-client.ts");
+
+    printCapabilities({ json: true });
+
+    const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+      version: number;
+      commands: Array<{ name: string }>;
+    };
+
+    expect(payload.version).toBe(1);
+    expect(payload.commands.map((command) => command.name)).not.toContain("workspace.list");
+    expect(payload.commands.map((command) => command.name)).toEqual(
+      expect.arrayContaining([
+        "session.list",
+        "terminal.read",
+        "git.status",
+        "git.diff",
+        "memory.list",
+        "memory.search",
+        "memory.get",
+        "memory.add",
+        "memory.update",
+        "memory.delete",
+        "ui.editor.openFile",
+        "ui.command.run",
+      ])
+    );
+  });
+
+  it("prints no cli capabilities when the scoped permission env is present but invalid", async () => {
+    process.env.CODER_STUDIO_AUTOMATION_PERMISSIONS = "invalid:permission, nope";
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { printCapabilities } = await import("../../../cli/src/automation-client.ts");
+
+    printCapabilities({ json: true });
+
+    const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+      version: number;
+      commands: Array<{ name: string }>;
+    };
+
+    expect(payload.version).toBe(1);
+    expect(payload.commands).toEqual([]);
+  });
+
+  it("prints no cli capabilities when the scoped permission env mixes valid and invalid tokens", async () => {
+    process.env.CODER_STUDIO_AUTOMATION_PERMISSIONS = "session:read,invalid:permission";
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { printCapabilities } = await import("../../../cli/src/automation-client.ts");
+
+    printCapabilities({ json: true });
+
+    const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+      version: number;
+      commands: Array<{ name: string }>;
+    };
+
+    expect(payload.version).toBe(1);
+    expect(payload.commands).toEqual([]);
+  });
+
+  it("prints no cli capabilities when the scoped permission env includes blank tokens", async () => {
+    process.env.CODER_STUDIO_AUTOMATION_PERMISSIONS = "session:read, ";
+
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { printCapabilities } = await import("../../../cli/src/automation-client.ts");
+
+    printCapabilities({ json: true });
+
+    const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string) as {
+      version: number;
+      commands: Array<{ name: string }>;
+    };
+
+    expect(payload.version).toBe(1);
+    expect(payload.commands).toEqual([]);
   });
 });

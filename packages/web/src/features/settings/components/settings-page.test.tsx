@@ -1,4 +1,8 @@
-import type { MonitoringResponse, MonitoringSettings } from "@coder-studio/core";
+import type {
+  MonitoringResponse,
+  MonitoringSettings,
+  TerminalProfilesListResult,
+} from "@coder-studio/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
@@ -138,6 +142,19 @@ const DEFAULT_PROVIDER_LIST = [
   },
 ] as const;
 
+const DEFAULT_TERMINAL_PROFILES: TerminalProfilesListResult = {
+  profiles: [
+    {
+      id: "detected:bash",
+      label: "Bash",
+      source: "detected",
+      runtime: "native",
+      icon: "terminal",
+    },
+  ],
+  resolvedDefaultProfileId: "detected:bash",
+};
+
 function buildSettingsDashboard(
   overrides: {
     errorMessage?: string;
@@ -259,6 +276,10 @@ function createDefaultCommandHandler(overrides?: {
       return overrides?.providers ?? DEFAULT_PROVIDER_LIST;
     }
 
+    if (op === "terminal.profiles.list") {
+      return DEFAULT_TERMINAL_PROFILES;
+    }
+
     if (op === "settings.previewCommand") {
       return overrides?.preview?.(args) ?? { preview: "preview" };
     }
@@ -343,7 +364,7 @@ function renderSettingsPage(
 }
 
 function renderEmbeddedSettingsPage(
-  section: "general" | "providers" | "appearance" | "shortcuts" | "about",
+  section: "general" | "providers" | "terminal" | "appearance" | "shortcuts" | "about",
   options: {
     aboutView?: "all" | "product" | "update-status" | "auto-update";
     store?: ReturnType<typeof createConnectedStore>;
@@ -617,6 +638,9 @@ describe("SettingsPage", () => {
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
     ).toBeTruthy();
     expect(
+      desktopView.container.querySelector('[data-icon-semantic="nav.settings.terminal"]')
+    ).toBeTruthy();
+    expect(
       desktopView.container.querySelector('[data-icon-semantic="nav.settings.appearance"]')
     ).toBeTruthy();
     expect(
@@ -652,6 +676,9 @@ describe("SettingsPage", () => {
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.providers"]')
+    ).toBeTruthy();
+    expect(
+      mobileView.container.querySelector('[data-icon-semantic="nav.settings.terminal"]')
     ).toBeTruthy();
     expect(
       mobileView.container.querySelector('[data-icon-semantic="nav.settings.appearance"]')
@@ -978,7 +1005,41 @@ describe("SettingsPage", () => {
       .getAllByRole("button")
       .map((button) => button.textContent?.trim() ?? "");
 
-    expect(labels).toEqual(["通用", "Agents", "外观", "快捷键"]);
+    expect(labels).toEqual(["通用", "Agents", "终端", "外观", "快捷键"]);
+  });
+
+  it("groups terminal with workspace/runtime settings on mobile", async () => {
+    viewportMocks.viewport = "mobile";
+    const store = createConnectedStore(vi.fn().mockResolvedValue({}));
+
+    const view = renderSettingsPage(store);
+
+    const root = await waitFor(() => {
+      const element = view.container.querySelector(".settings-mobile-root");
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("Settings mobile root did not render");
+      }
+      return element;
+    });
+    const groups = root.querySelectorAll(".settings-mobile-group");
+
+    expect(groups).toHaveLength(2);
+    expect(
+      within(groups[0] as HTMLElement)
+        .getAllByRole("button")
+        .map(
+          (button) =>
+            button.querySelector(".settings-mobile-item__label")?.textContent?.trim() ?? ""
+        )
+    ).toEqual(["通用", "Agents", "终端"]);
+    expect(
+      within(groups[1] as HTMLElement)
+        .getAllByRole("button")
+        .map(
+          (button) =>
+            button.querySelector(".settings-mobile-item__label")?.textContent?.trim() ?? ""
+        )
+    ).toEqual(["外观", "快捷键"]);
   });
 
   it("does not expose diagnostics in the visible settings navigation", async () => {
@@ -2897,10 +2958,10 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     await waitFor(() => {
-      expect(screen.getByText("通知")).toBeInTheDocument();
+      expect(screen.getByText("终端渲染器")).toBeInTheDocument();
     });
 
     const detailBody = document.querySelector(".settings-body--mobile");
@@ -2998,16 +3059,19 @@ describe("SettingsPage", () => {
     renderSettingsPage(store);
     fireEvent.click(screen.getByRole("button", { name: "外观" }));
 
-    const appearanceGroupTitles = (await screen.findAllByRole("heading", { level: 3 })).map(
-      (heading) => heading.textContent
-    );
     const themePicker = await screen.findByRole("button", { name: "主题 Mint 深色" });
+    const appearanceSurface = themePicker.closest(".settings-content-surface");
+    const appearanceGroupTitles = within(appearanceSurface as HTMLElement)
+      .getAllByRole("heading", { level: 3 })
+      .map((heading) => heading.textContent);
 
     expect(appearanceGroupTitles[0]).toBe("主题");
     expect(themePicker).toHaveAccessibleDescription("选择应用主题");
     expect(screen.queryByRole("group", { name: "语言" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "桌面端终端字号" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "移动端终端字号" })).not.toBeInTheDocument();
     expect(themePicker).toHaveAttribute("aria-haspopup", "listbox");
 
     fireEvent.click(screen.getByRole("button", { name: "通用" }));
@@ -3016,6 +3080,9 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("group", { name: "语言" })).toHaveAccessibleDescription("选择界面语言");
     expect(chineseLanguagePill).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("group", { name: "终端渲染器" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "选中自动复制" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "终端配置" })).not.toBeInTheDocument();
   });
 
   it("hydrates appearance personalization controls from settings.get and syncs the global atom", async () => {
@@ -3307,7 +3374,7 @@ describe("SettingsPage", () => {
     expect(store.get(appearancePersonalizationAtom).common.backgroundAssetId).toBeNull();
   });
 
-  it("renders terminal option groups through shared pills in general settings", async () => {
+  it("renders terminal option groups in the terminal settings section", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -3319,7 +3386,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const standardRendererPill = await screen.findByRole("button", { name: "标准" });
 
@@ -3329,6 +3396,362 @@ describe("SettingsPage", () => {
       })
     ).toHaveAccessibleDescription("选择终端渲染模式");
     expect(standardRendererPill).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("hydrates terminal profile settings from settings.get and terminal.profiles.list", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "terminal.defaultProfileId": "custom:ops",
+          "terminal.profiles": [
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              command: "/usr/bin/env",
+              args: ["bash", "-l"],
+            },
+          ],
+        };
+      }
+      if (op === "terminal.profiles.list") {
+        return {
+          profiles: [
+            ...DEFAULT_TERMINAL_PROFILES.profiles,
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              source: "custom",
+              runtime: "native",
+              icon: "terminal",
+            },
+          ],
+          configuredDefaultProfileId: "custom:ops",
+          resolvedDefaultProfileId: "custom:ops",
+        } satisfies TerminalProfilesListResult;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+
+    expect(await screen.findByRole("heading", { name: "终端配置" })).toBeInTheDocument();
+    expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
+    expect(sendCommand).toHaveBeenCalledWith("terminal.profiles.list", {}, undefined);
+    const defaultProfileTrigger = screen.getByRole("button", { name: /默认终端配置/ });
+    expect(defaultProfileTrigger).toHaveAttribute("aria-haspopup", "listbox");
+    expect(defaultProfileTrigger).toHaveTextContent("Ops Shell");
+    const currentDefaultRow = screen.getByText("当前默认").closest(".settings-info-row");
+    expect(currentDefaultRow).not.toBeNull();
+    expect(within(currentDefaultRow as HTMLElement).getByText("Ops Shell")).toBeInTheDocument();
+    expect(screen.getAllByText("Bash").length).toBeGreaterThan(0);
+    expect(screen.getByText("检测到")).toBeInTheDocument();
+    expect(screen.getAllByText("Ops Shell").length).toBeGreaterThan(0);
+    expect(screen.getByText("/usr/bin/env bash -l")).toBeInTheDocument();
+  });
+
+  it("exposes a terminal profiles anchor from the embedded terminal section", async () => {
+    const store = createConnectedStore(createDefaultCommandHandler());
+
+    renderEmbeddedSettingsPage("terminal", { store });
+
+    const terminalProfilesHeading = await screen.findByRole("heading", { name: "终端配置" });
+    const terminalProfilesSection = document.getElementById("terminal-profiles");
+
+    expect(terminalProfilesSection).not.toBeNull();
+    expect(terminalProfilesSection).toContainElement(terminalProfilesHeading);
+    expect(terminalProfilesSection).toHaveClass("settings-group");
+  });
+
+  it("shows the resolved terminal default when no explicit terminal default is configured", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      if (op === "terminal.profiles.list") {
+        return DEFAULT_TERMINAL_PROFILES;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+
+    expect(await screen.findByRole("button", { name: /默认终端配置/ })).toHaveTextContent(
+      "系统默认"
+    );
+    const currentDefaultRow = screen.getByText("当前默认").closest(".settings-info-row");
+    expect(currentDefaultRow).not.toBeNull();
+    expect(within(currentDefaultRow as HTMLElement).getByText("Bash")).toBeInTheDocument();
+  });
+
+  it("saves a new custom terminal profile and sets it as default", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {};
+      }
+      if (op === "terminal.profiles.list") {
+        return DEFAULT_TERMINAL_PROFILES;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "配置名称" }), {
+      target: { value: "Ops Shell" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "命令" }), {
+      target: { value: "/usr/bin/env" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "参数" }), {
+      target: { value: "bash\n-l" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存自定义配置" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            terminal: {
+              defaultProfileId: "custom:ops-shell",
+              profiles: [
+                {
+                  id: "custom:ops-shell",
+                  label: "Ops Shell",
+                  command: "/usr/bin/env",
+                  args: ["bash", "-l"],
+                },
+              ],
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
+  it("edits and deletes an existing custom terminal profile, clearing it when it was default", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "terminal.defaultProfileId": "custom:ops",
+          "terminal.profiles": [
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              command: "/bin/bash",
+              args: ["-l"],
+              icon: "rocket",
+            },
+          ],
+        };
+      }
+      if (op === "terminal.profiles.list") {
+        return {
+          profiles: [
+            ...DEFAULT_TERMINAL_PROFILES.profiles,
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              source: "custom",
+              runtime: "native",
+              icon: "terminal",
+            },
+          ],
+          configuredDefaultProfileId: "custom:ops",
+          resolvedDefaultProfileId: "custom:ops",
+        } satisfies TerminalProfilesListResult;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "编辑 Ops Shell" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "命令" }), {
+      target: { value: "/bin/zsh" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "参数" }), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存自定义配置" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            terminal: {
+              defaultProfileId: "custom:ops",
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell",
+                  command: "/bin/zsh",
+                  args: [],
+                  icon: "rocket",
+                },
+              ],
+            },
+          },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "删除 Ops Shell" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            terminal: {
+              defaultProfileId: null,
+              profiles: [],
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
+  it("clears the configured terminal default when the system-default option is selected", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "terminal.defaultProfileId": "custom:ops",
+          "terminal.profiles": [
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              command: "/usr/bin/env",
+              args: ["bash"],
+            },
+          ],
+        };
+      }
+      if (op === "terminal.profiles.list") {
+        return {
+          profiles: [
+            ...DEFAULT_TERMINAL_PROFILES.profiles,
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              source: "custom",
+              runtime: "native",
+              icon: "terminal",
+            },
+          ],
+          configuredDefaultProfileId: "custom:ops",
+          resolvedDefaultProfileId: "custom:ops",
+        } satisfies TerminalProfilesListResult;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /默认终端配置/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "系统默认" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            terminal: {
+              defaultProfileId: null,
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell",
+                  command: "/usr/bin/env",
+                  args: ["bash"],
+                },
+              ],
+            },
+          },
+        },
+        undefined
+      );
+    });
+  });
+
+  it("preserves custom profile icons when only the default terminal profile selection changes", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "terminal.defaultProfileId": "custom:ops",
+          "terminal.profiles": [
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              command: "/usr/bin/env",
+              args: ["bash"],
+              icon: "rocket",
+            },
+          ],
+        };
+      }
+      if (op === "terminal.profiles.list") {
+        return {
+          profiles: [
+            ...DEFAULT_TERMINAL_PROFILES.profiles,
+            {
+              id: "custom:ops",
+              label: "Ops Shell",
+              source: "custom",
+              runtime: "native",
+              icon: "rocket",
+            },
+          ],
+          configuredDefaultProfileId: "custom:ops",
+          resolvedDefaultProfileId: "custom:ops",
+        } satisfies TerminalProfilesListResult;
+      }
+      return {};
+    });
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+    fireEvent.click(await screen.findByRole("button", { name: /默认终端配置/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Bash" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          settings: {
+            terminal: {
+              defaultProfileId: "detected:bash",
+              profiles: [
+                {
+                  id: "custom:ops",
+                  label: "Ops Shell",
+                  command: "/usr/bin/env",
+                  args: ["bash"],
+                  icon: "rocket",
+                },
+              ],
+            },
+          },
+        },
+        undefined
+      );
+    });
   });
 
   it("hydrates lsp runtime mode from settings.get", async () => {
@@ -3447,7 +3870,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("keeps copy-on-select visible on desktop general settings", async () => {
+  it("keeps copy-on-select visible on desktop terminal settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -3459,12 +3882,12 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
   });
 
-  it("shows copy-on-select on mobile general settings with mobile-specific hint", async () => {
+  it("shows copy-on-select on mobile terminal settings with mobile-specific hint", async () => {
     viewportMocks.viewport = "mobile";
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
@@ -3477,7 +3900,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toBeInTheDocument();
     expect(screen.getByText("选中文本后自动复制到系统剪贴板")).toBeInTheDocument();
@@ -3738,7 +4161,7 @@ describe("SettingsPage", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
   });
 
-  it("updates terminal renderer selection through the shared general pills", async () => {
+  it("updates terminal renderer selection through the terminal section pills", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -3750,7 +4173,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
     fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
 
     await waitFor(() => {
@@ -3778,7 +4201,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("preserves terminal renderer selection when a stale settings load resolves afterward in general settings", async () => {
+  it("preserves terminal renderer selection when a stale settings load resolves afterward in terminal settings", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -3792,7 +4215,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
     fireEvent.click(await screen.findByRole("button", { name: "兼容模式" }));
 
     await waitFor(() => {
@@ -3824,7 +4247,7 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "标准" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("renders the copy-on-select switch from loaded general settings", async () => {
+  it("renders the copy-on-select switch from loaded terminal settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -3836,7 +4259,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     await waitFor(() => {
       expect(screen.getByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
@@ -3852,7 +4275,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("updates copy-on-select through the general switch and syncs the global atom", async () => {
+  it("updates copy-on-select through the terminal switch and syncs the global atom", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -3864,7 +4287,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
     fireEvent.click(await screen.findByRole("switch", { name: "选中自动复制" }));
 
     await waitFor(() => {
@@ -3889,7 +4312,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("renders copy-on-select from the terminal preferences atom before general settings load resolves", async () => {
+  it("renders copy-on-select from the terminal preferences atom before terminal settings load resolves", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -3909,7 +4332,7 @@ describe("SettingsPage", () => {
     });
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     expect(await screen.findByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
       "aria-checked",
@@ -3922,7 +4345,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("preserves copy-on-select when a stale general settings load resolves afterward", async () => {
+  it("preserves copy-on-select when a stale terminal settings load resolves afterward", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -3936,7 +4359,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
     fireEvent.click(await screen.findByRole("switch", { name: "选中自动复制" }));
 
     await waitFor(() => {
@@ -3970,7 +4393,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("defaults copy-on-select to enabled when general settings do not provide a value", async () => {
+  it("defaults copy-on-select to enabled when terminal settings do not provide a value", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {};
@@ -3980,7 +4403,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "通用" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     await waitFor(() => {
       expect(screen.getByRole("switch", { name: "选中自动复制" })).toHaveAttribute(
@@ -4009,7 +4432,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const desktopInput = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
     const mobileInput = await screen.findByRole("spinbutton", { name: "移动端终端字号" });
@@ -4025,7 +4448,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("falls back to the legacy shared terminal font size when split settings are absent", async () => {
+  it("falls back to the legacy shared terminal font size when split settings are absent in terminal settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -4037,7 +4460,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const desktopInput = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
     const mobileInput = await screen.findByRole("spinbutton", { name: "移动端终端字号" });
@@ -4054,7 +4477,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("updates desktop terminal font size through the appearance input and syncs the global atom", async () => {
+  it("updates desktop terminal font size through the terminal input and syncs the global atom", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -4067,7 +4490,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
 
@@ -4109,7 +4532,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
 
@@ -4142,7 +4565,7 @@ describe("SettingsPage", () => {
     ).toHaveLength(1);
   });
 
-  it("updates mobile terminal font size through the appearance input without changing desktop size", async () => {
+  it("updates mobile terminal font size through the terminal input without changing desktop size", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -4155,7 +4578,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const input = await screen.findByRole("spinbutton", { name: "移动端终端字号" });
 
@@ -4184,7 +4607,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("shows a validation error and restores the current desktop terminal font size for out-of-range values", async () => {
+  it("shows a validation error and restores the current desktop terminal font size for out-of-range values in terminal settings", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "settings.get") {
         return {
@@ -4197,7 +4620,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
     await waitFor(() => {
@@ -4231,7 +4654,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("preserves desktop terminal font size when a stale appearance settings load resolves afterward", async () => {
+  it("preserves desktop terminal font size when a stale terminal settings load resolves afterward", async () => {
     let resolveSettingsGet: ((value: Record<string, unknown>) => void) | undefined;
     const settingsGetPromise = new Promise<Record<string, unknown>>((resolve) => {
       resolveSettingsGet = resolve;
@@ -4245,7 +4668,7 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(sendCommand);
 
     renderSettingsPage(store);
-    fireEvent.click(screen.getByRole("button", { name: "外观" }));
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const input = await screen.findByRole("spinbutton", { name: "桌面端终端字号" });
     fireEvent.change(input, { target: { value: "17" } });
@@ -4524,7 +4947,7 @@ describe("SettingsPage", () => {
   it("renders embedded settings content without standalone page chrome", async () => {
     renderEmbeddedSettingsPage("general");
 
-    expect(screen.queryByRole("heading", { level: 1, name: "设置" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 3, name: "设置" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("settings-mobile-root")).toBeNull();
     expect(await screen.findByText("通知")).toBeInTheDocument();
     expect(document.querySelector(".settings-sidebar")).toBeNull();

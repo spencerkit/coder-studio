@@ -16,7 +16,7 @@ import type {
   SkillInstallJobSnapshot,
   SkillLibraryEntry,
   SkillMountRelation,
-  SkillRecommendationEntry,
+  SkillRecommendationPage,
   SkillVersionCheckEntry,
   Supervisor,
   UpdateStateView,
@@ -132,7 +132,7 @@ export interface UiPreviewCommands {
     targets: Array<AgentSkillTargetEntry & { mountedSkillCount: number }>;
     mounts: SkillMountRelation[];
   };
-  skillsRecommendations?: SkillRecommendationEntry[];
+  skillsRecommendations?: SkillRecommendationPage;
   skillsSearchResultsByQuery?: Record<
     string,
     Array<{
@@ -156,6 +156,14 @@ export interface UiPreviewCommands {
       libraryEntry?: SkillLibraryEntry;
       mounts: SkillMountRelation[];
     }
+  >;
+  skillsLocalFileEntriesBySlug?: Record<
+    string,
+    Array<{
+      path: string;
+      kind: "file" | "dir";
+      content?: string;
+    }>
   >;
   skillsVersionChecks?: SkillVersionCheckEntry[];
   terminalListByWorkspaceId?: Record<
@@ -259,6 +267,454 @@ function getTerminalPreviewSeq(seed: UiPreviewSeed, terminalId: string): number 
   return getTerminalPreviewBytes(seed, terminalId).byteLength;
 }
 
+type PreviewSkillLibraryItem = NonNullable<UiPreviewCommands["skillsLibraryList"]>[number];
+type PreviewSkillInfoMap = NonNullable<UiPreviewCommands["skillsInfoBySlug"]>;
+type PreviewSkillTarget = NonNullable<UiPreviewCommands["skillsHealthScan"]>["targets"][number];
+
+interface PreviewSkillFsFileEntry {
+  kind: "file";
+  content: string;
+}
+
+interface PreviewSkillFsDirEntry {
+  kind: "dir";
+}
+
+type PreviewSkillFsEntry = PreviewSkillFsFileEntry | PreviewSkillFsDirEntry;
+
+interface PreviewSkillsState {
+  library: PreviewSkillLibraryItem[];
+  healthScan: {
+    targets: PreviewSkillTarget[];
+    mounts: SkillMountRelation[];
+  };
+  localFilesBySlug: Map<string, Map<string, PreviewSkillFsEntry>>;
+  infoBySlug: PreviewSkillInfoMap;
+  localSkillRoot: string;
+}
+
+function cloneSkillLibraryItem(item: PreviewSkillLibraryItem): PreviewSkillLibraryItem {
+  return {
+    ...item,
+    mountedProviderIds: [...item.mountedProviderIds],
+  };
+}
+
+function cloneSkillMountRelation(relation: SkillMountRelation): SkillMountRelation {
+  return {
+    ...relation,
+  };
+}
+
+function cloneSkillTarget(target: PreviewSkillTarget): PreviewSkillTarget {
+  return {
+    ...target,
+  };
+}
+
+function cloneSkillInfoMap(input: UiPreviewCommands["skillsInfoBySlug"]): PreviewSkillInfoMap {
+  return Object.fromEntries(
+    Object.entries(input ?? {}).map(([slug, info]) => [
+      slug,
+      {
+        ...info,
+        libraryEntry: info.libraryEntry ? { ...info.libraryEntry } : undefined,
+        mounts: info.mounts.map((mount) => ({ ...mount })),
+      },
+    ])
+  );
+}
+
+function previewHash(content: string): string {
+  let hash = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    hash = (hash * 31 + content.charCodeAt(index)) >>> 0;
+  }
+  return `preview:${content.length}:${hash.toString(16)}`;
+}
+
+function slugifyPreviewSkillName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function buildDefaultCustomSkillMarkdown(displayName: string, slug: string): string {
+  return [
+    "---",
+    `name: ${slug}`,
+    "description: Custom skill",
+    "---",
+    "",
+    `# ${displayName}`,
+    "",
+  ].join("\n");
+}
+
+function normalizeSkillPath(input?: string, rootFallback = "."): string {
+  const trimmed = (input ?? "").trim();
+  if (!trimmed || trimmed === "." || trimmed === "./") {
+    return rootFallback;
+  }
+
+  const sanitized = trimmed
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/g, "");
+
+  if (!sanitized || sanitized === ".") {
+    return rootFallback;
+  }
+
+  const segments = sanitized.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw { code: "path_escape", message: "Path escapes skill root" };
+  }
+
+  return segments.join("/");
+}
+
+function parentSkillPath(path: string): string {
+  if (path === ".") {
+    return ".";
+  }
+
+  const slashIndex = path.lastIndexOf("/");
+  return slashIndex === -1 ? "." : path.slice(0, slashIndex);
+}
+
+function basenameSkillPath(path: string): string {
+  if (path === ".") {
+    return ".";
+  }
+
+  const slashIndex = path.lastIndexOf("/");
+  return slashIndex === -1 ? path : path.slice(slashIndex + 1);
+}
+
+function ensurePreviewDirEntries(tree: Map<string, PreviewSkillFsEntry>, targetPath: string): void {
+  let current = ".";
+  for (const segment of targetPath.split("/")) {
+    current = current === "." ? segment : `${current}/${segment}`;
+    const existing = tree.get(current);
+    if (existing?.kind === "file") {
+      throw { code: "already_exists", message: "File already exists" };
+    }
+    if (!existing) {
+      tree.set(current, { kind: "dir" });
+    }
+  }
+}
+
+function listPreviewSkillChildren(
+  tree: Map<string, PreviewSkillFsEntry>,
+  dirPath: string
+): FileNode[] {
+  const dirEntry = tree.get(dirPath);
+  if (!dirEntry || dirEntry.kind !== "dir") {
+    throw { code: "not_found", message: "Directory not found" };
+  }
+
+  const children: FileNode[] = [];
+  for (const [path, entry] of tree.entries()) {
+    if (path === "." || parentSkillPath(path) !== dirPath) {
+      continue;
+    }
+
+    children.push({
+      name: basenameSkillPath(path),
+      path,
+      kind: entry.kind,
+    });
+  }
+
+  return children.sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "dir" ? -1 : 1;
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function getPreviewLocalSkillTree(state: PreviewSkillsState, skillSlug: string) {
+  const tree = state.localFilesBySlug.get(skillSlug);
+  if (!tree) {
+    throw { code: "skill_not_found", message: `Custom skill not found: ${skillSlug}` };
+  }
+  return tree;
+}
+
+function getPreviewSkillLibraryEntry(state: PreviewSkillsState, skillSlug: string) {
+  const entry = state.library.find((skill) => skill.slug === skillSlug);
+  if (!entry || entry.source !== "custom") {
+    throw { code: "skill_not_found", message: `Custom skill not found: ${skillSlug}` };
+  }
+  return entry;
+}
+
+function touchPreviewSkill(state: PreviewSkillsState, skillSlug: string): void {
+  const entry = getPreviewSkillLibraryEntry(state, skillSlug);
+  entry.updatedAt = Date.now();
+}
+
+function readPreviewSkillFile(
+  state: PreviewSkillsState,
+  skillSlug: string,
+  relPath: string
+): {
+  kind: "text";
+  content: string;
+  baseHash: string;
+  encoding: "utf-8";
+  displayPath: string;
+} {
+  const entry = getPreviewSkillLibraryEntry(state, skillSlug);
+  const tree = getPreviewLocalSkillTree(state, skillSlug);
+  const normalizedPath = normalizeSkillPath(relPath, ".");
+  const node = tree.get(normalizedPath);
+
+  if (!node || node.kind !== "file") {
+    throw { code: "not_found", message: "File not found" };
+  }
+
+  return {
+    kind: "text",
+    content: node.content,
+    baseHash: previewHash(node.content),
+    encoding: "utf-8",
+    displayPath: `${entry.libraryPath}/${normalizedPath}`,
+  };
+}
+
+function createPreviewSkillFile(
+  state: PreviewSkillsState,
+  skillSlug: string,
+  relPath: string
+): void {
+  const tree = getPreviewLocalSkillTree(state, skillSlug);
+  const normalizedPath = normalizeSkillPath(relPath, ".");
+  const existing = tree.get(normalizedPath);
+  if (existing) {
+    throw { code: "already_exists", message: "File already exists" };
+  }
+
+  ensurePreviewDirEntries(tree, parentSkillPath(normalizedPath));
+  tree.set(normalizedPath, { kind: "file", content: "" });
+  touchPreviewSkill(state, skillSlug);
+}
+
+function createPreviewSkillDirectory(
+  state: PreviewSkillsState,
+  skillSlug: string,
+  relPath: string
+): void {
+  const tree = getPreviewLocalSkillTree(state, skillSlug);
+  const normalizedPath = normalizeSkillPath(relPath, ".");
+  const existing = tree.get(normalizedPath);
+  if (existing) {
+    throw {
+      code: "already_exists",
+      message: existing.kind === "dir" ? "Directory already exists" : "File already exists",
+    };
+  }
+
+  ensurePreviewDirEntries(tree, normalizedPath);
+  touchPreviewSkill(state, skillSlug);
+}
+
+function renamePreviewSkillEntry(
+  state: PreviewSkillsState,
+  skillSlug: string,
+  fromRelPath: string,
+  toRelPath: string
+): void {
+  const tree = getPreviewLocalSkillTree(state, skillSlug);
+  const fromPath = normalizeSkillPath(fromRelPath, ".");
+  const toPath = normalizeSkillPath(toRelPath, ".");
+  const source = tree.get(fromPath);
+
+  if (!source) {
+    throw { code: "not_found", message: "Source not found" };
+  }
+
+  if (parentSkillPath(fromPath) !== parentSkillPath(toPath)) {
+    throw {
+      code: "rename_across_directories_not_supported",
+      message: "Rename must stay within the current directory",
+    };
+  }
+
+  if (tree.has(toPath)) {
+    throw { code: "already_exists", message: "Target already exists" };
+  }
+
+  const renamedEntries = [...tree.entries()].filter(
+    ([path]) => path === fromPath || path.startsWith(`${fromPath}/`)
+  );
+  const renamedPaths = new Set(renamedEntries.map(([path]) => path));
+
+  for (const [path] of renamedEntries) {
+    const nextPath = path === fromPath ? toPath : `${toPath}${path.slice(fromPath.length)}`;
+    const conflict = tree.get(nextPath);
+    if (conflict && !renamedPaths.has(nextPath)) {
+      throw { code: "already_exists", message: "Target already exists" };
+    }
+  }
+
+  for (const [path] of renamedEntries) {
+    tree.delete(path);
+  }
+
+  for (const [path, entry] of renamedEntries) {
+    const nextPath = path === fromPath ? toPath : `${toPath}${path.slice(fromPath.length)}`;
+    tree.set(
+      nextPath,
+      entry.kind === "dir" ? { kind: "dir" } : { kind: "file", content: entry.content }
+    );
+  }
+
+  touchPreviewSkill(state, skillSlug);
+}
+
+function deletePreviewSkillEntry(
+  state: PreviewSkillsState,
+  skillSlug: string,
+  relPath: string
+): void {
+  const tree = getPreviewLocalSkillTree(state, skillSlug);
+  const normalizedPath = normalizeSkillPath(relPath, ".");
+  if (!tree.has(normalizedPath)) {
+    throw { code: "not_found", message: "Target not found" };
+  }
+
+  for (const path of [...tree.keys()]) {
+    if (path === normalizedPath || path.startsWith(`${normalizedPath}/`)) {
+      tree.delete(path);
+    }
+  }
+
+  touchPreviewSkill(state, skillSlug);
+}
+
+function writePreviewSkillFile(
+  state: PreviewSkillsState,
+  skillSlug: string,
+  relPath: string,
+  content: string,
+  baseHash?: string
+): { newHash: string } {
+  const tree = getPreviewLocalSkillTree(state, skillSlug);
+  const normalizedPath = normalizeSkillPath(relPath, ".");
+  const node = tree.get(normalizedPath);
+  if (!node || node.kind !== "file") {
+    throw { code: "not_found", message: "File not found" };
+  }
+
+  const currentHash = previewHash(node.content);
+  if (baseHash && baseHash !== currentHash) {
+    throw {
+      code: "conflict",
+      message: "File has been modified externally",
+      details: {
+        expectedHash: baseHash,
+        actualHash: currentHash,
+      },
+    };
+  }
+
+  tree.set(normalizedPath, { kind: "file", content });
+  touchPreviewSkill(state, skillSlug);
+  return { newHash: previewHash(content) };
+}
+
+function buildPreviewLocalFileTree(
+  displayName: string,
+  slug: string,
+  entries?: Array<{ path: string; kind: "file" | "dir"; content?: string }>
+): Map<string, PreviewSkillFsEntry> {
+  const tree = new Map<string, PreviewSkillFsEntry>();
+  tree.set(".", { kind: "dir" });
+
+  for (const entry of entries ?? []) {
+    const normalizedPath = normalizeSkillPath(entry.path, ".");
+    if (normalizedPath === ".") {
+      continue;
+    }
+
+    if (entry.kind === "dir") {
+      ensurePreviewDirEntries(tree, normalizedPath);
+      continue;
+    }
+
+    ensurePreviewDirEntries(tree, parentSkillPath(normalizedPath));
+    tree.set(normalizedPath, { kind: "file", content: entry.content ?? "" });
+  }
+
+  if (!tree.has("SKILL.md")) {
+    tree.set("SKILL.md", {
+      kind: "file",
+      content: buildDefaultCustomSkillMarkdown(displayName, slug),
+    });
+  }
+
+  return tree;
+}
+
+function resolvePreviewLocalSkillRoot(
+  library: PreviewSkillLibraryItem[],
+  commands: UiPreviewCommands
+): string {
+  const localEntry = library.find((entry) => entry.source === "custom");
+  if (localEntry?.libraryPath) {
+    return parentSkillPath(localEntry.libraryPath.replace(/\\/g, "/"));
+  }
+
+  const seededPath = Object.keys(commands.skillsLocalFileEntriesBySlug ?? {})[0];
+  if (seededPath) {
+    return "/Users/spencer/.coder-studio/state/skills/custom";
+  }
+
+  return "/Users/spencer/.coder-studio/state/skills/custom";
+}
+
+function createPreviewSkillsState(commands: UiPreviewCommands = {}): PreviewSkillsState {
+  const library = (commands.skillsLibraryList ?? []).map(cloneSkillLibraryItem);
+  const healthScan = {
+    targets: (commands.skillsHealthScan?.targets ?? []).map(cloneSkillTarget),
+    mounts: (commands.skillsHealthScan?.mounts ?? []).map(cloneSkillMountRelation),
+  };
+  const infoBySlug = cloneSkillInfoMap(commands.skillsInfoBySlug);
+  const localSkillRoot = resolvePreviewLocalSkillRoot(library, commands);
+  const localFilesBySlug = new Map<string, Map<string, PreviewSkillFsEntry>>();
+
+  for (const entry of library) {
+    if (entry.source !== "custom") {
+      continue;
+    }
+
+    localFilesBySlug.set(
+      entry.slug,
+      buildPreviewLocalFileTree(
+        entry.displayName,
+        entry.slug,
+        commands.skillsLocalFileEntriesBySlug?.[entry.slug]
+      )
+    );
+  }
+
+  return {
+    library,
+    healthScan,
+    localFilesBySlug,
+    infoBySlug,
+    localSkillRoot,
+  };
+}
+
 function err(message: string) {
   return {
     ok: false as const,
@@ -267,6 +723,8 @@ function err(message: string) {
 }
 
 function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCommand {
+  const previewSkillsState = createPreviewSkillsState(seed.commands);
+
   return async <T>(op: string, args: unknown) => {
     const commands = seed.commands ?? {};
 
@@ -342,9 +800,20 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
       if (workspaceId && uiState?.paneLayout) {
         store.set(paneLayoutAtomFamily(workspaceId), uiState.paneLayout as PaneNode);
       }
-      return ok(
-        (commands.workspaceUiStateSet ?? commands.workspaceOpen ?? seed.workspaces?.[0]) as T
-      );
+      const fallbackWorkspace =
+        seed.workspaces?.find((workspace) => workspace.id === workspaceId) ?? seed.workspaces?.[0];
+      if (workspaceId && fallbackWorkspace && uiState) {
+        const nextWorkspace = {
+          ...fallbackWorkspace,
+          uiState,
+        };
+        store.set(workspacesAtom, {
+          ...store.get(workspacesAtom),
+          [workspaceId]: nextWorkspace,
+        });
+        return ok((commands.workspaceUiStateSet ?? nextWorkspace) as T);
+      }
+      return ok((commands.workspaceUiStateSet ?? commands.workspaceOpen ?? fallbackWorkspace) as T);
     }
 
     if (op === "session.list") {
@@ -514,19 +983,24 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
     }
 
     if (op === "skills.library.list") {
-      return ok((commands.skillsLibraryList ?? []) as unknown as T);
+      return ok(previewSkillsState.library.map(cloneSkillLibraryItem) as unknown as T);
     }
 
     if (op === "skills.health.scan") {
-      return ok((commands.skillsHealthScan ?? { targets: [], mounts: [] }) as unknown as T);
+      return ok({
+        targets: previewSkillsState.healthScan.targets.map(cloneSkillTarget),
+        mounts: previewSkillsState.healthScan.mounts.map(cloneSkillMountRelation),
+      } as unknown as T);
     }
 
     if (op === "skills.targets.list") {
-      return ok((commands.skillsHealthScan?.targets ?? []) as unknown as T);
+      return ok(previewSkillsState.healthScan.targets.map(cloneSkillTarget) as unknown as T);
     }
 
     if (op === "skills.recommend") {
-      return ok((commands.skillsRecommendations ?? []) as unknown as T);
+      return ok(
+        (commands.skillsRecommendations ?? { entries: [], hasMore: false }) as unknown as T
+      );
     }
 
     if (op === "skills.search") {
@@ -536,12 +1010,16 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
 
     if (op === "skills.info") {
       const slug = (args as { slug?: string })?.slug ?? "";
-      const configured = commands.skillsInfoBySlug?.[slug];
+      const configured = previewSkillsState.infoBySlug[slug];
       if (configured) {
-        return ok(configured as unknown as T);
+        return ok({
+          ...configured,
+          libraryEntry: configured.libraryEntry ? { ...configured.libraryEntry } : undefined,
+          mounts: configured.mounts.map(cloneSkillMountRelation),
+        } as unknown as T);
       }
 
-      const libraryEntry = commands.skillsLibraryList?.find((skill) => skill.slug === slug);
+      const libraryEntry = previewSkillsState.library.find((skill) => skill.slug === slug);
       if (libraryEntry) {
         return ok({
           slug: libraryEntry.slug,
@@ -549,13 +1027,120 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
           description: libraryEntry.description,
           version: libraryEntry.version,
           installed: libraryEntry.installState === "installed",
-          libraryEntry,
+          libraryEntry: { ...libraryEntry },
           mounts:
-            commands.skillsHealthScan?.mounts.filter((mount) => mount.skillSlug === slug) ?? [],
+            previewSkillsState.healthScan.mounts
+              .filter((mount) => mount.skillSlug === slug)
+              .map(cloneSkillMountRelation) ?? [],
         } as unknown as T);
       }
 
       return err(`Missing preview skill info for ${slug}`);
+    }
+
+    if (op === "skills.custom.create") {
+      const displayName = (args as { name?: string })?.name?.trim() ?? "";
+      const slug = slugifyPreviewSkillName(displayName);
+
+      if (!slug) {
+        throw { code: "invalid_skill_name", message: "Skill name must produce a valid slug" };
+      }
+
+      if (previewSkillsState.library.some((entry) => entry.slug === slug)) {
+        throw { code: "already_exists", message: "Skill already exists" };
+      }
+
+      const now = Date.now();
+      const entry: PreviewSkillLibraryItem = {
+        slug,
+        displayName,
+        description: "Custom skill",
+        version: "local",
+        source: "custom",
+        origin: "filesystem",
+        libraryPath: `${previewSkillsState.localSkillRoot}/${slug}`,
+        installState: "installed",
+        installedAt: now,
+        updatedAt: now,
+        mountedProviderIds: [],
+        mountStatus: "unmounted",
+        errorCount: 0,
+      };
+
+      previewSkillsState.library.push(entry);
+      previewSkillsState.localFilesBySlug.set(
+        slug,
+        buildPreviewLocalFileTree(displayName, slug, [
+          {
+            path: "SKILL.md",
+            kind: "file",
+            content: buildDefaultCustomSkillMarkdown(displayName, slug),
+          },
+        ])
+      );
+
+      return ok({ ...entry } as unknown as T);
+    }
+
+    if (op === "skills.files.readTree") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const path = normalizeSkillPath((args as { path?: string })?.path, ".");
+      const tree = getPreviewLocalSkillTree(previewSkillsState, skillSlug);
+      return ok({
+        path,
+        children: listPreviewSkillChildren(tree, path),
+      } as unknown as T);
+    }
+
+    if (op === "skills.files.read") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      return ok(readPreviewSkillFile(previewSkillsState, skillSlug, path) as unknown as T);
+    }
+
+    if (op === "skills.files.write") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      const content = (args as { content?: string })?.content ?? "";
+      const baseHash = (args as { baseHash?: string })?.baseHash;
+      return ok(
+        writePreviewSkillFile(
+          previewSkillsState,
+          skillSlug,
+          path,
+          content,
+          baseHash
+        ) as unknown as T
+      );
+    }
+
+    if (op === "skills.files.create") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      createPreviewSkillFile(previewSkillsState, skillSlug, path);
+      return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "skills.files.mkdir") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      createPreviewSkillDirectory(previewSkillsState, skillSlug, path);
+      return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "skills.files.rename") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const fromPath = (args as { fromPath?: string })?.fromPath ?? "";
+      const toPath = (args as { toPath?: string })?.toPath ?? "";
+      renamePreviewSkillEntry(previewSkillsState, skillSlug, fromPath, toPath);
+      return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "skills.files.delete") {
+      const skillSlug = (args as { skillSlug?: string })?.skillSlug ?? "";
+      const path = (args as { path?: string })?.path ?? "";
+      deletePreviewSkillEntry(previewSkillsState, skillSlug, path);
+      return ok({ ok: true } as unknown as T);
     }
 
     if (op === "skills.versions.check") {

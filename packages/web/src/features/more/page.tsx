@@ -25,6 +25,7 @@ const FALLBACK_CATEGORY = MORE_CATEGORIES.settings;
 type EmbeddedMoreSettingsSection =
   | "general"
   | "providers"
+  | "terminal"
   | "appearance"
   | "shortcuts"
   | "monitoring";
@@ -141,6 +142,7 @@ function isEmbeddedSettingsSection(sectionId: string): sectionId is EmbeddedMore
   return (
     sectionId === "general" ||
     sectionId === "providers" ||
+    sectionId === "terminal" ||
     sectionId === "appearance" ||
     sectionId === "shortcuts" ||
     sectionId === "monitoring"
@@ -212,7 +214,7 @@ function MoreMobileCategoryList({
   return (
     <div className="more-features-page more-features-page--mobile" data-testid="more-features-page">
       <header className="more-features-mobile-detail__header">
-        <MobilePageHeader title={title} titleAs="h1" onBack={onBack} backLabel={backLabel} />
+        <MobilePageHeader title={title} titleAs="h3" onBack={onBack} backLabel={backLabel} />
       </header>
       <main className="more-features-mobile-list" role="list">
         {items.map((item) => (
@@ -380,14 +382,18 @@ export function MoreFeaturesPage() {
         <header className="more-features-page__header">
           <PageHeader
             title={t("more.title")}
-            titleAs="h1"
+            titleAs="h3"
             level="secondary"
             onBack={handleBack}
             backLabel={t("action.back")}
             className="more-features-page__page-header"
           />
         </header>
+      </div>
 
+      <div className="more-features-page__divider" aria-hidden="true" />
+
+      <div className="more-features-page__frame more-features-page__frame--tight-top more-features-page__frame--tight-bottom">
         <div role="tablist" aria-label={t("more.category_tabs")} className="more-features-tabs">
           {MORE_CATEGORY_LIST.map((category, categoryIndex) => {
             const isActive = category.id === activeCategory.id;
@@ -407,9 +413,6 @@ export function MoreFeaturesPage() {
                 }
               >
                 <span className="more-features-tab__label">{t(category.labelKey)}</span>
-                {isActive ? (
-                  <span className="more-features-tab__copy">{t(category.descriptionKey)}</span>
-                ) : null}
               </button>
             );
           })}
