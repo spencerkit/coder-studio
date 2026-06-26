@@ -46,7 +46,11 @@ describe("pane-layout vertical divider styles", () => {
     expect(divider).toContain("margin-top: -5px");
     expect(divider).toContain("margin-bottom: -5px");
     expect(divider).toContain("background: transparent");
-    expect(dividerLine).toContain("background: transparent");
-    expect(hoverDividerLine).toContain("background: transparent");
+    expect(dividerLine).toContain(
+      "background: var(--component-mix-border-default-78pct-status-info-fg-22pct)"
+    );
+    expect(hoverDividerLine).toContain(
+      "background: var(--component-mix-border-focus-58pct-transparent)"
+    );
   });
 });
