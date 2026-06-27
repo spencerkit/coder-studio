@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import type { SupervisorTargetMemory } from "./supervisor";
 import type {
   AgentContextKind,
+  AgentSessionMetadata,
   CustomProviderSessionMode,
   GitCommitDetail,
   GitCommitFileEntry,
@@ -10,6 +11,10 @@ import type {
   GitFileDiffPayload,
   GitHunkOperation,
   GitRevisionSource,
+  SessionActivityEntry,
+  SessionActivityKind,
+  SessionActivityPhase,
+  SessionActivityStatus,
   SessionState,
   TaskDefinition,
   TaskRun,
@@ -175,6 +180,31 @@ describe("Task contracts", () => {
   it("allows task terminals as managed terminal DTOs", () => {
     expectTypeOf<TerminalKind>().toEqualTypeOf<"agent" | "shell" | "task">();
     expectTypeOf<Terminal["kind"]>().toEqualTypeOf<TerminalKind>();
+  });
+});
+
+describe("Session activity contracts", () => {
+  it("defines the shared session activity metadata shape", () => {
+    expectTypeOf<SessionActivityKind>().toEqualTypeOf<
+      "plan" | "command" | "edit" | "review" | "note"
+    >();
+    expectTypeOf<SessionActivityPhase>().toEqualTypeOf<"start" | "update" | "finish">();
+    expectTypeOf<SessionActivityStatus>().toEqualTypeOf<"info" | "success" | "warning" | "error">();
+    expectTypeOf<SessionActivityEntry>().toEqualTypeOf<{
+      id: string;
+      sessionId: string;
+      workspaceId: string;
+      kind: "plan" | "command" | "edit" | "review" | "note";
+      phase?: "start" | "update" | "finish";
+      title: string;
+      summary?: string;
+      status?: "info" | "success" | "warning" | "error";
+      command?: string;
+      files?: string[];
+      payload?: Record<string, unknown>;
+      createdAt: number;
+    }>();
+    expectTypeOf<AgentSessionMetadata["activityEntries"]>().toEqualTypeOf<SessionActivityEntry[]>();
   });
 });
 

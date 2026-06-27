@@ -355,6 +355,33 @@ export interface AgentSessionVerificationRun {
   createdAt: number;
 }
 
+export const SESSION_ACTIVITY_KINDS = ["plan", "command", "edit", "review", "note"] as const;
+
+export type SessionActivityKind = (typeof SESSION_ACTIVITY_KINDS)[number];
+
+export const SESSION_ACTIVITY_PHASES = ["start", "update", "finish"] as const;
+
+export type SessionActivityPhase = (typeof SESSION_ACTIVITY_PHASES)[number];
+
+export const SESSION_ACTIVITY_STATUSES = ["info", "success", "warning", "error"] as const;
+
+export type SessionActivityStatus = (typeof SESSION_ACTIVITY_STATUSES)[number];
+
+export interface SessionActivityEntry {
+  id: string;
+  sessionId: string;
+  workspaceId: string;
+  kind: SessionActivityKind;
+  phase?: SessionActivityPhase;
+  title: string;
+  summary?: string;
+  status?: SessionActivityStatus;
+  command?: string;
+  files?: string[];
+  payload?: Record<string, unknown>;
+  createdAt: number;
+}
+
 export interface AgentSessionMetadata {
   sessionId: string;
   workspaceId: string;
@@ -363,6 +390,7 @@ export interface AgentSessionMetadata {
   baselineGitHead?: string;
   baselineCapturedAt?: number;
   verificationRuns: AgentSessionVerificationRun[];
+  activityEntries: SessionActivityEntry[];
   attachedAgentInstructions?: {
     effectiveHash: string;
     mode: "auto" | "manual";
