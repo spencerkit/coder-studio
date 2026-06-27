@@ -177,6 +177,7 @@ export function createInlineRuntimeContext(ctx: HostCommandContext): RuntimeComm
     providerConfigRepo: (candidate.providerConfigRepo ??
       NOOP_PROVIDER_CONFIG_REPO) as ProviderConfigRepo,
     providerRegistry: candidate.providerRegistry ?? [],
+    settingsRepo: candidate.settingsRepo as SettingsRepo,
     sessionMgr: candidate.sessionMgr as SessionManager,
     terminalMgr: candidate.terminalMgr as TerminalManager,
     taskMgr: candidate.taskMgr as TaskManager,

@@ -87,7 +87,7 @@ function renderMorePage(
           return [];
         }
 
-        if (op === "terminal.profiles.list") {
+        if (op === "terminal.profiles.list.global") {
           return {
             profiles: [
               {

@@ -15,6 +15,7 @@ import type { SkillMountManager } from "../skills/mount-manager.js";
 import type { SkillsHubClient } from "../skills/skills-hub-client.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import type { SessionMetadataRepo } from "../storage/repositories/session-metadata-repo.js";
+import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
 import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js";
 import type { SkillTargetRepo } from "../storage/repositories/skill-target-repo.js";
@@ -40,6 +41,7 @@ export interface RuntimeCommandContext {
   eventBus: EventBus;
   providerConfigRepo: ProviderConfigRepo;
   providerRegistry: ProviderDefinition[];
+  settingsRepo: SettingsRepo;
   sessionMgr: SessionManager;
   terminalMgr: TerminalManager;
   taskMgr: TaskManager;

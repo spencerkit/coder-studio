@@ -201,6 +201,12 @@ async function resolveWorkspaceCwd(workspacePath: string, cwdPath?: string): Pro
   return resolvedCwd;
 }
 
+function getRuntimeTerminalSettings(
+  ctx: Pick<RuntimeCommandContext, "settingsRepo">
+): ReturnType<typeof getTerminalSettings> {
+  return getTerminalSettings(ctx.settingsRepo);
+}
+
 // terminal.list
 registerRuntimeCommand(
   "terminal.list",
@@ -240,16 +246,43 @@ registerRuntimeCommand(
   }
 );
 
-registerHostCommand("terminal.profiles.list", z.object({}).default({}), async (_args, ctx) => {
-  const terminalSettings = getTerminalSettings(ctx.settingsRepo);
-  return listTerminalProfiles({
-    configuredDefaultProfileId: terminalSettings.configuredDefaultProfileId,
-    customProfiles: terminalSettings.customProfiles,
-  });
-});
+registerHostCommand(
+  "terminal.profiles.list.global",
+  z.object({}).default({}),
+  async (_args, ctx) => {
+    const terminalSettings = getTerminalSettings(ctx.settingsRepo);
+    return listTerminalProfiles({
+      configuredDefaultProfileId: terminalSettings.configuredDefaultProfileId,
+      customProfiles: terminalSettings.customProfiles,
+    });
+  }
+);
+
+registerRuntimeCommand(
+  "terminal.profiles.list",
+  z
+    .object({
+      workspaceId: z.string().optional(),
+    })
+    .default({}),
+  {
+    resolveTarget: (args) =>
+      args.workspaceId ? { kind: "workspace", workspaceId: args.workspaceId } : { kind: "default" },
+    handler: async (args, ctx) => {
+      const terminalSettings = getRuntimeTerminalSettings(ctx);
+      const workspace = args.workspaceId ? ctx.workspaceLookup.get(args.workspaceId) : undefined;
+
+      return listTerminalProfiles({
+        configuredDefaultProfileId: terminalSettings.configuredDefaultProfileId,
+        customProfiles: terminalSettings.customProfiles,
+        workspacePath: workspace?.path,
+      });
+    },
+  }
+);
 
 // terminal.create
-registerHostCommand(
+registerRuntimeCommand(
   "terminal.create",
   z.object({
     workspaceId: z.string(),
@@ -259,36 +292,34 @@ registerHostCommand(
     cwdPath: z.string().optional(),
     themeBackground: TerminalThemeBackgroundSchema,
   }),
-  async (args, ctx, meta) => {
-    const workspace = ctx.workspaceMgr.get(args.workspaceId);
-    if (!workspace) {
-      throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = ctx.workspaceLookup.get(args.workspaceId);
+      if (!workspace) {
+        throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
+      }
 
-    const cwd = await resolveWorkspaceCwd(workspace.path, args.cwdPath);
-    const terminalSettings = getTerminalSettings(ctx.settingsRepo);
-    const launch = await resolveTerminalLaunch({
-      configuredDefaultProfileId: terminalSettings.configuredDefaultProfileId,
-      customProfiles: terminalSettings.customProfiles,
-      requestedProfileId: args.profileId,
-      workspacePath: cwd,
-    });
+      const cwd = await resolveWorkspaceCwd(workspace.path, args.cwdPath);
+      const terminalSettings = getRuntimeTerminalSettings(ctx);
+      const launch = await resolveTerminalLaunch({
+        configuredDefaultProfileId: terminalSettings.configuredDefaultProfileId,
+        customProfiles: terminalSettings.customProfiles,
+        requestedProfileId: args.profileId,
+        workspacePath: cwd,
+      });
 
-    return executeRuntimeCommandOnTarget(
-      "terminal.spawn",
-      {
+      return ctx.terminalMgr.create({
         workspaceId: args.workspaceId,
+        kind: "shell",
         argv: launch.argv,
         title: launch.title,
         cwd: launch.cwd,
         cols: args.cols ?? 120,
         rows: args.rows ?? 30,
         themeBackground: args.themeBackground,
-      },
-      ctx,
-      meta,
-      { kind: "workspace", workspaceId: args.workspaceId }
-    );
+      });
+    },
   }
 );
 

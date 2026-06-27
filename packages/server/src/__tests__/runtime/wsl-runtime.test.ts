@@ -508,6 +508,26 @@ describe("WslRuntimeHandle", () => {
       event: "removed",
     });
 
+    await hostHandlers!.onNotification("domainEvent", {
+      event: {
+        type: "terminal.output",
+        workspaceId: "ws-1",
+        terminalId: "term-1",
+        chunk: {
+          type: "Buffer",
+          data: [104, 105],
+        },
+        seq: 7,
+      },
+    });
+    expect(hostBridge.emitDomainEvent).toHaveBeenCalledWith({
+      type: "terminal.output",
+      workspaceId: "ws-1",
+      terminalId: "term-1",
+      chunk: Buffer.from("hi"),
+      seq: 7,
+    });
+
     await hostHandlers!.onNotification("broadcast", {
       topic: "workspace:dirty:ws-1",
       payload: { reason: "fs_change" },

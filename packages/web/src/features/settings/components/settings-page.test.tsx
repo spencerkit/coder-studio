@@ -3370,7 +3370,7 @@ describe("SettingsPage", () => {
           ],
         };
       }
-      if (op === "terminal.profiles.list") {
+      if (op === "terminal.profiles.list.global") {
         return {
           profiles: [
             ...DEFAULT_TERMINAL_PROFILES.profiles,
@@ -3395,7 +3395,7 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "终端配置" })).toBeInTheDocument();
     expect(sendCommand).toHaveBeenCalledWith("settings.get", {}, undefined);
-    expect(sendCommand).toHaveBeenCalledWith("terminal.profiles.list", {}, undefined);
+    expect(sendCommand).toHaveBeenCalledWith("terminal.profiles.list.global", {}, undefined);
     const defaultProfileTrigger = screen.getByRole("button", { name: /默认终端配置/ });
     expect(defaultProfileTrigger).toHaveAttribute("aria-haspopup", "listbox");
     expect(defaultProfileTrigger).toHaveTextContent("Ops Shell");
@@ -3426,7 +3426,7 @@ describe("SettingsPage", () => {
       if (op === "settings.get") {
         return {};
       }
-      if (op === "terminal.profiles.list") {
+      if (op === "terminal.profiles.list.global") {
         return DEFAULT_TERMINAL_PROFILES;
       }
       return {};
@@ -3509,7 +3509,7 @@ describe("SettingsPage", () => {
           ],
         };
       }
-      if (op === "terminal.profiles.list") {
+      if (op === "terminal.profiles.list.global") {
         return {
           profiles: [
             ...DEFAULT_TERMINAL_PROFILES.profiles,
@@ -3597,7 +3597,7 @@ describe("SettingsPage", () => {
           ],
         };
       }
-      if (op === "terminal.profiles.list") {
+      if (op === "terminal.profiles.list.global") {
         return {
           profiles: [
             ...DEFAULT_TERMINAL_PROFILES.profiles,
@@ -3662,7 +3662,7 @@ describe("SettingsPage", () => {
           ],
         };
       }
-      if (op === "terminal.profiles.list") {
+      if (op === "terminal.profiles.list.global") {
         return {
           profiles: [
             ...DEFAULT_TERMINAL_PROFILES.profiles,

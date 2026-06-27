@@ -2,6 +2,7 @@ import type { TerminalProfile, TerminalProfilesListResult } from "@coder-studio/
 import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useMemo } from "react";
 import { type CommandResult, dispatchCommandAtom } from "../../../atoms/connection";
+import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 
 interface TerminalProfilesState {
   profiles: TerminalProfile[];
@@ -19,11 +20,13 @@ const EMPTY_STATE: TerminalProfilesState = {
   loaded: false,
 };
 
-const terminalProfilesStateAtom = atom<TerminalProfilesState>(EMPTY_STATE);
+const terminalProfilesStateAtom = atom<Record<string, TerminalProfilesState>>({});
 export const resetTerminalProfilesAtom = atom(null, (_get, set) => {
-  set(terminalProfilesStateAtom, EMPTY_STATE);
+  set(terminalProfilesStateAtom, {});
 });
-const inflightByStore = new WeakMap<object, Promise<TerminalProfilesState>>();
+const inflightByStore = new WeakMap<object, Map<string, Promise<TerminalProfilesState>>>();
+
+const GLOBAL_WORKSPACE_KEY = "__global__";
 
 function normalizeProfilesResult(
   result: CommandResult<TerminalProfilesListResult>
@@ -57,28 +60,40 @@ function normalizeProfilesResult(
 export function useTerminalProfiles() {
   const store = useStore();
   const dispatch = useAtomValue(dispatchCommandAtom);
-  const state = useAtomValue(terminalProfilesStateAtom);
+  const activeWorkspaceId = useAtomValue(resolvedActiveWorkspaceIdAtom);
+  const workspaceKey = activeWorkspaceId ?? GLOBAL_WORKSPACE_KEY;
+  const stateByWorkspace = useAtomValue(terminalProfilesStateAtom);
+  const state = stateByWorkspace[workspaceKey] ?? EMPTY_STATE;
   const setState = useSetAtom(terminalProfilesStateAtom);
 
   const loadProfiles = useCallback(async () => {
-    const existingRequest = inflightByStore.get(store);
+    const inflightByWorkspace = inflightByStore.get(store);
+    const existingRequest = inflightByWorkspace?.get(workspaceKey);
     if (existingRequest) {
       return existingRequest;
     }
 
     setState((current) =>
-      current.loading
+      (current[workspaceKey] ?? EMPTY_STATE).loading
         ? current
         : {
             ...current,
-            loading: true,
+            [workspaceKey]: {
+              ...(current[workspaceKey] ?? EMPTY_STATE),
+              loading: true,
+            },
           }
     );
 
-    const request = dispatch<TerminalProfilesListResult>("terminal.profiles.list", {})
+    const request = dispatch<TerminalProfilesListResult>("terminal.profiles.list", {
+      ...(activeWorkspaceId ? { workspaceId: activeWorkspaceId } : {}),
+    })
       .then((result) => {
         const nextState = normalizeProfilesResult(result);
-        store.set(terminalProfilesStateAtom, nextState);
+        store.set(terminalProfilesStateAtom, (current) => ({
+          ...current,
+          [workspaceKey]: nextState,
+        }));
         return nextState;
       })
       .catch(() => {
@@ -86,16 +101,26 @@ export function useTerminalProfiles() {
           ...EMPTY_STATE,
           loaded: true,
         };
-        store.set(terminalProfilesStateAtom, nextState);
+        store.set(terminalProfilesStateAtom, (current) => ({
+          ...current,
+          [workspaceKey]: nextState,
+        }));
         return nextState;
       })
       .finally(() => {
-        inflightByStore.delete(store);
+        const current = inflightByStore.get(store);
+        current?.delete(workspaceKey);
+        if (current && current.size === 0) {
+          inflightByStore.delete(store);
+        }
       });
 
-    inflightByStore.set(store, request);
+    const nextInflightByWorkspace =
+      inflightByWorkspace ?? new Map<string, Promise<TerminalProfilesState>>();
+    nextInflightByWorkspace.set(workspaceKey, request);
+    inflightByStore.set(store, nextInflightByWorkspace);
     return request;
-  }, [dispatch, setState, store]);
+  }, [activeWorkspaceId, dispatch, setState, store, workspaceKey]);
 
   useEffect(() => {
     if (state.loaded || state.loading) {

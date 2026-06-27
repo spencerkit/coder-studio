@@ -24,6 +24,46 @@ function serializeProviderSnapshot(providers: ProviderDefinition[]): RemoteProvi
   };
 }
 
+function isSerializedBuffer(value: unknown): value is { type: "Buffer"; data: number[] } {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "Buffer" &&
+    Array.isArray((value as { data?: unknown }).data)
+  );
+}
+
+function normalizeDomainEventPayload(event: unknown): unknown {
+  if (
+    !event ||
+    typeof event !== "object" ||
+    (event as { type?: unknown }).type !== "terminal.output"
+  ) {
+    return event;
+  }
+
+  const chunk = (event as { chunk?: unknown }).chunk;
+  if (Buffer.isBuffer(chunk)) {
+    return event;
+  }
+
+  if (chunk instanceof Uint8Array) {
+    return {
+      ...event,
+      chunk: Buffer.from(chunk),
+    };
+  }
+
+  if (isSerializedBuffer(chunk)) {
+    return {
+      ...event,
+      chunk: Buffer.from(chunk.data),
+    };
+  }
+
+  return event;
+}
+
 async function routeHostNotification(
   hostBridge: RuntimeHostBridge,
   method: HostNotificationMessage["method"],
@@ -31,7 +71,7 @@ async function routeHostNotification(
 ): Promise<void> {
   if (method === "domainEvent") {
     const message = params as Extract<HostNotificationMessage, { method: "domainEvent" }>["params"];
-    hostBridge.emitDomainEvent(message.event);
+    hostBridge.emitDomainEvent(normalizeDomainEventPayload(message.event) as typeof message.event);
     return;
   }
 

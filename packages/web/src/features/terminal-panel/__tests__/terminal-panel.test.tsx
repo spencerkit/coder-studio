@@ -251,7 +251,11 @@ describe("TerminalPanel", () => {
       screen.getAllByRole("button", { name: "New Terminal" })[0]?.click();
     });
 
-    expect(sendCommand).toHaveBeenCalledWith("terminal.profiles.list", {}, undefined);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "terminal.profiles.list",
+      { workspaceId: "ws-test" },
+      undefined
+    );
     expect(sendCommand).toHaveBeenCalledWith(
       "terminal.create",
       expect.objectContaining({
@@ -500,7 +504,11 @@ describe("TerminalPanel", () => {
       expect(screen.getByTestId("xterm-host")).toHaveTextContent("term_1");
     });
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("terminal.profiles.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.profiles.list",
+        { workspaceId: "ws-test" },
+        undefined
+      );
     });
 
     const toolbarRight = document.querySelector(".terminal-toolbar-right");
@@ -535,6 +543,99 @@ describe("TerminalPanel", () => {
         expect.objectContaining({
           workspaceId: "ws-test",
           profileId: "detected:win:git-bash",
+          themeBackground: expect.any(String),
+        }),
+        undefined
+      );
+    });
+  });
+
+  it("requests runtime-aware terminal profiles for a WSL workspace and launches the returned default shell", async () => {
+    const user = userEvent.setup();
+    const store = createStore();
+    const subscribe = vi.fn((_topics: string[], handler: EventHandler) => {
+      handlers.push(handler);
+      return () => {
+        handlers = handlers.filter((candidate) => candidate !== handler);
+      };
+    });
+    const sendCommand = vi
+      .fn()
+      .mockImplementation((op: string, args?: { workspaceId?: string }) => {
+        if (op === "terminal.list") {
+          return Promise.resolve([]);
+        }
+
+        if (op === "terminal.profiles.list") {
+          expect(args).toEqual({ workspaceId: "ws-test" });
+          return Promise.resolve({
+            profiles: [
+              {
+                id: "detected:posix:bash",
+                label: "bash",
+                source: "detected",
+                runtime: "native",
+                icon: "terminal",
+              },
+            ],
+            configuredDefaultProfileId: "detected:win:powershell",
+            resolvedDefaultProfileId: "detected:posix:bash",
+          });
+        }
+
+        if (op === "terminal.create") {
+          return Promise.resolve({
+            id: "term_wsl_1",
+            workspaceId: "ws-test",
+            kind: "shell",
+            title: "bash",
+            cwd: "/home/w/app",
+            argv: ["/bin/bash", "-i"],
+            cols: 120,
+            rows: 30,
+            alive: true,
+            createdAt: 1,
+          });
+        }
+
+        return Promise.resolve(undefined);
+      });
+
+    seedReadyWorkspaceState(store, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/w/app",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+    store.set(bottomPanelHeightAtom, 240);
+    setEnglishLocale(store);
+    store.set(wsClientAtom, { subscribe, sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <TerminalPanel />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "New Terminal" })[0]!);
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "terminal.create",
+        expect.objectContaining({
+          workspaceId: "ws-test",
+          profileId: "detected:posix:bash",
           themeBackground: expect.any(String),
         }),
         undefined

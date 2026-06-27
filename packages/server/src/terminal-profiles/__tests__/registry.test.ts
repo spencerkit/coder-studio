@@ -263,6 +263,36 @@ describe("terminal profile registry", () => {
     ]);
   });
 
+  it("prefers runtime-local shells in a WSL runtime even when the configured default is a Windows profile", async () => {
+    const result = await listTerminalProfiles({
+      platform: "linux",
+      shellPath: "/bin/bash",
+      configuredDefaultProfileId: "detected:win:powershell",
+      customProfiles: [],
+      workspacePath: "/home/me/app",
+      detectProfiles: async () => [
+        {
+          id: "detected:posix:bash",
+          label: "bash",
+          source: "detected",
+          runtime: "native",
+          icon: "terminal",
+          argv: ["/bin/bash", "-i"],
+          cwdRuntime: "native",
+        },
+      ],
+    });
+
+    expect(result.resolvedDefaultProfileId).toBe("detected:posix:bash");
+    expect(result.profiles).toEqual([
+      expect.objectContaining({
+        id: "detected:posix:bash",
+        label: "bash",
+        runtime: "native",
+      }),
+    ]);
+  });
+
   it("throws for an explicitly requested unavailable profile instead of silently falling back", async () => {
     await expect(
       resolveTerminalLaunch({

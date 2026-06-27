@@ -592,7 +592,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
       const [settingsResult, providersResult, terminalProfilesResult] = await Promise.all([
         dispatch<Record<string, unknown>>("settings.get", {}),
         dispatch<ProviderListItem[]>("provider.list", {}),
-        dispatch<TerminalProfilesListResult>("terminal.profiles.list", {}),
+        dispatch<TerminalProfilesListResult>("terminal.profiles.list.global", {}),
       ]);
       if (settingsResult === null || providersResult === null || terminalProfilesResult === null) {
         return;
@@ -940,7 +940,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
     }
 
     const refreshedProfilesResult = await dispatch<TerminalProfilesListResult>(
-      "terminal.profiles.list",
+      "terminal.profiles.list.global",
       {}
     );
     if (

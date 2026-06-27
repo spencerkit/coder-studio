@@ -341,6 +341,7 @@ export async function assembleRuntime(input: {
     eventBus,
     providerConfigRepo,
     providerRegistry: input.providerRegistry,
+    settingsRepo: runtimeSettingsRepo,
     sessionMgr,
     terminalMgr,
     taskMgr,

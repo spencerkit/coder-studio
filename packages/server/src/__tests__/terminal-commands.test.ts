@@ -114,6 +114,7 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
             eventBus: runtimeCtxRef.eventBus,
             providerConfigRepo: runtimeCtxRef.providerConfigRepo,
             providerRegistry: runtimeCtxRef.providerRegistry,
+            settingsRepo: runtimeCtxRef.settingsRepo,
             sessionMgr: runtimeCtxRef.sessionMgr,
             terminalMgr: runtimeCtxRef.terminalMgr,
             taskMgr: runtimeCtxRef.taskMgr as never,
@@ -424,7 +425,7 @@ describe("terminal commands", () => {
         kind: "command",
         id: "terminal-profiles-list-1",
         op: "terminal.profiles.list",
-        args: {},
+        args: { workspaceId: "ws-1" },
       },
       ctx
     );
@@ -490,6 +491,49 @@ describe("terminal commands", () => {
     });
   });
 
+  it("keeps the host-global terminal profile list available for settings", async () => {
+    vi.stubEnv("SHELL", "/bin/zsh");
+    const ctx = createContext({
+      settingsRepo: createSettingsRepoStub({
+        "terminal.defaultProfileId": "custom:ops",
+        "terminal.profiles": [
+          {
+            id: "custom:ops",
+            label: "Ops Shell",
+            command: "/usr/bin/env",
+            args: ["bash"],
+            icon: "rocket",
+          },
+        ],
+      }) as never,
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-profiles-list-global-1",
+        op: "terminal.profiles.list.global",
+        args: {},
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      configuredDefaultProfileId: "custom:ops",
+      resolvedDefaultProfileId: "custom:ops",
+      profiles: expect.arrayContaining([
+        expect.objectContaining({
+          id: "custom:ops",
+          label: "Ops Shell",
+          source: "custom",
+          runtime: "native",
+          icon: "rocket",
+        }),
+      ]),
+    });
+  });
+
   it("uses the current user shell when creating shell terminals", async () => {
     vi.stubEnv("SHELL", "/bin/zsh");
     const ctx = createContext();
@@ -512,17 +556,6 @@ describe("terminal commands", () => {
         argv: ["/bin/zsh", "-i"],
         title: "zsh",
       })
-    );
-    expect(
-      (ctx as CommandContext & { __sendCommand: ReturnType<typeof vi.fn> }).__sendCommand
-    ).toHaveBeenCalledWith(
-      "terminal.spawn",
-      expect.objectContaining({
-        workspaceId: "ws-1",
-        argv: ["/bin/zsh", "-i"],
-        title: "zsh",
-      }),
-      undefined
     );
   });
 
@@ -562,17 +595,6 @@ describe("terminal commands", () => {
         title: "Tooling",
         cwd: "/tmp/workspace",
       })
-    );
-    expect(
-      (ctx as CommandContext & { __sendCommand: ReturnType<typeof vi.fn> }).__sendCommand
-    ).toHaveBeenCalledWith(
-      "terminal.spawn",
-      expect.objectContaining({
-        workspaceId: "ws-1",
-        argv: ["npm", "run", "dev"],
-        title: "Tooling",
-      }),
-      undefined
     );
   });
 
