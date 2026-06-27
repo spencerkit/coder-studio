@@ -5,6 +5,7 @@ const REQUIRED_WORKFLOW_EXPECTATIONS = [
   "Do not revert user changes unless explicitly asked.",
   "Prefer the project's existing patterns.",
   "Run the relevant verification command before reporting completion.",
+  "Use the built-in `coder-studio-session-activity` skill to record meaningful session activity when plans change, important commands finish, important edits complete, or you reach a review checkpoint.",
 ] as const;
 
 const REQUIRED_REVIEW_CHECKLIST = [

@@ -111,6 +111,7 @@ describe("buildAgentInstructionsMarkdown", () => {
         "- Do not revert user changes unless explicitly asked.",
         "- Prefer the project's existing patterns.",
         "- Run the relevant verification command before reporting completion.",
+        "- Use the built-in `coder-studio-session-activity` skill to record meaningful session activity when plans change, important commands finish, important edits complete, or you reach a review checkpoint.",
         "",
         "## File Constraints",
         "",
@@ -192,6 +193,9 @@ describe("buildAgentInstructionsMarkdown", () => {
     );
     expect(content).toContain(
       "`packages/core/src/domain/types.ts` and `packages/core/src/provider/definition.ts`"
+    );
+    expect(content).toContain(
+      "- Use the built-in `coder-studio-session-activity` skill to record meaningful session activity when plans change, important commands finish, important edits complete, or you reach a review checkpoint."
     );
   });
 });
