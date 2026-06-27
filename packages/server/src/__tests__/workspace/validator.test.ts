@@ -46,6 +46,23 @@ describe("validatePath", () => {
 
     await unlink(filePath);
   });
+
+  it("accepts WSL workspace paths using distro discovery instead of host stat", async () => {
+    const result = await validatePath("/home/spencer/workspace", {
+      targetRuntime: "wsl",
+      wslDistro: "Ubuntu-24.04",
+      commandExists: async () => true,
+      runCommand: async (file: string, args?: string[]) => {
+        if (file === "wsl.exe" && args?.join(" ") === "-l -q") {
+          return { stdout: "Ubuntu-24.04\n", stderr: "" };
+        }
+        throw new Error(`unexpected command: ${file}`);
+      },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
 });
 
 describe("WorkspaceValidator", () => {

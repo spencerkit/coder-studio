@@ -198,7 +198,15 @@ export function useWorktreeManagementActions(workspaceId: string) {
 
   const openWorktree = useCallback(
     async (path: string) => {
-      const result = await dispatch<Workspace>("workspace.open", { path });
+      const openArgs =
+        workspace?.targetRuntime === "wsl"
+          ? {
+              path,
+              targetRuntime: "wsl" as const,
+              wslDistro: workspace.wslDistro,
+            }
+          : { path };
+      const result = await dispatch<Workspace>("workspace.open", openArgs);
 
       if (!result.ok || !result.data?.id) {
         const message = result.error?.message ?? t("worktree.open_failed_body");

@@ -17,6 +17,10 @@ export class RuntimeRouter {
       return this.deps.defaultRuntimeId;
     }
 
+    if (target.kind === "runtime") {
+      return target.runtimeId;
+    }
+
     const workspaceId =
       target.kind === "workspace"
         ? target.workspaceId

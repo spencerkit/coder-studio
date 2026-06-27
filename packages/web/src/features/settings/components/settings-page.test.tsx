@@ -15,7 +15,11 @@ import {
   serverInfoAtom,
   wsClientAtom,
 } from "../../../atoms/connection";
-import { activeWorkspaceIdAtom, workspacesAtom } from "../../../atoms/workspaces";
+import {
+  activeWorkspaceIdAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../../../atoms/workspaces";
 import { CommandResultError } from "../../../ws/client";
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -113,6 +117,25 @@ function createConnectedStore(
   } as never);
 
   return store;
+}
+
+function setActiveWorkspaceContext(store: ReturnType<typeof createConnectedStore>, id = "ws-1") {
+  store.set(activeWorkspaceIdAtom, id);
+  store.set(workspacesLoadStateAtom, "ready");
+  store.set(workspacesAtom, {
+    [id]: {
+      id,
+      path: "/repo/project",
+      targetRuntime: "native",
+      openedAt: 1,
+      lastActiveAt: 2,
+      uiState: {
+        leftPanelWidth: 240,
+        bottomPanelHeight: 200,
+        focusMode: false,
+      },
+    },
+  });
 }
 
 const DEFAULT_PROVIDER_LIST = [
@@ -719,21 +742,7 @@ describe("SettingsPage", () => {
     });
     const store = createConnectedStore(sendCommand);
     store.set(connectionStatusAtom, "connected");
-    store.set(activeWorkspaceIdAtom, "ws-1");
-    store.set(workspacesAtom, {
-      "ws-1": {
-        id: "ws-1",
-        path: "/repo/project",
-        targetRuntime: "native",
-        openedAt: 1,
-        lastActiveAt: 2,
-        uiState: {
-          leftPanelWidth: 240,
-          bottomPanelHeight: 200,
-          focusMode: false,
-        },
-      },
-    });
+    setActiveWorkspaceContext(store);
 
     renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
 
@@ -772,21 +781,7 @@ describe("SettingsPage", () => {
     });
     const store = createConnectedStore(sendCommand);
     store.set(connectionStatusAtom, "connected");
-    store.set(activeWorkspaceIdAtom, "ws-1");
-    store.set(workspacesAtom, {
-      "ws-1": {
-        id: "ws-1",
-        path: "/repo/project",
-        targetRuntime: "native",
-        openedAt: 1,
-        lastActiveAt: 2,
-        uiState: {
-          leftPanelWidth: 240,
-          bottomPanelHeight: 200,
-          focusMode: false,
-        },
-      },
-    });
+    setActiveWorkspaceContext(store);
 
     renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
 
@@ -817,21 +812,7 @@ describe("SettingsPage", () => {
     });
     const store = createConnectedStore(sendCommand);
     store.set(connectionStatusAtom, "connected");
-    store.set(activeWorkspaceIdAtom, "ws-1");
-    store.set(workspacesAtom, {
-      "ws-1": {
-        id: "ws-1",
-        path: "/repo/project",
-        targetRuntime: "native",
-        openedAt: 1,
-        lastActiveAt: 2,
-        uiState: {
-          leftPanelWidth: 240,
-          bottomPanelHeight: 200,
-          focusMode: false,
-        },
-      },
-    });
+    setActiveWorkspaceContext(store);
 
     renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
 
@@ -889,21 +870,7 @@ describe("SettingsPage", () => {
     });
     const store = createConnectedStore(sendCommand);
     store.set(connectionStatusAtom, "connected");
-    store.set(activeWorkspaceIdAtom, "ws-1");
-    store.set(workspacesAtom, {
-      "ws-1": {
-        id: "ws-1",
-        path: "/repo/project",
-        targetRuntime: "native",
-        openedAt: 1,
-        lastActiveAt: 2,
-        uiState: {
-          leftPanelWidth: 240,
-          bottomPanelHeight: 200,
-          focusMode: false,
-        },
-      },
-    });
+    setActiveWorkspaceContext(store);
 
     renderSettingsPage(store, { initialEntry: "/settings?section=analysis" });
 
@@ -966,21 +933,7 @@ describe("SettingsPage", () => {
     });
     const emptySessionStore = createConnectedStore(sendCommand);
     emptySessionStore.set(connectionStatusAtom, "connected");
-    emptySessionStore.set(activeWorkspaceIdAtom, "ws-1");
-    emptySessionStore.set(workspacesAtom, {
-      "ws-1": {
-        id: "ws-1",
-        path: "/repo/project",
-        targetRuntime: "native",
-        openedAt: 1,
-        lastActiveAt: 2,
-        uiState: {
-          leftPanelWidth: 240,
-          bottomPanelHeight: 200,
-          focusMode: false,
-        },
-      },
-    });
+    setActiveWorkspaceContext(emptySessionStore);
 
     renderSettingsPage(emptySessionStore, { initialEntry: "/settings?section=analysis" });
 
@@ -1952,7 +1905,7 @@ describe("SettingsPage", () => {
 
   it("does not render phone continuation entry from settings even when a workspace is active", async () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
-    store.set(activeWorkspaceIdAtom, "ws-1");
+    setActiveWorkspaceContext(store);
 
     renderSettingsPage(store);
 
@@ -2620,6 +2573,7 @@ describe("SettingsPage", () => {
       return {};
     });
     const store = createConnectedStore(sendCommand);
+    setActiveWorkspaceContext(store);
 
     renderSettingsPage(store);
 
@@ -2652,6 +2606,7 @@ describe("SettingsPage", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "settings.update",
         {
+          workspaceId: "ws-1",
           settings: {
             providers: {
               claude: {
@@ -2668,6 +2623,7 @@ describe("SettingsPage", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "settings.previewCommand",
         {
+          workspaceId: "ws-1",
           providerId: "claude",
           config: {
             additionalArgs: ["--verbose", "--debug", "--print"],
@@ -2695,6 +2651,7 @@ describe("SettingsPage", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "settings.update",
         {
+          workspaceId: "ws-1",
           settings: {
             providers: {
               codex: {

@@ -245,4 +245,69 @@ describe("system deps commands", () => {
     expect(ownerCancel.ok).toBe(true);
     expect(cancel).toHaveBeenCalledWith("job-1", "tab-a", "client-a-reconnected");
   });
+
+  it("routes workspace-scoped install lifecycle through the runtime router", async () => {
+    const executeOnTarget = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jobId: "job-1",
+        dependencyId: "git",
+        status: "running",
+        steps: [],
+        interaction: { kind: "none", echo: false },
+      })
+      .mockResolvedValueOnce({
+        jobId: "job-1",
+        dependencyId: "git",
+        status: "running",
+        steps: [],
+        interaction: { kind: "none", echo: false },
+      });
+    const context = createContext({
+      runtimeRouter: {
+        executeOnTarget,
+      } as never,
+      runtimeBindings: {} as never,
+    });
+
+    const started = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-start-wsl",
+        op: "systemDeps.install.start",
+        args: { workspaceId: "ws-wsl", dependencyId: "git" },
+      },
+      context,
+      "client-a"
+    );
+
+    expect(started.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenNthCalledWith(
+      1,
+      { kind: "workspace", workspaceId: "ws-wsl" },
+      "systemDeps.install.start",
+      { workspaceId: "ws-wsl", dependencyId: "git" },
+      { authContext: undefined, clientId: "client-a" }
+    );
+
+    const polled = await dispatch(
+      {
+        kind: "command",
+        id: "sysdeps-get-wsl",
+        op: "systemDeps.install.get",
+        args: { jobId: "job-1", runtimeId: "wsl:ws-wsl" },
+      },
+      context,
+      "client-a"
+    );
+
+    expect(polled.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenNthCalledWith(
+      2,
+      { kind: "runtime", runtimeId: "wsl:ws-wsl" },
+      "systemDeps.install.get",
+      { jobId: "job-1", runtimeId: "wsl:ws-wsl" },
+      { authContext: undefined, clientId: "client-a" }
+    );
+  });
 });

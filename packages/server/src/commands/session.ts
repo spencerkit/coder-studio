@@ -66,7 +66,7 @@ registerRuntimeCommand(
   }),
   {
     resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
-    handler: async (args, ctx) => {
+    handler: async (args, ctx, meta) => {
       const workspace = ctx.workspaceLookup.get(args.workspaceId);
       if (!workspace) {
         throw { code: "workspace_not_found", message: `Workspace not found: ${args.workspaceId}` };
@@ -100,6 +100,7 @@ registerRuntimeCommand(
         provider,
         draft: args.draft,
         themeBackground: args.themeBackground,
+        sessionBootstrap: meta?.sessionBootstrap,
       });
 
       ctx.sessionMetadataRepo?.upsert({

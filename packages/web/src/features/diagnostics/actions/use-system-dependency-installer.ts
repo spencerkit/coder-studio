@@ -9,7 +9,10 @@ import { useEffect, useRef, useState } from "react";
 import { activationStatusAtom } from "../../../atoms/activation";
 import { connectionStatusAtom, dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 
-export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
+export function useSystemDependencyInstaller(
+  workspaceId: string | null | undefined,
+  onSucceeded: () => Promise<void>
+) {
   const dispatch = useAtomValue(dispatchCommandAtom);
   const activationStatus = useAtomValue(activationStatusAtom);
   const connectionStatus = useAtomValue(connectionStatusAtom);
@@ -90,6 +93,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
       "systemDeps.install.get",
       {
         jobId,
+        workspaceId: workspaceId ?? undefined,
       }
     );
 
@@ -169,6 +173,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
 
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.start", {
       dependencyId,
+      workspaceId: workspaceId ?? undefined,
     });
     if (!result.ok || !result.data) {
       setPendingDependency(null);
@@ -200,6 +205,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.input", {
       jobId: currentJob.jobId,
       text,
+      workspaceId: workspaceId ?? undefined,
     });
     setSubmitting(false);
 
@@ -232,6 +238,7 @@ export function useSystemDependencyInstaller(onSucceeded: () => Promise<void>) {
     setPendingDependency(null);
     const result = await dispatch<SystemDependencyInstallJobSnapshot>("systemDeps.install.cancel", {
       jobId: currentJob.jobId,
+      workspaceId: workspaceId ?? undefined,
     });
     if (result.ok && result.data) {
       setCurrentJob(result.data);

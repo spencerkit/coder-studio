@@ -47,6 +47,14 @@ export class ProviderConfigRepo {
     return {};
   }
 
+  ensureInitialized(): void {
+    if (readJsonFile<ProviderConfigFileRecord | Record<string, ProviderConfig>>(this.filePath)) {
+      return;
+    }
+
+    this.saveFileConfigs({});
+  }
+
   private saveFileConfigs(configs: Record<string, ProviderConfig>): void {
     const payload: ProviderConfigFileRecord = {
       version: 1,

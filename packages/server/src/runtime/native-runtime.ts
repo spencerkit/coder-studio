@@ -21,10 +21,13 @@ async function executeRuntimeCommand(
 export async function createNativeRuntime(input: {
   runtimeId: string;
   stateRoot: string;
+  runtimeStateRoot?: string;
   hostBridge: RuntimeHostBridge;
   providerRegistry: RuntimeCommandContext["providerRegistry"];
   workspaceLookup: RuntimeCommandContext["workspaceLookup"];
   providerRuntimeDeps?: RuntimeCommandContext["providerRuntimeDeps"];
+  settingsRepo?: Parameters<typeof assembleRuntime>[0]["settingsRepo"];
+  agentInstructionPublisher?: Parameters<typeof assembleRuntime>[0]["agentInstructionPublisher"];
   contextOverrides?: Partial<RuntimeCommandContext>;
   providerConfigRepoFactory?:
     | ((filePath: string) => RuntimeCommandContext["providerConfigRepo"])
@@ -35,6 +38,10 @@ export async function createNativeRuntime(input: {
   return {
     id: input.runtimeId,
     kind: "native",
+    summary: {
+      scope: "shared",
+      targetRuntime: "native",
+    },
     execute: (op, args, meta) => executeRuntimeCommand(op, args, assembly.context, meta),
     disposeWorkspace: async (workspaceId) => {
       await assembly.context.lspMgr.disposeWorkspace(workspaceId);
@@ -44,10 +51,18 @@ export async function createNativeRuntime(input: {
       await assembly.context.terminalMgr.closeForWorkspace(workspaceId);
     },
     setProviderRegistry: (providers) => {
-      assembly.context.providerRegistry = providers;
+      assembly.context.providerRegistry.splice(
+        0,
+        assembly.context.providerRegistry.length,
+        ...providers
+      );
       assembly.context.sessionMgr.setProviderRegistry(providers);
       assembly.context.supervisorMgr.setProviderRegistry(providers);
+      assembly.resources.providerInstallMgr.setProviders(providers);
     },
     health: async () => ({ ok: true }),
+    stop: () => assembly.stop(),
+    getContext: () => assembly.context,
+    getResources: () => assembly.resources,
   };
 }

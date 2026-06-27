@@ -308,6 +308,97 @@ describe("WorkspaceLaunchModal", () => {
     expect(store.get(activeFilePathAtomFamily("ws-1"))).toBe("README.md");
   });
 
+  it("shows WSL launch controls on Windows and opens with explicit distro metadata", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const onClose = vi.fn();
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(
+        async (
+          op: string,
+          args?: { path?: string; targetRuntime?: string; wslDistro?: string }
+        ) => {
+          if (op === "workspace.browse") {
+            return {
+              currentPath: "/home/spencer",
+              parentPath: "/home",
+              directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+            };
+          }
+
+          if (op === "workspace.history.list") {
+            return [];
+          }
+
+          if (op === "workspace.wsl.listDistros") {
+            return {
+              distros: ["Ubuntu-24.04"],
+            };
+          }
+
+          if (op === "workspace.open") {
+            return {
+              id: "ws-wsl",
+              path: args?.path ?? "/home/spencer/workspace",
+              targetRuntime: "wsl",
+              wslDistro: args?.wslDistro ?? "Ubuntu-24.04",
+              openedAt: 1,
+              lastActiveAt: 1,
+              uiState: {
+                leftPanelWidth: 280,
+                bottomPanelHeight: 200,
+                focusMode: false,
+              },
+            };
+          }
+
+          return {};
+        }
+      );
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const runtimeSelect = await screen.findByRole("combobox", { name: "Workspace Runtime" });
+    expect(screen.getByText("Native Windows")).toBeInTheDocument();
+    expect(screen.getByText("WSL")).toBeInTheDocument();
+
+    fireEvent.change(runtimeSelect, { target: { value: "wsl" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "WSL Distribution" }), {
+      target: { value: "Ubuntu-24.04" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Workspace Path" }), {
+      target: { value: "/home/spencer/workspace" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.open",
+        {
+          path: "/home/spencer/workspace",
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        },
+        undefined
+      );
+    });
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
   it("navigates to /workspace after opening a workspace from outside the workspace page", async () => {
     const onClose = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {
@@ -400,6 +491,76 @@ describe("WorkspaceLaunchModal", () => {
     await waitFor(() => {
       expect(routerMocks.navigate).toHaveBeenCalledWith(
         "/diagnostics?context=workspace_open&workspacePath=%2Fhome%2Fspencer%2Fworkspace"
+      );
+    });
+  });
+
+  it("preserves WSL runtime metadata when redirecting failed opens into diagnostics", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(
+        async (
+          op: string,
+          args?: { path?: string; targetRuntime?: string; wslDistro?: string }
+        ) => {
+          if (op === "workspace.browse") {
+            return {
+              currentPath: "/home/spencer",
+              parentPath: "/home",
+              directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+            };
+          }
+
+          if (op === "workspace.history.list") {
+            return [];
+          }
+
+          if (op === "workspace.wsl.listDistros") {
+            return {
+              distros: ["Ubuntu-24.04"],
+            };
+          }
+
+          if (op === "workspace.open") {
+            throw new CommandResultError({
+              code: "workspace_open_failed",
+              message: "Workspace path is no longer available",
+            });
+          }
+
+          return {};
+        }
+      );
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    routerMocks.location.pathname = "/";
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Workspace Runtime" }), {
+      target: { value: "wsl" },
+    });
+    fireEvent.change(await screen.findByRole("combobox", { name: "WSL Distribution" }), {
+      target: { value: "Ubuntu-24.04" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Workspace Path" }), {
+      target: { value: "/home/spencer/workspace" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Workspace" }));
+
+    await waitFor(() => {
+      expect(routerMocks.navigate).toHaveBeenCalledWith(
+        "/diagnostics?context=workspace_open&workspacePath=%2Fhome%2Fspencer%2Fworkspace&targetRuntime=wsl&wslDistro=Ubuntu-24.04"
       );
     });
   });

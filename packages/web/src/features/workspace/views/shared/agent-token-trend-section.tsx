@@ -8,10 +8,14 @@ import { buildWorkAnalyticsPath } from "../../../work-analysis/navigation";
 import { AgentInstructionsTokenTrend } from "./agent-instructions-token-trend";
 
 interface AgentTokenTrendSectionProps {
+  workspaceId: string;
   workspacePath: string;
 }
 
-export const AgentTokenTrendSection: FC<AgentTokenTrendSectionProps> = ({ workspacePath }) => {
+export const AgentTokenTrendSection: FC<AgentTokenTrendSectionProps> = ({
+  workspaceId,
+  workspacePath,
+}) => {
   const t = useTranslation();
   const [isExpanded, setIsExpanded] = useState(true);
   const panelId = "workspace-agent-token-trend-panel";
@@ -59,7 +63,7 @@ export const AgentTokenTrendSection: FC<AgentTokenTrendSectionProps> = ({ worksp
       </div>
       {isExpanded ? (
         <div id={panelId}>
-          <AgentInstructionsTokenTrend workspacePath={workspacePath} />
+          <AgentInstructionsTokenTrend workspaceId={workspaceId} workspacePath={workspacePath} />
         </div>
       ) : null}
     </section>

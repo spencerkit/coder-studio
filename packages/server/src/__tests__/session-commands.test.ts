@@ -43,6 +43,41 @@ describe("Session Commands", () => {
   let runtimeBindings: WorkspaceRuntimeBindingStore;
   let runtimeRegistry: RuntimeRegistry;
   let runtimeRouter: RuntimeRouter;
+  const registerNativeTestRuntime = async () => {
+    runtimeRegistry.register(
+      await createNativeRuntime({
+        runtimeId: "native-default",
+        stateRoot: stateDir,
+        hostBridge: {
+          issueSessionToken: vi.fn(() => ({ token: "token" })),
+          revokeSessionTokensBySessionId: vi.fn(),
+          getHostApiUrl: () => "http://127.0.0.1:4173",
+          emitDomainEvent: (event) => eventBus.emit(event),
+          broadcast: vi.fn(),
+          recordWorkspaceFetch: vi.fn(),
+          sendToClient: vi.fn(() => true),
+          sendBinaryToClient: vi.fn(() => true),
+        },
+        providerRegistry: ctx.providerRegistry,
+        workspaceLookup: {
+          get: (workspaceId: string) => workspaceMgr.get(workspaceId),
+          list: () => workspaceMgr.list(),
+        },
+        providerRuntimeDeps: ctx.providerRuntimeDeps,
+        contextOverrides: {
+          eventBus,
+          providerConfigRepo: ctx.providerConfigRepo,
+          sessionMgr,
+          terminalMgr: ctx.terminalMgr,
+          taskMgr: ctx.taskMgr,
+          lspMgr: ctx.lspMgr,
+          supervisorMgr: ctx.supervisorMgr,
+          sessionMetadataRepo,
+          agentInstructionPublisher: ctx.agentInstructionPublisher,
+        },
+      })
+    );
+  };
 
   beforeEach(() => {
     eventBus = new EventBus();
@@ -184,39 +219,7 @@ describe("Session Commands", () => {
       };
 
       try {
-        runtimeRegistry.register(
-          await createNativeRuntime({
-            runtimeId: "native-default",
-            stateRoot: stateDir,
-            hostBridge: {
-              issueSessionToken: vi.fn(() => ({ token: "token" })),
-              revokeSessionTokensBySessionId: vi.fn(),
-              getHostApiUrl: () => "http://127.0.0.1:4173",
-              emitDomainEvent: (event) => eventBus.emit(event),
-              broadcast: vi.fn(),
-              recordWorkspaceFetch: vi.fn(),
-              sendToClient: vi.fn(() => true),
-              sendBinaryToClient: vi.fn(() => true),
-            },
-            providerRegistry: ctx.providerRegistry,
-            workspaceLookup: {
-              get: (workspaceId: string) => workspaceMgr.get(workspaceId),
-              list: () => workspaceMgr.list(),
-            },
-            providerRuntimeDeps: ctx.providerRuntimeDeps,
-            contextOverrides: {
-              eventBus,
-              providerConfigRepo: ctx.providerConfigRepo,
-              sessionMgr,
-              terminalMgr: ctx.terminalMgr,
-              taskMgr: ctx.taskMgr,
-              lspMgr: ctx.lspMgr,
-              supervisorMgr: ctx.supervisorMgr,
-              sessionMetadataRepo,
-              agentInstructionPublisher: ctx.agentInstructionPublisher,
-            },
-          })
-        );
+        await registerNativeTestRuntime();
 
         const openResult = await dispatch(
           {
@@ -283,39 +286,7 @@ describe("Session Commands", () => {
       });
 
       try {
-        runtimeRegistry.register(
-          await createNativeRuntime({
-            runtimeId: "native-default",
-            stateRoot: stateDir,
-            hostBridge: {
-              issueSessionToken: vi.fn(() => ({ token: "token" })),
-              revokeSessionTokensBySessionId: vi.fn(),
-              getHostApiUrl: () => "http://127.0.0.1:4173",
-              emitDomainEvent: (event) => eventBus.emit(event),
-              broadcast: vi.fn(),
-              recordWorkspaceFetch: vi.fn(),
-              sendToClient: vi.fn(() => true),
-              sendBinaryToClient: vi.fn(() => true),
-            },
-            providerRegistry: ctx.providerRegistry,
-            workspaceLookup: {
-              get: (workspaceId: string) => workspaceMgr.get(workspaceId),
-              list: () => workspaceMgr.list(),
-            },
-            providerRuntimeDeps: ctx.providerRuntimeDeps,
-            contextOverrides: {
-              eventBus,
-              providerConfigRepo: ctx.providerConfigRepo,
-              sessionMgr,
-              terminalMgr: ctx.terminalMgr,
-              taskMgr: ctx.taskMgr,
-              lspMgr: ctx.lspMgr,
-              supervisorMgr: ctx.supervisorMgr,
-              sessionMetadataRepo,
-              agentInstructionPublisher: ctx.agentInstructionPublisher,
-            },
-          })
-        );
+        await registerNativeTestRuntime();
 
         const openResult = await dispatch(
           {
@@ -386,6 +357,8 @@ describe("Session Commands", () => {
       };
 
       try {
+        await registerNativeTestRuntime();
+
         const openResult = await dispatch(
           {
             kind: "command",
@@ -453,6 +426,8 @@ describe("Session Commands", () => {
       };
 
       try {
+        await registerNativeTestRuntime();
+
         const openResult = await dispatch(
           {
             kind: "command",
@@ -516,6 +491,8 @@ describe("Session Commands", () => {
       };
 
       try {
+        await registerNativeTestRuntime();
+
         const openResult = await dispatch(
           {
             kind: "command",
@@ -564,6 +541,8 @@ describe("Session Commands", () => {
       };
 
       try {
+        await registerNativeTestRuntime();
+
         const openResult = await dispatch(
           {
             kind: "command",
@@ -645,6 +624,17 @@ describe("Session Commands", () => {
       const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-remove-metadata-"));
       tempDirs.push(workspacePath);
       const workspace = await workspaceMgr.open({ path: workspacePath });
+      const endedSession = {
+        id: "sess-ended",
+        workspaceId: workspace.id,
+        terminalId: "term-ended",
+        providerId: "codex",
+        capability: "full",
+        state: "ended",
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      } as const;
       sessionMetadataRepo.upsert({
         sessionId: "sess-ended",
         workspaceId: workspace.id,
@@ -654,20 +644,10 @@ describe("Session Commands", () => {
 
       const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
       vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
-        sessionId === "sess-ended"
-          ? ({
-              id: "sess-ended",
-              workspaceId: workspace.id,
-              terminalId: "term-ended",
-              providerId: "codex",
-              capability: "full",
-              state: "ended",
-              startedAt: 1,
-              lastActiveAt: 1,
-              endedAt: 2,
-            } as const)
-          : undefined
+        sessionId === "sess-ended" ? endedSession : undefined
       );
+      await registerNativeTestRuntime();
+      runtimeBindings.bindSession(endedSession);
 
       const result = await dispatch(
         {
@@ -692,6 +672,17 @@ describe("Session Commands", () => {
       const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-mobile-"));
       tempDirs.push(workspacePath);
       const workspace = await workspaceMgr.open({ path: workspacePath });
+      const endedSession = {
+        id: "sess-1",
+        workspaceId: workspace.id,
+        terminalId: "term-1",
+        providerId: "codex",
+        capability: "full",
+        state: "ended",
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      } as const;
       workspaceMgr.updateUiState(workspace.id, {
         ...workspace.uiState,
         paneLayout: {
@@ -706,21 +697,13 @@ describe("Session Commands", () => {
       });
 
       const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
-      const getSpy = vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
-        sessionId === "sess-1"
-          ? ({
-              id: "sess-1",
-              workspaceId: workspace.id,
-              terminalId: "term-1",
-              providerId: "codex",
-              capability: "full",
-              state: "ended",
-              startedAt: 1,
-              lastActiveAt: 1,
-              endedAt: 2,
-            } as const)
-          : undefined
-      );
+      const getSpy = vi
+        .spyOn(sessionMgr, "get")
+        .mockImplementation((sessionId: string) =>
+          sessionId === "sess-1" ? endedSession : undefined
+        );
+      await registerNativeTestRuntime();
+      runtimeBindings.bindSession(endedSession);
 
       const result = await dispatch(
         {
@@ -749,6 +732,17 @@ describe("Session Commands", () => {
       const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-typed-"));
       tempDirs.push(workspacePath);
       const workspace = await workspaceMgr.open({ path: workspacePath });
+      const endedSession = {
+        id: "sess-typed",
+        workspaceId: workspace.id,
+        terminalId: "term-typed",
+        providerId: "codex",
+        capability: "full",
+        state: "ended",
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      } as const;
       workspaceMgr.updateUiState(workspace.id, {
         ...workspace.uiState,
         paneLayout: {
@@ -765,20 +759,10 @@ describe("Session Commands", () => {
 
       const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
       vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
-        sessionId === "sess-typed"
-          ? ({
-              id: "sess-typed",
-              workspaceId: workspace.id,
-              terminalId: "term-typed",
-              providerId: "codex",
-              capability: "full",
-              state: "ended",
-              startedAt: 1,
-              lastActiveAt: 1,
-              endedAt: 2,
-            } as const)
-          : undefined
+        sessionId === "sess-typed" ? endedSession : undefined
       );
+      await registerNativeTestRuntime();
+      runtimeBindings.bindSession(endedSession);
 
       const result = await dispatch(
         {
@@ -810,6 +794,17 @@ describe("Session Commands", () => {
       const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-desktop-"));
       tempDirs.push(workspacePath);
       const workspace = await workspaceMgr.open({ path: workspacePath });
+      const endedSession = {
+        id: "sess-1",
+        workspaceId: workspace.id,
+        terminalId: "term-1",
+        providerId: "codex",
+        capability: "full",
+        state: "ended",
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      } as const;
       workspaceMgr.updateUiState(workspace.id, {
         ...workspace.uiState,
         paneLayout: {
@@ -825,20 +820,10 @@ describe("Session Commands", () => {
 
       vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
       vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
-        sessionId === "sess-1"
-          ? ({
-              id: "sess-1",
-              workspaceId: workspace.id,
-              terminalId: "term-1",
-              providerId: "codex",
-              capability: "full",
-              state: "ended",
-              startedAt: 1,
-              lastActiveAt: 1,
-              endedAt: 2,
-            } as const)
-          : undefined
+        sessionId === "sess-1" ? endedSession : undefined
       );
+      await registerNativeTestRuntime();
+      runtimeBindings.bindSession(endedSession);
 
       const result = await dispatch(
         {
@@ -869,6 +854,17 @@ describe("Session Commands", () => {
       const workspacePath = mkdtempSync(join(tmpdir(), "coder-studio-close-metadata-"));
       tempDirs.push(workspacePath);
       const workspace = await workspaceMgr.open({ path: workspacePath });
+      const endedSession = {
+        id: "sess-meta",
+        workspaceId: workspace.id,
+        terminalId: "term-meta",
+        providerId: "codex",
+        capability: "full",
+        state: "ended",
+        startedAt: 1,
+        lastActiveAt: 1,
+        endedAt: 2,
+      } as const;
       sessionMetadataRepo.upsert({
         sessionId: "sess-meta",
         workspaceId: workspace.id,
@@ -878,20 +874,10 @@ describe("Session Commands", () => {
 
       const deleteSpy = vi.spyOn(sessionMgr, "delete").mockImplementation(() => {});
       vi.spyOn(sessionMgr, "get").mockImplementation((sessionId: string) =>
-        sessionId === "sess-meta"
-          ? ({
-              id: "sess-meta",
-              workspaceId: workspace.id,
-              terminalId: "term-meta",
-              providerId: "codex",
-              capability: "full",
-              state: "ended",
-              startedAt: 1,
-              lastActiveAt: 1,
-              endedAt: 2,
-            } as const)
-          : undefined
+        sessionId === "sess-meta" ? endedSession : undefined
       );
+      await registerNativeTestRuntime();
+      runtimeBindings.bindSession(endedSession);
 
       const result = await dispatch(
         {

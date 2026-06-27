@@ -22,6 +22,7 @@ import {
 import type { SessionTokenRepo } from "./auth/session-token-repo.js";
 import type { CanvasService } from "./canvas/service.js";
 import type { ServerConfig } from "./config.js";
+import type { RuntimeRouter } from "./host/runtime-router.js";
 import { PreviewSessionStore } from "./preview/session-store.js";
 import { registerAppearanceAssetsRoutes } from "./routes/appearance-assets.js";
 import { registerCanvasRoutes } from "./routes/canvas.js";
@@ -46,6 +47,7 @@ interface AppDeps {
   webRoot?: string;
   workspaceMgr: WorkspaceManager;
   skillLibraryRepo: SkillLibraryRepo;
+  runtimeRouter?: RuntimeRouter;
   config: ServerConfig;
   authSessionRepo: AuthSessionRepo;
   authLoginBlockRepo: AuthLoginBlockRepo;
@@ -166,9 +168,12 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   // only needs its own path-safety and allowlist checks.
   registerFileAssetRoutes(app, {
     workspaceMgr: deps.workspaceMgr,
+    runtimeRouter: deps.runtimeRouter,
   });
   registerSkillFileAssetRoutes(app, {
     skillLibraryRepo: deps.skillLibraryRepo,
+    workspaceMgr: deps.workspaceMgr,
+    runtimeRouter: deps.runtimeRouter,
   });
 
   registerAppearanceAssetsRoutes(app, {
@@ -180,6 +185,7 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   registerPreviewRoutes(app, {
     workspaceMgr: deps.workspaceMgr,
     previewSessions,
+    runtimeRouter: deps.runtimeRouter,
   });
 
   if (deps.canvasService) {

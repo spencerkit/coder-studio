@@ -213,7 +213,9 @@ export function ProviderSettings({
     let cancelled = false;
 
     const loadRuntimeStatus = async () => {
-      const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
+      const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {
+        workspaceId: activeWorkspaceId ?? undefined,
+      });
       if (cancelled || result === null || !result.ok || !result.data) {
         return;
       }
@@ -235,7 +237,7 @@ export function ProviderSettings({
     return () => {
       cancelled = true;
     };
-  }, [activationStatus, connectionStatus, dispatch, providers]);
+  }, [activationStatus, activeWorkspaceId, connectionStatus, dispatch, providers]);
 
   useEffect(() => {
     if (connectionStatus !== "connected" || activationStatus !== "active") {
@@ -252,6 +254,7 @@ export function ProviderSettings({
 
     const loadPreview = async () => {
       const result = await dispatch<{ preview: string }>("settings.previewCommand", {
+        workspaceId: activeWorkspaceId ?? undefined,
         providerId: provider.id,
         config: { additionalArgs },
       });
@@ -275,7 +278,15 @@ export function ProviderSettings({
     return () => {
       cancelled = true;
     };
-  }, [activationStatus, additionalArgs, additionalArgsText, connectionStatus, dispatch, provider]);
+  }, [
+    activationStatus,
+    activeWorkspaceId,
+    additionalArgs,
+    additionalArgsText,
+    connectionStatus,
+    dispatch,
+    provider,
+  ]);
 
   useEffect(() => {
     if (!provider || !showConfig) {
@@ -296,6 +307,7 @@ export function ProviderSettings({
 
   const saveSettings = async (providerId: ProviderInfo["id"], nextValue: string) => {
     await dispatch("settings.update", {
+      workspaceId: activeWorkspaceId ?? undefined,
       settings: {
         providers: {
           [providerId]: {

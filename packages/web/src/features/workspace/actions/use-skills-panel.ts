@@ -84,7 +84,7 @@ export function useSkillsPanel(workspaceId: string) {
 
   const refreshLibrary = useCallback(async () => {
     setLoadingLibrary(true);
-    const result = await dispatch<SkillLibraryListItem[]>("skills.library.list", {});
+    const result = await dispatch<SkillLibraryListItem[]>("skills.library.list", { workspaceId });
     setLoadingLibrary(false);
     if (!result.ok || !result.data) {
       setErrorMessage(result.error?.message ?? "Failed to load skills");
@@ -103,7 +103,10 @@ export function useSkillsPanel(workspaceId: string) {
       }
 
       setLoadingSearch(true);
-      const result = await dispatch<SkillSearchResultItem[]>("skills.search", { query: trimmed });
+      const result = await dispatch<SkillSearchResultItem[]>("skills.search", {
+        workspaceId,
+        query: trimmed,
+      });
       setLoadingSearch(false);
       if (!result.ok || !result.data) {
         setErrorMessage(result.error?.message ?? "Failed to search skills");
@@ -183,7 +186,9 @@ export function useSkillsPanel(workspaceId: string) {
 
   const checkSkillVersions = useCallback(async () => {
     setCheckingVersions(true);
-    const result = await dispatch<SkillVersionCheckEntry[]>("skills.versions.check", {});
+    const result = await dispatch<SkillVersionCheckEntry[]>("skills.versions.check", {
+      workspaceId,
+    });
     setCheckingVersions(false);
     if (!result.ok || !result.data) {
       setErrorMessage(result.error?.message ?? "Failed to check skill versions");
@@ -197,7 +202,7 @@ export function useSkillsPanel(workspaceId: string) {
 
   const loadSkillInfo = useCallback(
     async (slug: string) => {
-      const result = await dispatch<SkillInfoItem>("skills.info", { slug });
+      const result = await dispatch<SkillInfoItem>("skills.info", { workspaceId, slug });
       if (!result.ok || !result.data) {
         setErrorMessage(result.error?.message ?? "Failed to load skill details");
         return null;
@@ -214,7 +219,7 @@ export function useSkillsPanel(workspaceId: string) {
   );
 
   const refreshHealth = useCallback(async () => {
-    const result = await dispatch<SkillsHealthScanResult>("skills.health.scan", {});
+    const result = await dispatch<SkillsHealthScanResult>("skills.health.scan", { workspaceId });
     if (!result.ok || !result.data) {
       setErrorMessage(result.error?.message ?? "Failed to scan skills");
       return false;
@@ -260,7 +265,10 @@ export function useSkillsPanel(workspaceId: string) {
     const timer = window.setInterval(() => {
       void Promise.all(
         jobIds.map(async ([slug, jobId]) => {
-          const result = await dispatch<SkillInstallJobSnapshot>("skills.install.get", { jobId });
+          const result = await dispatch<SkillInstallJobSnapshot>("skills.install.get", {
+            workspaceId,
+            jobId,
+          });
           if (cancelled || !result.ok || !result.data) {
             return;
           }
@@ -304,7 +312,10 @@ export function useSkillsPanel(workspaceId: string) {
 
   const installSkill = useCallback(
     async (slug: string) => {
-      const result = await dispatch<SkillInstallJobSnapshot>("skills.install.start", { slug });
+      const result = await dispatch<SkillInstallJobSnapshot>("skills.install.start", {
+        workspaceId,
+        slug,
+      });
       if (!result.ok || !result.data) {
         setErrorMessage(result.error?.message ?? "Failed to install skill");
         return false;
@@ -331,6 +342,7 @@ export function useSkillsPanel(workspaceId: string) {
       }
 
       const result = await dispatch<SkillLibraryEntry>("skills.custom.create", {
+        workspaceId,
         name: trimmed,
       });
       if (!result.ok || !result.data) {
@@ -357,11 +369,13 @@ export function useSkillsPanel(workspaceId: string) {
       for (const providerId of providerIds) {
         const result = enabled
           ? await dispatch<SkillMountRelation>("skills.mount", {
+              workspaceId,
               providerId,
               skillSlug,
               enabled: true,
             })
           : await dispatch("skills.unmount", {
+              workspaceId,
               providerId,
               skillSlug,
             });
@@ -397,6 +411,7 @@ export function useSkillsPanel(workspaceId: string) {
 
       for (const providerId of providerIds) {
         const result = await dispatch("skills.builtin.setMountEnabled", {
+          workspaceId,
           providerId,
           skillSlug,
           enabled,
@@ -406,6 +421,7 @@ export function useSkillsPanel(workspaceId: string) {
         }
         if (!enabled) {
           const unmountResult = await dispatch("skills.unmount", {
+            workspaceId,
             providerId,
             skillSlug,
           });
@@ -434,7 +450,7 @@ export function useSkillsPanel(workspaceId: string) {
 
   const uninstallSkill = useCallback(
     async (slug: string, force = false) => {
-      const result = await dispatch("skills.uninstall", { slug, force });
+      const result = await dispatch("skills.uninstall", { workspaceId, slug, force });
       if (!result.ok) {
         setErrorMessage(result.error?.message ?? "Failed to uninstall skill");
         return false;
@@ -460,7 +476,10 @@ export function useSkillsPanel(workspaceId: string) {
 
   const updateSkill = useCallback(
     async (slug: string) => {
-      const result = await dispatch<SkillInstallJobSnapshot>("skills.update.start", { slug });
+      const result = await dispatch<SkillInstallJobSnapshot>("skills.update.start", {
+        workspaceId,
+        slug,
+      });
       if (!result.ok || !result.data) {
         setErrorMessage(result.error?.message ?? "Failed to update skill");
         return false;

@@ -35,4 +35,30 @@ describe("WorkspaceRuntimeBindingStore", () => {
     expect(store.listSessionsForWorkspace("ws-1")).toHaveLength(1);
     expect(store.listTerminalsForWorkspace("ws-1")).toHaveLength(1);
   });
+
+  it("tracks workspace ids by runtime id across rebinds", () => {
+    const store = new WorkspaceRuntimeBindingStore();
+    store.bindWorkspace("ws-native-1", "native-default");
+    store.bindWorkspace("ws-native-2", "native-default");
+    store.bindWorkspace("ws-wsl", "wsl:ws-wsl");
+
+    expect(store.listWorkspaceIdsForRuntime("native-default")).toEqual([
+      "ws-native-1",
+      "ws-native-2",
+    ]);
+    expect(store.listWorkspaceIdsForRuntime("wsl:ws-wsl")).toEqual(["ws-wsl"]);
+
+    store.bindWorkspace("ws-wsl", "native-default");
+
+    expect(store.listWorkspaceIdsForRuntime("wsl:ws-wsl")).toEqual([]);
+    expect(store.listWorkspaceIdsForRuntime("native-default")).toEqual([
+      "ws-native-1",
+      "ws-native-2",
+      "ws-wsl",
+    ]);
+
+    store.unbindWorkspace("ws-native-2");
+
+    expect(store.listWorkspaceIdsForRuntime("native-default")).toEqual(["ws-native-1", "ws-wsl"]);
+  });
 });

@@ -61,6 +61,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
       resolve(CLI_DIR, "src/index.ts"),
       resolve(CLI_DIR, "src/server-runner.ts"),
       resolve(CLI_DIR, "src/update-worker.ts"),
+      resolve(CLI_DIR, "src/wsl-runtime-entry.ts"),
     ],
     bundle: true,
     platform: "node",

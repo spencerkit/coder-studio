@@ -6,11 +6,11 @@ import type {
   DiagnosticsResponse,
   LspServerKind,
   ProviderRuntimeStatusEntry,
+  SystemDependencyRuntimeStatusResponse,
 } from "@coder-studio/core";
 import { z } from "zod";
 import { getLspToolDefinition } from "../lsp-tools/definitions.js";
-import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
-import { buildSystemDependencyRuntimeStatus } from "../system-deps/runtime-status.js";
+import { resolveOptionalRuntimeTarget } from "../runtime/targeting.js";
 import { validatePath } from "../workspace/validator.js";
 import { type CommandContext, registerCommand } from "../ws/dispatch.js";
 
@@ -20,8 +20,14 @@ const DiagnosticsRequestSchema = z.object({
   context: z.enum(["workspace_open", "session_start", "mobile_continue", "manual_check"]),
   workspaceId: z.string().optional(),
   workspacePath: z.string().optional(),
+  targetRuntime: z.enum(["native", "wsl"]).optional(),
+  wslDistro: z.string().optional(),
   providerId: z.string().optional(),
 });
+
+function resolveDiagnosticsTarget(workspaceId?: string) {
+  return resolveOptionalRuntimeTarget({ workspaceId });
+}
 
 function isLoopbackHost(host: string | undefined): boolean {
   return (
@@ -34,7 +40,9 @@ function isLoopbackHost(host: string | undefined): boolean {
 }
 
 async function resolveWorkspacePathCheck(
-  workspacePath: string | undefined
+  workspacePath: string | undefined,
+  options: Pick<DiagnosticsRequest, "targetRuntime" | "wslDistro">,
+  ctx: CommandContext
 ): Promise<{ canContinue: boolean; checks: DiagnosticsCheck[] }> {
   if (!workspacePath) {
     return {
@@ -49,7 +57,12 @@ async function resolveWorkspacePathCheck(
     };
   }
 
-  const validation = await validatePath(workspacePath);
+  const validation = await validatePath(workspacePath, {
+    targetRuntime: options.targetRuntime,
+    wslDistro: options.wslDistro,
+    commandExists: ctx.providerRuntimeDeps?.commandExists,
+    runCommand: ctx.providerRuntimeDeps?.runCommand,
+  });
 
   if (validation.valid) {
     return {
@@ -143,13 +156,29 @@ function buildProviderCheck(
 async function buildWorkspaceSelectionChecks(
   args: DiagnosticsRequest,
   ctx: CommandContext
-): Promise<{ canContinue: boolean; checks: DiagnosticsCheck[]; workspacePath?: string }> {
+): Promise<{
+  canContinue: boolean;
+  checks: DiagnosticsCheck[];
+  workspacePath?: string;
+  targetRuntime?: "native" | "wsl";
+  wslDistro?: string;
+}> {
   if (args.workspacePath) {
-    const workspaceResult = await resolveWorkspacePathCheck(args.workspacePath);
+    const targetRuntime = args.targetRuntime ?? "native";
+    const workspaceResult = await resolveWorkspacePathCheck(
+      args.workspacePath,
+      {
+        targetRuntime,
+        wslDistro: args.wslDistro,
+      },
+      ctx
+    );
     return {
       canContinue: workspaceResult.canContinue,
       checks: workspaceResult.checks,
       workspacePath: args.workspacePath,
+      targetRuntime,
+      wslDistro: args.wslDistro,
     };
   }
 
@@ -175,7 +204,15 @@ async function buildWorkspaceSelectionChecks(
     };
   }
 
-  const pathCheck = await resolveWorkspacePathCheck(workspace.path);
+  const targetRuntime = workspace.targetRuntime ?? "native";
+  const pathCheck = await resolveWorkspacePathCheck(
+    workspace.path,
+    {
+      targetRuntime,
+      wslDistro: workspace.wslDistro,
+    },
+    ctx
+  );
   return {
     canContinue: pathCheck.canContinue,
     checks: [
@@ -196,11 +233,14 @@ async function buildWorkspaceSelectionChecks(
       ),
     ],
     workspacePath: workspace.path,
+    targetRuntime,
+    wslDistro: workspace.wslDistro,
   };
 }
 
 async function buildAllProviderChecks(
   ctx: CommandContext,
+  workspaceId: string | undefined,
   preferredProviderId?: string
 ): Promise<{
   checks: DiagnosticsCheck[];
@@ -208,10 +248,13 @@ async function buildAllProviderChecks(
 }> {
   const checks: DiagnosticsCheck[] = [];
   let canContinueForPreferredProvider = preferredProviderId ? false : true;
-  const runtimeStatus = await buildProviderRuntimeStatus(
-    ctx.providerRegistry,
-    ctx.providerRuntimeDeps
-  );
+  const runtimeStatus = (await ctx.runtimeRouter.executeOnTarget(
+    resolveDiagnosticsTarget(workspaceId),
+    "provider.runtimeStatus",
+    { workspaceId }
+  )) as {
+    providers: Record<string, ProviderRuntimeStatusEntry>;
+  };
 
   for (const provider of ctx.providerRegistry) {
     const providerStatus = runtimeStatus.providers[provider.id];
@@ -255,7 +298,14 @@ async function buildAllProviderChecks(
 
 async function buildLspServices(
   ctx: CommandContext,
-  workspacePath?: string
+  workspaceId: string | undefined,
+  workspace?:
+    | {
+        path: string;
+        targetRuntime: "native" | "wsl";
+        wslDistro?: string;
+      }
+    | undefined
 ): Promise<{
   lspServices: DiagnosticsLspServiceEntry[];
   lspRuntimeContext?: {
@@ -276,40 +326,65 @@ async function buildLspServices(
           missingPrerequisites: [],
         } satisfies DiagnosticsLspServiceEntry;
       }),
-      lspRuntimeContext: workspacePath
+      lspRuntimeContext: workspace
         ? {
-            targetRuntime: "native",
-            managedInstallSupported: true,
+            targetRuntime: workspace.targetRuntime,
+            managedInstallSupported: workspace.targetRuntime === "native",
           }
         : undefined,
     };
   }
 
+  const routedLspRuntimeStatus = workspaceId
+    ? ((await ctx.runtimeRouter.executeOnTarget(
+        resolveDiagnosticsTarget(workspaceId),
+        "lsp.runtimeStatus",
+        { workspaceId }
+      )) as {
+        tools: Record<
+          string,
+          {
+            serverKind: string;
+            displayName: string;
+            available: boolean;
+            autoInstallSupported: boolean;
+            installReadiness: "ready" | "missing_prerequisite" | "unsupported_platform";
+            missingCommands: string[];
+            missingPrerequisites: string[];
+          }
+        >;
+      })
+    : undefined;
+
   const lspServices = await Promise.all(
     LSP_SERVER_KINDS.map(async (serverKind) => {
       const fallbackDefinition = getLspToolDefinition(serverKind);
-      const runtimeStatus = ctx.lspToolMgr
-        ? await ctx.lspToolMgr.runtimeStatus({
-            workspace: {
-              id: "__diagnostics__",
-              path: workspacePath ?? "",
-              name: "Diagnostics",
-              targetRuntime: "native",
-              openedAt: 0,
-              lastActiveAt: 0,
-              uiState: { leftPanelWidth: 0, bottomPanelHeight: 0, focusMode: false },
-            },
-            serverKind,
-          })
-        : {
-            serverKind,
-            displayName: fallbackDefinition.displayName,
-            available: false,
-            autoInstallSupported: false,
-            installReadiness: "unsupported_platform" as const,
-            missingCommands: [fallbackDefinition.defaultCommand],
-            missingPrerequisites: [],
-          };
+      const routedRuntimeStatus = routedLspRuntimeStatus?.tools?.[serverKind];
+      const runtimeStatus =
+        routedRuntimeStatus ??
+        (ctx.lspToolMgr
+          ? await ctx.lspToolMgr.runtimeStatus({
+              workspace: {
+                id: "__diagnostics__",
+                path: workspace?.path ?? "",
+                name: "Diagnostics",
+                targetRuntime: workspace?.targetRuntime ?? "native",
+                wslDistro: workspace?.wslDistro,
+                openedAt: 0,
+                lastActiveAt: 0,
+                uiState: { leftPanelWidth: 0, bottomPanelHeight: 0, focusMode: false },
+              },
+              serverKind,
+            })
+          : {
+              serverKind,
+              displayName: fallbackDefinition.displayName,
+              available: false,
+              autoInstallSupported: false,
+              installReadiness: "unsupported_platform" as const,
+              missingCommands: [fallbackDefinition.defaultCommand],
+              missingPrerequisites: [],
+            });
 
       const latestFailure = ctx.lspToolInstallMgr?.getLatestFailure(serverKind);
       const status = runtimeStatus.available
@@ -332,10 +407,10 @@ async function buildLspServices(
 
   return {
     lspServices,
-    lspRuntimeContext: workspacePath
+    lspRuntimeContext: workspace
       ? {
-          targetRuntime: "native",
-          managedInstallSupported: true,
+          targetRuntime: workspace.targetRuntime,
+          managedInstallSupported: workspace.targetRuntime === "native",
         }
       : undefined,
   };
@@ -375,9 +450,14 @@ function buildMobileHostCheck(ctx: CommandContext): {
 }
 
 async function buildBaseRuntimeChecks(
-  ctx: CommandContext
+  ctx: CommandContext,
+  workspaceId?: string
 ): Promise<{ canContinue: boolean; checks: DiagnosticsCheck[] }> {
-  const runtime = await buildSystemDependencyRuntimeStatus(ctx.providerRuntimeDeps);
+  const runtime = (await ctx.runtimeRouter.executeOnTarget(
+    resolveDiagnosticsTarget(workspaceId),
+    "systemDeps.runtimeStatus",
+    { workspaceId }
+  )) as SystemDependencyRuntimeStatusResponse;
   const git = runtime.dependencies.git;
   const node = runtime.dependencies.node;
   return {
@@ -414,9 +494,19 @@ async function buildSessionStartDiagnostics(
   ctx: CommandContext
 ): Promise<DiagnosticsResponse> {
   const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
-  const baseRuntime = await buildBaseRuntimeChecks(ctx);
-  const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-  const lspServices = await buildLspServices(ctx, workspaceSelection.workspacePath);
+  const baseRuntime = await buildBaseRuntimeChecks(ctx, args.workspaceId);
+  const providerChecks = await buildAllProviderChecks(ctx, args.workspaceId, args.providerId);
+  const lspServices = await buildLspServices(
+    ctx,
+    args.workspaceId,
+    workspaceSelection.workspacePath
+      ? {
+          path: workspaceSelection.workspacePath,
+          targetRuntime: workspaceSelection.targetRuntime ?? "native",
+          wslDistro: workspaceSelection.wslDistro,
+        }
+      : undefined
+  );
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...workspaceSelection.checks,
@@ -439,6 +529,8 @@ async function buildSessionStartDiagnostics(
       providerId: args.providerId,
       workspaceId: args.workspaceId,
       workspacePath: workspaceSelection.workspacePath,
+      targetRuntime: workspaceSelection.targetRuntime,
+      wslDistro: workspaceSelection.wslDistro,
       lspRuntimeContext: lspServices.lspRuntimeContext,
       authEnabled: ctx.config?.auth.enabled ?? false,
       host: ctx.config?.host,
@@ -450,9 +542,19 @@ async function buildManualDiagnostics(
   args: DiagnosticsRequest,
   ctx: CommandContext
 ): Promise<DiagnosticsResponse> {
-  const baseRuntime = await buildBaseRuntimeChecks(ctx);
-  const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-  const lspServices = await buildLspServices(ctx, args.workspacePath);
+  const baseRuntime = await buildBaseRuntimeChecks(ctx, args.workspaceId);
+  const providerChecks = await buildAllProviderChecks(ctx, args.workspaceId, args.providerId);
+  const lspServices = await buildLspServices(
+    ctx,
+    args.workspaceId,
+    args.workspacePath
+      ? {
+          path: args.workspacePath,
+          targetRuntime: args.targetRuntime ?? "native",
+          wslDistro: args.wslDistro,
+        }
+      : undefined
+  );
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...baseRuntime.checks,
@@ -473,6 +575,8 @@ async function buildManualDiagnostics(
       providerId: args.providerId,
       workspaceId: args.workspaceId,
       workspacePath: args.workspacePath,
+      targetRuntime: args.targetRuntime,
+      wslDistro: args.wslDistro,
     },
   };
 }
@@ -484,8 +588,18 @@ async function buildMobileDiagnostics(
   const host = ctx.config?.host;
   const authEnabled = ctx.config?.auth.enabled ?? false;
   const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
-  const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
-  const lspServices = await buildLspServices(ctx, workspaceSelection.workspacePath);
+  const providerChecks = await buildAllProviderChecks(ctx, args.workspaceId, args.providerId);
+  const lspServices = await buildLspServices(
+    ctx,
+    args.workspaceId,
+    workspaceSelection.workspacePath
+      ? {
+          path: workspaceSelection.workspacePath,
+          targetRuntime: workspaceSelection.targetRuntime ?? "native",
+          wslDistro: workspaceSelection.wslDistro,
+        }
+      : undefined
+  );
   const mobileHost = buildMobileHostCheck(ctx);
   const checks: DiagnosticsCheck[] = [
     ...workspaceSelection.checks,
@@ -521,6 +635,8 @@ async function buildMobileDiagnostics(
       lspRuntimeContext: lspServices.lspRuntimeContext,
       workspaceId: args.workspaceId,
       workspacePath: workspaceSelection.workspacePath,
+      targetRuntime: workspaceSelection.targetRuntime,
+      wslDistro: workspaceSelection.wslDistro,
       providerId: args.providerId,
     },
   };
@@ -533,11 +649,18 @@ async function buildDiagnostics(
   switch (args.context as DiagnosticsContext) {
     case "workspace_open": {
       const workspaceSelection = await buildWorkspaceSelectionChecks(args, ctx);
-      const baseRuntime = await buildBaseRuntimeChecks(ctx);
-      const providerChecks = await buildAllProviderChecks(ctx, args.providerId);
+      const baseRuntime = await buildBaseRuntimeChecks(ctx, args.workspaceId);
+      const providerChecks = await buildAllProviderChecks(ctx, args.workspaceId, args.providerId);
       const lspServices = await buildLspServices(
         ctx,
-        workspaceSelection.workspacePath ?? args.workspacePath
+        args.workspaceId,
+        (workspaceSelection.workspacePath ?? args.workspacePath)
+          ? {
+              path: workspaceSelection.workspacePath ?? args.workspacePath ?? "",
+              targetRuntime: workspaceSelection.targetRuntime ?? args.targetRuntime ?? "native",
+              wslDistro: workspaceSelection.wslDistro ?? args.wslDistro,
+            }
+          : undefined
       );
       const mobileHost = buildMobileHostCheck(ctx);
       return {
@@ -553,6 +676,8 @@ async function buildDiagnostics(
         lspServices: lspServices.lspServices,
         metadata: {
           workspacePath: workspaceSelection.workspacePath ?? args.workspacePath,
+          targetRuntime: workspaceSelection.targetRuntime ?? args.targetRuntime,
+          wslDistro: workspaceSelection.wslDistro ?? args.wslDistro,
           authEnabled: ctx.config?.auth.enabled ?? false,
           host: ctx.config?.host,
           lspRuntimeContext: lspServices.lspRuntimeContext,

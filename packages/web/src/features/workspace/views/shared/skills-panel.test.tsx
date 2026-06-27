@@ -201,6 +201,10 @@ function renderPanelWithProps(
   return { ...view, store };
 }
 
+function withWorkspaceId<T extends Record<string, unknown>>(args: T) {
+  return { workspaceId: "ws-1", ...args };
+}
+
 function wrapperFor(store: ReturnType<typeof createStore>) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return <Provider store={store}>{children}</Provider>;
@@ -368,7 +372,7 @@ describe("SkillsPanel", () => {
     expect(within(skillCard).getByText("v1.2.3")).toBeInTheDocument();
     expect(screen.queryByText("Enabled")).not.toBeInTheDocument();
     expect(screen.getByText("Review code changes before merge")).toBeInTheDocument();
-    expect(sendCommand).toHaveBeenCalledWith("skills.library.list", {}, undefined);
+    expect(sendCommand).toHaveBeenCalledWith("skills.library.list", withWorkspaceId({}), undefined);
   }, 10_000);
 
   it("refreshes skill state when the server broadcasts a library change", async () => {
@@ -449,7 +453,7 @@ describe("SkillsPanel", () => {
       }
 
       if (op === "skills.update.start") {
-        expect(args).toEqual({ slug: "code-review" });
+        expect(args).toEqual(withWorkspaceId({ slug: "code-review" }));
         return {
           jobId: "job-update-1",
           slug: "code-review",
@@ -482,7 +486,7 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.update.start",
-        { slug: "code-review" },
+        withWorkspaceId({ slug: "code-review" }),
         undefined
       );
     });
@@ -621,7 +625,7 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.uninstall",
-        { slug: "command-control", force: true },
+        withWorkspaceId({ slug: "command-control", force: true }),
         undefined
       );
     });
@@ -1647,9 +1651,9 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.custom.create",
-        {
+        withWorkspaceId({
           name: "My Review Skill",
-        },
+        }),
         undefined
       );
     });
@@ -1660,9 +1664,9 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.readTree",
-        {
+        withWorkspaceId({
           skillSlug: "my-review-skill",
-        },
+        }),
         undefined
       );
     });
@@ -1771,7 +1775,7 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.uninstall",
-        { slug: "my-review-skill", force: true },
+        withWorkspaceId({ slug: "my-review-skill", force: true }),
         undefined
       );
     });
@@ -1872,10 +1876,10 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.readTree",
-        {
+        withWorkspaceId({
           skillSlug: "my-review-skill",
           path: "refs",
-        },
+        }),
         undefined
       );
     });
@@ -2091,10 +2095,10 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.mkdir",
-        {
+        withWorkspaceId({
           skillSlug: "my-review-skill",
           path: "refs/checklists",
-        },
+        }),
         undefined
       );
     });
@@ -2108,11 +2112,11 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.rename",
-        {
+        withWorkspaceId({
           skillSlug: "my-review-skill",
           fromPath: "refs",
           toPath: "references",
-        },
+        }),
         undefined
       );
     });
@@ -2123,10 +2127,10 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.delete",
-        {
+        withWorkspaceId({
           skillSlug: "my-review-skill",
           path: "refs/guide.md",
-        },
+        }),
         {
           timeoutMs: 180000,
         }
@@ -2580,20 +2584,20 @@ describe("SkillsPanel", () => {
       expect(builtinCalls).toEqual([
         [
           "skills.builtin.setMountEnabled",
-          {
+          withWorkspaceId({
             providerId: "claude",
             skillSlug: "coder-studio-example-builtin",
             enabled: true,
-          },
+          }),
           undefined,
         ],
         [
           "skills.builtin.setMountEnabled",
-          {
+          withWorkspaceId({
             providerId: "codex",
             skillSlug: "coder-studio-example-builtin",
             enabled: true,
-          },
+          }),
           undefined,
         ],
       ]);
@@ -2726,29 +2730,29 @@ describe("SkillsPanel", () => {
       expect(builtinCalls).toEqual([
         [
           "skills.builtin.setMountEnabled",
-          {
+          withWorkspaceId({
             providerId: "codex",
             skillSlug: "coder-studio-example-builtin",
             enabled: false,
-          },
+          }),
           undefined,
         ],
         [
           "skills.builtin.setMountEnabled",
-          {
+          withWorkspaceId({
             providerId: "claude",
             skillSlug: "coder-studio-example-builtin",
             enabled: false,
-          },
+          }),
           undefined,
         ],
         [
           "skills.builtin.setMountEnabled",
-          {
+          withWorkspaceId({
             providerId: "legacy",
             skillSlug: "coder-studio-example-builtin",
             enabled: false,
-          },
+          }),
           undefined,
         ],
       ]);
@@ -2759,26 +2763,26 @@ describe("SkillsPanel", () => {
       expect(unmountCalls).toEqual([
         [
           "skills.unmount",
-          {
+          withWorkspaceId({
             providerId: "codex",
             skillSlug: "coder-studio-example-builtin",
-          },
+          }),
           undefined,
         ],
         [
           "skills.unmount",
-          {
+          withWorkspaceId({
             providerId: "claude",
             skillSlug: "coder-studio-example-builtin",
-          },
+          }),
           undefined,
         ],
         [
           "skills.unmount",
-          {
+          withWorkspaceId({
             providerId: "legacy",
             skillSlug: "coder-studio-example-builtin",
-          },
+          }),
           undefined,
         ],
       ]);
@@ -2896,7 +2900,11 @@ describe("SkillsPanel", () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("skills.search", { query: "tool" }, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "skills.search",
+        withWorkspaceId({ query: "tool" }),
+        undefined
+      );
     });
 
     await waitFor(() => {
@@ -2976,7 +2984,11 @@ describe("SkillsPanel", () => {
     });
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("skills.search", { query: "beta" }, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "skills.search",
+        withWorkspaceId({ query: "beta" }),
+        undefined
+      );
     });
 
     fireEvent.click(await screen.findByText("Available result"));
@@ -2984,9 +2996,9 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.info",
-        {
+        withWorkspaceId({
           slug: "beta-helper",
-        },
+        }),
         undefined
       );
     });
@@ -3003,9 +3015,9 @@ describe("SkillsPanel", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.install.start",
-        {
+        withWorkspaceId({
           slug: "beta-helper",
-        },
+        }),
         undefined
       );
     });
@@ -3507,11 +3519,11 @@ describe("SkillsPanel", () => {
       expect(mountCalls).toEqual([
         [
           "skills.mount",
-          {
+          withWorkspaceId({
             providerId: "codex",
             skillSlug: "code-review",
             enabled: true,
-          },
+          }),
           undefined,
         ],
       ]);
@@ -3608,20 +3620,20 @@ describe("SkillsPanel", () => {
       expect(mountCalls).toEqual([
         [
           "skills.mount",
-          {
+          withWorkspaceId({
             providerId: "claude",
             skillSlug: "code-review",
             enabled: true,
-          },
+          }),
           undefined,
         ],
         [
           "skills.mount",
-          {
+          withWorkspaceId({
             providerId: "codex",
             skillSlug: "code-review",
             enabled: true,
-          },
+          }),
           undefined,
         ],
       ]);
@@ -3709,18 +3721,18 @@ describe("SkillsPanel", () => {
       expect(unmountCalls).toEqual([
         [
           "skills.unmount",
-          {
+          withWorkspaceId({
             providerId: "codex",
             skillSlug: "code-review",
-          },
+          }),
           undefined,
         ],
         [
           "skills.unmount",
-          {
+          withWorkspaceId({
             providerId: "legacy",
             skillSlug: "code-review",
-          },
+          }),
           undefined,
         ],
       ]);

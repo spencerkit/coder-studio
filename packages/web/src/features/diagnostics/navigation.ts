@@ -26,6 +26,14 @@ export function buildDiagnosticsPath(intent: DiagnosticsRouteIntent): string {
     params.set("workspacePath", intent.workspacePath);
   }
 
+  if (intent.targetRuntime) {
+    params.set("targetRuntime", intent.targetRuntime);
+  }
+
+  if (intent.wslDistro) {
+    params.set("wslDistro", intent.wslDistro);
+  }
+
   if (intent.providerId) {
     params.set("providerId", intent.providerId);
   }
@@ -54,6 +62,11 @@ export function parseDiagnosticsSearch(search: string): DiagnosticsRouteIntent {
     context,
     workspaceId: params.get("workspaceId") ?? undefined,
     workspacePath: params.get("workspacePath") ?? undefined,
+    targetRuntime:
+      params.get("targetRuntime") === "native" || params.get("targetRuntime") === "wsl"
+        ? (params.get("targetRuntime") as "native" | "wsl")
+        : undefined,
+    wslDistro: params.get("wslDistro") ?? undefined,
     providerId: params.get("providerId") ?? undefined,
     paneId: params.get("paneId") ?? undefined,
     launchMode: launchMode === "assign" || launchMode === "replace" ? launchMode : undefined,

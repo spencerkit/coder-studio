@@ -413,6 +413,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
           })
         : skillPath
           ? await dispatch<EditorReadPayload>("skills.files.read", {
+              workspaceId,
               skillSlug: skillPath.skillSlug,
               path: skillPath.relativePath,
             })
@@ -614,6 +615,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
         })
       : skillPath
         ? await dispatch<{ newHash: string }>("skills.files.write", {
+            workspaceId,
             skillSlug: skillPath.skillSlug,
             path: skillPath.relativePath,
             content,
@@ -737,6 +739,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
             })
           : skillPath
             ? await dispatch<EditorReadPayload>("skills.files.read", {
+                workspaceId,
                 skillSlug: skillPath.skillSlug,
                 path: skillPath.relativePath,
               })

@@ -213,7 +213,7 @@ interface EvaluateOptions {
 
 export class SupervisorEvaluator {
   private readonly config: SupervisorConfig;
-  private readonly logger: FastifyBaseLogger;
+  private logger: FastifyBaseLogger;
 
   constructor(
     private readonly deps: {
@@ -227,6 +227,10 @@ export class SupervisorEvaluator {
   ) {
     this.config = deps.config ?? DEFAULT_SUPERVISOR_CONFIG;
     this.logger = deps.logger ?? NOOP_LOGGER;
+  }
+
+  setLogger(logger: FastifyBaseLogger): void {
+    this.logger = logger;
   }
 
   async evaluate(

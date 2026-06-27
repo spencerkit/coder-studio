@@ -180,6 +180,7 @@ export function useSkillFileActions({ workspaceId, skillSlug }: UseSkillFileActi
     setIsLoading(true);
     try {
       const result = await dispatch<ReadTreeResult>("skills.files.readTree", {
+        workspaceId,
         skillSlug,
       });
 
@@ -203,6 +204,7 @@ export function useSkillFileActions({ workspaceId, skillSlug }: UseSkillFileActi
 
       for (const dirPath of collectRefreshTargets(reconciled.prunedExpandedDirs)) {
         const childResult = await dispatch<ReadTreeResult>("skills.files.readTree", {
+          workspaceId,
           skillSlug,
           path: dirPath,
         });
@@ -260,6 +262,7 @@ export function useSkillFileActions({ workspaceId, skillSlug }: UseSkillFileActi
       setIsLoadingDir(dirPath);
       try {
         const result = await dispatch<ReadTreeResult>("skills.files.readTree", {
+          workspaceId,
           skillSlug,
           path: dirPath,
         });
@@ -413,6 +416,7 @@ export function useSkillFileActions({ workspaceId, skillSlug }: UseSkillFileActi
 
     const op = createDialog.mode === "file" ? "skills.files.create" : "skills.files.mkdir";
     const result = await dispatch(op, {
+      workspaceId,
       skillSlug,
       path,
     });
@@ -486,6 +490,7 @@ export function useSkillFileActions({ workspaceId, skillSlug }: UseSkillFileActi
     const toPath = parentDir ? `${parentDir}/${nextName}` : nextName;
 
     const result = await dispatch("skills.files.rename", {
+      workspaceId,
       skillSlug,
       fromPath: renameDialog.fromPath,
       toPath,
@@ -558,6 +563,7 @@ export function useSkillFileActions({ workspaceId, skillSlug }: UseSkillFileActi
       const result = await dispatch(
         "skills.files.delete",
         {
+          workspaceId,
           skillSlug,
           path: pendingDelete.path,
         },

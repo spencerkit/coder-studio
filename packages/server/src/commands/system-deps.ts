@@ -1,103 +1,138 @@
 import { SYSTEM_DEPENDENCY_IDS, type SystemDependencyInstallJobSnapshot } from "@coder-studio/core";
 import { z } from "zod";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import type { RuntimeCommandContext } from "../runtime/context.js";
+import type { RuntimeExecuteMeta } from "../runtime/contract.js";
+import { resolveOptionalRuntimeTarget } from "../runtime/targeting.js";
 import { buildSystemDependencyRuntimeStatus } from "../system-deps/runtime-status.js";
-import type { CommandContext } from "../ws/dispatch.js";
-import { registerCommand } from "../ws/dispatch.js";
 
-function resolveInstallOwnerId(ctx: CommandContext, clientId?: string): string | undefined {
+function resolveOwnerId(ctx: RuntimeCommandContext, meta?: RuntimeExecuteMeta): string | undefined {
+  if (meta?.clientOwnerId) {
+    return meta.clientOwnerId;
+  }
+
+  const clientId = meta?.clientId;
   if (!clientId) {
     return undefined;
   }
 
-  const activeLease = ctx.activationMgr?.getLease?.();
-  if (activeLease?.wsClientId === clientId) {
-    return activeLease.clientInstanceId;
-  }
-
-  return clientId;
+  return ctx.hostBridge.resolveClientOwnerId?.(clientId) ?? clientId;
 }
 
-registerCommand("systemDeps.runtimeStatus", z.object({}), async (_args, ctx) => {
-  return buildSystemDependencyRuntimeStatus(ctx.providerRuntimeDeps);
+const runtimeTargetSchema = z.object({
+  workspaceId: z.string().optional(),
+  runtimeId: z.string().optional(),
 });
 
-registerCommand(
+registerRuntimeCommand("systemDeps.runtimeStatus", runtimeTargetSchema, {
+  resolveTarget: (args) => resolveOptionalRuntimeTarget(args),
+  handler: async (_args, ctx) => {
+    return buildSystemDependencyRuntimeStatus(ctx.providerRuntimeDeps);
+  },
+});
+
+registerRuntimeCommand(
   "systemDeps.install.start",
   z.object({
+    workspaceId: z.string().optional(),
+    runtimeId: z.string().optional(),
     dependencyId: z.enum(SYSTEM_DEPENDENCY_IDS),
   }),
-  async (args, ctx, clientId) => {
-    if (!ctx.systemDependencyInstallMgr) {
-      throw {
-        code: "system_dependency_install_unavailable",
-        message: "System dependency install manager not configured",
-      };
-    }
+  {
+    resolveTarget: (args) => resolveOptionalRuntimeTarget(args),
+    handler: async (args, ctx, meta) => {
+      if (!ctx.systemDependencyInstallMgr) {
+        throw {
+          code: "system_dependency_install_unavailable",
+          message: "System dependency install manager not configured",
+        };
+      }
 
-    const ownerId = resolveInstallOwnerId(ctx, clientId);
-    return ctx.systemDependencyInstallMgr.start(args.dependencyId, ownerId, clientId);
+      const ownerId = resolveOwnerId(ctx, meta);
+      return ctx.systemDependencyInstallMgr.start(args.dependencyId, ownerId, meta?.clientId);
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "systemDeps.install.get",
   z.object({
     jobId: z.string(),
+    workspaceId: z.string().optional(),
+    runtimeId: z.string().optional(),
   }),
-  async (args, ctx, clientId): Promise<SystemDependencyInstallJobSnapshot> => {
-    if (!ctx.systemDependencyInstallMgr) {
-      throw {
-        code: "system_dependency_install_unavailable",
-        message: "System dependency install manager not configured",
-      };
-    }
+  {
+    resolveTarget: (args) => resolveOptionalRuntimeTarget(args),
+    handler: async (args, ctx, meta): Promise<SystemDependencyInstallJobSnapshot> => {
+      if (!ctx.systemDependencyInstallMgr) {
+        throw {
+          code: "system_dependency_install_unavailable",
+          message: "System dependency install manager not configured",
+        };
+      }
 
-    const ownerId = resolveInstallOwnerId(ctx, clientId);
-    const job = ctx.systemDependencyInstallMgr.get(args.jobId, ownerId, clientId);
-    if (!job) {
-      throw {
-        code: "system_dependency_install_job_not_found",
-        message: `Install job not found: ${args.jobId}`,
-      };
-    }
+      const ownerId = resolveOwnerId(ctx, meta);
+      const job = ctx.systemDependencyInstallMgr.get(args.jobId, ownerId, meta?.clientId);
+      if (!job) {
+        throw {
+          code: "system_dependency_install_job_not_found",
+          message: `Install job not found: ${args.jobId}`,
+        };
+      }
 
-    return job;
+      return job;
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "systemDeps.install.input",
   z.object({
     jobId: z.string(),
+    workspaceId: z.string().optional(),
+    runtimeId: z.string().optional(),
     text: z.string(),
   }),
-  async (args, ctx, clientId) => {
-    if (!ctx.systemDependencyInstallMgr) {
-      throw {
-        code: "system_dependency_install_unavailable",
-        message: "System dependency install manager not configured",
-      };
-    }
+  {
+    resolveTarget: (args) => resolveOptionalRuntimeTarget(args),
+    handler: async (args, ctx, meta) => {
+      if (!ctx.systemDependencyInstallMgr) {
+        throw {
+          code: "system_dependency_install_unavailable",
+          message: "System dependency install manager not configured",
+        };
+      }
 
-    const ownerId = resolveInstallOwnerId(ctx, clientId);
-    return ctx.systemDependencyInstallMgr.submitInput(args.jobId, ownerId, args.text, clientId);
+      const ownerId = resolveOwnerId(ctx, meta);
+      return ctx.systemDependencyInstallMgr.submitInput(
+        args.jobId,
+        ownerId,
+        args.text,
+        meta?.clientId
+      );
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "systemDeps.install.cancel",
   z.object({
     jobId: z.string(),
+    workspaceId: z.string().optional(),
+    runtimeId: z.string().optional(),
   }),
-  async (args, ctx, clientId) => {
-    if (!ctx.systemDependencyInstallMgr) {
-      throw {
-        code: "system_dependency_install_unavailable",
-        message: "System dependency install manager not configured",
-      };
-    }
+  {
+    resolveTarget: (args) => resolveOptionalRuntimeTarget(args),
+    handler: async (args, ctx, meta) => {
+      if (!ctx.systemDependencyInstallMgr) {
+        throw {
+          code: "system_dependency_install_unavailable",
+          message: "System dependency install manager not configured",
+        };
+      }
 
-    const ownerId = resolveInstallOwnerId(ctx, clientId);
-    return ctx.systemDependencyInstallMgr.cancel(args.jobId, ownerId, clientId);
+      const ownerId = resolveOwnerId(ctx, meta);
+      return ctx.systemDependencyInstallMgr.cancel(args.jobId, ownerId, meta?.clientId);
+    },
   }
 );

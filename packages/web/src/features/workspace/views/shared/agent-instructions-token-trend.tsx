@@ -9,6 +9,7 @@ import type {
 } from "../../../work-analysis/types";
 
 interface AgentInstructionsTokenTrendProps {
+  workspaceId?: string;
   workspacePath: string;
 }
 
@@ -53,7 +54,10 @@ function summarizePoints(points: readonly WorkAnalysisTokenTrendPoint[]) {
   );
 }
 
-export function AgentInstructionsTokenTrend({ workspacePath }: AgentInstructionsTokenTrendProps) {
+export function AgentInstructionsTokenTrend({
+  workspaceId,
+  workspacePath,
+}: AgentInstructionsTokenTrendProps) {
   const t = useTranslation();
   const dispatch = useAtomValue(dispatchCommandAtom);
   const chartRef = useRef<HTMLDivElement | null>(null);
@@ -65,6 +69,7 @@ export function AgentInstructionsTokenTrend({ workspacePath }: AgentInstructions
 
     async function loadTrend() {
       const result = await dispatch<WorkAnalysisDashboardRecord>("work.analysis.dashboard.get", {
+        workspaceId,
         workspacePaths: [workspacePath],
         timeRange: { preset: "24h" },
       });
@@ -87,7 +92,7 @@ export function AgentInstructionsTokenTrend({ workspacePath }: AgentInstructions
     return () => {
       cancelled = true;
     };
-  }, [dispatch, workspacePath]);
+  }, [dispatch, workspaceId, workspacePath]);
 
   const chartData = useMemo(() => {
     if (state.status !== "ready") {

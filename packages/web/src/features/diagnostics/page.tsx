@@ -289,10 +289,11 @@ export function DiagnosticsPage({
   const [copyConfirmed, setCopyConfirmed] = useState(false);
   const copyResetTimerRef = useRef<number | null>(null);
   const workspaceUiStateTargetId = intent.workspaceId ?? response?.metadata.workspaceId;
+  const diagnosticsWorkspaceId = intent.workspaceId ?? response?.metadata.workspaceId ?? null;
   const persistWorkspaceUiState = useWorkspaceUiStatePersistence(
     workspaceUiStateTargetId ?? "__workspace_empty__"
   );
-  const installer = useSystemDependencyInstaller(async () => {
+  const installer = useSystemDependencyInstaller(diagnosticsWorkspaceId, async () => {
     await loadDiagnostics("diagnostics.recheck");
   });
 
@@ -327,6 +328,8 @@ export function DiagnosticsPage({
     context: intent.context,
     workspaceId: intent.workspaceId,
     workspacePath: intent.workspacePath,
+    targetRuntime: intent.targetRuntime,
+    wslDistro: intent.wslDistro,
     providerId: intent.providerId,
   };
 
@@ -358,6 +361,8 @@ export function DiagnosticsPage({
     connectionStatus,
     intent.context,
     intent.providerId,
+    intent.targetRuntime,
+    intent.wslDistro,
     intent.workspaceId,
     intent.workspacePath,
   ]);
@@ -388,9 +393,20 @@ export function DiagnosticsPage({
       return;
     }
 
-    const result = await dispatch<Workspace>("workspace.open", {
-      path: intent.workspacePath,
-    });
+    const targetRuntime = intent.targetRuntime ?? response?.metadata.targetRuntime;
+    const wslDistro = intent.wslDistro ?? response?.metadata.wslDistro;
+    const openArgs =
+      targetRuntime === "wsl"
+        ? {
+            path: intent.workspacePath,
+            targetRuntime: "wsl" as const,
+            wslDistro,
+          }
+        : {
+            path: intent.workspacePath,
+          };
+
+    const result = await dispatch<Workspace>("workspace.open", openArgs);
 
     if (!result.ok || !result.data?.id) {
       setActionError(result.error?.message ?? t("workspace.launch.open_failed"));

@@ -1,6 +1,7 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { getRuntimePath, readRuntimeConfig } from "@coder-studio/core/runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerConfig } from "../config.js";
@@ -130,5 +131,19 @@ describe("server runtime config", () => {
     server = await pendingServer;
     const { createServer: restoredCreateServer } = await import("../server.js");
     expect(restoredCreateServer).toBeDefined();
+  });
+
+  it("resolves the packaged WSL runtime entry alongside the CLI server bundle", async () => {
+    const cliDistDir = join(testHomeDir, "dist", "esm");
+    mkdirSync(cliDistDir, { recursive: true });
+    writeFileSync(join(cliDistDir, "server-runner.mjs"), "export {};\n");
+    writeFileSync(join(cliDistDir, "wsl-runtime-entry.mjs"), "export {};\n");
+
+    const { resolveWslRuntimeEntryPath } = await import("../runtime/wsl-bootstrap.js");
+    const resolved = resolveWslRuntimeEntryPath(
+      pathToFileURL(join(cliDistDir, "server-runner.mjs")).href
+    );
+
+    expect(resolved).toBe(join(cliDistDir, "wsl-runtime-entry.mjs"));
   });
 });

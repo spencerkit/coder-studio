@@ -7,6 +7,7 @@ import {
   EmptyState,
   IconButton,
   Input,
+  Select,
   Sheet,
   Spinner,
   ThemedIcon,
@@ -57,6 +58,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const [showClearRecentConfirm, setShowClearRecentConfirm] = useState(false);
   const {
     browsing,
+    canOpen,
     clearRecentWorkspaces,
     closeCreateFolder,
     currentPath,
@@ -81,8 +83,18 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     rootPaths,
     removeRecentWorkspace,
     selectedPath,
+    setTargetRuntime,
+    setWslDistro,
+    setWslPath,
     submitCreateFolder,
+    isWindowsPlatform,
+    targetRuntime,
     updateNewFolderName,
+    wslDistro,
+    wslDistros,
+    wslDistrosError,
+    wslDistrosLoading,
+    wslPath,
   } = useWorkspaceLaunchActions(onClose);
 
   useLayoutEffect(() => {
@@ -160,141 +172,195 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       </section>
     ) : null;
 
+  const runtimeSection = isWindowsPlatform ? (
+    <section className="launch-runtime">
+      <label className="launch-runtime__label" htmlFor="workspace-runtime-select">
+        {t("workspace.launch.runtime_label")}
+      </label>
+      <Select
+        id="workspace-runtime-select"
+        aria-label={t("workspace.launch.runtime_label")}
+        options={[
+          { value: "native", label: t("workspace.launch.runtime_native_windows") },
+          { value: "wsl", label: t("workspace.launch.runtime_wsl") },
+        ]}
+        value={targetRuntime}
+        onValueChange={(value) => setTargetRuntime(value)}
+      />
+    </section>
+  ) : null;
+
+  const nativeFolderPicker = (
+    <div className="folder-picker">
+      <div className="fp-toolbar">
+        <button className="fp-btn" onClick={() => handleNavigate("~")}>
+          <ThemedIcon semantic="workspace.launch.home" size={12} />
+          {t("workspace.launch.home_directory")}
+        </button>
+        {parentPath && (
+          <button className="fp-btn" onClick={() => handleNavigate(parentPath)}>
+            <ArrowUp size={12} />
+            {t("workspace.launch.go_up")}
+          </button>
+        )}
+        <button className="fp-btn" type="button" onClick={openCreateFolder}>
+          {t("workspace.launch.new_folder")}
+        </button>
+      </div>
+
+      <div className="fp-root-chips">
+        {rootPaths.map((rp) => (
+          <span
+            key={rp}
+            className={`fp-chip ${currentPath === rp ? "active" : ""}`}
+            onClick={() => handleNavigate(rp)}
+          >
+            {getShortPath(rp)}
+          </span>
+        ))}
+        {currentPath && !rootPaths.includes(currentPath) && (
+          <span className="fp-chip active">{getShortPath(currentPath)}</span>
+        )}
+      </div>
+
+      {isCreatingFolder && (
+        <div className="fp-create-folder">
+          <Input
+            ref={createFolderInputRef}
+            aria-label={t("workspace.launch.folder_name_label")}
+            className="fp-create-folder__input"
+            disabled={creatingFolder}
+            invalid={Boolean(createFolderError)}
+            onChange={(event) => updateNewFolderName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submitCreateFolder();
+                return;
+              }
+
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                closeCreateFolder();
+              }
+            }}
+            placeholder={t("workspace.launch.new_folder_placeholder")}
+            value={newFolderName}
+          />
+          <button
+            className="fp-create-folder__action"
+            type="button"
+            onClick={() => void submitCreateFolder()}
+            disabled={creatingFolder}
+          >
+            {creatingFolder
+              ? t("workspace.launch.creating_folder")
+              : t("workspace.launch.create_folder")}
+          </button>
+          <button
+            className="fp-create-folder__cancel"
+            type="button"
+            onClick={closeCreateFolder}
+            disabled={creatingFolder}
+          >
+            {t("workspace.launch.create_folder_cancel")}
+          </button>
+          {createFolderError && <div className="form-error">{createFolderError}</div>}
+        </div>
+      )}
+
+      <div className="fp-dir-list">
+        {browsing ? (
+          <EmptyState
+            className="directory-loading"
+            icon={<Spinner label={t("common.loading")} />}
+            style={directoryLoadingStateStyle}
+            title={<span style={visuallyHiddenTitleStyle}>{t("common.loading")}</span>}
+          />
+        ) : directories.length === 0 ? (
+          <EmptyState
+            className="directory-empty"
+            style={directoryEmptyStateStyle}
+            title={
+              <p style={directoryEmptyStateTitleStyle}>{t("workspace.launch.no_directories")}</p>
+            }
+          />
+        ) : (
+          directories.map((dir) => (
+            <div
+              key={dir.path}
+              className={`fp-dir ${selectedPath === dir.path ? "selected" : ""}`}
+              onClick={() => handleSelect(dir.path)}
+              onDoubleClick={() => handleNavigate(dir.path)}
+            >
+              <span className="fp-dir-icon">
+                <ThemedIcon semantic="file.folder.closed" size={14} />
+              </span>
+              <span className={`fp-dir-name ${selectedPath === dir.path ? "selected" : ""}`}>
+                {dir.name}
+              </span>
+              {dir.itemCount !== undefined && (
+                <span className="fp-dir-hint">
+                  {t("workspace.launch.items_count", { count: dir.itemCount })}
+                </span>
+              )}
+              {selectedPath === dir.path && (
+                <button
+                  className="fp-dir-action"
+                  type="button"
+                  aria-label={t("workspace.launch.enter_folder", { name: dir.name })}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleNavigate(dir.path);
+                  }}
+                >
+                  {t("workspace.launch.enter_folder_action")}
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+  const wslLaunchSection =
+    isWindowsPlatform && targetRuntime === "wsl" ? (
+      <div className="launch-wsl">
+        <label className="launch-runtime__label" htmlFor="workspace-wsl-distro">
+          {t("workspace.launch.wsl_distro_label")}
+        </label>
+        <Select
+          id="workspace-wsl-distro"
+          aria-label={t("workspace.launch.wsl_distro_label")}
+          options={wslDistros.map((distro) => ({ value: distro, label: distro }))}
+          value={wslDistro}
+          disabled={wslDistrosLoading || wslDistros.length === 0}
+          onValueChange={(value) => setWslDistro(value)}
+        />
+        <label className="launch-runtime__label" htmlFor="workspace-wsl-path">
+          {t("workspace.launch.wsl_path_label")}
+        </label>
+        <Input
+          id="workspace-wsl-path"
+          aria-label={t("workspace.launch.wsl_path_label")}
+          placeholder={t("workspace.launch.wsl_path_placeholder")}
+          value={wslPath}
+          onChange={(event) => setWslPath(event.target.value)}
+        />
+        {wslDistrosError ? <div className="form-error">{wslDistrosError}</div> : null}
+        {!wslDistrosLoading && wslDistros.length === 0 && !wslDistrosError ? (
+          <div className="form-error">{t("workspace.launch.wsl_no_distros")}</div>
+        ) : null}
+      </div>
+    ) : null;
+
   const launchBody = (
     <div className="launch-body">
       {recentSection}
-      <div className="folder-picker">
-        <div className="fp-toolbar">
-          <button className="fp-btn" onClick={() => handleNavigate("~")}>
-            <ThemedIcon semantic="workspace.launch.home" size={12} />
-            {t("workspace.launch.home_directory")}
-          </button>
-          {parentPath && (
-            <button className="fp-btn" onClick={() => handleNavigate(parentPath)}>
-              <ArrowUp size={12} />
-              {t("workspace.launch.go_up")}
-            </button>
-          )}
-          <button className="fp-btn" type="button" onClick={openCreateFolder}>
-            {t("workspace.launch.new_folder")}
-          </button>
-        </div>
-
-        <div className="fp-root-chips">
-          {rootPaths.map((rp) => (
-            <span
-              key={rp}
-              className={`fp-chip ${currentPath === rp ? "active" : ""}`}
-              onClick={() => handleNavigate(rp)}
-            >
-              {getShortPath(rp)}
-            </span>
-          ))}
-          {currentPath && !rootPaths.includes(currentPath) && (
-            <span className="fp-chip active">{getShortPath(currentPath)}</span>
-          )}
-        </div>
-
-        {isCreatingFolder && (
-          <div className="fp-create-folder">
-            <Input
-              ref={createFolderInputRef}
-              aria-label={t("workspace.launch.folder_name_label")}
-              className="fp-create-folder__input"
-              disabled={creatingFolder}
-              invalid={Boolean(createFolderError)}
-              onChange={(event) => updateNewFolderName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void submitCreateFolder();
-                  return;
-                }
-
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  closeCreateFolder();
-                }
-              }}
-              placeholder={t("workspace.launch.new_folder_placeholder")}
-              value={newFolderName}
-            />
-            <button
-              className="fp-create-folder__action"
-              type="button"
-              onClick={() => void submitCreateFolder()}
-              disabled={creatingFolder}
-            >
-              {creatingFolder
-                ? t("workspace.launch.creating_folder")
-                : t("workspace.launch.create_folder")}
-            </button>
-            <button
-              className="fp-create-folder__cancel"
-              type="button"
-              onClick={closeCreateFolder}
-              disabled={creatingFolder}
-            >
-              {t("workspace.launch.create_folder_cancel")}
-            </button>
-            {createFolderError && <div className="form-error">{createFolderError}</div>}
-          </div>
-        )}
-
-        <div className="fp-dir-list">
-          {browsing ? (
-            <EmptyState
-              className="directory-loading"
-              icon={<Spinner label={t("common.loading")} />}
-              style={directoryLoadingStateStyle}
-              title={<span style={visuallyHiddenTitleStyle}>{t("common.loading")}</span>}
-            />
-          ) : directories.length === 0 ? (
-            <EmptyState
-              className="directory-empty"
-              style={directoryEmptyStateStyle}
-              title={
-                <p style={directoryEmptyStateTitleStyle}>{t("workspace.launch.no_directories")}</p>
-              }
-            />
-          ) : (
-            directories.map((dir) => (
-              <div
-                key={dir.path}
-                className={`fp-dir ${selectedPath === dir.path ? "selected" : ""}`}
-                onClick={() => handleSelect(dir.path)}
-                onDoubleClick={() => handleNavigate(dir.path)}
-              >
-                <span className="fp-dir-icon">
-                  <ThemedIcon semantic="file.folder.closed" size={14} />
-                </span>
-                <span className={`fp-dir-name ${selectedPath === dir.path ? "selected" : ""}`}>
-                  {dir.name}
-                </span>
-                {dir.itemCount !== undefined && (
-                  <span className="fp-dir-hint">
-                    {t("workspace.launch.items_count", { count: dir.itemCount })}
-                  </span>
-                )}
-                {selectedPath === dir.path && (
-                  <button
-                    className="fp-dir-action"
-                    type="button"
-                    aria-label={t("workspace.launch.enter_folder", { name: dir.name })}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleNavigate(dir.path);
-                    }}
-                  >
-                    {t("workspace.launch.enter_folder_action")}
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      {runtimeSection}
+      {wslLaunchSection ?? nativeFolderPicker}
 
       {error && (
         <div className="form-error" style={{ marginTop: "var(--sp-3)" }}>
@@ -309,7 +375,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       <button
         className="launch-start-btn launch-start-btn--mobile"
         onClick={() => void handleOpen()}
-        disabled={loading || !selectedPath}
+        disabled={loading || !canOpen}
       >
         {loading ? t("workspace.launch.starting") : t("workspace.launch.start")}
       </button>
@@ -382,7 +448,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
             <button
               className="launch-start-btn launch-start-btn--desktop"
               onClick={() => void handleOpen()}
-              disabled={loading || !selectedPath}
+              disabled={loading || !canOpen}
             >
               {loading ? t("workspace.launch.starting") : t("workspace.launch.start")}
             </button>

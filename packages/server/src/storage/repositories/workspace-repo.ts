@@ -79,6 +79,17 @@ function normalizeWorkspaceFile(value: unknown): Record<string, Workspace> {
   return {};
 }
 
+function isSameWorkspaceIdentity(
+  existing: Pick<Workspace, "path" | "targetRuntime" | "wslDistro">,
+  next: Pick<Workspace, "path" | "targetRuntime" | "wslDistro">
+): boolean {
+  return (
+    existing.path === next.path &&
+    existing.targetRuntime === next.targetRuntime &&
+    (existing.targetRuntime !== "wsl" || existing.wslDistro === next.wslDistro)
+  );
+}
+
 /**
  * Workspace repository for CRUD operations
  */
@@ -141,7 +152,7 @@ export class WorkspaceRepo {
     if (next[workspace.id]) {
       throw new Error(`Workspace already exists: ${workspace.id}`);
     }
-    if (Object.values(next).some((entry) => entry.path === workspace.path)) {
+    if (Object.values(next).some((entry) => isSameWorkspaceIdentity(entry, workspace))) {
       throw new Error(`Workspace path already exists: ${workspace.path}`);
     }
 

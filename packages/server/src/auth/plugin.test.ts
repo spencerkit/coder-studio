@@ -349,6 +349,27 @@ describe("auth login protection", () => {
     socket.terminate();
   });
 
+  it("accepts websocket upgrades with a valid remote-runtime bearer token from a private IP", async () => {
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-remote-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+      mode: "remote_runtime",
+      runtimeId: "wsl:ws-1",
+      ttlMs: 60_000,
+    });
+
+    const socket = await app.injectWS("/ws", {
+      headers: {
+        authorization: `Bearer ${tokenRecord.token}`,
+        "x-forwarded-for": "172.28.96.1",
+      },
+    });
+
+    socket.terminate();
+  });
+
   it("decorates auth-disabled websocket requests with a valid session token context", async () => {
     await app.close();
     wsHub.destroy();
@@ -428,6 +449,48 @@ describe("auth login protection", () => {
       ok: false,
       error: "Authentication required",
     });
+  });
+
+  it("rejects remote-runtime bearer tokens from public IPs", async () => {
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-remote-2",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+      mode: "remote_runtime",
+      runtimeId: "wsl:ws-1",
+      ttlMs: 60_000,
+    });
+
+    await expect(
+      app.injectWS("/ws", {
+        headers: {
+          authorization: `Bearer ${tokenRecord.token}`,
+          "x-forwarded-for": "198.51.100.24",
+        },
+      })
+    ).rejects.toThrow("Unexpected server response: 401");
+  });
+
+  it("rejects expired remote-runtime bearer tokens", async () => {
+    const tokenRecord = sessionTokenRepo.issue({
+      sessionId: "sess-remote-expired",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      permissions: ["session:read"],
+      mode: "remote_runtime",
+      runtimeId: "wsl:ws-1",
+      ttlMs: 0,
+    });
+
+    await expect(
+      app.injectWS("/ws", {
+        headers: {
+          authorization: `Bearer ${tokenRecord.token}`,
+          "x-forwarded-for": "172.28.96.1",
+        },
+      })
+    ).rejects.toThrow("Unexpected server response: 401");
   });
 
   it("rejects bearer-auth websocket upgrades from non-loopback requests", async () => {

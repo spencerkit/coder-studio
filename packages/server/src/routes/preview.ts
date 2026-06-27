@@ -4,6 +4,7 @@ import { posix } from "node:path";
 import { markdownUsesMermaid } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { RuntimeRouter } from "../host/runtime-router.js";
 import {
   encodePathSegments,
   rewritePreviewCssResourceUrls,
@@ -29,7 +30,7 @@ interface PreviewSessionUpdateBody {
   allowScripts?: boolean;
 }
 
-type WorkspaceLookup = { path: string } | null | undefined;
+type WorkspaceLookup = { path: string; targetRuntime?: "native" | "wsl" } | null | undefined;
 
 const require = createRequire(import.meta.url);
 const MERMAID_RUNTIME_PATH = require.resolve("mermaid/dist/mermaid.min.js");
@@ -92,6 +93,7 @@ export function registerPreviewRoutes(
   deps: {
     workspaceMgr: { get(id: string): WorkspaceLookup };
     previewSessions: PreviewSessionStore;
+    runtimeRouter?: RuntimeRouter;
   }
 ): void {
   app.get("/api/preview/assets/mermaid.min.js", async (_request, reply) => {
@@ -207,18 +209,46 @@ export function registerPreviewRoutes(
 
     try {
       const resourcePath = resolvePreviewAssetWorkspacePath(session.entryPath, rawPath);
-      const resource = await loadPreviewResource(workspace.path, resourcePath);
+      const resource =
+        workspace.targetRuntime === "wsl"
+          ? ((await deps.runtimeRouter?.executeOnTarget(
+              { kind: "workspace", workspaceId: session.workspaceId },
+              "file.previewResource.read",
+              {
+                workspaceId: session.workspaceId,
+                path: resourcePath,
+              }
+            )) as
+              | {
+                  mime: string;
+                  size: number;
+                  bytesBase64: string;
+                  workspaceRelativePath?: string;
+                }
+              | undefined)
+          : await loadPreviewResource(workspace.path, resourcePath);
+
+      if (!resource) {
+        throw { code: "runtime_router_unavailable", message: "Runtime router unavailable" };
+      }
+
+      const workspaceRelativePath =
+        "workspaceRelativePath" in resource && typeof resource.workspaceRelativePath === "string"
+          ? resource.workspaceRelativePath
+          : resourcePath;
+      const resourceBytes =
+        "bytes" in resource ? resource.bytes : Buffer.from(resource.bytesBase64, "base64");
       const bytes =
         resource.mime === "text/css"
           ? Buffer.from(
-              rewritePreviewCssResourceUrls(resource.bytes.toString("utf-8"), {
-                baseWorkspacePath: resource.workspaceRelativePath,
+              rewritePreviewCssResourceUrls(resourceBytes.toString("utf-8"), {
+                baseWorkspacePath: workspaceRelativePath,
                 sessionId: session.id,
                 workspaceRootPath: workspace.path,
               }),
               "utf-8"
             )
-          : resource.bytes;
+          : resourceBytes;
 
       return reply
         .header("Content-Type", resource.mime)
@@ -230,6 +260,9 @@ export function registerPreviewRoutes(
       const code = (error as { code?: string })?.code ?? (error as Error).message;
       if (code === "path_escape") {
         return reply.status(400).send({ error: "path_escape" });
+      }
+      if (code === "runtime_router_unavailable") {
+        return reply.status(503).send({ error: code });
       }
       return reply.status(404).send({ error: "not_found" });
     }

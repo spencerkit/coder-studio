@@ -1260,6 +1260,120 @@ describe("GitPanel", () => {
     });
   });
 
+  it("inherits WSL runtime metadata when opening another worktree as a workspace", async () => {
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: Record<string, string>) => {
+        if (op === "git.status") {
+          return status;
+        }
+
+        if (op === "git.branches") {
+          return { current: "feature/ai-agent", branches: [] };
+        }
+
+        if (op === "worktree.list") {
+          return {
+            worktrees: [
+              {
+                name: "main",
+                path: "/home/spencer/workspace/coder-studio",
+                branch: "main",
+                commit: "abc1234",
+                status: "clean",
+              },
+              {
+                name: "feature/ai-agent",
+                path: "/home/spencer/workspace/coder-studio-feature",
+                branch: "feature/ai-agent",
+                commit: "def5678",
+                status: "dirty",
+              },
+            ],
+          };
+        }
+
+        if (op === "git.log") {
+          return { entries: [] };
+        }
+
+        if (op === "workspace.open") {
+          expect(args).toEqual({
+            path: "/home/spencer/workspace/coder-studio-feature",
+            targetRuntime: "wsl",
+            wslDistro: "Ubuntu-24.04",
+          });
+
+          return {
+            id: "ws-opened-wsl",
+            path: "/home/spencer/workspace/coder-studio-feature",
+            targetRuntime: "wsl",
+            wslDistro: "Ubuntu-24.04",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          };
+        }
+
+        if (op === "workspace.lastViewedTarget.set") {
+          return {
+            workspaceId: "ws-opened-wsl",
+            updatedAt: 10,
+          };
+        }
+
+        return {};
+      });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+    seedWorkspaceStore(store);
+    store.set(workspacesAtom, {
+      "ws-test": {
+        id: "ws-test",
+        path: "/home/spencer/workspace/coder-studio",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+    });
+
+    render(
+      <Provider store={store}>
+        <GitPanel workspaceId="ws-test" />
+      </Provider>
+    );
+
+    const worktreeToggle = await screen.findByRole("button", { name: "Worktrees0" });
+    fireEvent.click(worktreeToggle);
+
+    const worktreeButtons = await screen.findAllByRole("button", { name: /feature\/ai-agent/i });
+    fireEvent.click(
+      worktreeButtons.find((button) =>
+        button.classList.contains("git-worktree-row__main")
+      ) as HTMLButtonElement
+    );
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.lastViewedTarget.set",
+        { workspaceId: "ws-opened-wsl", sessionId: undefined },
+        undefined
+      );
+    });
+  });
+
   it("renders git groups from the first git.status response", async () => {
     const sendCommand = vi.fn().mockImplementation(async (op: string) => {
       if (op === "git.status") {

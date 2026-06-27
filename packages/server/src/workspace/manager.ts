@@ -5,7 +5,8 @@
 import type { DomainEvent, Workspace } from "@coder-studio/core";
 import type { WatcherLogger } from "../fs/watcher.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
-import { WorkspaceValidator } from "./validator.js";
+import { type WorkspaceValidationOptions, WorkspaceValidator } from "./validator.js";
+import { canonicalizeWslWorkspacePath } from "./wsl-paths.js";
 
 export interface OpenWorkspaceRequest {
   path: string;
@@ -33,6 +34,8 @@ export interface WorkspaceManagerDeps {
   teardown?: (workspaceId: string) => void | Promise<void>;
   onClose?: (workspaceId: string) => void | Promise<void>;
   logger?: WatcherLogger;
+  validator?: WorkspaceValidator;
+  validatorOptions?: WorkspaceValidationOptions;
 }
 
 /**
@@ -48,7 +51,7 @@ function generateWorkspaceId(): string {
  * and broadcasts metadata changes via EventBus.
  */
 export class WorkspaceManager {
-  private validator = new WorkspaceValidator();
+  private readonly validator: WorkspaceValidator;
   private watchers = new Map<string, WorkspaceWatcher>();
   private readonly repo: WorkspaceRepo;
   private logger: WatcherLogger | undefined;
@@ -56,6 +59,7 @@ export class WorkspaceManager {
   constructor(private deps: WorkspaceManagerDeps) {
     this.repo = deps.workspaceRepo;
     this.logger = deps.logger;
+    this.validator = deps.validator ?? new WorkspaceValidator(deps.validatorOptions);
   }
 
   /**
@@ -68,16 +72,20 @@ export class WorkspaceManager {
     this.logger = logger;
   }
 
-  private startWatcher(workspaceId: string, rootPath: string): void {
-    if (!this.deps.broadcaster || this.watchers.has(workspaceId)) {
+  private startWatcher(workspace: Pick<Workspace, "id" | "path" | "targetRuntime">): void {
+    if (
+      !this.deps.broadcaster ||
+      this.watchers.has(workspace.id) ||
+      workspace.targetRuntime === "wsl"
+    ) {
       return;
     }
 
     this.watchers.set(
-      workspaceId,
+      workspace.id,
       new WorkspaceWatcher(
-        workspaceId,
-        rootPath,
+        workspace.id,
+        workspace.path,
         this.deps.broadcaster,
         this.logger,
         this.deps.onDirty
@@ -87,7 +95,7 @@ export class WorkspaceManager {
 
   hydrateWatchers(): void {
     for (const workspace of this.list()) {
-      this.startWatcher(workspace.id, workspace.path);
+      this.startWatcher(workspace);
     }
   }
 
@@ -119,19 +127,30 @@ export class WorkspaceManager {
    */
   async open(req: OpenWorkspaceRequest): Promise<Workspace> {
     const targetRuntime = req.targetRuntime ?? "native";
+    const wslDistro = targetRuntime === "wsl" ? req.wslDistro?.trim() : undefined;
+    const resolvedPath =
+      targetRuntime === "wsl" ? canonicalizeWslWorkspacePath(req.path, wslDistro) : req.path;
 
     // 1. Validate path
-    await this.validator.validate(req.path);
+    await this.validator.validate(resolvedPath, {
+      targetRuntime,
+      wslDistro,
+    });
 
     // 2. Check if workspace already exists for this path
-    const existing = this.getByPath(req.path);
+    const existing = this.list().find(
+      (workspace) =>
+        workspace.path === resolvedPath &&
+        workspace.targetRuntime === targetRuntime &&
+        (targetRuntime !== "wsl" || workspace.wslDistro === wslDistro)
+    );
     if (existing) {
       // Update last active timestamp and return existing
       this.touch(existing.id);
       const refreshed = this.get(existing.id) ?? existing;
 
       // Start watcher if not already watching (e.g., after server restart)
-      this.startWatcher(refreshed.id, refreshed.path);
+      this.startWatcher(refreshed);
 
       this.deps.eventBus.emit({
         type: "workspace.meta.changed",
@@ -145,9 +164,9 @@ export class WorkspaceManager {
     // 3. Persist through the repository
     const workspace: Workspace = {
       id: generateWorkspaceId(),
-      path: req.path,
+      path: resolvedPath,
       targetRuntime,
-      wslDistro: targetRuntime === "wsl" ? req.wslDistro : undefined,
+      wslDistro,
       openedAt: Date.now(),
       lastActiveAt: Date.now(),
       uiState: {
@@ -172,7 +191,7 @@ export class WorkspaceManager {
     });
 
     // Start file system watcher
-    this.startWatcher(workspace.id, workspace.path);
+    this.startWatcher(workspace);
     this.deps.autoFetch?.triggerOpenTimeFetch(workspace.id);
 
     return workspace;

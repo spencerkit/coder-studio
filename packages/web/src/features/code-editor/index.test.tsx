@@ -307,6 +307,7 @@ describe("CodeEditorHost", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.read",
         {
+          workspaceId: "ws-1",
           skillSlug: "my-review-skill",
           path: "SKILL.md",
         },
@@ -456,6 +457,7 @@ describe("CodeEditorHost", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "skills.files.write",
         {
+          workspaceId: "ws-1",
           skillSlug: "my-review-skill",
           path: "SKILL.md",
           content: "# My Review Skill\n\n- Prefer focused answers.\n",

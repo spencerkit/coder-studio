@@ -246,6 +246,7 @@ export function createLspBridge(initialTransport: Partial<LspBridgeTransport> = 
 
       const job = await transport.sendCommand<LspToolInstallJobSnapshot>("lsp.install.get", {
         jobId: currentJobId,
+        workspaceId: input.workspaceId,
       });
 
       if (job.status === "queued" || job.status === "running") {

@@ -70,14 +70,31 @@ describe("WorkspaceManager", () => {
     });
 
     it("persists explicit targetRuntime and wslDistro on new workspaces", async () => {
+      manager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        validatorOptions: {
+          commandExists: async () => true,
+          runCommand: async (file: string, args?: string[]) => {
+            if (file === "wsl.exe" && args?.join(" ") === "-l -q") {
+              return { stdout: "Ubuntu-24.04\n", stderr: "" };
+            }
+            throw new Error(`unexpected command: ${file}`);
+          },
+        },
+      });
+
       const workspace = await manager.open({
-        path: testDir,
+        path: "/home/spencer/workspace",
         targetRuntime: "wsl",
         wslDistro: "Ubuntu-24.04",
       });
 
       expect(workspace.targetRuntime).toBe("wsl");
       expect(workspace.wslDistro).toBe("Ubuntu-24.04");
+      expect(workspace.path).toBe("/home/spencer/workspace");
     });
 
     it("triggers open-time auto fetch for new workspaces", async () => {
@@ -160,6 +177,35 @@ describe("WorkspaceManager", () => {
         path: testDir,
       });
 
+      expect((manager as unknown as { watchers: Map<string, unknown> }).watchers.size).toBe(0);
+    });
+
+    it("does not start host file watchers for WSL workspaces", async () => {
+      manager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        broadcaster: { broadcast: vi.fn() } as never,
+        validatorOptions: {
+          commandExists: async () => true,
+          runCommand: async (file: string, args?: string[]) => {
+            if (file === "wsl.exe" && args?.join(" ") === "-l -q") {
+              return { stdout: "Ubuntu-24.04\n", stderr: "" };
+            }
+
+            throw new Error(`unexpected command: ${file}`);
+          },
+        },
+      });
+
+      await manager.open({
+        path: "/home/spencer/workspace",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      });
+
+      expect(watchSpy).not.toHaveBeenCalled();
       expect((manager as unknown as { watchers: Map<string, unknown> }).watchers.size).toBe(0);
     });
   });
@@ -294,6 +340,59 @@ describe("WorkspaceManager", () => {
           persisted.id
         )
       ).toBe(true);
+    });
+
+    it("skips host watcher hydration for persisted WSL workspaces", async () => {
+      manager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        broadcaster: { broadcast: vi.fn() } as never,
+        validatorOptions: {
+          commandExists: async () => true,
+          runCommand: async (file: string, args?: string[]) => {
+            if (file === "wsl.exe" && args?.join(" ") === "-l -q") {
+              return { stdout: "Ubuntu-24.04\n", stderr: "" };
+            }
+
+            throw new Error(`unexpected command: ${file}`);
+          },
+        },
+      });
+      const persisted = await manager.open({
+        path: "/home/spencer/workspace",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      });
+      watchSpy.mockClear();
+
+      const restoredManager = new WorkspaceManager({
+        workspaceRepo: new WorkspaceRepo({
+          filePath: join(stateDir, "workspaces.json"),
+        }),
+        eventBus,
+        broadcaster: { broadcast: vi.fn() } as never,
+        validatorOptions: {
+          commandExists: async () => true,
+          runCommand: async (file: string, args?: string[]) => {
+            if (file === "wsl.exe" && args?.join(" ") === "-l -q") {
+              return { stdout: "Ubuntu-24.04\n", stderr: "" };
+            }
+
+            throw new Error(`unexpected command: ${file}`);
+          },
+        },
+      });
+
+      restoredManager.hydrateWatchers();
+
+      expect(watchSpy).not.toHaveBeenCalled();
+      expect(
+        (restoredManager as unknown as { watchers: Map<string, unknown> }).watchers.has(
+          persisted.id
+        )
+      ).toBe(false);
     });
   });
 

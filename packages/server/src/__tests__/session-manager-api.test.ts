@@ -182,6 +182,65 @@ describe("SessionManager session-level API", () => {
     expect(sessionMgr.getLatestSubmittedUserInput(session.id)).toBe("fix the build");
   });
 
+  it("uses a host-provided session bootstrap without reissuing a token", async () => {
+    const createdSpecs: Array<{ env?: Record<string, string> }> = [];
+    const issueSessionToken = vi.fn(() => ({ token: "should-not-be-used" }));
+    const getHostApiUrl = vi.fn(() => "http://127.0.0.1:4173");
+    const bootstrapEventBus = new EventBus();
+    const bootstrapSessionMgr = new SessionManager({
+      terminalMgr: {
+        create: vi.fn((spec) => {
+          createdSpecs.push(spec as { env?: Record<string, string> });
+          return { id: "terminal-bootstrap-1" };
+        }),
+        kill: vi.fn(async () => undefined),
+        close: vi.fn(async () => undefined),
+      } as unknown as TerminalManager,
+      eventBus: bootstrapEventBus,
+      db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        findById: vi.fn(),
+        findByWorkspaceId: vi.fn().mockReturnValue([]),
+        listHydratable: vi.fn().mockReturnValue([]),
+        delete: vi.fn(),
+      } as SessionDatabase,
+      broadcaster: { broadcast: vi.fn() } as Broadcaster,
+      providerRegistry: [provider],
+      providerConfigRepo: providerConfigRepoStub,
+      hostBridge: {
+        issueSessionToken,
+        revokeSessionTokensBySessionId: vi.fn(),
+        getHostApiUrl,
+        emitDomainEvent: vi.fn(),
+        broadcast: vi.fn(),
+        sendToClient: vi.fn(() => false),
+        sendBinaryToClient: vi.fn(() => false),
+      },
+    });
+
+    const session = await bootstrapSessionMgr.create({
+      workspaceId: "ws-1",
+      workspacePath: "/tmp",
+      providerId: provider.id,
+      provider,
+      sessionBootstrap: {
+        sessionId: "sess_bootstrap",
+        sessionToken: "remote-token",
+        apiUrl: "http://172.29.224.1:4173",
+      },
+    });
+
+    expect(session.id).toBe("sess_bootstrap");
+    expect(issueSessionToken).not.toHaveBeenCalled();
+    expect(getHostApiUrl).not.toHaveBeenCalled();
+    expect(createdSpecs[0]?.env).toMatchObject({
+      CODER_STUDIO_SESSION_ID: "sess_bootstrap",
+      CODER_STUDIO_SESSION_TOKEN: "remote-token",
+      CODER_STUDIO_API_URL: "http://172.29.224.1:4173",
+    });
+  });
+
   it("subscribes PTY detector shadow mode when provider exposes idle heuristics", async () => {
     provider = {
       ...provider,

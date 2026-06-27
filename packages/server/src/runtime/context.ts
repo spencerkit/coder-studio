@@ -25,7 +25,10 @@ import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkAnalysisService } from "../work-analysis/service.js";
 import type { RuntimeHostBridge } from "./contract.js";
 
-type RuntimeWorkspaceLookup = Pick<Workspace, "id" | "path" | "targetRuntime">;
+type RuntimeWorkspaceLookup = Pick<
+  Workspace,
+  "id" | "path" | "targetRuntime" | "wslDistro" | "uiState"
+>;
 
 export interface RuntimeCommandContext {
   runtimeId: string;

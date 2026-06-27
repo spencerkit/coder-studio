@@ -753,7 +753,10 @@ const WorkspaceDesktopScene: FC = () => {
                   {activeSidebarView === "agent-instructions" ? (
                     <div className="workspace-sidebar-view">
                       <div className="workspace-sidebar-panel__body workspace-sidebar-panel__body--stacked">
-                        <AgentTokenTrendSection workspacePath={workspace.path} />
+                        <AgentTokenTrendSection
+                          workspaceId={workspace.id}
+                          workspacePath={workspace.path}
+                        />
                         <AgentInstructionsSection workspaceId={workspace.id} />
                       </div>
                     </div>

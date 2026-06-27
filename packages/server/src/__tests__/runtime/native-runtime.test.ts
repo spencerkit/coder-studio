@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,5 +37,15 @@ describe("NativeRuntimeHandle", () => {
     });
 
     expect(runtime.id).toBe("native-default");
+    expect(existsSync(join(stateDir, "state", "runtimes", "native-default"))).toBe(true);
+    expect(
+      existsSync(join(stateDir, "state", "runtimes", "native-default", "provider-configs.json"))
+    ).toBe(true);
+    expect(
+      readFileSync(
+        join(stateDir, "state", "runtimes", "native-default", "provider-configs.json"),
+        "utf8"
+      )
+    ).toContain('"version": 1');
   });
 });

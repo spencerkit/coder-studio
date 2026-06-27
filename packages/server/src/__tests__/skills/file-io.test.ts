@@ -65,4 +65,17 @@ describe("skill file helpers", () => {
       isTextBacked: false,
     });
   });
+
+  it("includes workspace context in skill image URLs when provided", async () => {
+    const skillRoot = await createSkillRoot();
+
+    const result = await readSkillFile("my-review-skill", skillRoot, "pixel.png", {
+      workspaceId: "ws-1",
+    });
+
+    expect(result).toMatchObject({
+      kind: "image",
+      url: "/api/skill-file?workspaceId=ws-1&skillSlug=my-review-skill&path=pixel.png",
+    });
+  });
 });

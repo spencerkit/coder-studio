@@ -861,7 +861,10 @@ describe("createLspBridge", () => {
         workspaceId: "ws-1",
         serverKind: "python",
       });
-      expect(sendCommand).toHaveBeenCalledWith("lsp.install.get", { jobId: "job-1" });
+      expect(sendCommand).toHaveBeenCalledWith("lsp.install.get", {
+        jobId: "job-1",
+        workspaceId: "ws-1",
+      });
       expect(sendCommand).toHaveBeenCalledWith("lsp.openDocument", {
         workspaceId: "ws-1",
         path: "src/main.py",

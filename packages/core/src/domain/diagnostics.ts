@@ -34,6 +34,8 @@ export interface DiagnosticsRequest {
   context: DiagnosticsContext;
   workspaceId?: string;
   workspacePath?: string;
+  targetRuntime?: "native" | "wsl";
+  wslDistro?: string;
   providerId?: string;
 }
 
@@ -68,6 +70,8 @@ export interface DiagnosticsMetadata {
   providerId?: string;
   workspaceId?: string;
   workspacePath?: string;
+  targetRuntime?: "native" | "wsl";
+  wslDistro?: string;
 }
 
 export type DiagnosticsLspServiceStatus =

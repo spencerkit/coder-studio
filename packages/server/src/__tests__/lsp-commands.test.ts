@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
+import { RuntimeRegistry } from "../host/runtime-registry.js";
 import { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { WorkspaceRepo } from "../storage/repositories/workspace-repo.js";
 import { WorkspaceManager } from "../workspace/manager.js";
@@ -316,7 +317,7 @@ describe("LSP commands", () => {
         kind: "command",
         id: crypto.randomUUID(),
         op: "lsp.install.get",
-        args: { jobId: "job-1" },
+        args: { jobId: "job-1", workspaceId },
       },
       ctx
     );
@@ -329,6 +330,35 @@ describe("LSP commands", () => {
   });
 
   it("applies lsp runtime mode through lsp.setMode", async () => {
+    const runtimeRegistry = new RuntimeRegistry();
+    const executeNative = vi.fn(async () => ({ mode: "off" }));
+    const executeWsl = vi.fn(async () => ({ mode: "off" }));
+    runtimeRegistry.register({
+      id: "native-default",
+      kind: "native",
+      summary: { scope: "shared", targetRuntime: "native" },
+      execute: executeNative,
+      disposeWorkspace: vi.fn(),
+      health: async () => ({ ok: true }),
+    });
+    runtimeRegistry.register({
+      id: "wsl:ws-1",
+      kind: "wsl",
+      summary: {
+        scope: "workspace",
+        workspaceId: "ws-1",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      },
+      execute: executeWsl,
+      disposeWorkspace: vi.fn(),
+      health: async () => ({ ok: true }),
+    });
+    ctx = {
+      ...ctx,
+      runtimeRegistry,
+    } as CommandContext;
+
     const result = await dispatch(
       {
         kind: "command",
@@ -341,5 +371,7 @@ describe("LSP commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data).toEqual({ mode: "off" });
+    expect(executeNative).toHaveBeenCalledWith("lsp.applyMode", { mode: "off" });
+    expect(executeWsl).toHaveBeenCalledWith("lsp.applyMode", { mode: "off" });
   });
 });

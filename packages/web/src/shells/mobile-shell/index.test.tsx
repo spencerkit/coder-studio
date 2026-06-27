@@ -1751,7 +1751,11 @@ describe("MobileShell Phase 2 workspace", () => {
       expect(screen.getByText("Then run npm install -g @openai/codex.")).toBeInTheDocument();
     });
 
-    expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+    expect(sendCommand).toHaveBeenCalledWith(
+      "provider.runtimeStatus",
+      { workspaceId: "ws-1" },
+      undefined
+    );
     expect(screen.getByRole("button", { name: "Open Diagnostics" })).toBeInTheDocument();
   }, 15_000);
 

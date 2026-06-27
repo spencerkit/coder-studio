@@ -255,7 +255,7 @@ export function useAgentInstructionsActions(workspaceId: string) {
       runAction("generate", async () => {
         const [providerListResult, runtimeStatusResult] = await Promise.all([
           dispatch<ProviderListItem[]>("provider.list", {}),
-          dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {}),
+          dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", { workspaceId }),
         ]);
 
         if (!providerListResult.ok || !providerListResult.data) {

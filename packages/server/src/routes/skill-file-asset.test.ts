@@ -2,7 +2,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerSkillFileAssetRoutes } from "./skill-file-asset.js";
 
 const PNG_BYTES = Buffer.from(
@@ -15,7 +15,13 @@ const PNG_BYTES = Buffer.from(
 async function buildApp(
   skillPath: string | null,
   source: "custom" | "installed" = "custom",
-  origin: "filesystem" | "skillhub" = "filesystem"
+  origin: "filesystem" | "skillhub" = "filesystem",
+  workspace: {
+    id: string;
+    path: string;
+    targetRuntime: "native" | "wsl";
+  } | null = null,
+  runtimeRouter?: { executeOnTarget: ReturnType<typeof vi.fn> }
 ) {
   const app = Fastify({ logger: false });
   registerSkillFileAssetRoutes(app, {
@@ -35,6 +41,10 @@ async function buildApp(
             }
           : undefined,
     } as never,
+    workspaceMgr: {
+      get: (workspaceId: string) => (workspaceId === workspace?.id ? workspace : null),
+    } as never,
+    runtimeRouter: runtimeRouter as never,
   });
   await app.ready();
   return app;
@@ -128,5 +138,43 @@ describe("/api/skill-file", () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.json()).toMatchObject({ error: "skill_not_found" });
+  });
+
+  it("proxies WSL skill image reads through runtime routing", async () => {
+    const executeOnTarget = vi.fn(async () => ({
+      mime: "image/png",
+      size: PNG_BYTES.length,
+      bytesBase64: PNG_BYTES.toString("base64"),
+    }));
+    app = await buildApp(
+      testDir,
+      "custom",
+      "filesystem",
+      {
+        id: "ws-1",
+        path: "/home/spencer/project",
+        targetRuntime: "wsl",
+      },
+      { executeOnTarget }
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/skill-file?workspaceId=ws-1&skillSlug=my-review-skill&path=pixel.png",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.headers["content-length"]).toBe(String(PNG_BYTES.length));
+    expect(res.rawPayload.equals(PNG_BYTES)).toBe(true);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-1" },
+      "skills.files.readAsset",
+      {
+        workspaceId: "ws-1",
+        skillSlug: "my-review-skill",
+        path: "pixel.png",
+      }
+    );
   });
 });

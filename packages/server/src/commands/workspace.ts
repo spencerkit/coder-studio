@@ -9,9 +9,11 @@ import type { WorkspacePaneNode } from "@coder-studio/core";
 import { z } from "zod";
 import { createDirectory } from "../fs/file-io.js";
 import { registerHostCommand } from "../host/command-registry.js";
+import { getRuntimeIdForWorkspace } from "../host/runtime-orchestrator.js";
 import { registerRuntimeCommand } from "../runtime/command-registry.js";
 import { WorkspaceHistoryStore } from "../workspace/history-store.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
+import { listWslDistros } from "../workspace/wsl-discovery.js";
 import { registerCommand } from "../ws/dispatch.js";
 
 function resolveBrowsePath(path: string | undefined): string {
@@ -201,15 +203,24 @@ registerHostCommand(
   "workspace.open",
   z.object({
     path: z.string(),
+    targetRuntime: z.enum(["native", "wsl"]).optional(),
+    wslDistro: z.string().optional(),
   }),
   async (args, ctx) => {
-    const targetRuntime = "native";
     const workspace = await ctx.workspaceMgr.open({
       path: args.path,
-      targetRuntime,
+      targetRuntime: args.targetRuntime,
+      wslDistro: args.wslDistro,
     });
 
-    ctx.runtimeBindings?.bindWorkspace(workspace.id, "native-default");
+    if (ctx.runtimeOrchestrator) {
+      await ctx.runtimeOrchestrator.ensureRuntimeForWorkspace(workspace);
+    } else {
+      ctx.runtimeBindings?.bindWorkspace(
+        workspace.id,
+        getRuntimeIdForWorkspace(workspace, "native-default")
+      );
+    }
     ctx.settingsRepo && new WorkspaceHistoryStore(ctx.settingsRepo).recordOpen(workspace.path);
     await (
       ctx as {
@@ -221,6 +232,15 @@ registerHostCommand(
     return workspace;
   }
 );
+
+registerHostCommand("workspace.wsl.listDistros", z.object({}), async (_args, ctx) => {
+  const distros = await listWslDistros({
+    commandExists: ctx.providerRuntimeDeps?.commandExists,
+    runCommand: ctx.providerRuntimeDeps?.runCommand,
+  }).catch(() => []);
+
+  return { distros };
+});
 
 registerRuntimeCommand(
   "workspace.intelligence",

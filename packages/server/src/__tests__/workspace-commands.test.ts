@@ -369,6 +369,66 @@ describe("Workspace Commands", () => {
       expect(result.data).toMatchObject({ targetRuntime: "native" });
     });
 
+    it("passes explicit WSL runtime metadata through the command layer", async () => {
+      const open = vi.fn().mockResolvedValue({
+        id: "ws-wsl",
+        path: "/home/spencer/workspace",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 280,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      });
+      const ensureRuntimeForWorkspace = vi.fn().mockResolvedValue(undefined);
+
+      ctx = {
+        ...ctx,
+        workspaceMgr: {
+          ...workspaceMgr,
+          open,
+        } as unknown as WorkspaceManager,
+        runtimeOrchestrator: {
+          ensureRuntimeForWorkspace,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-open-wsl",
+          op: "workspace.open",
+          args: {
+            path: "/home/spencer/workspace",
+            targetRuntime: "wsl",
+            wslDistro: "Ubuntu-24.04",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(open).toHaveBeenCalledWith({
+        path: "/home/spencer/workspace",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      });
+      expect(ensureRuntimeForWorkspace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "ws-wsl",
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        })
+      );
+      expect(result.data).toMatchObject({
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      });
+    });
+
     it("triggers open-time auto fetch after workspace.open succeeds", async () => {
       const dir = join(tmpdir(), `workspace-open-test-${Date.now()}`);
       await mkdir(dir);

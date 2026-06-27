@@ -249,7 +249,7 @@ export class SupervisorManager {
   private readonly contextBuilder: SupervisorContextBuilder;
   private readonly evaluator: SupervisorEvaluator;
   private readonly injector: SupervisorInjector;
-  private readonly logger: FastifyBaseLogger;
+  private logger: FastifyBaseLogger;
   private readonly config: SupervisorConfig;
   private lifecycleUnsubscribe: (() => void) | null = null;
 
@@ -299,6 +299,12 @@ export class SupervisorManager {
 
   setProviderRegistry(providerRegistry: ProviderDefinition[]): void {
     this.deps.providerRegistry = providerRegistry;
+  }
+
+  setLogger(logger: FastifyBaseLogger): void {
+    this.logger = logger;
+    this.contextBuilder.setLogger(logger);
+    this.evaluator.setLogger(logger);
   }
 
   start(): void {

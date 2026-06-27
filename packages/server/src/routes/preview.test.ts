@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreviewSessionStore } from "../preview/session-store.js";
 import { registerPreviewRoutes } from "./preview.js";
 
@@ -203,6 +203,61 @@ describe("/api/preview/session", () => {
     expect(cssRes.body).toContain(`background-image: url("${assetUrl}?v=2#hero")`);
     expect(cssRes.body).toContain(`mask-image: url(${assetUrl}#mask)`);
     expect(cssRes.body).toContain('url("https://example.com/remote.png")');
+  });
+
+  it("loads WSL preview resources through runtime routing", async () => {
+    await app.close();
+
+    const cssBytes = Buffer.from('.hero { background-image: url("./pixel.png#hero"); }', "utf-8");
+    const executeOnTarget = vi.fn(async () => ({
+      mime: "text/css",
+      size: cssBytes.byteLength,
+      bytesBase64: cssBytes.toString("base64"),
+      workspaceRelativePath: "examples/demo/style.css",
+    }));
+
+    app = Fastify({ logger: false });
+    registerPreviewRoutes(app, {
+      previewSessions: new PreviewSessionStore(),
+      workspaceMgr: {
+        get: (id: string) =>
+          id === "ws-1" ? { path: "/home/spencer/project", targetRuntime: "wsl" } : null,
+      } as never,
+      runtimeRouter: {
+        executeOnTarget,
+      } as never,
+    });
+    await app.ready();
+
+    const createRes = await app.inject({
+      method: "POST",
+      url: "/api/preview/session",
+      payload: {
+        workspaceId: "ws-1",
+        entryPath: "examples/demo/index.html",
+        kind: "html",
+        content:
+          '<!doctype html><html><head><link rel="stylesheet" href="./style.css"></head><body>demo</body></html>',
+      },
+    });
+
+    const { id } = createRes.json();
+    const cssRes = await app.inject({
+      method: "GET",
+      url: `/api/preview/session/${id}/examples/demo/style.css`,
+    });
+
+    expect(cssRes.statusCode).toBe(200);
+    expect(cssRes.headers["content-type"]).toContain("text/css");
+    expect(cssRes.body).toContain(`/api/preview/session/${id}/examples/demo/pixel.png#hero`);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-1" },
+      "file.previewResource.read",
+      {
+        workspaceId: "ws-1",
+        path: "examples/demo/style.css",
+      }
+    );
   });
 
   it("rejects invalid preview session payloads", async () => {

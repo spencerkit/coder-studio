@@ -1254,6 +1254,76 @@ describe("DiagnosticsPage", () => {
     );
   });
 
+  it("retries WSL workspace continuation with the runtime metadata preserved", async () => {
+    const workspace: Workspace = {
+      ...createWorkspace("ws-wsl", "/home/spencer/workspace"),
+      targetRuntime: "wsl",
+      wslDistro: "Ubuntu-24.04",
+    };
+    const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {
+      if (op === "diagnostics.get") {
+        expect(args).toEqual({
+          context: "workspace_open",
+          workspacePath: "/home/spencer/workspace",
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+          providerId: undefined,
+          workspaceId: undefined,
+        });
+        return createResponse(
+          {
+            context: "workspace_open",
+            canContinue: true,
+            metadata: {
+              workspacePath: "/home/spencer/workspace",
+              targetRuntime: "wsl",
+              wslDistro: "Ubuntu-24.04",
+            },
+          },
+          [
+            {
+              id: "workspace-ready",
+              code: "workspace_path_ready",
+              status: "ready",
+              workspacePath: "/home/spencer/workspace",
+            },
+          ]
+        );
+      }
+
+      if (op === "workspace.open") {
+        expect(args).toEqual({
+          path: "/home/spencer/workspace",
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        });
+        return workspace;
+      }
+
+      if (op === "workspace.lastViewedTarget.set") {
+        return {
+          workspaceId: "ws-wsl",
+          updatedAt: 10,
+        };
+      }
+
+      throw new Error(`Unexpected op: ${op}`);
+    });
+
+    renderDiagnostics(
+      "/diagnostics?context=workspace_open&workspacePath=%2Fhome%2Fspencer%2Fworkspace&targetRuntime=wsl&wslDistro=Ubuntu-24.04",
+      sendCommand
+    );
+
+    expect(await screen.findByText("We couldn't open your workspace")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry Opening Workspace" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-display")).toHaveTextContent("/workspace");
+    });
+  });
+
   it("shows missing git on workspace open without disabling the retry action", async () => {
     const workspace = createWorkspace("ws-1", "/repo");
     const sendCommand = vi.fn(async (op: string, args?: Record<string, unknown>) => {

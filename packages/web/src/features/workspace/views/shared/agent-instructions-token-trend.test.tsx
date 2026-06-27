@@ -128,10 +128,14 @@ function buildDashboard(
   };
 }
 
-function renderTrend(dispatch: ReturnType<typeof vi.fn>, workspacePath = "/repo/project") {
+function renderTrend(
+  dispatch: ReturnType<typeof vi.fn>,
+  workspacePath = "/repo/project",
+  workspaceId = "ws-1"
+) {
   render(
     <Provider store={createStoreWithDispatch(dispatch)}>
-      <AgentInstructionsTokenTrend workspacePath={workspacePath} />
+      <AgentInstructionsTokenTrend workspaceId={workspaceId} workspacePath={workspacePath} />
     </Provider>
   );
 }
@@ -153,6 +157,7 @@ describe("AgentInstructionsTokenTrend", () => {
       expect(dispatch).toHaveBeenCalledWith(
         "work.analysis.dashboard.get",
         {
+          workspaceId: "ws-1",
           workspacePaths: ["/repo/project"],
           timeRange: { preset: "24h" },
         },

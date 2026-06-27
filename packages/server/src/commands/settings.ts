@@ -10,7 +10,6 @@ import {
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
   MAX_SUPERVISOR_RETRY_MAX_COUNT,
-  type ProviderDefinition,
   resolveSupervisorEvaluationTimeoutSec,
   resolveSupervisorRetryDelaySec,
   resolveSupervisorRetryEnabled,
@@ -18,9 +17,16 @@ import {
   resolveSupervisorRetryOnEvaluatorError,
   resolveSupervisorRetryOnTimeout,
 } from "@coder-studio/core";
-import { getProviderById as getBuiltInProviderById } from "@coder-studio/providers";
 import { z } from "zod";
 import { type ConfigType, readConfigFile, writeConfigFile } from "../config/config-io.js";
+import {
+  findProviderById,
+  getProviderByIdOrThrow,
+  mergeProviderConfigs,
+  sanitizeProviderConfig,
+} from "../provider-runtime/config.js";
+import { buildRemoteStateSnapshot } from "../runtime/remote/state-snapshot.js";
+import { resolveOptionalRuntimeTarget } from "../runtime/targeting.js";
 import {
   SUPERVISOR_EVALUATION_TIMEOUT_SETTING_KEY,
   SUPERVISOR_RETRY_DELAY_SEC_SETTING_KEY,
@@ -174,8 +180,13 @@ const SettingsSchema = z.object({
   providers: z.record(z.string(), z.unknown()).optional(),
 });
 
+const settingsTargetSchema = z.object({
+  workspaceId: z.string().optional(),
+  runtimeId: z.string().optional(),
+});
+
 // settings.get
-registerCommand("settings.get", z.object({}), async (_args, ctx) => {
+registerCommand("settings.get", settingsTargetSchema, async (args, ctx) => {
   const settings: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(ctx.settingsRepo.getAll())) {
     if (key.startsWith("providers.")) {
@@ -184,7 +195,14 @@ registerCommand("settings.get", z.object({}), async (_args, ctx) => {
     settings[key] = value;
   }
 
-  const providerConfigs = ctx.providerConfigRepo.getAll();
+  const providerConfigs =
+    args.workspaceId || args.runtimeId
+      ? ((await ctx.runtimeRouter.executeOnTarget(
+          resolveOptionalRuntimeTarget(args),
+          "provider.config.getAll",
+          args
+        )) as Record<string, unknown>)
+      : ctx.providerConfigRepo.getAll();
   for (const [providerId, config] of Object.entries(providerConfigs)) {
     const provider = findProviderById(ctx.providerRegistry, providerId);
     if (!provider) {
@@ -237,7 +255,7 @@ registerCommand("settings.get", z.object({}), async (_args, ctx) => {
 // settings.update
 registerCommand(
   "settings.update",
-  z.object({
+  settingsTargetSchema.extend({
     settings: SettingsSchema,
   }),
   async (args, ctx) => {
@@ -266,12 +284,28 @@ registerCommand(
 
     if (providers) {
       for (const [providerId, config] of Object.entries(providers)) {
-        const provider = getProviderByIdOrThrow(ctx.providerRegistry, providerId);
-        const existingConfig = ctx.providerConfigRepo.get(providerId);
-        ctx.providerConfigRepo.set(
-          providerId,
-          mergeProviderConfigs(provider, existingConfig, config)
-        );
+        if (args.workspaceId || args.runtimeId) {
+          await ctx.runtimeRouter.executeOnTarget(
+            resolveOptionalRuntimeTarget(args),
+            "provider.config.merge",
+            {
+              workspaceId: args.workspaceId,
+              runtimeId: args.runtimeId,
+              providerId,
+              config:
+                config && typeof config === "object" && !Array.isArray(config)
+                  ? (config as Record<string, unknown>)
+                  : {},
+            }
+          );
+        } else {
+          const provider = getProviderByIdOrThrow(ctx.providerRegistry, providerId);
+          const existingConfig = ctx.providerConfigRepo.get(providerId);
+          ctx.providerConfigRepo.set(
+            providerId,
+            mergeProviderConfigs(provider, existingConfig, config)
+          );
+        }
       }
     }
 
@@ -293,6 +327,16 @@ registerCommand(
       ctx.monitoringService?.reloadFromSettings();
     }
 
+    if (ctx.runtimeRegistry && ctx.customProviderRepo) {
+      await ctx.runtimeRegistry.syncSnapshot(
+        buildRemoteStateSnapshot({
+          settings: ctx.settingsRepo.getAll(),
+          workspaces: ctx.workspaceMgr.list(),
+          customProviders: ctx.customProviderRepo.list(),
+        })
+      );
+    }
+
     return {
       updated: [
         ...Object.keys(flatSettings),
@@ -305,12 +349,20 @@ registerCommand(
 // settings.previewCommand
 registerCommand(
   "settings.previewCommand",
-  z.object({
+  settingsTargetSchema.extend({
     providerId: z.string(),
     config: z.record(z.string(), z.unknown()),
     workspacePath: z.string().optional(),
   }),
   async (args, ctx) => {
+    if (args.workspaceId || args.runtimeId) {
+      return ctx.runtimeRouter.executeOnTarget(
+        resolveOptionalRuntimeTarget(args),
+        "provider.previewCommand",
+        args
+      );
+    }
+
     const provider = getProviderByIdOrThrow(ctx.providerRegistry, args.providerId);
     const command = provider.buildCommand(
       mergeProviderConfigs(provider, ctx.providerConfigRepo.get(provider.id), args.config),
@@ -346,79 +398,6 @@ function flattenSettings(obj: Record<string, unknown>, prefix = ""): Record<stri
   }
 
   return result;
-}
-
-function getProviderByIdOrThrow(
-  providerRegistry: ProviderDefinition[],
-  providerId: string
-): ProviderDefinition {
-  const provider = findProviderById(providerRegistry, providerId);
-  if (!provider) {
-    throw {
-      code: "unknown_provider",
-      message: `Unknown provider: ${providerId}`,
-    };
-  }
-
-  return provider;
-}
-
-function findProviderById(
-  providerRegistry: ProviderDefinition[],
-  providerId: string
-): ProviderDefinition | undefined {
-  return (
-    providerRegistry.find((item) => item.id === providerId) ?? getBuiltInProviderById(providerId)
-  );
-}
-
-function sanitizeProviderConfig(
-  provider: ProviderDefinition,
-  config: unknown
-): Record<string, unknown> {
-  const parsed = provider.configSchema.safeParse(config);
-  if (parsed.success) {
-    return compactProviderConfig(parsed.data as Record<string, unknown>);
-  }
-
-  const defaults = provider.defaultConfig as Record<string, unknown>;
-  const fallback = provider.configSchema.safeParse(defaults);
-  return compactProviderConfig(
-    fallback.success ? (fallback.data as Record<string, unknown>) : defaults
-  );
-}
-
-function mergeProviderConfigs(
-  provider: ProviderDefinition,
-  existingConfig: unknown,
-  nextConfig: unknown
-): Record<string, unknown> {
-  const merged = {
-    ...sanitizeProviderConfig(provider, provider.defaultConfig),
-    ...sanitizeProviderConfig(provider, existingConfig),
-    ...(nextConfig && typeof nextConfig === "object" && !Array.isArray(nextConfig)
-      ? (nextConfig as Record<string, unknown>)
-      : {}),
-  };
-
-  return compactProviderConfig(provider.configSchema.parse(merged) as Record<string, unknown>);
-}
-
-function compactProviderConfig(config: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(config).filter(([, value]) => {
-      if (value === undefined) {
-        return false;
-      }
-      if (Array.isArray(value)) {
-        return value.length > 0;
-      }
-      if (value && typeof value === "object") {
-        return Object.keys(value as Record<string, unknown>).length > 0;
-      }
-      return true;
-    })
-  );
 }
 
 function resolveNullSettingsKeysToDelete(settings: Record<string, unknown>): string[] {

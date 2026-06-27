@@ -159,8 +159,17 @@ vi.mock("../shared/agent-instructions-section", () => ({
 }));
 
 vi.mock("../shared/agent-token-trend-section", () => ({
-  AgentTokenTrendSection: ({ workspacePath }: { workspacePath: string }) => (
-    <section className="workspace-sidebar-section workspace-agent-token-trend-section">
+  AgentTokenTrendSection: ({
+    workspaceId,
+    workspacePath,
+  }: {
+    workspaceId: string;
+    workspacePath: string;
+  }) => (
+    <section
+      className="workspace-sidebar-section workspace-agent-token-trend-section"
+      data-workspace-id={workspaceId}
+    >
       <h2 className="workspace-sidebar-section__title">Token Trend</h2>
       <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
     </section>

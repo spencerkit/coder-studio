@@ -60,4 +60,10 @@ describe("build-cli", () => {
 
     expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/automation-entry.ts"));
   });
+
+  it("emits the WSL runtime entry as an ESM build output", async () => {
+    const buildOptions = await createCliBuildOptions("esm");
+
+    expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/wsl-runtime-entry.ts"));
+  });
 });

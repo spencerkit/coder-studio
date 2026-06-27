@@ -161,6 +161,7 @@ export async function assertCliPublishArtifacts(
   await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
+  await assertFile(resolve(cliDir, "dist/esm/wsl-runtime-entry.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
   assertBundleRuntimeDependenciesDeclared(
     pkg.dependencies,
@@ -168,6 +169,7 @@ export async function assertCliPublishArtifacts(
       "bin.mjs",
       "index.mjs",
       "server-runner.mjs",
+      "wsl-runtime-entry.mjs",
     ]),
     packageJsonPath
   );

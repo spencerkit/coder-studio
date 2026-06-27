@@ -25,6 +25,7 @@ import { resolveSafe } from "../fs/file-io.js";
 import { getImageTypeInfo } from "../fs/image.js";
 import { isPathInsideRoot } from "../fs/path-safety.js";
 import { parseGitImageRevisionSelector, readImageAtRevision } from "../git/image-revision.js";
+import type { RuntimeRouter } from "../host/runtime-router.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 
 interface FileAssetQuery {
@@ -33,9 +34,42 @@ interface FileAssetQuery {
   revision?: string;
 }
 
+interface RuntimeAssetPayload {
+  mime: string;
+  size: number;
+  bytesBase64: string;
+}
+
+function sendRuntimeAsset(reply: FastifyReply, asset: RuntimeAssetPayload) {
+  const bytes = Buffer.from(asset.bytesBase64, "base64");
+  return reply
+    .header("Content-Type", asset.mime)
+    .header("Content-Length", String(asset.size))
+    .header("Cache-Control", "no-store")
+    .header("X-Content-Type-Options", "nosniff")
+    .send(bytes);
+}
+
+function handleRuntimeAssetError(reply: FastifyReply, error: unknown) {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: string }).code
+      : undefined;
+
+  if (code === "invalid_revision" || code === "path_escape") {
+    return reply.status(400).send({ ok: false, error: code });
+  }
+
+  if (code === "runtime_router_unavailable") {
+    return reply.status(503).send({ ok: false, error: code });
+  }
+
+  return reply.status(404).send({ ok: false, error: code ?? "not_found" });
+}
+
 export function registerFileAssetRoutes(
   app: FastifyInstance,
-  deps: { workspaceMgr: WorkspaceManager }
+  deps: { workspaceMgr: WorkspaceManager; runtimeRouter?: RuntimeRouter }
 ) {
   app.get(
     "/api/file",
@@ -53,10 +87,29 @@ export function registerFileAssetRoutes(
 
       const typeInfo = getImageTypeInfo(relPath);
       if (!typeInfo) {
-        // Enforce allowlist: this endpoint exists for image previews only,
-        // not as a generic file fetcher. Text files keep using file.read
-        // over WS where we can attach baseHash / encoding metadata.
         return reply.status(404).send({ ok: false, error: "not_an_image" });
+      }
+
+      if (workspace.targetRuntime === "wsl") {
+        try {
+          const asset = (await deps.runtimeRouter?.executeOnTarget(
+            { kind: "workspace", workspaceId },
+            "file.asset.read",
+            {
+              workspaceId,
+              path: relPath,
+              revision,
+            }
+          )) as RuntimeAssetPayload | undefined;
+
+          if (!asset) {
+            throw { code: "runtime_router_unavailable", message: "Runtime router unavailable" };
+          }
+
+          return sendRuntimeAsset(reply, asset);
+        } catch (error) {
+          return handleRuntimeAssetError(reply, error);
+        }
       }
 
       const revisionSelector = revision ? parseGitImageRevisionSelector(revision) : null;
@@ -105,17 +158,15 @@ export function registerFileAssetRoutes(
 
       let fileSize: number;
       try {
-        const stats = await stat(absPath);
-        if (!stats.isFile()) {
+        const fileStats = await stat(absPath);
+        if (!fileStats.isFile()) {
           return reply.status(404).send({ ok: false, error: "not_a_file" });
         }
-        fileSize = stats.size;
+        fileSize = fileStats.size;
       } catch {
         return reply.status(404).send({ ok: false, error: "not_found" });
       }
 
-      // no-store here is deliberate: the editor re-fetches on demand and we
-      // want changes on disk to reflect immediately without stale caches.
       reply
         .header("Content-Type", typeInfo.mime)
         .header("Content-Length", String(fileSize))

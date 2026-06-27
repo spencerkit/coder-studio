@@ -302,6 +302,201 @@ describe("Command Dispatch", () => {
       );
     });
 
+    it("serializes client-triggered background git.fetch through autoFetch", async () => {
+      registerRuntimeCommand(
+        "git.fetch",
+        z.object({
+          workspaceId: z.string(),
+          background: z.boolean().optional(),
+        }),
+        {
+          resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+          handler: async () => ({ success: true }),
+        }
+      );
+      const executeOnTarget = vi.fn().mockResolvedValue({ success: true });
+      const runExclusive = vi.fn(async (_workspaceId: string, op: () => Promise<unknown>) => op());
+      ctx = {
+        ...ctx,
+        autoFetch: {
+          registerViewer: vi.fn(),
+          unregisterViewer: vi.fn(),
+          runExclusive,
+        } as never,
+        runtimeRouter: {
+          executeOnTarget,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "git-fetch-bg-1",
+          op: "git.fetch",
+          args: {
+            workspaceId: "ws-1",
+            background: true,
+          },
+        },
+        ctx,
+        "runtime-client"
+      );
+
+      expect(result).toEqual({
+        kind: "result",
+        id: "git-fetch-bg-1",
+        ok: true,
+        data: { success: true },
+      });
+      expect(runExclusive).toHaveBeenCalledTimes(1);
+      expect(runExclusive).toHaveBeenCalledWith("ws-1", expect.any(Function));
+      expect(executeOnTarget).toHaveBeenCalledWith(
+        { kind: "workspace", workspaceId: "ws-1" },
+        "git.fetch",
+        { workspaceId: "ws-1", background: true },
+        { authContext: undefined, clientId: "runtime-client" }
+      );
+    });
+
+    it("does not re-enter autoFetch for internal background git.fetch", async () => {
+      registerRuntimeCommand(
+        "git.fetch",
+        z.object({
+          workspaceId: z.string(),
+          background: z.boolean().optional(),
+        }),
+        {
+          resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+          handler: async () => ({ success: true }),
+        }
+      );
+      const executeOnTarget = vi.fn().mockResolvedValue({ success: true });
+      const runExclusive = vi.fn(async (_workspaceId: string, op: () => Promise<unknown>) => op());
+      ctx = {
+        ...ctx,
+        autoFetch: {
+          registerViewer: vi.fn(),
+          unregisterViewer: vi.fn(),
+          runExclusive,
+        } as never,
+        runtimeRouter: {
+          executeOnTarget,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "git-fetch-bg-internal-1",
+          op: "git.fetch",
+          args: {
+            workspaceId: "ws-1",
+            background: true,
+          },
+        },
+        ctx
+      );
+
+      expect(result).toEqual({
+        kind: "result",
+        id: "git-fetch-bg-internal-1",
+        ok: true,
+        data: { success: true },
+      });
+      expect(runExclusive).not.toHaveBeenCalled();
+      expect(executeOnTarget).toHaveBeenCalledWith(
+        { kind: "workspace", workspaceId: "ws-1" },
+        "git.fetch",
+        { workspaceId: "ws-1", background: true },
+        { authContext: undefined, clientId: undefined }
+      );
+    });
+
+    it("does not fallback to inline runtime execution for workspace-scoped commands", async () => {
+      registerRuntimeCommand(
+        "runtime.no_fallback",
+        z.object({
+          workspaceId: z.string(),
+        }),
+        {
+          resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+          handler: async () => ({ inline: true }),
+        }
+      );
+
+      ctx = {
+        ...ctx,
+        runtimeRouter: {
+          executeOnTarget: vi.fn().mockRejectedValue({
+            code: "runtime_not_bound",
+            message: "No runtime bound",
+          }),
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "runtime-no-fallback-1",
+          op: "runtime.no_fallback",
+          args: {
+            workspaceId: "ws-1",
+          },
+        },
+        ctx,
+        "runtime-client"
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toEqual({
+        code: "runtime_not_bound",
+        message: "No runtime bound",
+      });
+    });
+
+    it("allows default-target runtime commands to fallback inline when no runtime is available", async () => {
+      registerRuntimeCommand(
+        "runtime.default_fallback",
+        z.object({
+          value: z.number(),
+        }),
+        {
+          resolveTarget: () => ({ kind: "default" }),
+          handler: async (args) => ({ echoed: args.value }),
+        }
+      );
+
+      ctx = {
+        ...ctx,
+        runtimeRouter: {
+          executeOnTarget: vi.fn().mockRejectedValue({
+            code: "runtime_not_found",
+            message: "Runtime not found",
+          }),
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "runtime-default-fallback-1",
+          op: "runtime.default_fallback",
+          args: {
+            value: 7,
+          },
+        },
+        ctx,
+        "runtime-client"
+      );
+
+      expect(result).toEqual({
+        kind: "result",
+        id: "runtime-default-fallback-1",
+        ok: true,
+        data: { echoed: 7 },
+      });
+    });
+
     it("authorizes terminal.read session tokens via runtime binding projections", async () => {
       registerCommand(
         "terminal.read",

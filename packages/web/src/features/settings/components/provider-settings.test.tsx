@@ -75,13 +75,24 @@ function createDeferred<T>() {
 
 function renderHarness({
   isMobile = false,
+  activeWorkspaceId = undefined as string | undefined,
   connectionStatus = "connected" as ConnectionStatus,
   activationStatus = "active" as ActivationStatus,
   sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
     if (op === "settings.previewCommand") {
-      const request = args as { providerId: string; config: { additionalArgs?: string[] } };
+      const request = args as {
+        providerId: string;
+        workspaceId?: string;
+        config: { additionalArgs?: string[] };
+      };
       return {
-        preview: [request.providerId, ...(request.config.additionalArgs ?? [])].join(" "),
+        preview: [
+          request.providerId,
+          request.workspaceId ? `@${request.workspaceId}` : null,
+          ...(request.config.additionalArgs ?? []),
+        ]
+          .filter(Boolean)
+          .join(" "),
       };
     }
     if (op === "settings.readConfigFile") {
@@ -157,6 +168,7 @@ function renderHarness({
         additionalArgsById={additionalArgsById}
         setAdditionalArgsById={setAdditionalArgsById}
         isMobile={isMobile}
+        activeWorkspaceId={activeWorkspaceId}
       />
     );
   }
@@ -394,6 +406,75 @@ describe("ProviderSettings desktop", () => {
     });
 
     expect(await screen.findByText("claude --verbose")).toBeInTheDocument();
+  });
+
+  it("passes activeWorkspaceId to provider preview and save requests", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args: unknown) => {
+      if (op === "provider.runtimeStatus") {
+        return { providers: {} };
+      }
+      if (op === "settings.previewCommand") {
+        const request = args as {
+          providerId: string;
+          workspaceId?: string;
+          config: { additionalArgs?: string[] };
+        };
+        return {
+          preview: [
+            request.providerId,
+            request.workspaceId ? `@${request.workspaceId}` : null,
+            ...(request.config.additionalArgs ?? []),
+          ]
+            .filter(Boolean)
+            .join(" "),
+        };
+      }
+      if (op === "settings.readConfigFile") {
+        return {
+          configPath: "/tmp/config.json",
+          content: "{}",
+          exists: true,
+        };
+      }
+      return {};
+    });
+
+    renderHarness({ sendCommand, activeWorkspaceId: "ws-wsl" });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.previewCommand",
+        {
+          workspaceId: "ws-wsl",
+          providerId: "claude",
+          config: { additionalArgs: ["--verbose"] },
+        },
+        undefined
+      );
+    });
+
+    fireEvent.change(screen.getByLabelText("启动命令参数"), {
+      target: {
+        value: "--verbose\n--debug",
+      },
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "settings.update",
+        {
+          workspaceId: "ws-wsl",
+          settings: {
+            providers: {
+              claude: {
+                additionalArgs: ["--verbose", "--debug"],
+              },
+            },
+          },
+        },
+        undefined
+      );
+    });
   });
 
   it("shows provider runtime state with diagnostics and docs affordances", async () => {

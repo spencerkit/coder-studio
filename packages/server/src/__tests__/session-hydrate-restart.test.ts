@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer, type Server } from "../server.js";
-import { SessionRepo, TerminalRepo } from "../storage/index.js";
 import { dispatch } from "../ws/dispatch.js";
 
 import "../commands/workspace.js";
@@ -53,12 +52,12 @@ describe("session hydrate restart", () => {
     const workspaceId = openResult.data!.id;
 
     const now = Date.now();
-    const terminalRepo = new TerminalRepo({
-      filePath: join(stateDir, "state", "terminals.json"),
-    });
-    const sessionRepo = new SessionRepo({
-      filePath: join(stateDir, "state", "sessions.json"),
-    });
+    const runtimeResources = server.__test__!.nativeRuntime.getResources?.();
+    expect(runtimeResources).toBeDefined();
+    if (!runtimeResources) {
+      throw new Error("Native runtime resources are required for this test");
+    }
+    const { terminalRepo, sessionRepo } = runtimeResources;
 
     terminalRepo.insert({
       id: "term-hydrated",

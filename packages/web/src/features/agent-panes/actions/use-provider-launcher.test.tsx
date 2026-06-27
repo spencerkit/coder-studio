@@ -156,7 +156,7 @@ describe("useProviderLauncher", () => {
     });
 
     await waitFor(() => {
-      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", {});
+      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", { workspaceId: "ws-1" });
     });
 
     expect(dispatch).not.toHaveBeenCalledWith("provider.list", {});
@@ -436,6 +436,7 @@ describe("useProviderLauncher", () => {
     });
 
     expect(dispatch).toHaveBeenCalledWith("provider.install.start", {
+      workspaceId: "ws-1",
       providerId: "claude",
     });
     expect(result.current.states.claude?.installJob?.status).toBe("running");
@@ -446,8 +447,11 @@ describe("useProviderLauncher", () => {
     });
 
     await waitFor(() => {
-      expect(dispatch).toHaveBeenCalledWith("provider.install.get", { jobId: "job-1" });
-      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", {});
+      expect(dispatch).toHaveBeenCalledWith("provider.install.get", {
+        jobId: "job-1",
+        workspaceId: "ws-1",
+      });
+      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", { workspaceId: "ws-1" });
       expect(dispatch).toHaveBeenCalledWith(
         "session.create",
         expect.objectContaining({
@@ -569,7 +573,7 @@ describe("useProviderLauncher", () => {
     });
 
     await waitFor(() => {
-      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", {});
+      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", { workspaceId: "ws-1" });
       expect(dispatch).toHaveBeenCalledWith(
         "session.create",
         expect.objectContaining({

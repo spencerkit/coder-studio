@@ -43,7 +43,7 @@ export interface SupervisorEvaluationContext {
 }
 
 export class SupervisorContextBuilder {
-  private readonly logger: FastifyBaseLogger;
+  private logger: FastifyBaseLogger;
 
   constructor(
     private readonly deps: {
@@ -55,6 +55,10 @@ export class SupervisorContextBuilder {
     }
   ) {
     this.logger = deps.logger ?? NOOP_LOGGER;
+  }
+
+  setLogger(logger: FastifyBaseLogger): void {
+    this.logger = logger;
   }
 
   async build(

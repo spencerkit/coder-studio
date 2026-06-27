@@ -18,6 +18,7 @@ function upsertByWorkspaceId<T extends { id: string; workspaceId: string }>(
 
 export class WorkspaceRuntimeBindingStore {
   private readonly runtimeIdByWorkspaceId = new Map<string, string>();
+  private readonly workspaceIdsByRuntimeId = new Map<string, Set<string>>();
   private readonly workspaceIdBySessionId = new Map<string, string>();
   private readonly workspaceIdByTerminalId = new Map<string, string>();
   private readonly sessionIdByTerminalId = new Map<string, string>();
@@ -25,11 +26,31 @@ export class WorkspaceRuntimeBindingStore {
   private readonly terminalsByWorkspaceId = new Map<string, Map<string, Terminal>>();
 
   bindWorkspace(workspaceId: string, runtimeId: string): void {
+    const previousRuntimeId = this.runtimeIdByWorkspaceId.get(workspaceId);
+    if (previousRuntimeId && previousRuntimeId !== runtimeId) {
+      const previousBucket = this.workspaceIdsByRuntimeId.get(previousRuntimeId);
+      previousBucket?.delete(workspaceId);
+      if (previousBucket?.size === 0) {
+        this.workspaceIdsByRuntimeId.delete(previousRuntimeId);
+      }
+    }
+
     this.runtimeIdByWorkspaceId.set(workspaceId, runtimeId);
+    const bucket = this.workspaceIdsByRuntimeId.get(runtimeId) ?? new Set<string>();
+    bucket.add(workspaceId);
+    this.workspaceIdsByRuntimeId.set(runtimeId, bucket);
   }
 
   unbindWorkspace(workspaceId: string): void {
+    const runtimeId = this.runtimeIdByWorkspaceId.get(workspaceId);
     this.runtimeIdByWorkspaceId.delete(workspaceId);
+    if (runtimeId) {
+      const bucket = this.workspaceIdsByRuntimeId.get(runtimeId);
+      bucket?.delete(workspaceId);
+      if (bucket?.size === 0) {
+        this.workspaceIdsByRuntimeId.delete(runtimeId);
+      }
+    }
 
     const sessions = this.sessionsByWorkspaceId.get(workspaceId);
     for (const session of sessions?.values() ?? []) {
@@ -50,6 +71,10 @@ export class WorkspaceRuntimeBindingStore {
 
   getRuntimeIdForWorkspace(workspaceId: string): string | undefined {
     return this.runtimeIdByWorkspaceId.get(workspaceId);
+  }
+
+  listWorkspaceIdsForRuntime(runtimeId: string): string[] {
+    return Array.from(this.workspaceIdsByRuntimeId.get(runtimeId)?.values() ?? []).sort();
   }
 
   bindSession(session: Session): void {

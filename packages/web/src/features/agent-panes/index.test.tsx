@@ -1635,7 +1635,11 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "provider.runtimeStatus",
+        { workspaceId: "ws-1" },
+        undefined
+      );
     });
 
     await act(async () => {
@@ -1718,7 +1722,11 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "provider.runtimeStatus",
+        { workspaceId: "ws-1" },
+        undefined
+      );
     });
 
     await act(async () => {
@@ -1731,6 +1739,7 @@ describe("AgentPanes", () => {
       expect(sendCommand).toHaveBeenCalledWith(
         "provider.install.start",
         {
+          workspaceId: "ws-1",
           providerId: "codex",
         },
         undefined
@@ -1792,7 +1801,11 @@ describe("AgentPanes", () => {
     );
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith("provider.runtimeStatus", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith(
+        "provider.runtimeStatus",
+        { workspaceId: "ws-1" },
+        undefined
+      );
     });
 
     await act(async () => {

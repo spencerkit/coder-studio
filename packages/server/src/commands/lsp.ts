@@ -1,6 +1,27 @@
 import { z } from "zod";
 import { buildLspRuntimeStatus } from "../lsp-tools/runtime-status.js";
 import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import { resolveOptionalRuntimeTarget } from "../runtime/targeting.js";
+import { registerCommand } from "../ws/dispatch.js";
+
+const runtimeModeSchema = z.object({
+  mode: z.enum(["auto", "off"]),
+});
+
+registerRuntimeCommand("lsp.applyMode", runtimeModeSchema, {
+  visibility: "internal",
+  resolveTarget: () => ({ kind: "default" }),
+  handler: async (args, ctx) => {
+    await ctx.lspMgr.setRuntimeMode(args.mode);
+    return { mode: ctx.lspMgr.getRuntimeMode() };
+  },
+});
+
+registerCommand("lsp.setMode", runtimeModeSchema, async (args, ctx) => {
+  const runtimes = ctx.runtimeRegistry?.list() ?? [];
+  await Promise.all(runtimes.map((runtime) => runtime.execute("lsp.applyMode", args)));
+  return { mode: args.mode };
+});
 
 registerRuntimeCommand(
   "lsp.ensureSession",
@@ -11,20 +32,6 @@ registerRuntimeCommand(
   {
     resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
     handler: async (args, ctx) => ctx.lspMgr.ensureSession(args),
-  }
-);
-
-registerRuntimeCommand(
-  "lsp.setMode",
-  z.object({
-    mode: z.enum(["auto", "off"]),
-  }),
-  {
-    resolveTarget: () => ({ kind: "default" }),
-    handler: async (args, ctx) => {
-      await ctx.lspMgr.setRuntimeMode(args.mode);
-      return { mode: ctx.lspMgr.getRuntimeMode() };
-    },
   }
 );
 
@@ -95,9 +102,11 @@ registerRuntimeCommand(
   "lsp.install.get",
   z.object({
     jobId: z.string(),
+    workspaceId: z.string().optional(),
+    runtimeId: z.string().optional(),
   }),
   {
-    resolveTarget: () => ({ kind: "default" }),
+    resolveTarget: (args) => resolveOptionalRuntimeTarget(args),
     handler: async (args, ctx) => {
       if (!ctx.lspToolInstallMgr) {
         throw {

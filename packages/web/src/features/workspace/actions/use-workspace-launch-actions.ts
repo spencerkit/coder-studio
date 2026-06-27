@@ -38,6 +38,15 @@ interface CreateDirectoryResult {
   ok: true;
 }
 
+interface WslDistrosResult {
+  distros: string[];
+}
+
+interface OpenWorkspaceOptions {
+  targetRuntime?: Workspace["targetRuntime"];
+  wslDistro?: string;
+}
+
 type TabType = "status" | "diff" | "tree";
 
 function joinChildPath(parentPath: string, childName: string): string {
@@ -72,10 +81,21 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [newFolderName, setNewFolderName] = useState("");
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [targetRuntime, setTargetRuntime] = useState<Workspace["targetRuntime"]>("native");
+  const [wslDistro, setWslDistro] = useState("");
+  const [wslPath, setWslPath] = useState("");
+  const [wslDistros, setWslDistros] = useState<string[]>([]);
+  const [wslDistrosLoading, setWslDistrosLoading] = useState(false);
+  const [wslDistrosError, setWslDistrosError] = useState<string | null>(null);
   const createRequestIdRef = useRef(0);
+  const isWindowsPlatform =
+    typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("win");
 
   const launchTitle = t("workspace.launch.title");
-  const launchHint = t("workspace.launch.hint");
+  const launchHint =
+    isWindowsPlatform && targetRuntime === "wsl"
+      ? t("workspace.launch.hint_wsl")
+      : t("workspace.launch.hint");
 
   const loadDirectory = useCallback(
     async (path?: string) => {
@@ -166,6 +186,57 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     void loadDirectory();
     void loadWorkspaceHistory();
   }, [loadDirectory, loadWorkspaceHistory]);
+
+  useEffect(() => {
+    if (!isWindowsPlatform) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadWslDistros = async () => {
+      setWslDistrosLoading(true);
+      setWslDistrosError(null);
+
+      try {
+        const result = await dispatch<WslDistrosResult>("workspace.wsl.listDistros", {});
+        if (cancelled) {
+          return;
+        }
+
+        if (!result.ok || !result.data) {
+          setWslDistros([]);
+          setWslDistrosError(result.error?.message || t("workspace.launch.wsl_distro_load_failed"));
+          return;
+        }
+
+        const nextDistros = Array.isArray(result.data.distros) ? result.data.distros : [];
+        setWslDistros(nextDistros);
+        setWslDistro((prev) =>
+          prev && nextDistros.includes(prev) ? prev : (nextDistros[0] ?? "")
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setWslDistros([]);
+        setWslDistrosError(
+          error instanceof Error ? error.message : t("workspace.launch.wsl_distro_load_failed")
+        );
+      } finally {
+        if (!cancelled) {
+          setWslDistrosLoading(false);
+        }
+      }
+    };
+
+    void loadWslDistros();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, isWindowsPlatform, t]);
 
   const handleNavigate = useCallback(
     (path: string) => {
@@ -278,7 +349,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   }, [currentPath, dispatch, newFolderName, t]);
 
   const openWorkspaceByPath = useCallback(
-    async (path: string) => {
+    async (path: string, options: OpenWorkspaceOptions = {}) => {
       if (!path) {
         return;
       }
@@ -287,7 +358,28 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       setError(null);
 
       try {
-        const result = await dispatch<Workspace>("workspace.open", { path });
+        const openArgs =
+          options.targetRuntime === "wsl"
+            ? {
+                path,
+                targetRuntime: "wsl" as const,
+                wslDistro: options.wslDistro,
+              }
+            : { path };
+        const diagnosticsIntent =
+          options.targetRuntime === "wsl"
+            ? {
+                context: "workspace_open" as const,
+                workspacePath: path,
+                targetRuntime: "wsl" as const,
+                wslDistro: options.wslDistro,
+              }
+            : {
+                context: "workspace_open" as const,
+                workspacePath: path,
+              };
+
+        const result = await dispatch<Workspace>("workspace.open", openArgs);
 
         if (result.ok && result.data?.id) {
           void persistLastViewedTarget({ workspaceId: result.data.id });
@@ -314,19 +406,9 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
           return;
         }
 
-        navigate(
-          buildDiagnosticsPath({
-            context: "workspace_open",
-            workspacePath: path,
-          })
-        );
+        navigate(buildDiagnosticsPath(diagnosticsIntent));
       } catch (_err) {
-        navigate(
-          buildDiagnosticsPath({
-            context: "workspace_open",
-            workspacePath: path,
-          })
-        );
+        navigate(buildDiagnosticsPath(diagnosticsIntent));
       } finally {
         setLoading(false);
       }
@@ -347,13 +429,32 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   );
 
   const handleOpen = useCallback(async () => {
+    if (targetRuntime === "wsl") {
+      if (!wslDistro) {
+        setError(t("workspace.launch.wsl_distro_required"));
+        return;
+      }
+
+      const trimmedWslPath = wslPath.trim();
+      if (!trimmedWslPath) {
+        setError(t("workspace.launch.wsl_path_required"));
+        return;
+      }
+
+      await openWorkspaceByPath(trimmedWslPath, {
+        targetRuntime: "wsl",
+        wslDistro,
+      });
+      return;
+    }
+
     if (!selectedPath) {
       setError(t("workspace.launch.select_required"));
       return;
     }
 
     await openWorkspaceByPath(selectedPath);
-  }, [openWorkspaceByPath, selectedPath, t]);
+  }, [openWorkspaceByPath, selectedPath, t, targetRuntime, wslDistro, wslPath]);
 
   const getShortPath = useCallback(
     (path: string) => {
@@ -371,6 +472,10 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
   return {
     browsing,
+    canOpen:
+      targetRuntime === "wsl"
+        ? Boolean(wslDistro && wslPath.trim().length > 0)
+        : Boolean(selectedPath),
     currentPath,
     directories,
     error,
@@ -396,7 +501,17 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     selectedPath,
     removeRecentWorkspace,
     submitCreateFolder,
+    isWindowsPlatform,
+    setTargetRuntime,
+    setWslDistro,
+    setWslPath,
+    targetRuntime,
     updateNewFolderName,
+    wslDistro,
+    wslDistros,
+    wslDistrosError,
+    wslDistrosLoading,
+    wslPath,
   };
 }
 

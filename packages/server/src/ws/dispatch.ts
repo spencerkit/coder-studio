@@ -156,6 +156,14 @@ export function createInlineRuntimeContext(ctx: HostCommandContext): RuntimeComm
         }
       },
       recordWorkspaceFetch: (workspaceId) => candidate.workspaceMgr?.recordFetch?.(workspaceId),
+      resolveClientOwnerId: (clientId) => {
+        const activeLease = candidate.activationMgr?.getLease?.();
+        if (activeLease?.wsClientId === clientId) {
+          return activeLease.clientInstanceId;
+        }
+
+        return clientId;
+      },
       sendToClient: (clientId, payload) =>
         typeof broadcaster?.sendToClient === "function"
           ? broadcaster.sendToClient(clientId as never, payload as never)
@@ -200,11 +208,61 @@ function shouldFallbackRuntimeRouting(error: unknown, target: RuntimeRouteTarget
       ? (error as { code?: unknown }).code
       : undefined;
 
+  if (target.kind !== "default") {
+    return false;
+  }
+
   return (
-    code === "runtime_not_bound" ||
-    code === "runtime_not_found" ||
-    (code === "workspace_not_found" && target.kind !== "workspace")
+    code === "runtime_not_bound" || code === "runtime_not_found" || code === "workspace_not_found"
   );
+}
+
+function getGitNetworkWorkspaceId(op: string, args: unknown): string | undefined {
+  if (op !== "git.fetch" && op !== "git.pull" && op !== "git.push") {
+    return undefined;
+  }
+
+  if (!args || typeof args !== "object") {
+    return undefined;
+  }
+
+  return typeof (args as { workspaceId?: unknown }).workspaceId === "string"
+    ? (args as { workspaceId: string }).workspaceId
+    : undefined;
+}
+
+function shouldBypassGitOperationLock(
+  op: string,
+  args: unknown,
+  meta?: RuntimeExecuteMeta
+): boolean {
+  return (
+    op === "git.fetch" &&
+    !!args &&
+    typeof args === "object" &&
+    (args as { background?: unknown }).background === true &&
+    !meta?.clientId
+  );
+}
+
+async function executeWithWorkspaceOperationLock<T>(
+  op: string,
+  args: unknown,
+  ctx: HostCommandContext,
+  meta: RuntimeExecuteMeta | undefined,
+  execute: () => Promise<T>
+): Promise<T> {
+  const workspaceId = getGitNetworkWorkspaceId(op, args);
+  if (!workspaceId || shouldBypassGitOperationLock(op, args, meta)) {
+    return execute();
+  }
+
+  const autoFetch = ctx.autoFetch;
+  if (!autoFetch?.runExclusive) {
+    return execute();
+  }
+
+  return autoFetch.runExclusive(workspaceId, execute);
 }
 
 export async function executeRuntimeCommandOnTarget(
@@ -226,28 +284,30 @@ export async function executeRuntimeCommandOnTarget(
   const target = targetOverride ?? definition.resolveTarget(parsedArgs);
   const inlineRuntimeContext = createInlineRuntimeContext(ctx);
 
-  if (typeof ctx.runtimeRouter?.executeOnTarget === "function") {
-    try {
-      return await ctx.runtimeRouter.executeOnTarget(target, op, parsedArgs, meta);
-    } catch (error) {
-      if (!shouldFallbackRuntimeRouting(error, target)) {
-        throw error;
+  return executeWithWorkspaceOperationLock(op, parsedArgs, ctx, meta, async () => {
+    if (typeof ctx.runtimeRouter?.executeOnTarget === "function") {
+      try {
+        return await ctx.runtimeRouter.executeOnTarget(target, op, parsedArgs, meta);
+      } catch (error) {
+        if (!shouldFallbackRuntimeRouting(error, target)) {
+          throw error;
+        }
       }
     }
-  }
 
-  if (inlineRuntimeContext) {
-    return definition.handler(parsedArgs, inlineRuntimeContext, meta);
-  }
+    if (inlineRuntimeContext) {
+      return definition.handler(parsedArgs, inlineRuntimeContext, meta);
+    }
 
-  if (compatibilityHandlers.has(op)) {
-    return executeCompatibilityCommand(op, parsedArgs, ctx as CommandContext, meta?.clientId);
-  }
+    if (compatibilityHandlers.has(op)) {
+      return executeCompatibilityCommand(op, parsedArgs, ctx as CommandContext, meta?.clientId);
+    }
 
-  throw {
-    code: "runtime_router_unavailable",
-    message: `Runtime router is unavailable for operation: ${op}`,
-  };
+    throw {
+      code: "runtime_router_unavailable",
+      message: `Runtime router is unavailable for operation: ${op}`,
+    };
+  });
 }
 
 const ACTIVATION_ALLOWLIST = new Set([

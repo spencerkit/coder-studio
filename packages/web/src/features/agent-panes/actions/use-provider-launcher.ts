@@ -154,7 +154,7 @@ export function useProviderLauncher(
     const loadStatus = async () => {
       const runtimeResult = await dispatch<ProviderRuntimeStatusResponse>(
         "provider.runtimeStatus",
-        {}
+        { workspaceId }
       );
 
       if (cancelled) {
@@ -195,10 +195,12 @@ export function useProviderLauncher(
         }
       }
     };
-  }, [dispatch, setProviderRuntimeStatus]);
+  }, [dispatch, setProviderRuntimeStatus, workspaceId]);
 
   const refreshStatus = async (): Promise<void> => {
-    const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {});
+    const result = await dispatch<ProviderRuntimeStatusResponse>("provider.runtimeStatus", {
+      workspaceId,
+    });
     if (!result.ok || !result.data) {
       return;
     }
@@ -323,6 +325,7 @@ export function useProviderLauncher(
     }
 
     const startResult = await dispatch<ProviderInstallJobSnapshot>("provider.install.start", {
+      workspaceId,
       providerId,
     });
 
@@ -376,6 +379,7 @@ export function useProviderLauncher(
     const poll = async () => {
       const jobResult = await dispatch<ProviderInstallJobSnapshot>("provider.install.get", {
         jobId: startResult.data!.jobId,
+        workspaceId,
       });
 
       if (!jobResult.ok || !jobResult.data) {

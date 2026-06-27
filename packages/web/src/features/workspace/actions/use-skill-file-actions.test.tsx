@@ -35,6 +35,10 @@ function seedWorkspace(store: ReturnType<typeof createStore>) {
   } as never);
 }
 
+function withWorkspaceId<T extends Record<string, unknown>>(workspaceId: string, args: T) {
+  return { workspaceId, ...args };
+}
+
 function createSendCommand(store: ReturnType<typeof createStore>) {
   return vi.fn(
     async (op: string, args?: { workspaceId?: string; uiState?: Record<string, unknown> }) => {
@@ -122,9 +126,9 @@ describe("useSkillFileActions", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "skills.files.readTree",
-      {
+      withWorkspaceId("ws-test", {
         skillSlug: "my-review-skill",
-      },
+      }),
       undefined
     );
     expect(result.current.fileTree?.get(".")).toEqual(
@@ -174,10 +178,10 @@ describe("useSkillFileActions", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "skills.files.readTree",
-      {
+      withWorkspaceId("ws-test", {
         skillSlug: "my-review-skill",
         path: "refs",
-      },
+      }),
       undefined
     );
     expect(result.current.fileTree?.get("refs")).toEqual([
@@ -220,10 +224,10 @@ describe("useSkillFileActions", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "skills.files.create",
-      {
+      withWorkspaceId("ws-test", {
         skillSlug: "my-review-skill",
         path: "refs/checklist.md",
-      },
+      }),
       undefined
     );
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe(skillEditorPath);
@@ -274,11 +278,11 @@ describe("useSkillFileActions", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "skills.files.rename",
-      {
+      withWorkspaceId("ws-test", {
         skillSlug: "my-review-skill",
         fromPath: "refs/guide.md",
         toPath: "refs/checklist.md",
-      },
+      }),
       undefined
     );
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe(nextEditorPath);
@@ -334,11 +338,11 @@ describe("useSkillFileActions", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "skills.files.rename",
-      {
+      withWorkspaceId("ws-test", {
         skillSlug: "my-review-skill",
         fromPath: "refs",
         toPath: "references",
-      },
+      }),
       undefined
     );
     expect(store.get(activeFilePathAtomFamily("ws-test"))).toBe(nextEditorPath);
@@ -392,10 +396,10 @@ describe("useSkillFileActions", () => {
 
     expect(sendCommand).toHaveBeenCalledWith(
       "skills.files.delete",
-      {
+      withWorkspaceId("ws-test", {
         skillSlug: "my-review-skill",
         path: "refs/guide.md",
-      },
+      }),
       {
         timeoutMs: 180000,
       }

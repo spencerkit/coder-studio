@@ -4,13 +4,14 @@ import { RuntimeRouter } from "../host/runtime-router.js";
 import { WorkspaceRuntimeBindingStore } from "../host/workspace-runtime-binding.js";
 
 describe("RuntimeRouter", () => {
-  it("resolves workspace, session, terminal, and default targets", async () => {
+  it("resolves native default targets and WSL workspace targets independently", async () => {
     const bindings = new WorkspaceRuntimeBindingStore();
-    bindings.bindWorkspace("ws-1", "native-default");
+    bindings.bindWorkspace("ws-native", "native-default");
+    bindings.bindWorkspace("ws-wsl", "wsl:ws-wsl");
     bindings.bindSession({
-      id: "sess-1",
-      workspaceId: "ws-1",
-      terminalId: "term-1",
+      id: "sess-wsl",
+      workspaceId: "ws-wsl",
+      terminalId: "term-wsl",
       providerId: "codex",
       state: "running",
       capability: "full",
@@ -18,8 +19,8 @@ describe("RuntimeRouter", () => {
       lastActiveAt: 1,
     });
     bindings.bindTerminal({
-      id: "term-1",
-      workspaceId: "ws-1",
+      id: "term-wsl",
+      workspaceId: "ws-wsl",
       kind: "agent",
       title: "agent",
       cwd: "/repo",
@@ -30,12 +31,27 @@ describe("RuntimeRouter", () => {
       createdAt: 1,
     });
 
-    const execute = vi.fn(async () => ({ ok: true }));
+    const executeNative = vi.fn(async () => ({ runtime: "native" }));
+    const executeWsl = vi.fn(async () => ({ runtime: "wsl" }));
     const registry = new RuntimeRegistry();
     registry.register({
       id: "native-default",
       kind: "native",
-      execute,
+      execute: executeNative,
+      summary: { scope: "shared", targetRuntime: "native" },
+      disposeWorkspace: vi.fn(),
+      health: async () => ({ ok: true }),
+    });
+    registry.register({
+      id: "wsl:ws-wsl",
+      kind: "wsl",
+      summary: {
+        scope: "workspace",
+        workspaceId: "ws-wsl",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+      },
+      execute: executeWsl,
       disposeWorkspace: vi.fn(),
       health: async () => ({ ok: true }),
     });
@@ -46,11 +62,18 @@ describe("RuntimeRouter", () => {
       defaultRuntimeId: "native-default",
     });
 
-    await router.executeOnTarget({ kind: "workspace", workspaceId: "ws-1" }, "file.read", {});
-    await router.executeOnTarget({ kind: "session", sessionId: "sess-1" }, "session.stop", {});
-    await router.executeOnTarget({ kind: "terminal", terminalId: "term-1" }, "terminal.read", {});
+    await router.executeOnTarget({ kind: "workspace", workspaceId: "ws-native" }, "file.read", {});
+    await router.executeOnTarget({ kind: "workspace", workspaceId: "ws-wsl" }, "file.read", {});
+    await router.executeOnTarget({ kind: "session", sessionId: "sess-wsl" }, "session.stop", {});
+    await router.executeOnTarget({ kind: "terminal", terminalId: "term-wsl" }, "terminal.read", {});
+    await router.executeOnTarget(
+      { kind: "runtime", runtimeId: "wsl:ws-wsl" },
+      "skills.install.get",
+      {}
+    );
     await router.executeOnTarget({ kind: "default" }, "skills.library.list", {});
 
-    expect(execute).toHaveBeenCalledTimes(4);
+    expect(executeNative).toHaveBeenCalledTimes(2);
+    expect(executeWsl).toHaveBeenCalledTimes(4);
   });
 });

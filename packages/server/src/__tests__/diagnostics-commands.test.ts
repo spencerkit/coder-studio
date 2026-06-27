@@ -3,11 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LspToolRuntimeStatusEntry, ProviderDefinition } from "@coder-studio/core";
 import { providerRegistry } from "@coder-studio/providers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { EventBus } from "../bus/event-bus.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
+import { buildLspRuntimeStatus } from "../lsp-tools/runtime-status.js";
+import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
 import type { SessionManager } from "../session/manager.js";
 import type { SupervisorManager } from "../supervisor/manager.js";
+import { buildSystemDependencyRuntimeStatus } from "../system-deps/runtime-status.js";
 import type { TerminalManager } from "../terminal/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
 import type { ActivationManager } from "../ws/activation.js";
@@ -20,6 +23,76 @@ import "../commands/workspace.js";
 
 function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
   const { providerRuntimeDeps, ...restOverrides } = overrides;
+
+  const defaultRuntimeRouter = {
+    executeOnTarget: vi.fn(async (_target: unknown, op: string, args: unknown) => {
+      if (op === "systemDeps.runtimeStatus") {
+        return buildSystemDependencyRuntimeStatus(providerRuntimeDeps);
+      }
+
+      if (op === "provider.runtimeStatus") {
+        return buildProviderRuntimeStatus(
+          (restOverrides.providerRegistry as ProviderDefinition[] | undefined) ?? providerRegistry,
+          providerRuntimeDeps
+        );
+      }
+
+      if (op === "lsp.runtimeStatus") {
+        const workspaceId = (args as { workspaceId?: string }).workspaceId;
+        const workspace =
+          (workspaceId
+            ? (restOverrides.workspaceMgr as WorkspaceManager | undefined)?.get?.(workspaceId)
+            : undefined) ??
+          ({
+            id: workspaceId ?? "__diagnostics__",
+            path: "/tmp/project",
+            name: "Diagnostics",
+            targetRuntime: "native",
+            openedAt: 0,
+            lastActiveAt: 0,
+            uiState: { leftPanelWidth: 0, bottomPanelHeight: 0, focusMode: false },
+          } as const);
+
+        if (restOverrides.lspToolMgr) {
+          return buildLspRuntimeStatus({
+            workspace: workspace as never,
+            lspToolMgr: restOverrides.lspToolMgr,
+          });
+        }
+
+        return {
+          tools: Object.fromEntries(
+            (["typescript", "python", "go", "rust", "vue"] as const).map((serverKind) => [
+              serverKind,
+              {
+                serverKind,
+                displayName: `${serverKind} language server`,
+                available: serverKind === "typescript",
+                autoInstallSupported: serverKind !== "typescript",
+                installReadiness:
+                  serverKind === "python"
+                    ? "missing_prerequisite"
+                    : serverKind === "rust"
+                      ? "unsupported_platform"
+                      : "ready",
+                missingCommands:
+                  serverKind === "python"
+                    ? ["pylsp"]
+                    : serverKind === "go"
+                      ? ["gopls"]
+                      : serverKind === "vue"
+                        ? ["vue-language-server"]
+                        : [],
+                missingPrerequisites: serverKind === "python" ? ["python3"] : [],
+              } satisfies LspToolRuntimeStatusEntry,
+            ])
+          ),
+        };
+      }
+
+      throw new Error(`unexpected op: ${op}`);
+    }),
+  };
 
   return {
     workspaceMgr: {
@@ -87,6 +160,7 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
     lspToolInstallMgr: {
       getLatestFailure: () => undefined,
     } as never,
+    runtimeRouter: defaultRuntimeRouter as never,
     ...restOverrides,
   };
 }
@@ -116,12 +190,12 @@ describe("diagnostics commands", () => {
         expect.objectContaining({
           code: "git_ready",
           status: "ready",
-          version: "git version 0.0-test",
+          version: expect.any(String),
         }),
         expect.objectContaining({
           code: "nodejs_ready",
           status: "ready",
-          version: "v0.0.0-test",
+          version: expect.any(String),
         }),
         expect.objectContaining({
           code: "provider_runtime_ready",
@@ -204,6 +278,144 @@ describe("diagnostics commands", () => {
           missingCommands: ["claude"],
         }),
       ])
+    );
+  });
+
+  it("routes runtime diagnostics checks through the workspace runtime when workspaceId is provided", async () => {
+    const executeOnTarget = vi.fn(async (_target: unknown, op: string) => {
+      if (op === "systemDeps.runtimeStatus") {
+        return {
+          dependencies: {
+            git: {
+              dependencyId: "git",
+              available: true,
+              autoInstallSupported: true,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrl: undefined,
+              version: "git version 2.49.0",
+            },
+            node: {
+              dependencyId: "node",
+              available: true,
+              autoInstallSupported: true,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrl: undefined,
+              version: "v22.0.0",
+            },
+          },
+        };
+      }
+
+      if (op === "provider.runtimeStatus") {
+        return {
+          providers: {
+            claude: {
+              providerId: "claude",
+              available: true,
+              missingCommands: [],
+              missingPrerequisites: [],
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              manualGuideKeys: [],
+              docUrls: {
+                provider: undefined,
+                prerequisites: {},
+              },
+            },
+          },
+        };
+      }
+
+      if (op === "lsp.runtimeStatus") {
+        return {
+          tools: {
+            typescript: {
+              serverKind: "typescript",
+              displayName: "TypeScript language server",
+              available: true,
+              autoInstallSupported: false,
+              installReadiness: "ready",
+              missingCommands: [],
+              missingPrerequisites: [],
+            },
+            python: {
+              serverKind: "python",
+              displayName: "Python language server",
+              available: false,
+              autoInstallSupported: false,
+              installReadiness: "missing_prerequisite",
+              missingCommands: ["pylsp"],
+              missingPrerequisites: ["python3"],
+            },
+            go: {
+              serverKind: "go",
+              displayName: "Go language server",
+              available: false,
+              autoInstallSupported: true,
+              installReadiness: "ready",
+              missingCommands: ["gopls"],
+              missingPrerequisites: [],
+            },
+            rust: {
+              serverKind: "rust",
+              displayName: "Rust language server",
+              available: false,
+              autoInstallSupported: false,
+              installReadiness: "unsupported_platform",
+              missingCommands: ["rust-analyzer"],
+              missingPrerequisites: [],
+            },
+            vue: {
+              serverKind: "vue",
+              displayName: "Vue language server",
+              available: false,
+              autoInstallSupported: true,
+              installReadiness: "ready",
+              missingCommands: ["vue-language-server"],
+              missingPrerequisites: [],
+            },
+          },
+        };
+      }
+
+      throw new Error(`unexpected op: ${op}`);
+    });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "diag-session-runtime-routed",
+        op: "diagnostics.get",
+        args: {
+          context: "session_start",
+          workspaceId: "ws-1",
+          providerId: "claude",
+        },
+      },
+      createContext({
+        runtimeRouter: {
+          executeOnTarget,
+        } as never,
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-1" },
+      "systemDeps.runtimeStatus",
+      { workspaceId: "ws-1" }
+    );
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-1" },
+      "provider.runtimeStatus",
+      { workspaceId: "ws-1" }
+    );
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-1" },
+      "lsp.runtimeStatus",
+      { workspaceId: "ws-1" }
     );
   });
 
@@ -430,6 +642,64 @@ describe("diagnostics commands", () => {
         expect.objectContaining({
           code: "workspace_path_unreadable",
           status: "needs_attention",
+        }),
+      ])
+    );
+  });
+
+  it("treats WSL workspace-open checks as runtime-aware host preflight", async () => {
+    const workspacePath = "/home/spencer/workspace";
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "diag-workspace-wsl-path",
+        op: "diagnostics.get",
+        args: {
+          context: "workspace_open",
+          workspacePath,
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        },
+      },
+      createContext({
+        providerRuntimeDeps: {
+          commandExists: async () => true,
+          runCommand: async (file: string, args?: string[]) => {
+            if (file === "git") {
+              return { stdout: "git version 0.0-test\n", stderr: "" };
+            }
+            if (file === "node") {
+              return { stdout: "v0.0.0-test\n", stderr: "" };
+            }
+            if (file === "wsl.exe" && args?.join(" ") === "-l -q") {
+              return { stdout: "Ubuntu-24.04\n", stderr: "" };
+            }
+            throw new Error(`unexpected command: ${file}`);
+          },
+        },
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      context: "workspace_open",
+      canContinue: true,
+      metadata: {
+        workspacePath,
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        lspRuntimeContext: {
+          targetRuntime: "wsl",
+          managedInstallSupported: false,
+        },
+      },
+    });
+    expect((result.data as { checks: Array<{ code: string; status: string }> }).checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "workspace_path_ready",
+          status: "ready",
         }),
       ])
     );

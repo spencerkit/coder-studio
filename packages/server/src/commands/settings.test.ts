@@ -841,6 +841,49 @@ describe("settings commands", () => {
     });
   });
 
+  it("settings.update merges provider config through the workspace runtime bridge", async () => {
+    const executeOnTarget = vi.fn(async () => ({
+      additionalArgs: ["--verbose", "--debug"],
+    }));
+    ctx.runtimeRouter = {
+      executeOnTarget,
+    } as never;
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-update-provider-runtime-args",
+        op: "settings.update",
+        args: {
+          workspaceId: "ws-wsl",
+          settings: {
+            providers: {
+              claude: {
+                additionalArgs: ["--verbose", "--debug"],
+              },
+            },
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-wsl" },
+      "provider.config.merge",
+      {
+        workspaceId: "ws-wsl",
+        runtimeId: undefined,
+        providerId: "claude",
+        config: {
+          additionalArgs: ["--verbose", "--debug"],
+        },
+      }
+    );
+    expect(providerConfigRepo.get("claude")).toBeUndefined();
+  });
+
   it("settings.update replaces legacy provider fields with startup args only", async () => {
     providerConfigRepo.set("codex", {
       additionalArgs: ["--old"],
@@ -894,6 +937,45 @@ describe("settings commands", () => {
     });
   });
 
+  it("settings.get overlays provider config through the workspace runtime bridge", async () => {
+    const executeOnTarget = vi.fn(async () => ({
+      claude: {
+        additionalArgs: ["--verbose"],
+      },
+      codex: {
+        additionalArgs: ["--sandbox", "--full-auto"],
+      },
+    }));
+    ctx.runtimeRouter = {
+      executeOnTarget,
+    } as never;
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-get-provider-runtime-args",
+        op: "settings.get",
+        args: {
+          workspaceId: "ws-wsl",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-wsl" },
+      "provider.config.getAll",
+      {
+        workspaceId: "ws-wsl",
+      }
+    );
+    expect(result.data).toMatchObject({
+      "providers.claude.additionalArgs": ["--verbose"],
+      "providers.codex.additionalArgs": ["--sandbox", "--full-auto"],
+    });
+  });
+
   it("settings.get ignores legacy provider keys and sanitizes stored configs per provider schema", async () => {
     settingsRepo.set("providers.codex.additionalArgs", ["--legacy-user-setting"]);
     providerConfigRepo.set("claude", {
@@ -919,6 +1001,43 @@ describe("settings commands", () => {
     expect(result.data?.["providers.claude.model"]).toBe("claude-opus-4-6");
     expect(result.data?.["providers.codex.additionalArgs"]).toBeUndefined();
     expect(result.data?.["providers.openai.additionalArgs"]).toBeUndefined();
+  });
+
+  it("settings.previewCommand builds the preview through the workspace runtime bridge", async () => {
+    const executeOnTarget = vi.fn(async () => ({
+      argv: ["claude", "--print"],
+      cwd: "/repo",
+      env: { REVIEW_MODE: "strict" },
+      preview: "claude --print  # cwd=/repo",
+    }));
+    ctx.runtimeRouter = {
+      executeOnTarget,
+    } as never;
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "settings-preview-runtime",
+        op: "settings.previewCommand",
+        args: {
+          workspaceId: "ws-wsl",
+          providerId: "claude",
+          config: {},
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "workspace", workspaceId: "ws-wsl" },
+      "provider.previewCommand",
+      {
+        workspaceId: "ws-wsl",
+        providerId: "claude",
+        config: {},
+      }
+    );
   });
 
   it("settings.get reads settings from the file-backed settings store", async () => {

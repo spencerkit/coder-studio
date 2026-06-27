@@ -1,11 +1,24 @@
 import { type SkillLibraryEntry, type SkillVersionCheckEntry, Topics } from "@coder-studio/core";
+import { z } from "zod";
+import type { RuntimeCommandContext } from "../../runtime/context.js";
+import { resolveOptionalRuntimeTarget } from "../../runtime/targeting.js";
 import { buildAgentSkillTargets } from "../../skills/target-registry.js";
-import type { CommandContext } from "../../ws/dispatch.js";
 
-export function requireSkillsQuerySupport(ctx: CommandContext): asserts ctx is CommandContext & {
-  skillsHubClient: NonNullable<CommandContext["skillsHubClient"]>;
-  skillLibraryRepo: NonNullable<CommandContext["skillLibraryRepo"]>;
-  skillMountRepo: NonNullable<CommandContext["skillMountRepo"]>;
+export const skillRuntimeTargetSchema = z.object({
+  workspaceId: z.string().optional(),
+  runtimeId: z.string().optional(),
+});
+
+export function resolveSkillRuntimeTarget(input: { workspaceId?: string; runtimeId?: string }) {
+  return resolveOptionalRuntimeTarget(input);
+}
+
+export function requireSkillsQuerySupport(
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  skillsHubClient: NonNullable<RuntimeCommandContext["skillsHubClient"]>;
+  skillLibraryRepo: NonNullable<RuntimeCommandContext["skillLibraryRepo"]>;
+  skillMountRepo: NonNullable<RuntimeCommandContext["skillMountRepo"]>;
 } {
   if (!ctx.skillsHubClient || !ctx.skillLibraryRepo || !ctx.skillMountRepo) {
     throw { code: "skills_unavailable", message: "Skill management is not configured" };
@@ -13,18 +26,20 @@ export function requireSkillsQuerySupport(ctx: CommandContext): asserts ctx is C
 }
 
 export function requireSkillVersionCheckSupport(
-  ctx: CommandContext
-): asserts ctx is CommandContext & {
-  skillsHubClient: NonNullable<CommandContext["skillsHubClient"]>;
-  skillLibraryRepo: NonNullable<CommandContext["skillLibraryRepo"]>;
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  skillsHubClient: NonNullable<RuntimeCommandContext["skillsHubClient"]>;
+  skillLibraryRepo: NonNullable<RuntimeCommandContext["skillLibraryRepo"]>;
 } {
   if (!ctx.skillsHubClient || !ctx.skillLibraryRepo) {
     throw { code: "skills_unavailable", message: "Skill management is not configured" };
   }
 }
 
-export function requireSkillInstallSupport(ctx: CommandContext): asserts ctx is CommandContext & {
-  skillInstallMgr: NonNullable<CommandContext["skillInstallMgr"]>;
+export function requireSkillInstallSupport(
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  skillInstallMgr: NonNullable<RuntimeCommandContext["skillInstallMgr"]>;
 } {
   if (!ctx.skillInstallMgr) {
     throw {
@@ -34,8 +49,10 @@ export function requireSkillInstallSupport(ctx: CommandContext): asserts ctx is 
   }
 }
 
-export function requireSkillMountSupport(ctx: CommandContext): asserts ctx is CommandContext & {
-  skillMountMgr: NonNullable<CommandContext["skillMountMgr"]>;
+export function requireSkillMountSupport(
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  skillMountMgr: NonNullable<RuntimeCommandContext["skillMountMgr"]>;
 } {
   if (!ctx.skillMountMgr) {
     throw {
@@ -45,8 +62,10 @@ export function requireSkillMountSupport(ctx: CommandContext): asserts ctx is Co
   }
 }
 
-export function requireSkillHealthSupport(ctx: CommandContext): asserts ctx is CommandContext & {
-  skillHealthMgr: NonNullable<CommandContext["skillHealthMgr"]>;
+export function requireSkillHealthSupport(
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  skillHealthMgr: NonNullable<RuntimeCommandContext["skillHealthMgr"]>;
 } {
   if (!ctx.skillHealthMgr) {
     throw {
@@ -56,8 +75,10 @@ export function requireSkillHealthSupport(ctx: CommandContext): asserts ctx is C
   }
 }
 
-export function requireSkillTargetSupport(ctx: CommandContext): asserts ctx is CommandContext & {
-  skillMountRepo: NonNullable<CommandContext["skillMountRepo"]>;
+export function requireSkillTargetSupport(
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  skillMountRepo: NonNullable<RuntimeCommandContext["skillMountRepo"]>;
 } {
   if (!ctx.skillMountRepo) {
     throw {
@@ -68,9 +89,9 @@ export function requireSkillTargetSupport(ctx: CommandContext): asserts ctx is C
 }
 
 export function requireBuiltinSkillSyncSupport(
-  ctx: CommandContext
-): asserts ctx is CommandContext & {
-  builtinSkillSyncMgr: NonNullable<CommandContext["builtinSkillSyncMgr"]>;
+  ctx: RuntimeCommandContext
+): asserts ctx is RuntimeCommandContext & {
+  builtinSkillSyncMgr: NonNullable<RuntimeCommandContext["builtinSkillSyncMgr"]>;
 } {
   if (!ctx.builtinSkillSyncMgr) {
     throw {
@@ -81,14 +102,10 @@ export function requireBuiltinSkillSyncSupport(
 }
 
 export function broadcastSkillLibraryChanged(
-  ctx: CommandContext,
+  ctx: Pick<RuntimeCommandContext, "hostBridge">,
   payload: Record<string, unknown>
 ): void {
-  if (typeof ctx.broadcaster.broadcast !== "function") {
-    return;
-  }
-
-  ctx.broadcaster.broadcast(Topics.skillLibraryChanged, {
+  ctx.hostBridge.broadcast(Topics.skillLibraryChanged, {
     ...payload,
     changedAt: Date.now(),
   });
@@ -106,7 +123,7 @@ export function hasSyncChanges(result: {
   );
 }
 
-export async function listTargets(ctx: CommandContext) {
+export async function listTargets(ctx: RuntimeCommandContext) {
   requireSkillTargetSupport(ctx);
   requireSkillHealthSupport(ctx);
 
@@ -153,8 +170,8 @@ export function compareVersions(left: string, right: string): number {
 
 export async function checkSkillHubVersion(
   entry: SkillLibraryEntry,
-  ctx: CommandContext & {
-    skillsHubClient: NonNullable<CommandContext["skillsHubClient"]>;
+  ctx: RuntimeCommandContext & {
+    skillsHubClient: NonNullable<RuntimeCommandContext["skillsHubClient"]>;
   }
 ): Promise<SkillVersionCheckEntry> {
   try {

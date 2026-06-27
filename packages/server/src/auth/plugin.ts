@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ServerConfig } from "../config.js";
 import type { AuthLoginBlockRepo } from "../storage/repositories/auth-login-block-repo.js";
@@ -66,7 +67,10 @@ interface AuthDeps {
 
 export type RequestAuthContext =
   | { mode: "browser" }
-  | ({ mode: "session_token" } & SessionAutomationTokenRecord);
+  | ({
+      mode: "session_token";
+      tokenMode: SessionAutomationTokenRecord["mode"];
+    } & Omit<SessionAutomationTokenRecord, "mode">);
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -80,8 +84,6 @@ const isFrontendNavigationRequest = (request: FastifyRequest, deps: AuthDeps): b
   }
   return isFrontendNavigationRequestForWebUi(request);
 };
-
-const LOOPBACK_IPS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 function getBearerToken(request: FastifyRequest): string | null {
   const header = request.headers.authorization;
@@ -107,13 +109,58 @@ function getTrustedClientIp(request: FastifyRequest): string | null {
   return ip ? ip.toLowerCase() : null;
 }
 
+function normalizeClientIp(ip: string): string {
+  const withoutZone = ip.split("%")[0] ?? ip;
+  return withoutZone.startsWith("::ffff:") ? withoutZone.slice("::ffff:".length) : withoutZone;
+}
+
+function isLoopbackIp(ip: string): boolean {
+  const normalized = normalizeClientIp(ip);
+  return normalized === "::1" || normalized.startsWith("127.");
+}
+
+function isPrivateIpv4(ip: string): boolean {
+  const parts = normalizeClientIp(ip)
+    .split(".")
+    .map((part) => Number.parseInt(part, 10));
+
+  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part) || part < 0 || part > 255)) {
+    return false;
+  }
+
+  const [first = -1, second = -1] = parts;
+  return (
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
+
+function isLinkLocalIp(ip: string): boolean {
+  const normalized = normalizeClientIp(ip);
+  if (isIP(normalized) === 4) {
+    return normalized.startsWith("169.254.");
+  }
+
+  return /^fe[89ab]/i.test(normalized);
+}
+
 function isLoopbackRequest(request: FastifyRequest): boolean {
   const ip = getTrustedClientIp(request);
   if (!ip) {
     return false;
   }
 
-  return LOOPBACK_IPS.has(ip);
+  return isLoopbackIp(ip);
+}
+
+function isPrivateOrLoopbackRequest(request: FastifyRequest): boolean {
+  const ip = getTrustedClientIp(request);
+  if (!ip) {
+    return false;
+  }
+
+  return isLoopbackIp(ip) || isPrivateIpv4(ip) || isLinkLocalIp(ip);
 }
 
 function authenticateSessionToken(
@@ -129,19 +176,26 @@ function authenticateSessionToken(
     return null;
   }
 
-  if (!isLoopbackRequest(request)) {
+  const tokenRecord = deps.sessionTokenRepo?.get(token) ?? null;
+  if (!tokenRecord) {
     return null;
   }
 
-  return deps.sessionTokenRepo?.get(token) ?? null;
+  if (tokenRecord.mode === "remote_runtime") {
+    return isPrivateOrLoopbackRequest(request) ? tokenRecord : null;
+  }
+
+  return isLoopbackRequest(request) ? tokenRecord : null;
 }
 
 function decorateSessionTokenAuth(request: FastifyRequest, deps: AuthDeps): boolean {
   const tokenRecord = authenticateSessionToken(request, deps);
   if (tokenRecord) {
+    const { mode: tokenMode, ...tokenFields } = tokenRecord;
     request.coderStudioAuthContext = {
       mode: "session_token",
-      ...tokenRecord,
+      tokenMode,
+      ...tokenFields,
     };
     return true;
   }

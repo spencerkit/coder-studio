@@ -1,7 +1,11 @@
 import type { AutomationPermission, DomainEvent, ProviderDefinition } from "@coder-studio/core";
 import type { RequestAuthContext } from "../auth/index.js";
+import type { RuntimeAssemblyResources } from "./assembly.js";
+import type { RuntimeCommandContext } from "./context.js";
+import type { RemoteStateSnapshot } from "./remote/protocol.js";
 
 export type RuntimeRouteTarget =
+  | { kind: "runtime"; runtimeId: string }
   | { kind: "workspace"; workspaceId: string }
   | { kind: "session"; sessionId: string }
   | { kind: "terminal"; terminalId: string }
@@ -9,7 +13,22 @@ export type RuntimeRouteTarget =
 
 export interface RuntimeExecuteMeta {
   clientId?: string;
+  clientOwnerId?: string;
   authContext?: RequestAuthContext;
+  sessionBootstrap?: RuntimeSessionBootstrap;
+}
+
+export interface RuntimeSessionBootstrap {
+  sessionId: string;
+  sessionToken: string;
+  apiUrl?: string;
+}
+
+export interface RuntimeSummary {
+  scope: "shared" | "workspace";
+  targetRuntime: "native" | "wsl";
+  workspaceId?: string;
+  wslDistro?: string;
 }
 
 export interface RuntimeHostBridge {
@@ -24,6 +43,7 @@ export interface RuntimeHostBridge {
   emitDomainEvent(event: DomainEvent): void;
   broadcast(topic: string, payload: unknown): void;
   recordWorkspaceFetch?(workspaceId: string): void;
+  resolveClientOwnerId?(clientId: string): string | undefined;
   sendToClient(clientId: string, payload: unknown): boolean;
   sendBinaryToClient(clientId: string, payload: Buffer): boolean;
 }
@@ -31,8 +51,13 @@ export interface RuntimeHostBridge {
 export interface RuntimeHandle {
   id: string;
   kind: "native" | "wsl";
+  summary?: RuntimeSummary;
   execute(op: string, args: unknown, meta?: RuntimeExecuteMeta): Promise<unknown>;
   disposeWorkspace(workspaceId: string): Promise<void>;
-  setProviderRegistry?(providers: ProviderDefinition[]): void;
+  setProviderRegistry?(providers: ProviderDefinition[]): void | Promise<void>;
+  syncSnapshot?(snapshot: RemoteStateSnapshot): void | Promise<void>;
   health(): Promise<{ ok: true }>;
+  stop?(): Promise<void>;
+  getContext?(): RuntimeCommandContext;
+  getResources?(): RuntimeAssemblyResources;
 }

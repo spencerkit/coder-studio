@@ -29,8 +29,18 @@ vi.mock("../../../../lib/i18n", () => ({
 }));
 
 vi.mock("./agent-instructions-token-trend", () => ({
-  AgentInstructionsTokenTrend: ({ workspacePath }: { workspacePath: string }) => (
-    <div data-testid="agent-token-trend" data-workspace-path={workspacePath} />
+  AgentInstructionsTokenTrend: ({
+    workspaceId,
+    workspacePath,
+  }: {
+    workspaceId?: string;
+    workspacePath: string;
+  }) => (
+    <div
+      data-testid="agent-token-trend"
+      data-workspace-id={workspaceId}
+      data-workspace-path={workspacePath}
+    />
   ),
 }));
 
@@ -40,7 +50,7 @@ describe("AgentTokenTrendSection", () => {
   });
 
   it("renders token trend with collapsible standalone sidebar section chrome", () => {
-    render(<AgentTokenTrendSection workspacePath="/repo/project" />);
+    render(<AgentTokenTrendSection workspaceId="ws-1" workspacePath="/repo/project" />);
 
     const heading = screen.getByRole("heading", { level: 2, name: "Token Trend" });
     const section = heading.closest("section");
@@ -56,6 +66,7 @@ describe("AgentTokenTrendSection", () => {
       "data-workspace-path",
       "/repo/project"
     );
+    expect(screen.getByTestId("agent-token-trend")).toHaveAttribute("data-workspace-id", "ws-1");
 
     fireEvent.click(toggle);
 
@@ -67,7 +78,7 @@ describe("AgentTokenTrendSection", () => {
   });
 
   it("navigates to work analysis scoped to the current workspace from the more data action", () => {
-    render(<AgentTokenTrendSection workspacePath="/repo/project" />);
+    render(<AgentTokenTrendSection workspaceId="ws-1" workspacePath="/repo/project" />);
 
     const moreDataButton = screen.getByRole("button", { name: "More Data" });
 

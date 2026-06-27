@@ -86,10 +86,18 @@ describe("server built-in skills wiring", () => {
       3
     );
     expect(ctx.skillLibraryRepo?.getCustomSkillRoot()).toBe(
-      join(tempDir, "state-root", "state", "skills", "custom")
+      join(tempDir, "state-root", "state", "runtimes", "native-default", "skills", "custom")
     );
 
-    const builtinRoot = join(tempDir, "state-root", "state", "skills", "builtin");
+    const builtinRoot = join(
+      tempDir,
+      "state-root",
+      "state",
+      "runtimes",
+      "native-default",
+      "skills",
+      "builtin"
+    );
     const builtinOpenSkillPath = join(builtinRoot, "coder-studio-open", "SKILL.md");
     expect(existsSync(builtinOpenSkillPath)).toBe(true);
     expect(readFileSync(builtinOpenSkillPath, "utf8")).toContain(

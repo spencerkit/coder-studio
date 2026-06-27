@@ -92,6 +92,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "wsl-runtime-entry.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
       join(cliDir, "package.json"),
@@ -138,6 +139,7 @@ describe("publish-cli", () => {
     );
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "wsl-runtime-entry.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
       join(cliDir, "package.json"),
@@ -176,6 +178,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "wsl-runtime-entry.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
       join(cliDir, "package.json"),

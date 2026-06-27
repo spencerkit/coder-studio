@@ -29,14 +29,14 @@ import { resolveEffectiveAgentInstructions } from "../agent-instructions/effecti
 import { buildAgentInstructionsMarkdown } from "../agent-instructions/generator.js";
 import { evaluateAgentInstructionsMarkdown } from "../agent-instructions/health.js";
 import { readFile as readWorkspaceFile, writeFile as writeWorkspaceFile } from "../fs/file-io.js";
+import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import type { RuntimeCommandContext } from "../runtime/context.js";
 import { describeNonInjectableState, INJECTABLE_SESSION_STATES } from "../supervisor/injector.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import {
   AGENT_INSTRUCTIONS_CUSTOM_RELATIVE_PATH,
   AGENT_INSTRUCTIONS_RELATIVE_PATH,
 } from "../workspace/workspace-state.js";
-import type { CommandContext } from "../ws/dispatch.js";
-import { registerCommand } from "../ws/dispatch.js";
 
 type AgentInstructionsPath = typeof AGENT_INSTRUCTIONS_CUSTOM_RELATIVE_PATH;
 
@@ -72,15 +72,9 @@ async function readDocument(
 
 async function getWorkspaceOrThrow(
   workspaceId: string,
-  ctx: Parameters<typeof registerCommand>[2] extends (
-    args: unknown,
-    ctx: infer T,
-    clientId?: string
-  ) => Promise<unknown>
-    ? T
-    : never
+  ctx: Pick<RuntimeCommandContext, "workspaceLookup">
 ) {
-  const workspace = ctx.workspaceMgr.get(workspaceId);
+  const workspace = ctx.workspaceLookup.get(workspaceId);
   if (!workspace) {
     throw { code: "workspace_not_found", message: `Workspace not found: ${workspaceId}` };
   }
@@ -110,7 +104,7 @@ async function writeCustomDocument(
   workspaceId: string,
   rootPath: string,
   content: string,
-  ctx: CommandContext,
+  ctx: Pick<RuntimeCommandContext, "eventBus">,
   options?: {
     overwrite?: boolean;
     baseHash?: string;
@@ -295,7 +289,7 @@ async function buildStatus(
   };
 }
 
-function emitDirty(workspaceId: string, eventBus: CommandContext["eventBus"]): void {
+function emitDirty(workspaceId: string, eventBus: RuntimeCommandContext["eventBus"]): void {
   eventBus.emit({
     type: "fs.dirty",
     workspaceId,
@@ -303,35 +297,41 @@ function emitDirty(workspaceId: string, eventBus: CommandContext["eventBus"]): v
   });
 }
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.read",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    return readDocument(workspace.id, workspace.path, AGENT_INSTRUCTIONS_CUSTOM_RELATIVE_PATH);
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      return readDocument(workspace.id, workspace.path, AGENT_INSTRUCTIONS_CUSTOM_RELATIVE_PATH);
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.generate",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    const { content } = await buildGeneratedDocument(workspace.id, workspace.path);
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      const { content } = await buildGeneratedDocument(workspace.id, workspace.path);
 
-    return {
-      path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
-      exists: false,
-      content,
-    } satisfies AgentInstructionsDocument;
+      return {
+        path: AGENT_INSTRUCTIONS_RELATIVE_PATH,
+        exists: false,
+        content,
+      } satisfies AgentInstructionsDocument;
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.write",
   z.object({
     workspaceId: z.string(),
@@ -339,39 +339,48 @@ registerCommand(
     overwrite: z.boolean().optional(),
     baseHash: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    return writeCustomDocument(workspace.id, workspace.path, args.content, ctx, {
-      overwrite: args.overwrite,
-      baseHash: args.baseHash,
-    });
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      return writeCustomDocument(workspace.id, workspace.path, args.content, ctx, {
+        overwrite: args.overwrite,
+        baseHash: args.baseHash,
+      });
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.system.status",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    await getWorkspaceOrThrow(args.workspaceId, ctx);
-    return buildSystemStatus();
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      await getWorkspaceOrThrow(args.workspaceId, ctx);
+      return buildSystemStatus();
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.system.read",
   z.object({
     workspaceId: z.string(),
     providerId: z.string(),
   }),
-  async (args, ctx) => {
-    await getWorkspaceOrThrow(args.workspaceId, ctx);
-    return readSystemAgentInstructionsDocument(args.providerId);
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      await getWorkspaceOrThrow(args.workspaceId, ctx);
+      return readSystemAgentInstructionsDocument(args.providerId);
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.system.write",
   z.object({
     workspaceId: z.string(),
@@ -379,172 +388,198 @@ registerCommand(
     content: z.string(),
     baseHash: z.string().optional(),
   }),
-  async (args, ctx) => {
-    await getWorkspaceOrThrow(args.workspaceId, ctx);
-    return writeSystemAgentInstructionsDocument(args.providerId, args.content, args.baseHash);
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      await getWorkspaceOrThrow(args.workspaceId, ctx);
+      return writeSystemAgentInstructionsDocument(args.providerId, args.content, args.baseHash);
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.generateByAgent",
   z.object({
     workspaceId: z.string(),
     providerId: z.string().optional(),
     model: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    const generator = new AgentInstructionsGenerator({
-      providerConfigRepo: ctx.providerConfigRepo,
-    });
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      const generator = new AgentInstructionsGenerator({
+        providerConfigRepo: ctx.providerConfigRepo,
+      });
 
-    return generator.generate(workspace.id, workspace.path, ctx.providerRegistry, {
-      providerId: args.providerId,
-      model: args.model,
-    });
+      return generator.generate(workspace.id, workspace.path, ctx.providerRegistry, {
+        providerId: args.providerId,
+        model: args.model,
+      });
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.generateAndWriteByAgent",
   z.object({
     workspaceId: z.string(),
     providerId: z.string().optional(),
     model: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    const generator = new AgentInstructionsGenerator({
-      providerConfigRepo: ctx.providerConfigRepo,
-    });
-    const generated = await generator.generate(workspace.id, workspace.path, ctx.providerRegistry, {
-      providerId: args.providerId,
-      model: args.model,
-    });
-    const document = await writeCustomDocument(
-      workspace.id,
-      workspace.path,
-      generated.content,
-      ctx,
-      {
-        overwrite: true,
-      }
-    );
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      const generator = new AgentInstructionsGenerator({
+        providerConfigRepo: ctx.providerConfigRepo,
+      });
+      const generated = await generator.generate(
+        workspace.id,
+        workspace.path,
+        ctx.providerRegistry,
+        {
+          providerId: args.providerId,
+          model: args.model,
+        }
+      );
+      const document = await writeCustomDocument(
+        workspace.id,
+        workspace.path,
+        generated.content,
+        ctx,
+        {
+          overwrite: true,
+        }
+      );
 
-    return {
-      document,
-      meta: generated.meta,
-    };
+      return {
+        document,
+        meta: generated.meta,
+      };
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.health",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    const document = await readDocument(
-      workspace.id,
-      workspace.path,
-      AGENT_INSTRUCTIONS_CUSTOM_RELATIVE_PATH
-    );
-    return evaluateAgentInstructionsMarkdown(document.content) satisfies AgentInstructionsHealth;
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      const document = await readDocument(
+        workspace.id,
+        workspace.path,
+        AGENT_INSTRUCTIONS_CUSTOM_RELATIVE_PATH
+      );
+      return evaluateAgentInstructionsMarkdown(document.content) satisfies AgentInstructionsHealth;
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.status",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    return buildStatus(workspace.id, workspace.path);
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      return buildStatus(workspace.id, workspace.path);
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.regenerate",
   z.object({
     workspaceId: z.string(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    const { content } = await buildGeneratedDocument(workspace.id, workspace.path);
-    return writeCustomDocument(workspace.id, workspace.path, content, ctx, {
-      overwrite: true,
-    });
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      const { content } = await buildGeneratedDocument(workspace.id, workspace.path);
+      return writeCustomDocument(workspace.id, workspace.path, content, ctx, {
+        overwrite: true,
+      });
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "agentInstructions.attachToSession",
   z.object({
     workspaceId: z.string(),
     sessionId: z.string().optional(),
   }),
-  async (args, ctx) => {
-    const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
-    const sessionId = args.sessionId ?? workspace.uiState.activeSessionId;
-    if (!sessionId) {
-      throw {
-        code: "session_not_found",
-        message: "No active session is available for attach",
-      };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = await getWorkspaceOrThrow(args.workspaceId, ctx);
+      const sessionId = args.sessionId ?? workspace.uiState.activeSessionId;
+      if (!sessionId) {
+        throw {
+          code: "session_not_found",
+          message: "No active session is available for attach",
+        };
+      }
 
-    const session = ctx.sessionMgr.get(sessionId);
-    if (!session) {
-      throw {
-        code: "session_not_found",
-        message: `Session not found: ${sessionId}`,
-      };
-    }
-    if (!INJECTABLE_SESSION_STATES.has(session.state)) {
-      throw {
-        code: "inject_target_unavailable",
-        message: `Cannot inject into session ${sessionId}: ${describeNonInjectableState(session.state)}`,
-      };
-    }
+      const session = ctx.sessionMgr.get(sessionId);
+      if (!session) {
+        throw {
+          code: "session_not_found",
+          message: `Session not found: ${sessionId}`,
+        };
+      }
+      if (!INJECTABLE_SESSION_STATES.has(session.state)) {
+        throw {
+          code: "inject_target_unavailable",
+          message: `Cannot inject into session ${sessionId}: ${describeNonInjectableState(session.state)}`,
+        };
+      }
 
-    const effective = await resolveEffectiveAgentInstructions(workspace.id, workspace.path);
-    if (!effective) {
-      throw {
-        code: "agent_instructions_missing",
-        message: "No agent instructions are available for this workspace",
-      };
-    }
+      const effective = await resolveEffectiveAgentInstructions(workspace.id, workspace.path);
+      if (!effective) {
+        throw {
+          code: "agent_instructions_missing",
+          message: "No agent instructions are available for this workspace",
+        };
+      }
 
-    ctx.sessionMgr.sendInput(
-      sessionId,
-      Buffer.from(buildAgentInstructionsSubmitPayload(effective.content), "utf8"),
-      "internal_submit"
-    );
+      ctx.sessionMgr.sendInput(
+        sessionId,
+        Buffer.from(buildAgentInstructionsSubmitPayload(effective.content), "utf8"),
+        "internal_submit"
+      );
 
-    ctx.sessionMetadataRepo?.upsert({
-      ...(ctx.sessionMetadataRepo.get(sessionId) ?? {
+      ctx.sessionMetadataRepo?.upsert({
+        ...(ctx.sessionMetadataRepo.get(sessionId) ?? {
+          sessionId,
+          workspaceId: workspace.id,
+          providerId: session.providerId,
+          verificationRuns: [],
+        }),
         sessionId,
         workspaceId: workspace.id,
         providerId: session.providerId,
-        verificationRuns: [],
-      }),
-      sessionId,
-      workspaceId: workspace.id,
-      providerId: session.providerId,
-      attachedAgentInstructions: {
-        effectiveHash: effective.effectiveHash,
-        mode: "manual",
-        attachedAt: Date.now(),
-      },
-    });
+        attachedAgentInstructions: {
+          effectiveHash: effective.effectiveHash,
+          mode: "manual",
+          attachedAt: Date.now(),
+        },
+      });
 
-    return {
-      injected: true as const,
-      sessionId,
-      mode: "manual" as const,
-      effectiveHash: effective.effectiveHash,
-    };
+      return {
+        injected: true as const,
+        sessionId,
+        mode: "manual" as const,
+        effectiveHash: effective.effectiveHash,
+      };
+    },
   }
 );

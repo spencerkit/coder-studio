@@ -22,7 +22,7 @@ import {
 import { SessionTokenRepo } from "../auth/session-token-repo.js";
 import type { EventBus, Unsubscribe } from "../bus/event-bus.js";
 import { mergeProviderLaunchConfig } from "../provider-config.js";
-import type { RuntimeHostBridge } from "../runtime/contract.js";
+import type { RuntimeHostBridge, RuntimeSessionBootstrap } from "../runtime/contract.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
 import { type SessionRow, sessionToRow } from "../storage/repositories/session-repo.js";
 import type { TerminalManager } from "../terminal/manager.js";
@@ -40,6 +40,7 @@ export interface CreateSessionRequest {
   providerId: string;
   provider: ProviderDefinition;
   draft?: string;
+  sessionBootstrap?: RuntimeSessionBootstrap;
   /**
    * Hex color of the xterm.js theme background that will render this
    * session's terminal. Forwarded to TerminalSpec.themeBackground so the
@@ -73,7 +74,7 @@ export interface SessionManagerDeps {
 /**
  * Generate unique session ID
  */
-function generateSessionId(): string {
+export function generateSessionId(): string {
   return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
@@ -300,19 +301,22 @@ export class SessionManager {
    * Create a new session with provider
    */
   async create(req: CreateSessionRequest): Promise<Session> {
-    const sessionId = generateSessionId();
+    const sessionId = req.sessionBootstrap?.sessionId ?? generateSessionId();
     const launchConfig = this.getLaunchConfig(req.providerId, req.provider);
     const permissions = [
       ...SCOPED_SESSION_AUTOMATION_PERMISSIONS,
     ] as readonly AutomationPermission[];
-    const tokenRecord = this.hostBridge.issueSessionToken({
-      sessionId,
-      workspaceId: req.workspaceId,
-      providerId: req.providerId,
-      permissions,
-    });
+    const tokenRecord = req.sessionBootstrap
+      ? { token: req.sessionBootstrap.sessionToken }
+      : this.hostBridge.issueSessionToken({
+          sessionId,
+          workspaceId: req.workspaceId,
+          providerId: req.providerId,
+          permissions,
+        });
     try {
       const automationEntryPath = this.automationEntryPathResolver();
+      const apiUrl = req.sessionBootstrap?.apiUrl ?? this.hostBridge.getHostApiUrl();
 
       // Build command from provider (pass config and context)
       const cmd = req.provider.buildCommand(launchConfig, {
@@ -335,9 +339,7 @@ export class SessionManager {
           CODER_STUDIO_SESSION_TOKEN: tokenRecord.token,
           CODER_STUDIO_AUTOMATION_ENTRY: automationEntryPath,
           [AUTOMATION_PERMISSIONS_ENV]: permissions.join(","),
-          ...(this.hostBridge.getHostApiUrl()
-            ? { CODER_STUDIO_API_URL: this.hostBridge.getHostApiUrl() }
-            : {}),
+          ...(apiUrl ? { CODER_STUDIO_API_URL: apiUrl } : {}),
         },
         title: req.provider.displayName,
         themeBackground: req.themeBackground,
