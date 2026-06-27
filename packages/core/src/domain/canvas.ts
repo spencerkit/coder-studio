@@ -41,17 +41,24 @@ const ReportStatSchema = z.object({
   tone: z.enum(["neutral", "info", "success", "warning", "danger"]).optional(),
 });
 
+export const ReportChartKindSchema = z.enum(["line", "bar", "sparkline"]);
+export type ReportChartKind = z.infer<typeof ReportChartKindSchema>;
+
 export const ReportChartSeriesSchema = z.object({
-  label: z.string().trim().min(1),
+  name: z.string().trim().min(1),
   values: z.array(z.number()),
 });
 export type ReportChartSeries = z.infer<typeof ReportChartSeriesSchema>;
 
 export const ReportChartBlockSchema = z.object({
   type: z.literal("chart"),
+  kind: ReportChartKindSchema,
   title: z.string().trim().min(1),
+  summary: z.string().trim().min(1).optional(),
+  unit: z.string().trim().min(1).optional(),
   categories: z.array(z.string().trim().min(1)).min(1),
   series: z.array(ReportChartSeriesSchema).min(1),
+  showLegend: z.boolean().optional(),
 });
 export type ReportChartBlock = z.infer<typeof ReportChartBlockSchema>;
 
@@ -243,6 +250,10 @@ const CompiledReportCanvasBaseSchema = z.object({
 });
 const CompiledReportCanvasSchema = CompiledReportCanvasBaseSchema.superRefine((value, ctx) => {
   value.sections.forEach((section, sectionIndex) => {
+    if (section.type !== "section") {
+      return;
+    }
+
     section.blocks.forEach((block, blockIndex) => {
       if (block.type !== "chart") {
         return;

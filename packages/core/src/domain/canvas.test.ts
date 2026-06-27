@@ -21,7 +21,11 @@ describe("canvas domain", () => {
     expect(parsed.document.diagram.dsl).toBe("mermaid");
   });
 
-  it("parses a report canvas envelope with a chart block", () => {
+  it.each([
+    "line",
+    "bar",
+    "sparkline",
+  ] as const)("parses a report canvas envelope with a %s chart block", (kind) => {
     const parsed = parseCanvasDocumentEnvelope({
       version: 1,
       kind: "report_canvas",
@@ -35,11 +39,15 @@ describe("canvas domain", () => {
             blocks: [
               {
                 type: "chart",
+                kind,
                 title: "Traffic by day",
+                summary: "Desktop traffic over time.",
+                unit: "visits",
+                showLegend: true,
                 categories: ["Mon", "Tue", "Wed"],
                 series: [
                   {
-                    label: "Desktop",
+                    name: "Desktop",
                     values: [12, 18, 24],
                   },
                 ],
@@ -53,8 +61,10 @@ describe("canvas domain", () => {
     expect(parsed.kind).toBe("report_canvas");
     expect(parsed.document.sections[0]?.blocks[0]).toMatchObject({
       type: "chart",
+      kind,
       title: "Traffic by day",
       categories: ["Mon", "Tue", "Wed"],
+      series: [{ name: "Desktop", values: [12, 18, 24] }],
     });
   });
 
@@ -73,11 +83,12 @@ describe("canvas domain", () => {
               blocks: [
                 {
                   type: "chart",
+                  kind: "line",
                   title: "Traffic by day",
                   categories: ["Mon", "Tue", "Wed"],
                   series: [
                     {
-                      label: "Desktop",
+                      name: "Desktop",
                       values: [12, 18],
                     },
                   ],
