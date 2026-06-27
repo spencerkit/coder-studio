@@ -8,6 +8,8 @@ type SupportedOp =
   | "memory.create"
   | "memory.update"
   | "memory.delete"
+  | "session.activity.record"
+  | "session.activity.list"
   | "canvas.list"
   | "canvas.create"
   | "canvas.update"
@@ -22,7 +24,8 @@ type CanvasArtifactType = "architecture_canvas" | "report_canvas";
 
 interface SessionEnv {
   apiUrl: string;
-  workspaceId: string;
+  workspaceId?: string;
+  sessionId?: string;
 }
 
 interface ParsedEntryCommand {
@@ -43,8 +46,19 @@ function readRequiredEnv(name: "CODER_STUDIO_API_URL" | "CODER_STUDIO_WORKSPACE_
 function readSessionEnv(): SessionEnv {
   return {
     apiUrl: readRequiredEnv("CODER_STUDIO_API_URL"),
-    workspaceId: readRequiredEnv("CODER_STUDIO_WORKSPACE_ID"),
+    workspaceId: process.env.CODER_STUDIO_WORKSPACE_ID?.trim() || undefined,
+    sessionId: process.env.CODER_STUDIO_SESSION_ID?.trim() || undefined,
   };
+}
+
+function readRequiredWorkspaceId(env: SessionEnv): string {
+  if (!env.workspaceId) {
+    throw new Error(
+      "Coder Studio automation is not available in this session. Missing CODER_STUDIO_WORKSPACE_ID."
+    );
+  }
+
+  return env.workspaceId;
 }
 
 function readOptionValue(argv: string[], index: number, label: string): string {
@@ -81,6 +95,24 @@ function normalizeCanvasArtifactType(value: string): CanvasArtifactType {
   }
 
   return value;
+}
+
+function parseJsonArrayOption(label: string, value: string): unknown[] {
+  const parsed = parseJsonOption(label, value);
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Invalid ${label} JSON: expected array`);
+  }
+
+  return parsed;
+}
+
+function parseJsonObjectOption(label: string, value: string): Record<string, unknown> {
+  const parsed = parseJsonOption(label, value);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`Invalid ${label} JSON: expected object`);
+  }
+
+  return parsed as Record<string, unknown>;
 }
 
 function ensureNoExtraPositionals(positionals: string[]): void {
@@ -525,6 +557,129 @@ function parseUiCommand(op: SupportedOp, argv: string[], workspaceId: string): P
   };
 }
 
+function readRequiredSessionId(explicitSessionId: string | undefined, env: SessionEnv): string {
+  const sessionId = explicitSessionId ?? env.sessionId;
+  if (!sessionId) {
+    throw new Error("Missing CODER_STUDIO_SESSION_ID or --session value");
+  }
+
+  return sessionId;
+}
+
+function parseSessionActivityCommand(
+  op: SupportedOp,
+  argv: string[],
+  env: SessionEnv
+): ParsedEntryCommand {
+  let json = false;
+  let sessionId: string | undefined;
+  let kind: string | undefined;
+  let phase: string | undefined;
+  let title: string | undefined;
+  let summary: string | undefined;
+  let status: string | undefined;
+  let command: string | undefined;
+  let filesJson: string | undefined;
+  let payloadJson: string | undefined;
+  const positionals: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === undefined) {
+      continue;
+    }
+
+    switch (arg) {
+      case "--json":
+        json = true;
+        break;
+      case "--session":
+      case "--session-id":
+        sessionId = readOptionValue(argv, i + 1, "session");
+        i += 1;
+        break;
+      case "--kind":
+        kind = readOptionValue(argv, i + 1, "kind");
+        i += 1;
+        break;
+      case "--phase":
+        phase = readOptionValue(argv, i + 1, "phase");
+        i += 1;
+        break;
+      case "--title":
+        title = readOptionValue(argv, i + 1, "title");
+        i += 1;
+        break;
+      case "--summary":
+        summary = readOptionValue(argv, i + 1, "summary");
+        i += 1;
+        break;
+      case "--status":
+        status = readOptionValue(argv, i + 1, "status");
+        i += 1;
+        break;
+      case "--command":
+        command = readOptionValue(argv, i + 1, "command");
+        i += 1;
+        break;
+      case "--files":
+        filesJson = readOptionValue(argv, i + 1, "files");
+        i += 1;
+        break;
+      case "--payload-json":
+        payloadJson = readOptionValue(argv, i + 1, "payload-json");
+        i += 1;
+        break;
+      default:
+        if (arg.startsWith("-")) {
+          throw new Error(`Unknown option: ${arg}`);
+        }
+        positionals.push(arg);
+        break;
+    }
+  }
+
+  ensureNoExtraPositionals(positionals);
+
+  if (op === "session.activity.list") {
+    return {
+      op,
+      json,
+      args: {
+        sessionId: readRequiredSessionId(sessionId, env),
+      },
+    };
+  }
+
+  if (!kind) {
+    throw new Error("Missing kind value");
+  }
+  if (!phase) {
+    throw new Error("Missing phase value");
+  }
+  if (!title) {
+    throw new Error("Missing title value");
+  }
+
+  return {
+    op,
+    json,
+    args: {
+      sessionId: readRequiredSessionId(sessionId, env),
+      kind,
+      phase,
+      title,
+      ...(summary !== undefined ? { summary } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(command !== undefined ? { command } : {}),
+      ...(filesJson !== undefined ? { files: parseJsonArrayOption("files", filesJson) } : {}),
+      ...(payloadJson !== undefined
+        ? { payload: parseJsonObjectOption("payload-json", payloadJson) }
+        : {}),
+    },
+  };
+}
+
 function parseCommand(
   opValue: string | undefined,
   argv: string[],
@@ -542,18 +697,21 @@ function parseCommand(
     case "memory.create":
     case "memory.update":
     case "memory.delete":
-      return parseMemoryCommand(op, argv, env.workspaceId);
+      return parseMemoryCommand(op, argv, readRequiredWorkspaceId(env));
+    case "session.activity.record":
+    case "session.activity.list":
+      return parseSessionActivityCommand(op, argv, env);
     case "canvas.list":
     case "canvas.create":
     case "canvas.update":
     case "canvas.render":
-      return parseCanvasCommand(op, argv, env.workspaceId);
+      return parseCanvasCommand(op, argv, readRequiredWorkspaceId(env));
     case "ui.open-file":
     case "ui.close-file":
     case "ui.open-url":
     case "ui.close-url":
     case "ui.open-canvas":
-      return parseUiCommand(op, argv, env.workspaceId);
+      return parseUiCommand(op, argv, readRequiredWorkspaceId(env));
     default:
       throw new Error(`Unsupported automation op: ${opValue}`);
   }

@@ -167,6 +167,93 @@ describe("automation entry", () => {
     });
   });
 
+  it("maps session.activity.record with files to the existing websocket command shape in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("CODER_STUDIO_SESSION_ID", "session-env-1");
+
+    await main([
+      "session.activity.record",
+      "--kind",
+      "tool",
+      "--phase",
+      "execution",
+      "--title",
+      "Run verification",
+      "--summary",
+      "Executed the targeted vitest command.",
+      "--status",
+      "completed",
+      "--command",
+      "pnpm exec vitest run packages/cli/src/automation-entry.test.ts",
+      "--files",
+      '["packages/cli/src/automation-entry.ts","packages/cli/src/automation-entry.test.ts"]',
+      "--payload-json",
+      '{"attempt":1}',
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "session.activity.record",
+      args: {
+        sessionId: "session-env-1",
+        kind: "tool",
+        phase: "execution",
+        title: "Run verification",
+        summary: "Executed the targeted vitest command.",
+        status: "completed",
+        command: "pnpm exec vitest run packages/cli/src/automation-entry.test.ts",
+        files: [
+          "packages/cli/src/automation-entry.ts",
+          "packages/cli/src/automation-entry.test.ts",
+        ],
+        payload: { attempt: 1 },
+      },
+    });
+  });
+
+  it("maps session.activity.list to the existing websocket command shape in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["session.activity.list", "--session", "session-123", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "session.activity.list",
+      args: {
+        sessionId: "session-123",
+      },
+    });
+  });
+
+  it("uses CODER_STUDIO_SESSION_ID when session.activity.list does not provide a session flag", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("CODER_STUDIO_SESSION_ID", "session-from-env");
+
+    await main(["session.activity.list", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "session.activity.list",
+      args: {
+        sessionId: "session-from-env",
+      },
+    });
+  });
+
+  it("rejects session.activity.list when no session id is provided by flag or env", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("CODER_STUDIO_SESSION_ID", "");
+
+    await expect(main(["session.activity.list", "--json"])).rejects.toThrow(
+      "Missing CODER_STUDIO_SESSION_ID or --session value"
+    );
+    expect(callCoderStudioCommand).not.toHaveBeenCalled();
+  });
+
   it("rejects unsupported automation ops", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
 
