@@ -38,7 +38,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               <span>{t("supervisor.title")}</span>
             </button>
           </Tooltip>
-          <SessionActivityButton sessionId={sessionId} workspaceId={workspaceId} />
+          <SessionActivityButton sessionId={sessionId} />
         </div>
 
         <ObjectiveDialog workspaceId={workspaceId} sessionId={sessionId} />
@@ -69,7 +69,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         </span>
 
         <div className="supervisor-actions">
-          <SessionActivityButton sessionId={sessionId} workspaceId={workspaceId} />
+          <SessionActivityButton sessionId={sessionId} />
 
           <Tooltip content={t("supervisor.action.details")}>
             <IconButton

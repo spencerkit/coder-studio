@@ -174,15 +174,13 @@ describe("automation entry", () => {
     await main([
       "session.activity.record",
       "--kind",
-      "tool",
-      "--phase",
-      "execution",
+      "command",
       "--title",
       "Run verification",
       "--summary",
       "Executed the targeted vitest command.",
       "--status",
-      "completed",
+      "success",
       "--command",
       "pnpm exec vitest run packages/cli/src/automation-entry.test.ts",
       "--files",
@@ -198,17 +196,44 @@ describe("automation entry", () => {
       op: "session.activity.record",
       args: {
         sessionId: "session-env-1",
-        kind: "tool",
-        phase: "execution",
+        kind: "command",
         title: "Run verification",
         summary: "Executed the targeted vitest command.",
-        status: "completed",
+        status: "success",
         command: "pnpm exec vitest run packages/cli/src/automation-entry.test.ts",
         files: [
           "packages/cli/src/automation-entry.ts",
           "packages/cli/src/automation-entry.test.ts",
         ],
         payload: { attempt: 1 },
+      },
+    });
+  });
+
+  it("allows session.activity.record without a phase", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.stubEnv("CODER_STUDIO_SESSION_ID", "session-env-2");
+
+    await main([
+      "session.activity.record",
+      "--kind",
+      "note",
+      "--title",
+      "Flag blocker",
+      "--summary",
+      "Waiting on follow-up context.",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "session.activity.record",
+      args: {
+        sessionId: "session-env-2",
+        kind: "note",
+        title: "Flag blocker",
+        summary: "Waiting on follow-up context.",
       },
     });
   });

@@ -269,13 +269,13 @@ describe("builtin skills", () => {
       "meaningful milestones, not trivial noise"
     );
     expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
-      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind plan_update`
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind plan`
     );
     expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
-      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind command_finish`
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind command`
     );
     expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
-      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind edit_finish --files`
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind edit --phase finish --title`
     );
     expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
       `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.list --json`
@@ -297,7 +297,7 @@ describe("builtin skills", () => {
       now: () => 1234,
     });
 
-    expect(entries).toHaveLength(3);
+    expect(entries).toHaveLength(4);
 
     const openEntry = entries.find((entry) => entry.slug === "coder-studio-open");
     expect(openEntry).toMatchObject({
@@ -354,6 +354,27 @@ describe("builtin skills", () => {
     expect(await readFile(join(canvasEntry!.libraryPath, AUTOMATION_CMD_FILE_NAME), "utf8")).toBe(
       `${BUILTIN_AUTOMATION_BRIDGE_SOURCE.trimEnd()}\n`
     );
+
+    const sessionActivityEntry = entries.find(
+      (entry) => entry.slug === "coder-studio-session-activity"
+    );
+    expect(sessionActivityEntry).toMatchObject({
+      slug: "coder-studio-session-activity",
+      source: "builtin",
+      installState: "installed",
+      builtin: { defaultEnabled: true, autoMount: true },
+    });
+
+    const sessionActivityContent = await readFile(
+      join(sessionActivityEntry!.libraryPath, "SKILL.md"),
+      "utf8"
+    );
+    expect(sessionActivityContent).toContain(AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN);
+    expect(sessionActivityContent).toContain("session.activity.record");
+    expect(sessionActivityContent).toContain("session.activity.list");
+    expect(
+      await readFile(join(sessionActivityEntry!.libraryPath, AUTOMATION_CMD_FILE_NAME), "utf8")
+    ).toBe(`${BUILTIN_AUTOMATION_BRIDGE_SOURCE.trimEnd()}\n`);
   });
 
   it("materializes provided built-in SKILL.md files into the state directory", async () => {

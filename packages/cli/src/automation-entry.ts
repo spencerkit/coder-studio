@@ -654,9 +654,6 @@ function parseSessionActivityCommand(
   if (!kind) {
     throw new Error("Missing kind value");
   }
-  if (!phase) {
-    throw new Error("Missing phase value");
-  }
   if (!title) {
     throw new Error("Missing title value");
   }
@@ -667,7 +664,7 @@ function parseSessionActivityCommand(
     args: {
       sessionId: readRequiredSessionId(sessionId, env),
       kind,
-      phase,
+      ...(phase !== undefined ? { phase } : {}),
       title,
       ...(summary !== undefined ? { summary } : {}),
       ...(status !== undefined ? { status } : {}),

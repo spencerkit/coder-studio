@@ -488,9 +488,8 @@ describe("Session Commands", () => {
           sessionId: result.data!.id,
           workspaceId: openResult.data!.id,
           providerId: "review-bot",
-          objective: undefined,
-          baselineGitHead: undefined,
           verificationRuns: [],
+          activityEntries: [],
         });
       } finally {
         rmSync(testDir, { recursive: true, force: true });

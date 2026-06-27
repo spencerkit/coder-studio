@@ -122,10 +122,20 @@ describe("BuiltinSkillSyncManager", () => {
     const result = await manager.sync();
 
     expect(BUILTIN_SKILLS.map((skill) => skill.slug)).toEqual(
-      expect.arrayContaining(["coder-studio-open", "coder-studio-memory"])
+      expect.arrayContaining([
+        "coder-studio-open",
+        "coder-studio-memory",
+        "coder-studio-canvas",
+        "coder-studio-session-activity",
+      ])
     );
     expect(result.libraryEntries.map((entry) => entry.slug)).toEqual(
-      expect.arrayContaining(["coder-studio-open", "coder-studio-memory"])
+      expect.arrayContaining([
+        "coder-studio-open",
+        "coder-studio-memory",
+        "coder-studio-canvas",
+        "coder-studio-session-activity",
+      ])
     );
     expect(result.libraryEntries).toEqual(
       expect.arrayContaining([
@@ -136,6 +146,16 @@ describe("BuiltinSkillSyncManager", () => {
         }),
         expect.objectContaining({
           slug: "coder-studio-memory",
+          source: "builtin",
+          origin: "builtin",
+        }),
+        expect.objectContaining({
+          slug: "coder-studio-canvas",
+          source: "builtin",
+          origin: "builtin",
+        }),
+        expect.objectContaining({
+          slug: "coder-studio-session-activity",
           source: "builtin",
           origin: "builtin",
         }),
@@ -158,9 +178,14 @@ describe("BuiltinSkillSyncManager", () => {
           skillSlug: "coder-studio-canvas",
           status: "mounted",
         }),
+        expect.objectContaining({
+          providerId: "codex",
+          skillSlug: "coder-studio-session-activity",
+          status: "mounted",
+        }),
       ])
     );
-    expect(result.mounted).toHaveLength(3);
+    expect(result.mounted).toHaveLength(4);
     expect(result.skipped).toEqual([]);
     expect(readManagedSkillMarker(join(skillDir, "coder-studio-open"))).toEqual({
       version: 1,
@@ -186,9 +211,18 @@ describe("BuiltinSkillSyncManager", () => {
         skillSlug: "coder-studio-canvas",
       })
     );
+    expect(mountRepo.get("codex", "coder-studio-session-activity")).toEqual(
+      expect.objectContaining({
+        providerId: "codex",
+        skillSlug: "coder-studio-session-activity",
+      })
+    );
     await expect(lstat(join(skillDir, "coder-studio-open", "SKILL.md"))).resolves.toBeTruthy();
     await expect(lstat(join(skillDir, "coder-studio-memory", "SKILL.md"))).resolves.toBeTruthy();
     await expect(lstat(join(skillDir, "coder-studio-canvas", "SKILL.md"))).resolves.toBeTruthy();
+    await expect(
+      lstat(join(skillDir, "coder-studio-session-activity", "SKILL.md"))
+    ).resolves.toBeTruthy();
   });
 
   it("syncs provided built-ins into the library without auto-mounting by default", async () => {

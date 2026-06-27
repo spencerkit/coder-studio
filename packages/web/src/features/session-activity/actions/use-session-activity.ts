@@ -4,14 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { dispatchCommandAtom, wsClientAtom } from "../../../atoms/connection";
 import { sessionByIdAtomFamily } from "../../../atoms/sessions";
 import { sessionTopic } from "../../../ws";
-import { sessionActivityDialogOpenAtomFamily, sessionActivityKindFilterAtomFamily } from "../atoms";
+import {
+  type SessionActivityKindFilter,
+  sessionActivityDialogOpenAtomFamily,
+  sessionActivityKindFilterAtomFamily,
+} from "../atoms";
 
 interface SessionActivityListResult {
   sessionId: string;
   entries: SessionActivityEntry[];
 }
-
-type SessionActivityFilter = "all" | "plan" | "command" | "edit" | "review";
 
 function commandErrorMessage(fallback: string, error?: { message?: string }): string {
   return error?.message?.trim() || fallback;
@@ -36,6 +38,7 @@ export function useSessionActivity(sessionId: string, workspaceId: string) {
 
     if (!result.ok || !result.data) {
       setErrorMessage(commandErrorMessage("Failed to load session logs", result.error));
+      setEntries([]);
       return [];
     }
 
@@ -53,7 +56,7 @@ export function useSessionActivity(sessionId: string, workspaceId: string) {
     }
 
     void refreshActivity();
-  }, [open, refreshActivity, sessionId]);
+  }, [open, refreshActivity]);
 
   useEffect(() => {
     if (!wsClient || typeof wsClient.subscribe !== "function") {
@@ -92,7 +95,7 @@ export function useSessionActivity(sessionId: string, workspaceId: string) {
     open,
     refreshActivity,
     session,
-    setFilter: setFilter as (value: SessionActivityFilter) => void,
+    setFilter: setFilter as (value: SessionActivityKindFilter) => void,
     setOpen,
   };
 }

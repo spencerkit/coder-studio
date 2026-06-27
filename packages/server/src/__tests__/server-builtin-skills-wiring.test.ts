@@ -80,10 +80,16 @@ describe("server built-in skills wiring", () => {
           installState: "installed",
           builtin: { defaultEnabled: true, autoMount: true },
         }),
+        expect.objectContaining({
+          slug: "coder-studio-session-activity",
+          source: "builtin",
+          installState: "installed",
+          builtin: { defaultEnabled: true, autoMount: true },
+        }),
       ])
     );
     expect(ctx.skillLibraryRepo?.list().filter((entry) => entry.source === "builtin")).toHaveLength(
-      3
+      4
     );
     expect(ctx.skillLibraryRepo?.getCustomSkillRoot()).toBe(
       join(tempDir, "state-root", "state", "skills", "custom")
@@ -140,6 +146,25 @@ describe("server built-in skills wiring", () => {
     expect(existsSync(join(builtinRoot, "coder-studio-canvas", AUTOMATION_CMD_FILE_NAME))).toBe(
       true
     );
+
+    const builtinSessionActivitySkillPath = join(
+      builtinRoot,
+      "coder-studio-session-activity",
+      "SKILL.md"
+    );
+    expect(existsSync(builtinSessionActivitySkillPath)).toBe(true);
+    expect(readFileSync(builtinSessionActivitySkillPath, "utf8")).toContain(
+      AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN
+    );
+    expect(readFileSync(builtinSessionActivitySkillPath, "utf8")).toContain(
+      "session.activity.record"
+    );
+    expect(readFileSync(builtinSessionActivitySkillPath, "utf8")).toContain(
+      "session.activity.list"
+    );
+    expect(
+      existsSync(join(builtinRoot, "coder-studio-session-activity", AUTOMATION_CMD_FILE_NAME))
+    ).toBe(true);
 
     const homeOpenSkillPath = join(
       tempDir,
@@ -227,6 +252,43 @@ describe("server built-in skills wiring", () => {
     expect(
       existsSync(
         join(tempDir, "home", ".agents", "skills", "coder-studio-canvas", AUTOMATION_CMD_FILE_NAME)
+      )
+    ).toBe(true);
+
+    const homeSessionActivitySkillPath = join(
+      tempDir,
+      "home",
+      ".agents",
+      "skills",
+      "coder-studio-session-activity",
+      "SKILL.md"
+    );
+    expect(existsSync(homeSessionActivitySkillPath)).toBe(true);
+    expect(readFileSync(homeSessionActivitySkillPath, "utf8")).not.toContain(
+      AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN
+    );
+    expect(readFileSync(homeSessionActivitySkillPath, "utf8")).toContain(
+      join(
+        tempDir,
+        "home",
+        ".agents",
+        "skills",
+        "coder-studio-session-activity",
+        AUTOMATION_CMD_FILE_NAME
+      )
+    );
+    expect(readFileSync(homeSessionActivitySkillPath, "utf8")).toContain("session.activity.record");
+    expect(readFileSync(homeSessionActivitySkillPath, "utf8")).toContain("session.activity.list");
+    expect(
+      existsSync(
+        join(
+          tempDir,
+          "home",
+          ".agents",
+          "skills",
+          "coder-studio-session-activity",
+          AUTOMATION_CMD_FILE_NAME
+        )
       )
     ).toBe(true);
   }, 30_000);

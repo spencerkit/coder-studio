@@ -4,10 +4,9 @@ import { sessionActivityDialogOpenAtomFamily } from "../atoms";
 
 interface SessionActivityButtonProps {
   sessionId: string;
-  workspaceId: string;
 }
 
-export function SessionActivityButton({ sessionId, workspaceId }: SessionActivityButtonProps) {
+export function SessionActivityButton({ sessionId }: SessionActivityButtonProps) {
   const setOpen = useSetAtom(sessionActivityDialogOpenAtomFamily(sessionId));
 
   return (

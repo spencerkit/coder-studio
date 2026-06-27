@@ -82,7 +82,7 @@ registerCommand(
       };
     }
 
-    const next = ctx.sessionMetadataRepo.addActivityEntry(args.sessionId, {
+    const entry = {
       id: randomUUID(),
       sessionId: args.sessionId,
       workspaceId: metadata.workspaceId,
@@ -95,13 +95,18 @@ registerCommand(
       files: args.files,
       payload: args.payload,
       createdAt: Date.now(),
-    });
+    };
 
-    ctx.broadcaster?.broadcast?.(`workspace.${next.workspaceId}.session-activity.changed`, {
+    ctx.sessionMetadataRepo.addActivityEntry(args.sessionId, entry);
+
+    ctx.broadcaster?.broadcast?.(`workspace.${entry.workspaceId}.session-activity.changed`, {
+      action: "recorded",
+      entryId: entry.id,
+      workspaceId: entry.workspaceId,
       sessionId: args.sessionId,
     });
 
-    return next;
+    return entry;
   }
 );
 

@@ -9,7 +9,6 @@ import { useAtomValue } from "jotai";
 import { X } from "lucide-react";
 import { localeAtom } from "../../../atoms/app-ui";
 import {
-  Button,
   DialogHeader,
   EmptyState,
   IconButton,
@@ -22,6 +21,7 @@ import {
 import { formatDate } from "../../../lib/i18n";
 import { formatProviderLabel } from "../../notifications/format";
 import { useSessionActivity } from "../actions/use-session-activity";
+import type { SessionActivityKindFilter } from "../atoms";
 
 interface SessionActivityDialogProps {
   sessionId: string;
@@ -34,7 +34,7 @@ const FILTER_OPTIONS = [
   { label: "Commands", value: "command" },
   { label: "Edits", value: "edit" },
   { label: "Reviews", value: "review" },
-] as const;
+] as const satisfies ReadonlyArray<{ label: string; value: SessionActivityKindFilter }>;
 
 const KIND_TAG_COLOR: Record<
   SessionActivityKind,
@@ -213,18 +213,13 @@ export function SessionActivityDialog({ sessionId, workspaceId }: SessionActivit
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <Button size="sm" variant="ghost" onClick={() => void 0}>
-            Current session
-          </Button>
-          <IconButton
-            aria-label="Close"
-            className="modal-close"
-            icon={<X size={14} />}
-            onClick={() => setOpen(false)}
-            size="sm"
-          />
-        </div>
+        <IconButton
+          aria-label="Close"
+          className="modal-close"
+          icon={<X size={14} />}
+          onClick={() => setOpen(false)}
+          size="sm"
+        />
       </DialogHeader>
 
       <ModalBody>
@@ -234,7 +229,7 @@ export function SessionActivityDialog({ sessionId, workspaceId }: SessionActivit
             size="sm"
             value={filter}
             onChange={(value) => {
-              setFilter(value as "all" | "plan" | "command" | "edit" | "review");
+              setFilter(value as SessionActivityKindFilter);
             }}
           />
 

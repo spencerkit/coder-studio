@@ -148,27 +148,27 @@ describe("session metadata commands", () => {
 
     expect(recorded.ok).toBe(true);
     expect(recorded.data).toMatchObject({
+      id: expect.any(String),
       sessionId: "sess-1",
-      activityEntries: [
-        expect.objectContaining({
-          sessionId: "sess-1",
-          workspaceId: "ws-1",
-          kind: "plan",
-          phase: "start",
-          title: "Plan started",
-          summary: "Reviewing requirements",
-          status: "info",
-          command: "pnpm test",
-          files: ["packages/server/src/commands/session-metadata.ts"],
-          payload: {
-            source: "test",
-          },
-        }),
-      ],
+      workspaceId: "ws-1",
+      kind: "plan",
+      phase: "start",
+      title: "Plan started",
+      summary: "Reviewing requirements",
+      status: "info",
+      command: "pnpm test",
+      files: ["packages/server/src/commands/session-metadata.ts"],
+      payload: {
+        source: "test",
+      },
+      createdAt: expect.any(Number),
     });
     expect(ctx.broadcaster.broadcast).toHaveBeenCalledWith(
       "workspace.ws-1.session-activity.changed",
       {
+        action: "recorded",
+        entryId: recorded.data && typeof recorded.data === "object" ? recorded.data.id : undefined,
+        workspaceId: "ws-1",
         sessionId: "sess-1",
       }
     );
