@@ -8,7 +8,7 @@ import {
   getCommandLookupExecutable,
 } from "../provider-runtime/command-check.js";
 import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
-import { decodeWindowsConsoleOutput, formatWslLabel } from "./wsl.js";
+import { decodeWindowsConsoleOutput, formatWslLabel, resolveSafeWslHostCwd } from "./wsl.js";
 
 export interface DetectedTerminalProfile extends TerminalProfile {
   source: "detected";
@@ -203,7 +203,12 @@ function pushIfUnique(
 async function listWslDistros(runCommand?: CommandRunner): Promise<string[]> {
   try {
     const stdout = runCommand
-      ? (await runCommand("wsl.exe", ["-l", "-q"], { windowsHide: true })).stdout
+      ? (
+          await runCommand("wsl.exe", ["-l", "-q"], {
+            windowsHide: true,
+            cwd: resolveSafeWslHostCwd(),
+          })
+        ).stdout
       : await runWslListStdout();
     return parseWslDistroLines(stdout);
   } catch {
@@ -221,6 +226,7 @@ function parseWslDistroLines(stdout: string): string[] {
 function runWslListStdout(): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("wsl.exe", ["-l", "-q"], {
+      cwd: resolveSafeWslHostCwd(),
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });

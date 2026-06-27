@@ -11,7 +11,7 @@ import {
 import type { SessionTokenRepo } from "../auth/session-token-repo.js";
 import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
 import { generateSessionId } from "../session/manager.js";
-import { toWslPath } from "../terminal-profiles/wsl.js";
+import { resolveSafeWslHostCwd, toWslPath } from "../terminal-profiles/wsl.js";
 import type { RuntimeWorkspaceSnapshot, WslRuntimeBootstrapPayload } from "./remote/protocol.js";
 
 const WSL_HOST_IP_PROBE = "ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'";
@@ -107,10 +107,6 @@ function toExecutableWslPath(hostPath: string): string {
   return toWslPath(hostPath) ?? hostPath.replace(/\\/g, "/");
 }
 
-function resolveSafeWslHostCwd(): string {
-  return process.cwd();
-}
-
 export async function probeWslHostIp(
   wslDistro: string,
   runCommand: CommandRunner = runCommandAsString
@@ -118,7 +114,7 @@ export async function probeWslHostIp(
   const { stdout } = await runCommand(
     "wsl.exe",
     ["-d", wslDistro, "--cd", "/", "-e", "sh", "-c", WSL_HOST_IP_PROBE],
-    { windowsHide: true }
+    { windowsHide: true, cwd: resolveSafeWslHostCwd() }
   );
 
   const ip = stdout

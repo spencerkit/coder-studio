@@ -67,4 +67,37 @@ describe("listWslDistros", () => {
       "Ubuntu-24.04",
     ]);
   });
+
+  it("launches local wsl.exe from a host-safe cwd when the server cwd is a WSL share", async () => {
+    const originalCwd = process.cwd;
+    vi.stubEnv("LOCALAPPDATA", "C:\\Users\\spencer\\AppData\\Local");
+    process.cwd = () => "\\\\wsl$\\Ubuntu-24.04\\home\\spencer\\workspace\\coder-studio";
+
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => {
+        child.stdout.emit("data", Buffer.from("Ubuntu-24.04\r\n", "utf16le"));
+        child.emit("close", 0);
+      });
+      return child;
+    });
+
+    try {
+      await expect(listWslDistros({ commandExists: async () => true })).resolves.toEqual([
+        "Ubuntu-24.04",
+      ]);
+
+      expect(spawnMock).toHaveBeenCalledWith(
+        "wsl.exe",
+        ["-l", "-q"],
+        expect.objectContaining({
+          cwd: "C:\\Users\\spencer\\AppData\\Local\\Temp",
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
+        })
+      );
+    } finally {
+      process.cwd = originalCwd;
+    }
+  });
 });

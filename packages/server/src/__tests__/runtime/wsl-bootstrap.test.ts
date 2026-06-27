@@ -67,9 +67,49 @@ describe("resolveWslHostApiUrl", () => {
         "-c",
         expect.stringContaining("ip route show default"),
       ],
-      expect.objectContaining({ windowsHide: true })
+      expect.objectContaining({ windowsHide: true, cwd: process.cwd() })
     );
     expect(result).toBe("http://172.29.224.1:4173");
+  });
+
+  it("probes WSL from a host-safe cwd when the server is started from a WSL share path", async () => {
+    const originalCwd = process.cwd;
+    const runCommand = vi.fn(async () => ({
+      stdout: "172.29.224.1\n",
+      stderr: "",
+    }));
+    vi.stubEnv("LOCALAPPDATA", "C:\\Users\\spencer\\AppData\\Local");
+    process.cwd = () => "\\\\wsl$\\Ubuntu-24.04\\home\\spencer\\workspace\\coder-studio";
+
+    try {
+      const result = await resolveWslHostApiUrl({
+        boundHost: "localhost",
+        port: 4173,
+        wslDistro: "Ubuntu",
+        runCommand,
+      });
+
+      expect(runCommand).toHaveBeenCalledWith(
+        "wsl.exe",
+        [
+          "-d",
+          "Ubuntu",
+          "--cd",
+          "/",
+          "-e",
+          "sh",
+          "-c",
+          expect.stringContaining("ip route show default"),
+        ],
+        expect.objectContaining({
+          windowsHide: true,
+          cwd: "C:\\Users\\spencer\\AppData\\Local\\Temp",
+        })
+      );
+      expect(result).toBe("http://172.29.224.1:4173");
+    } finally {
+      process.cwd = originalCwd;
+    }
   });
 
   it("issues remote-runtime session bootstrap records with runtime-scoped tokens", () => {
@@ -224,6 +264,56 @@ describe("WSL runtime bootstrap", () => {
     ]);
     expect(spec.cwd).toBe(process.cwd());
     expect(spec.env.CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP).toBeTypeOf("string");
+  });
+
+  it("falls back to a host-safe cwd when the server is started from a WSL path", async () => {
+    const originalCwd = process.cwd;
+    const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-host-cwd-test");
+    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    writeFileSync(entryPath, "export {};\n");
+    vi.stubEnv("LOCALAPPDATA", "C:\\Users\\spencer\\AppData\\Local");
+    process.cwd = () => "\\\\wsl$\\Ubuntu-24.04\\home\\spencer\\workspace\\coder-studio";
+
+    try {
+      const spec = await resolveWslRuntimeLaunchSpec({
+        runtimeId: "wsl:ws-1",
+        stateRoot: join(tempRoot, "state-root"),
+        workspace: {
+          id: "ws-1",
+          path: "/home/spencer/workspace/my app",
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+          openedAt: 1,
+          lastActiveAt: 1,
+          uiState: {
+            leftPanelWidth: 250,
+            bottomPanelHeight: 200,
+            focusMode: false,
+          },
+        },
+        settingsSnapshot: {},
+        workspaceSnapshot: [],
+        customProviderConfigs: [],
+        runtimeEntryPathResolver: () => entryPath,
+      });
+
+      expect(spec.args).toEqual([
+        "-d",
+        "Ubuntu-24.04",
+        "--cd",
+        "/home/spencer/workspace/my app",
+        "-e",
+        "sh",
+        "-c",
+        expect.stringContaining('exec "$NODE" "$ENTRY"'),
+        "sh",
+        expect.stringContaining("wsl-runtime-entry.mjs"),
+      ]);
+      expect(spec.cwd).toBe("C:\\Users\\spencer\\AppData\\Local\\Temp");
+    } finally {
+      process.cwd = originalCwd;
+    }
   });
 
   it("fails early when the WSL runtime entrypoint cannot be resolved", async () => {

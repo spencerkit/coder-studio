@@ -33,7 +33,7 @@ describe("browseWslDirectory", () => {
     expect(runCommand).toHaveBeenCalledWith(
       "wsl",
       expect.arrayContaining(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]),
-      { windowsHide: true }
+      expect.objectContaining({ windowsHide: true, cwd: process.cwd() })
     );
   });
 
@@ -133,7 +133,7 @@ describe("browseWslDirectory", () => {
     expect(runCommand).toHaveBeenCalledWith(
       "wsl",
       expect.arrayContaining(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]),
-      { windowsHide: true }
+      expect.objectContaining({ windowsHide: true, cwd: process.cwd() })
     );
   });
 

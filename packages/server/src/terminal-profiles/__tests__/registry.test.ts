@@ -141,7 +141,7 @@ describe("detectTerminalProfiles", () => {
     vi.stubEnv("COMSPEC", "");
 
     const runCommand = vi.fn(
-      async (file: string, args: string[], _options?: { windowsHide: boolean }) => {
+      async (file: string, args: string[], options?: { windowsHide: boolean; cwd?: string }) => {
         if (file === "where" && args[0] === "wsl") {
           return {
             stdout: "C:\\Windows\\System32\\wsl.exe\r\n",
@@ -172,6 +172,66 @@ describe("detectTerminalProfiles", () => {
         argv: ["wsl.exe", "-d", "Ubuntu-24.04"],
       })
     );
+    expect(runCommand).toHaveBeenCalledWith(
+      "wsl.exe",
+      ["-l", "-q"],
+      expect.objectContaining({
+        windowsHide: true,
+        cwd: process.cwd(),
+      })
+    );
+  });
+
+  it("detects WSL distros from a host-safe cwd when the server cwd is a WSL share", async () => {
+    const originalCwd = process.cwd;
+    vi.stubEnv("ComSpec", "");
+    vi.stubEnv("COMSPEC", "");
+    vi.stubEnv("LOCALAPPDATA", "C:\\Users\\spencer\\AppData\\Local");
+    process.cwd = () => "\\\\wsl$\\Ubuntu-24.04\\home\\spencer\\workspace\\coder-studio";
+
+    const runCommand = vi.fn(
+      async (file: string, args: string[], _options?: { windowsHide: boolean; cwd?: string }) => {
+        if (file === "where" && args[0] === "wsl") {
+          return {
+            stdout: "C:\\Windows\\System32\\wsl.exe\r\n",
+            stderr: "",
+          };
+        }
+
+        if (file === "wsl.exe" && args[0] === "-l" && args[1] === "-q") {
+          return {
+            stdout: "Ubuntu-24.04\r\n",
+            stderr: "",
+          };
+        }
+
+        throw new Error(`missing: ${file} ${args.join(" ")}`);
+      }
+    );
+
+    try {
+      const profiles = await detectTerminalProfiles({
+        platform: "win32",
+        runCommand,
+      });
+
+      expect(profiles).toContainEqual(
+        expect.objectContaining({
+          id: "detected:win:wsl:Ubuntu-24.04",
+          label: "Ubuntu-24.04 (WSL)",
+        })
+      );
+      expect(runCommand).toHaveBeenCalledWith(
+        "wsl.exe",
+        ["-l", "-q"],
+        expect.objectContaining({
+          windowsHide: true,
+          cwd: "C:\\Users\\spencer\\AppData\\Local\\Temp",
+        })
+      );
+    } finally {
+      process.cwd = originalCwd;
+    }
   });
 });
 

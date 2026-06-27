@@ -4,7 +4,7 @@ import {
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
 import { type CommandRunner } from "../provider-runtime/command-runner.js";
-import { decodeWindowsConsoleOutput } from "../terminal-profiles/wsl.js";
+import { decodeWindowsConsoleOutput, resolveSafeWslHostCwd } from "../terminal-profiles/wsl.js";
 
 export interface WslDiscoveryDeps {
   commandExists?: CommandAvailabilityCheck;
@@ -38,7 +38,12 @@ export async function listWslDistros(input: WslDiscoveryDeps = {}): Promise<stri
   }
 
   const stdout = input.runCommand
-    ? (await input.runCommand("wsl.exe", ["-l", "-q"], { windowsHide: true })).stdout
+    ? (
+        await input.runCommand("wsl.exe", ["-l", "-q"], {
+          windowsHide: true,
+          cwd: resolveSafeWslHostCwd(),
+        })
+      ).stdout
     : await runWslListStdout();
   return parseWslDistroLines(stdout);
 }
@@ -46,6 +51,7 @@ export async function listWslDistros(input: WslDiscoveryDeps = {}): Promise<stri
 function runWslListStdout(): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("wsl.exe", ["-l", "-q"], {
+      cwd: resolveSafeWslHostCwd(),
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });

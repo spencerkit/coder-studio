@@ -4,6 +4,7 @@ import {
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
 import { type CommandRunner } from "../provider-runtime/command-runner.js";
+import { resolveSafeWslHostCwd } from "../terminal-profiles/wsl.js";
 
 export interface BrowseDirectoryInfo {
   name: string;
@@ -166,6 +167,7 @@ function mapWslBrowseError(error: unknown): never {
 function runWslCommandLocally(command: "wsl" | "wsl.exe", args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
+      cwd: resolveSafeWslHostCwd(),
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -219,7 +221,12 @@ async function runWslHelper(
 
   try {
     if (deps.runCommand) {
-      return (await deps.runCommand(command, args, { windowsHide: true })).stdout;
+      return (
+        await deps.runCommand(command, args, {
+          windowsHide: true,
+          cwd: resolveSafeWslHostCwd(),
+        })
+      ).stdout;
     }
 
     return await runWslCommandLocally(command, args);

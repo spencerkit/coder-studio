@@ -29,6 +29,35 @@ export function toWslPath(windowsPath: string): string | null {
   return `/mnt/${drive}${relative ? `/${relative}` : ""}`;
 }
 
+function isUnsafeWslHostCwd(cwd: string): boolean {
+  const normalized = cwd.trim().toLowerCase();
+  return normalized.startsWith("\\\\") || normalized.startsWith("//");
+}
+
+function resolveSafeWslHostFallbackCwd(env: NodeJS.ProcessEnv): string {
+  const localAppData = env.LOCALAPPDATA?.trim();
+  if (localAppData) {
+    return path.win32.join(localAppData, "Temp");
+  }
+
+  const temp = env.TEMP?.trim();
+  if (temp) {
+    return temp;
+  }
+
+  const tmp = env.TMP?.trim();
+  if (tmp) {
+    return tmp;
+  }
+
+  return process.cwd();
+}
+
+export function resolveSafeWslHostCwd(env: NodeJS.ProcessEnv = process.env): string {
+  const cwd = process.cwd();
+  return isUnsafeWslHostCwd(cwd) ? resolveSafeWslHostFallbackCwd(env) : cwd;
+}
+
 export function toExplicitWslCwd(workspacePath: string, distro?: string): string | null {
   const trimmed = workspacePath.trim();
   if (!trimmed) {
