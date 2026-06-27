@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { validateCanvasSource } from "./validation.js";
 
+function createReportChartBlock(kind: "line" | "bar" | "sparkline") {
+  return {
+    type: "chart" as const,
+    kind,
+    title: "Package trends",
+    summary: "Packages over time.",
+    unit: "packages",
+    categories: ["Jan", "Feb"],
+    series: [{ name: "Packages", values: [6, 7] }],
+    showLegend: true,
+  };
+}
+
 describe("validateCanvasSource", () => {
   it("accepts a valid architecture canvas envelope", () => {
     const result = validateCanvasSource(
@@ -63,6 +76,7 @@ describe("validateCanvasSource", () => {
     "bar",
     "sparkline",
   ] as const)("accepts a valid report canvas chart block with kind %s", (kind) => {
+    const chartBlock = createReportChartBlock(kind);
     const result = validateCanvasSource(
       JSON.stringify({
         version: 1,
@@ -74,18 +88,7 @@ describe("validateCanvasSource", () => {
           sections: [
             {
               title: "Findings",
-              blocks: [
-                {
-                  type: "chart",
-                  kind,
-                  title: "Package trends",
-                  summary: "Packages over time.",
-                  unit: "packages",
-                  categories: ["Jan", "Feb"],
-                  series: [{ name: "Packages", values: [6, 7] }],
-                  showLegend: true,
-                },
-              ],
+              blocks: [chartBlock],
             },
           ],
         },
@@ -100,18 +103,7 @@ describe("validateCanvasSource", () => {
         document: expect.objectContaining({
           sections: [
             expect.objectContaining({
-              blocks: [
-                expect.objectContaining({
-                  type: "chart",
-                  kind,
-                  title: "Package trends",
-                  summary: "Packages over time.",
-                  unit: "packages",
-                  categories: ["Jan", "Feb"],
-                  series: [{ name: "Packages", values: [6, 7] }],
-                  showLegend: true,
-                }),
-              ],
+              blocks: [expect.objectContaining(chartBlock)],
             }),
           ],
         }),

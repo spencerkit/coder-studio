@@ -93,7 +93,7 @@ describe("compileCanvasDocument", () => {
     });
   });
 
-  it("preserves report chart blocks", () => {
+  it("preserves chart blocks alongside other report blocks in order", () => {
     const compiled = compileCanvasDocument({
       version: 1,
       kind: "report_canvas",
@@ -105,12 +105,19 @@ describe("compileCanvasDocument", () => {
           {
             title: "Findings",
             blocks: [
+              { type: "markdown", markdown: "Server owns rendering." },
               {
                 type: "chart",
                 kind: "bar",
                 title: "Package trends",
                 categories: ["Jan", "Feb"],
                 series: [{ name: "Packages", values: [6, 7] }],
+              },
+              {
+                type: "callout",
+                tone: "info",
+                title: "Ownership",
+                body: "Charts stay in their original position.",
               },
             ],
           },
@@ -130,12 +137,19 @@ describe("compileCanvasDocument", () => {
           type: "section",
           title: "Findings",
           blocks: [
+            { type: "markdown", markdown: "Server owns rendering." },
             {
               type: "chart",
               kind: "bar",
               title: "Package trends",
               categories: ["Jan", "Feb"],
               series: [{ name: "Packages", values: [6, 7] }],
+            },
+            {
+              type: "callout",
+              tone: "info",
+              title: "Ownership",
+              body: "Charts stay in their original position.",
             },
           ],
         },
