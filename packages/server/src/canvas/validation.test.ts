@@ -1,7 +1,8 @@
+import { type ReportChartKind, ReportChartKindSchema } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { validateCanvasSource } from "./validation.js";
 
-function createReportChartBlock(kind: "line" | "bar" | "sparkline") {
+function createReportChartBlock(kind: ReportChartKind) {
   return {
     type: "chart" as const,
     kind,
@@ -71,11 +72,9 @@ describe("validateCanvasSource", () => {
     });
   });
 
-  it.each([
-    "line",
-    "bar",
-    "sparkline",
-  ] as const)("accepts a valid report canvas chart block with kind %s", (kind) => {
+  it.each(
+    ReportChartKindSchema.options
+  )("accepts a valid report canvas chart block with kind %s", (kind) => {
     const chartBlock = createReportChartBlock(kind);
     const result = validateCanvasSource(
       JSON.stringify({

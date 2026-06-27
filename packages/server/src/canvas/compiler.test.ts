@@ -1,7 +1,8 @@
+import { type ReportChartKind, ReportChartKindSchema } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { compileCanvasDocument } from "./compiler.js";
 
-function createReportChartBlock(kind: "line" | "bar" | "sparkline") {
+function createReportChartBlock(kind: ReportChartKind) {
   return {
     type: "chart" as const,
     kind,
@@ -106,11 +107,9 @@ describe("compileCanvasDocument", () => {
     });
   });
 
-  it.each([
-    "line",
-    "bar",
-    "sparkline",
-  ] as const)("preserves a %s chart block when compiling report canvases", (kind) => {
+  it.each(
+    ReportChartKindSchema.options
+  )("preserves a %s chart block when compiling report canvases", (kind) => {
     const chartBlock = createReportChartBlock(kind);
     const compiled = compileCanvasDocument({
       version: 1,
