@@ -1,10 +1,11 @@
-import type { Supervisor } from "@coder-studio/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { Session, SessionActivityEntry, Supervisor } from "@coder-studio/core";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
 import { wsClientAtom } from "../../../atoms/connection";
+import { sessionsAtom } from "../../../atoms/sessions";
 import { supervisorDialogAtom, supervisorsAtom } from "../atoms";
 import { SupervisorCard } from "../views/shared/supervisor-card";
 
@@ -64,6 +65,38 @@ describe("SupervisorCard", () => {
     updatedAt: 1,
   });
 
+  const createSession = (overrides: Partial<Session> = {}): Session => ({
+    id: "sess-1",
+    workspaceId: "ws-1",
+    terminalId: "term-1",
+    providerId: "codex",
+    state: "running",
+    capability: "full",
+    startedAt: 1,
+    lastActiveAt: 2,
+    title: "Fix session logs",
+    firstSubmittedUserInput: "Fix session logs",
+    ...overrides,
+  });
+
+  const createActivityEntry = (
+    overrides: Partial<SessionActivityEntry> = {}
+  ): SessionActivityEntry => ({
+    id: "entry-1",
+    sessionId: "sess-1",
+    workspaceId: "ws-1",
+    kind: "command",
+    phase: "finish",
+    title: "Run focused tests",
+    summary: "Verified the session activity modal.",
+    status: "success",
+    command: "pnpm vitest run",
+    files: ["packages/web/src/features/session-activity/views/session-activity-dialog.tsx"],
+    payload: { suite: "supervisor-card" },
+    createdAt: 2_000,
+    ...overrides,
+  });
+
   it("shows a unified Supervisor label for the inactive enable button", () => {
     const store = createStore();
     window.localStorage.setItem("ui.locale", JSON.stringify("en"));
@@ -80,6 +113,7 @@ describe("SupervisorCard", () => {
     const button = screen.getByRole("button", { name: "Enable Supervisor" });
     expect(button).toHaveTextContent("Supervisor");
     expect(button.querySelector('[data-icon-semantic="supervisor.entry"]')).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Logs" })).toBeInTheDocument();
   });
 
   it("opens the enable dialog from the inactive supervisor button", () => {
@@ -604,5 +638,168 @@ describe("SupervisorCard", () => {
 
     expect(screen.queryByRole("button", { name: /expand/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Finish the server refactor")).not.toBeInTheDocument();
+  });
+
+  it("opens session logs, filters entries, and refreshes when the current session changes", async () => {
+    const user = userEvent.setup();
+    const subscribe = vi.fn();
+    let eventHandler: ((topic: string, payload: unknown, seq: number) => void) | null = null;
+    subscribe.mockImplementation((_topics: string[], handler: typeof eventHandler) => {
+      eventHandler = handler;
+      return vi.fn();
+    });
+
+    const sendCommand = vi
+      .fn()
+      .mockResolvedValueOnce({
+        sessionId: "sess-1",
+        entries: [
+          createActivityEntry({
+            id: "entry-review",
+            kind: "review",
+            phase: "finish",
+            title: "Review current changes",
+            summary: "Checked the final UI state.",
+            command: undefined,
+            files: undefined,
+            payload: undefined,
+            createdAt: 3_000,
+          }),
+          createActivityEntry(),
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessionId: "sess-1",
+        entries: [
+          createActivityEntry({
+            id: "entry-refreshed",
+            title: "Refresh after broadcast",
+            createdAt: 4_000,
+          }),
+        ],
+      });
+    const store = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand, subscribe } as never);
+    store.set(sessionsAtom, { "sess-1": createSession() });
+    store.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={store}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Session Logs", level: 2 })
+    ).toBeInTheDocument();
+    expect(sendCommand).toHaveBeenCalledWith(
+      "session.activity.list",
+      { sessionId: "sess-1" },
+      undefined
+    );
+    expect(await screen.findByText("Review current changes")).toBeInTheDocument();
+    expect(screen.getByText("Run focused tests")).toBeInTheDocument();
+    expect(screen.getByText("pnpm vitest run")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "packages/web/src/features/session-activity/views/session-activity-dialog.tsx"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/"suite":\s+"supervisor-card"/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Reviews" }));
+
+    expect(screen.getByText("Review current changes")).toBeInTheDocument();
+    expect(screen.queryByText("Run focused tests")).not.toBeInTheDocument();
+
+    await act(async () => {
+      eventHandler?.(
+        "workspace.ws-1.session-activity.changed",
+        {
+          workspaceId: "ws-1",
+          sessionId: "sess-2",
+          entryId: "entry-other",
+          action: "recorded",
+        },
+        1
+      );
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("tab", { name: "All" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
+    });
+
+    await act(async () => {
+      eventHandler?.(
+        "workspace.ws-1.session-activity.changed",
+        {
+          workspaceId: "ws-1",
+          sessionId: "sess-1",
+          entryId: "entry-refreshed",
+          action: "recorded",
+        },
+        2
+      );
+    });
+
+    expect(await screen.findByText("Refresh after broadcast")).toBeInTheDocument();
+    expect(sendCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows empty and error states for session logs", async () => {
+    const user = userEvent.setup();
+    const emptySendCommand = vi.fn().mockResolvedValue({
+      sessionId: "sess-1",
+      entries: [],
+    });
+    const emptyStore = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    emptyStore.set(localeAtom, "en");
+    emptyStore.set(wsClientAtom, {
+      sendCommand: emptySendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+    } as never);
+    emptyStore.set(sessionsAtom, { "sess-1": createSession() });
+    emptyStore.set(supervisorsAtom, new Map());
+
+    const { unmount } = render(
+      <Provider store={emptyStore}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+    expect(await screen.findByText("No logs recorded for this session yet.")).toBeInTheDocument();
+
+    unmount();
+
+    const errorSendCommand = vi.fn().mockRejectedValue(new Error("list failed"));
+    const errorStore = createStore();
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    errorStore.set(localeAtom, "en");
+    errorStore.set(wsClientAtom, {
+      sendCommand: errorSendCommand,
+      subscribe: vi.fn(() => vi.fn()),
+    } as never);
+    errorStore.set(sessionsAtom, { "sess-1": createSession() });
+    errorStore.set(supervisorsAtom, new Map([["sess-1", createSupervisor()]]));
+
+    render(
+      <Provider store={errorStore}>
+        <SupervisorCard sessionId="sess-1" workspaceId="ws-1" />
+      </Provider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Logs" }));
+    expect(await screen.findByText("list failed")).toBeInTheDocument();
   });
 });

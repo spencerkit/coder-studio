@@ -25,5 +25,11 @@ describe("subscription topic helpers", () => {
     expect(sessionTopic("ws-1", "sess-1", "supervisor.state")).toBe(
       Topics.supervisorState("ws-1", "sess-1")
     );
+    expect(workspaceTopic("ws-1", "session-activity", "changed")).toBe(
+      Topics.sessionActivityChanged("ws-1")
+    );
+    expect(sessionTopic("ws-1", "sess-1", "activity.changed")).toBe(
+      Topics.sessionActivityChanged("ws-1")
+    );
   });
 });

@@ -1,5 +1,6 @@
-import { IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
+import { Button, IconButton, ThemedIcon, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { SessionActivityButton, SessionActivityDialog } from "../../../session-activity";
 import { useSupervisorActions } from "../../actions/use-supervisor-actions";
 import { ObjectiveDialog } from "./objective-dialog";
 import { SupervisorDetailsDialog } from "./supervisor-details-dialog";
@@ -37,9 +38,11 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
               <span>{t("supervisor.title")}</span>
             </button>
           </Tooltip>
+          <SessionActivityButton sessionId={sessionId} workspaceId={workspaceId} />
         </div>
 
         <ObjectiveDialog workspaceId={workspaceId} sessionId={sessionId} />
+        <SessionActivityDialog sessionId={sessionId} workspaceId={workspaceId} />
       </>
     );
   }
@@ -66,6 +69,8 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
         </span>
 
         <div className="supervisor-actions">
+          <SessionActivityButton sessionId={sessionId} workspaceId={workspaceId} />
+
           <Tooltip content={t("supervisor.action.details")}>
             <IconButton
               aria-label={t("supervisor.action.details")}
@@ -119,6 +124,7 @@ export function SupervisorCard({ sessionId, workspaceId }: SupervisorCardProps) 
 
       <SupervisorDetailsDialog workspaceId={workspaceId} sessionId={sessionId} />
       <ObjectiveDialog workspaceId={workspaceId} sessionId={sessionId} />
+      <SessionActivityDialog sessionId={sessionId} workspaceId={workspaceId} />
     </div>
   );
 }

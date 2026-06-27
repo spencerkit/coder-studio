@@ -128,6 +128,8 @@ export function workspaceTopic(workspaceId: string, ...parts: string[]): string 
       return Topics.workspaceGitState(workspaceId);
     case "fs.dirty":
       return Topics.workspaceFsDirty(workspaceId);
+    case "session-activity.changed":
+      return Topics.sessionActivityChanged(workspaceId);
     default:
       return `workspace.${workspaceId}.${key}`;
   }
@@ -160,6 +162,8 @@ export function sessionTopic(workspaceId: string, sessionId: string, event: stri
       return Topics.sessionProgress(workspaceId, sessionId);
     case "supervisor.state":
       return Topics.supervisorState(workspaceId, sessionId);
+    case "activity.changed":
+      return Topics.sessionActivityChanged(workspaceId);
     default:
       return `workspace.${workspaceId}.session.${sessionId}.${event}`;
   }

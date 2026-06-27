@@ -11,6 +11,8 @@ export const Topics = {
   workspaceGitState: (id: string) => `workspace.${id}.git.state`,
   workspaceLspDiagnostics: (workspaceId: string) => `workspace.${workspaceId}.lsp.diagnostics`,
   workspaceUiAction: (workspaceId: string) => `workspace.${workspaceId}.ui.action`,
+  sessionActivityChanged: (workspaceId: string) =>
+    `workspace.${workspaceId}.session-activity.changed`,
   workspaceAll: (id: string) => `workspace.${id}.*`,
 
   // Session-level
