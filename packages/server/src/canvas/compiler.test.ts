@@ -139,6 +139,8 @@ describe("compileCanvasDocument", () => {
 
     expect(compiled.kind).toBe("report_canvas");
     expect(compiled.title).toBe("Audit");
+    expect(compiled.sections).toHaveLength(2);
+    expect(compiled.sections.map((section) => section.type)).toEqual(["stats", "section"]);
     expect(compiled.sections[0]).toEqual({
       type: "stats",
       items: [],
