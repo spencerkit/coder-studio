@@ -42,6 +42,7 @@ describe("session metadata commands", () => {
       baselineGitHead: "abc123",
       baselineCapturedAt: 100,
       verificationRuns: [],
+      activityEntries: [],
     });
 
     ctx = {
@@ -86,6 +87,7 @@ describe("session metadata commands", () => {
       baselineGitHead: "abc123",
       baselineCapturedAt: 100,
       verificationRuns: [],
+      activityEntries: [],
     });
   });
 
@@ -115,6 +117,101 @@ describe("session metadata commands", () => {
           status: "passed",
           exitCode: 0,
           summary: "lint clean",
+        }),
+      ],
+      activityEntries: [],
+    });
+  });
+
+  it("records a session activity entry and broadcasts a workspace activity change", async () => {
+    const recorded = await dispatch(
+      {
+        kind: "command",
+        id: "session-activity-record",
+        op: "session.activity.record",
+        args: {
+          sessionId: "sess-1",
+          kind: "plan",
+          phase: "start",
+          title: "Plan started",
+          summary: "Reviewing requirements",
+          status: "info",
+          command: "pnpm test",
+          files: ["packages/server/src/commands/session-metadata.ts"],
+          payload: {
+            source: "test",
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(recorded.ok).toBe(true);
+    expect(recorded.data).toMatchObject({
+      sessionId: "sess-1",
+      activityEntries: [
+        expect.objectContaining({
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          kind: "plan",
+          phase: "start",
+          title: "Plan started",
+          summary: "Reviewing requirements",
+          status: "info",
+          command: "pnpm test",
+          files: ["packages/server/src/commands/session-metadata.ts"],
+          payload: {
+            source: "test",
+          },
+        }),
+      ],
+    });
+    expect(ctx.broadcaster.broadcast).toHaveBeenCalledWith(
+      "workspace.ws-1.session-activity.changed",
+      {
+        sessionId: "sess-1",
+      }
+    );
+  });
+
+  it("lists recorded session activity entries", async () => {
+    await dispatch(
+      {
+        kind: "command",
+        id: "session-activity-record",
+        op: "session.activity.record",
+        args: {
+          sessionId: "sess-1",
+          kind: "review",
+          phase: "finish",
+          title: "Verification finished",
+        },
+      },
+      ctx
+    );
+
+    const listed = await dispatch(
+      {
+        kind: "command",
+        id: "session-activity-list",
+        op: "session.activity.list",
+        args: {
+          sessionId: "sess-1",
+        },
+      },
+      ctx
+    );
+
+    expect(listed.ok).toBe(true);
+    expect(listed.data).toEqual({
+      sessionId: "sess-1",
+      entries: [
+        expect.objectContaining({
+          sessionId: "sess-1",
+          workspaceId: "ws-1",
+          kind: "review",
+          phase: "finish",
+          title: "Verification finished",
         }),
       ],
     });

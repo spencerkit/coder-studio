@@ -66,6 +66,7 @@ describe("SessionMetadataRepo", () => {
       baselineGitHead: "abc123",
       baselineCapturedAt: 1000,
       verificationRuns: [],
+      activityEntries: [],
     });
 
     const reloadedRepo = new SessionMetadataRepo({ workspaceRepo });
@@ -78,6 +79,7 @@ describe("SessionMetadataRepo", () => {
       baselineGitHead: "abc123",
       baselineCapturedAt: 1000,
       verificationRuns: [],
+      activityEntries: [],
     });
   });
 
@@ -87,6 +89,7 @@ describe("SessionMetadataRepo", () => {
       workspaceId: "ws-1",
       providerId: "codex",
       verificationRuns: [],
+      activityEntries: [],
     });
 
     repo.addVerificationRun("sess-1", {
@@ -134,6 +137,7 @@ describe("SessionMetadataRepo", () => {
       workspaceId: "ws-1",
       providerId: "codex",
       verificationRuns: [],
+      activityEntries: [],
       attachedAgentInstructions: {
         effectiveHash: "hash-123",
         mode: "manual",
@@ -148,6 +152,7 @@ describe("SessionMetadataRepo", () => {
       workspaceId: "ws-1",
       providerId: "codex",
       verificationRuns: [],
+      activityEntries: [],
       attachedAgentInstructions: {
         effectiveHash: "hash-123",
         mode: "manual",
@@ -173,6 +178,7 @@ describe("SessionMetadataRepo", () => {
       workspaceId: "ws-2",
       providerId: "codex",
       verificationRuns: [],
+      activityEntries: [],
     });
 
     expect(repo.get("sess-2")).toMatchObject({
@@ -180,9 +186,78 @@ describe("SessionMetadataRepo", () => {
       workspaceId: "ws-2",
       providerId: "codex",
       verificationRuns: [],
+      activityEntries: [],
     });
     await expect(
       stat(join(otherWorkspacePath, ".coder-studio", "session-metadata.json"))
     ).resolves.toBeDefined();
+  });
+
+  it("rehydrates missing activity entries as an empty list in a fresh repo instance", () => {
+    repo.upsert({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      verificationRuns: [],
+      activityEntries: [],
+    });
+
+    const reloadedRepo = new SessionMetadataRepo({ workspaceRepo });
+
+    expect(reloadedRepo.get("sess-1")?.activityEntries).toEqual([]);
+  });
+
+  it("rehydrates appended activity entries in created order in a fresh repo instance", () => {
+    repo.upsert({
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      providerId: "codex",
+      verificationRuns: [],
+      activityEntries: [],
+    });
+
+    repo.addActivityEntry("sess-1", {
+      id: "activity-1",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      kind: "plan",
+      phase: "start",
+      title: "Planning",
+      createdAt: 100,
+    });
+    repo.addActivityEntry("sess-1", {
+      id: "activity-2",
+      sessionId: "sess-1",
+      workspaceId: "ws-1",
+      kind: "review",
+      phase: "finish",
+      title: "Verification complete",
+      status: "success",
+      createdAt: 200,
+    });
+
+    const reloadedRepo = new SessionMetadataRepo({ workspaceRepo });
+
+    expect(reloadedRepo.get("sess-1")?.activityEntries).toEqual([
+      {
+        id: "activity-1",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        kind: "plan",
+        phase: "start",
+        title: "Planning",
+        createdAt: 100,
+      },
+      {
+        id: "activity-2",
+        sessionId: "sess-1",
+        workspaceId: "ws-1",
+        kind: "review",
+        phase: "finish",
+        title: "Verification complete",
+        status: "success",
+        createdAt: 200,
+      },
+    ]);
   });
 });

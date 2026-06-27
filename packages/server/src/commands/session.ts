@@ -110,6 +110,7 @@ registerRuntimeCommand(
         baselineGitHead: await tryReadGitHead(workspace.path),
         baselineCapturedAt: Date.now(),
         verificationRuns: [],
+        activityEntries: [],
       });
 
       return session;

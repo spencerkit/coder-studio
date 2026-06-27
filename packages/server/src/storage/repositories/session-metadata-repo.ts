@@ -1,4 +1,8 @@
-import type { AgentSessionMetadata, AgentSessionVerificationRun } from "@coder-studio/core";
+import type {
+  AgentSessionMetadata,
+  AgentSessionVerificationRun,
+  SessionActivityEntry,
+} from "@coder-studio/core";
 import {
   resolveWorkspaceStateFilePath,
   SESSION_METADATA_FILE_NAME,
@@ -43,22 +47,35 @@ function normalizeRun(run: AgentSessionVerificationRun): AgentSessionVerificatio
   };
 }
 
+function normalizeActivityEntry(entry: SessionActivityEntry): SessionActivityEntry {
+  return {
+    ...entry,
+  };
+}
+
 function normalizeMetadata(metadata: AgentSessionMetadata): AgentSessionMetadata {
   return {
     sessionId: metadata.sessionId,
     workspaceId: metadata.workspaceId,
     providerId: metadata.providerId,
-    objective: metadata.objective ?? undefined,
-    baselineGitHead: metadata.baselineGitHead ?? undefined,
-    baselineCapturedAt: metadata.baselineCapturedAt ?? undefined,
+    ...(metadata.objective !== undefined ? { objective: metadata.objective } : {}),
+    ...(metadata.baselineGitHead !== undefined
+      ? { baselineGitHead: metadata.baselineGitHead }
+      : {}),
+    ...(metadata.baselineCapturedAt !== undefined
+      ? { baselineCapturedAt: metadata.baselineCapturedAt }
+      : {}),
     verificationRuns: metadata.verificationRuns.map(normalizeRun),
-    attachedAgentInstructions: metadata.attachedAgentInstructions
+    activityEntries: (metadata.activityEntries ?? []).map(normalizeActivityEntry),
+    ...(metadata.attachedAgentInstructions
       ? {
-          effectiveHash: metadata.attachedAgentInstructions.effectiveHash,
-          mode: metadata.attachedAgentInstructions.mode,
-          attachedAt: metadata.attachedAgentInstructions.attachedAt,
+          attachedAgentInstructions: {
+            effectiveHash: metadata.attachedAgentInstructions.effectiveHash,
+            mode: metadata.attachedAgentInstructions.mode,
+            attachedAt: metadata.attachedAgentInstructions.attachedAt,
+          },
         }
-      : undefined,
+      : {}),
   };
 }
 
@@ -139,6 +156,23 @@ export class SessionMetadataRepo {
     existing.fileMetadata[sessionId] = normalizeMetadata({
       ...existing.fileMetadata[sessionId]!,
       verificationRuns: [...existing.fileMetadata[sessionId]!.verificationRuns, normalizeRun(run)],
+    });
+    this.saveWorkspaceFileMetadata(existing.workspace.path, existing.fileMetadata);
+    return existing.fileMetadata[sessionId]!;
+  }
+
+  addActivityEntry(sessionId: string, entry: SessionActivityEntry): AgentSessionMetadata {
+    const existing = this.findSessionLocation(sessionId);
+    if (!existing) {
+      throw new Error(`Session metadata not found: ${sessionId}`);
+    }
+
+    existing.fileMetadata[sessionId] = normalizeMetadata({
+      ...existing.fileMetadata[sessionId]!,
+      activityEntries: [
+        ...existing.fileMetadata[sessionId]!.activityEntries,
+        normalizeActivityEntry(entry),
+      ],
     });
     this.saveWorkspaceFileMetadata(existing.workspace.path, existing.fileMetadata);
     return existing.fileMetadata[sessionId]!;

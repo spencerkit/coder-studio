@@ -529,6 +529,7 @@ registerCommand(
         workspaceId: workspace.id,
         providerId: session.providerId,
         verificationRuns: [],
+        activityEntries: [],
       }),
       sessionId,
       workspaceId: workspace.id,
