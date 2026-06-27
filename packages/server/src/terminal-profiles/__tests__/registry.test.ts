@@ -278,7 +278,7 @@ describe("terminal profile registry", () => {
     expect(result.profiles[0]?.label).toBe("Ubuntu-24.04 (WSL)");
   });
 
-  it("falls back to the distro home when a WSL cwd cannot be mapped", async () => {
+  it("converts matching WSL UNC workspace paths into explicit Linux --cd targets", async () => {
     const launch = await resolveTerminalLaunch({
       platform: "win32",
       configuredDefaultProfileId: "detected:win:wsl:Ubuntu-24.04",
@@ -299,7 +299,63 @@ describe("terminal profile registry", () => {
     });
 
     expect(launch.title).toBe("Ubuntu-24.04 (WSL)");
-    expect(launch.argv).toEqual(["wsl.exe", "-d", "Ubuntu-24.04"]);
+    expect(launch.argv).toEqual(["wsl.exe", "-d", "Ubuntu-24.04", "--cd", "/repo/app"]);
     expect(launch.cwd).toBe("\\\\wsl$\\Ubuntu-24.04\\repo\\app");
+  });
+
+  it("passes a Linux workspace path through to WSL profiles as an explicit --cd target", async () => {
+    const launch = await resolveTerminalLaunch({
+      platform: "win32",
+      configuredDefaultProfileId: "detected:win:wsl:Ubuntu-24.04",
+      workspacePath: "/home/spencer/workspace/my app",
+      customProfiles: [],
+      detectProfiles: async () => [
+        {
+          id: "detected:win:wsl:Ubuntu-24.04",
+          label: "Ubuntu-24.04",
+          source: "detected",
+          runtime: "wsl",
+          icon: "terminal",
+          argv: ["wsl.exe", "-d", "Ubuntu-24.04"],
+          cwdRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        },
+      ],
+    });
+
+    expect(launch.title).toBe("Ubuntu-24.04 (WSL)");
+    expect(launch.argv).toEqual([
+      "wsl.exe",
+      "-d",
+      "Ubuntu-24.04",
+      "--cd",
+      "/home/spencer/workspace/my app",
+    ]);
+    expect(launch.cwd).toBe("/home/spencer/workspace/my app");
+  });
+
+  it("falls back to the distro home when a WSL UNC path points to a different distro", async () => {
+    const launch = await resolveTerminalLaunch({
+      platform: "win32",
+      configuredDefaultProfileId: "detected:win:wsl:Ubuntu-24.04",
+      workspacePath: "\\\\wsl$\\Debian\\home\\spencer\\workspace\\my app",
+      customProfiles: [],
+      detectProfiles: async () => [
+        {
+          id: "detected:win:wsl:Ubuntu-24.04",
+          label: "Ubuntu-24.04",
+          source: "detected",
+          runtime: "wsl",
+          icon: "terminal",
+          argv: ["wsl.exe", "-d", "Ubuntu-24.04"],
+          cwdRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        },
+      ],
+    });
+
+    expect(launch.title).toBe("Ubuntu-24.04 (WSL)");
+    expect(launch.argv).toEqual(["wsl.exe", "-d", "Ubuntu-24.04"]);
+    expect(launch.cwd).toBe("\\\\wsl$\\Debian\\home\\spencer\\workspace\\my app");
   });
 });

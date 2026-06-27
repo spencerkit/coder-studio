@@ -156,12 +156,56 @@ describe("WSL runtime bootstrap", () => {
     expect(spec.args).toEqual([
       "-d",
       "Ubuntu-24.04",
+      "--cd",
+      "/home/me/app",
       "--",
       "node",
       expect.stringContaining("wsl-runtime-entry.mjs"),
     ]);
+    expect(spec.cwd).toBe(process.cwd());
     expect(spec.env.CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP).toBeTypeOf("string");
     expect(spec.bootstrap.hostApiUrl).toBe("http://172.29.224.1:4173");
+  });
+
+  it("launches wsl.exe from a safe Windows cwd instead of inheriting the workspace path", async () => {
+    const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-safe-cwd-test");
+    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    writeFileSync(entryPath, "export {};\n");
+
+    const spec = await resolveWslRuntimeLaunchSpec({
+      runtimeId: "wsl:ws-1",
+      stateRoot: join(tempRoot, "state-root"),
+      workspace: {
+        id: "ws-1",
+        path: "/home/me/app",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 250,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      settingsSnapshot: {},
+      workspaceSnapshot: [],
+      customProviderConfigs: [],
+      runtimeEntryPathResolver: () => entryPath,
+    });
+
+    expect(spec.args).toEqual([
+      "-d",
+      "Ubuntu-24.04",
+      "--cd",
+      "/home/me/app",
+      "--",
+      "node",
+      expect.stringContaining("wsl-runtime-entry.mjs"),
+    ]);
+    expect(spec.cwd).toBe(process.cwd());
+    expect(spec.env.CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP).toBeTypeOf("string");
   });
 
   it("fails early when the WSL runtime entrypoint cannot be resolved", async () => {

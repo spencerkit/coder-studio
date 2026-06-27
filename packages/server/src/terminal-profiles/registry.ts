@@ -4,7 +4,7 @@ import type {
   TerminalProfilesListResult,
 } from "@coder-studio/core";
 import { type DetectedTerminalProfile, detectTerminalProfiles } from "./detect.js";
-import { appendWslCwd, formatWslLabel, toWslPath } from "./wsl.js";
+import { appendWslCwd, formatWslLabel, toExplicitWslCwd } from "./wsl.js";
 
 export interface ResolvedTerminalLaunch {
   profileId: string;
@@ -72,7 +72,7 @@ export async function resolveTerminalLaunch(
     return {
       profileId: profile.id,
       title: getDetectedProfileLabel(profile),
-      argv: appendWslCwd(profile.argv, toWslPath(input.workspacePath)),
+      argv: appendWslCwd(profile.argv, toExplicitWslCwd(input.workspacePath, profile.wslDistro)),
       cwd: input.workspacePath,
     };
   }

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { canonicalizeWslWorkspacePath } from "../workspace/wsl-paths.js";
 
 export function decodeWindowsConsoleOutput(buffer: Buffer): string {
   if (buffer.length === 0) {
@@ -26,6 +27,23 @@ export function toWslPath(windowsPath: string): string | null {
   const drive = parsed.root[0]!.toLowerCase();
   const relative = windowsPath.slice(parsed.root.length).replace(/\\/g, "/");
   return `/mnt/${drive}${relative ? `/${relative}` : ""}`;
+}
+
+export function toExplicitWslCwd(workspacePath: string, distro?: string): string | null {
+  const trimmed = workspacePath.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return canonicalizeWslWorkspacePath(trimmed, distro);
+  }
+
+  try {
+    return canonicalizeWslWorkspacePath(trimmed, distro);
+  } catch {
+    return toWslPath(trimmed);
+  }
 }
 
 export function appendWslCwd(argv: string[], mappedCwd: string | null): string[] {

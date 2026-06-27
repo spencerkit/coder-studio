@@ -97,6 +97,10 @@ function toExecutableWslPath(hostPath: string): string {
   return toWslPath(hostPath) ?? hostPath.replace(/\\/g, "/");
 }
 
+function resolveSafeWslHostCwd(): string {
+  return process.cwd();
+}
+
 export async function probeWslHostIp(
   wslDistro: string,
   runCommand: CommandRunner = runCommandAsString
@@ -209,8 +213,16 @@ export async function resolveWslRuntimeLaunchSpec(
 
   return {
     command: "wsl.exe",
-    args: ["-d", distro, "--", "node", toExecutableWslPath(entryPath)],
-    cwd: dirname(entryPath),
+    args: [
+      "-d",
+      distro,
+      "--cd",
+      input.workspace.path,
+      "--",
+      "node",
+      toExecutableWslPath(entryPath),
+    ],
+    cwd: resolveSafeWslHostCwd(),
     env: {
       CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: serializeWslRuntimeBootstrap(bootstrap),
     },
