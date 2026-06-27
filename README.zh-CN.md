@@ -55,6 +55,16 @@ vibe coding 一开始很快，但当 Agent 输出进入真实项目，后面还�
 
 ## 快速开始
 
+### 桌面 App（macOS / Windows）
+
+1. 从 Releases 下载最新桌面安装包。
+2. 安装并打开 `Coder Studio`。
+3. 打开一个本地仓库并启动 Agent 会话。
+
+> 桌面 App 内置 Node.js，但你仍然需要为要使用的 Agent 安装对应的 provider CLI。
+
+### CLI 安装方式
+
 ```bash
 # 全局安装
 npm install -g @spencer-kit/coder-studio
@@ -138,7 +148,7 @@ coder-studio open
 
 | 依赖 | 版本 | 说明 |
 |------|------|------|
-| Node.js | ≥ 24.0.0 | 运行 Coder Studio 必需 |
+| Node.js | ≥ 24.0.0 | CLI 安装方式仍然必需 |
 | AI coding agent CLI | 最新版 | 可选 —— 为你想运行的 Agent 安装对应 CLI |
 
 ---

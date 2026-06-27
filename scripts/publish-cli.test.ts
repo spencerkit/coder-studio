@@ -90,6 +90,7 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "desktop-server.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
@@ -125,6 +126,46 @@ describe("publish-cli", () => {
     });
   });
 
+  it("requires the built desktop server artifact that is included in the package", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
+    const cliDir = join(dir, "packages", "cli");
+
+    await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
+    await mkdir(join(cliDir, "dist", "web"), { recursive: true });
+    await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
+    await writeFile(
+      join(cliDir, "package.json"),
+      JSON.stringify({
+        name: "@spencer-kit/coder-studio",
+        version: "1.2.3",
+        bin: { "coder-studio": "./src/bin.ts" },
+        files: ["dist"],
+        publishConfig: {
+          bin: { "coder-studio": "./dist/bin.js" },
+          exports: {
+            ".": {
+              import: "./dist/esm/index.mjs",
+            },
+          },
+        },
+        exports: {
+          ".": {
+            import: "./src/index.ts",
+          },
+        },
+        dependencies: {
+          "@xterm/addon-serialize": "^0.14.0",
+        },
+      })
+    );
+
+    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow("desktop-server.mjs");
+  });
+
   it("rejects built runtime imports that are not declared in the CLI package dependencies", async () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
     const cliDir = join(dir, "packages", "cli");
@@ -136,6 +177,7 @@ describe("publish-cli", () => {
       join(cliDir, "dist", "esm", "bin.mjs"),
       'import { SerializeAddon } from "@xterm/addon-serialize";\nvoid SerializeAddon;\n'
     );
+    await writeFile(join(cliDir, "dist", "esm", "desktop-server.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
@@ -174,6 +216,7 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "desktop-server.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");

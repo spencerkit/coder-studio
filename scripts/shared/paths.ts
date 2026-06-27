@@ -19,11 +19,15 @@ export const SERVER_DIR = resolve(PACKAGES_DIR, "server");
 export const UTILS_DIR = resolve(PACKAGES_DIR, "utils");
 export const WEB_DIR = resolve(PACKAGES_DIR, "web");
 export const CLI_DIR = resolve(PACKAGES_DIR, "cli");
+export const DESKTOP_DIR = resolve(PACKAGES_DIR, "desktop");
 
 // Build output directories
 export const WEB_DIST_DIR = resolve(WEB_DIR, "dist");
 export const SERVER_DIST_DIR = resolve(SERVER_DIR, "dist");
 export const CLI_DIST_DIR = resolve(CLI_DIR, "dist");
+export const DESKTOP_DIST_DIR = resolve(DESKTOP_DIR, "dist");
+export const DESKTOP_ELECTRON_DIR = resolve(DESKTOP_DIST_DIR, "electron");
+export const DESKTOP_RUNTIME_DIR = resolve(DESKTOP_DIST_DIR, "runtime");
 
 // CLI subdirectories
 export const CLI_ESM_DIR = resolve(CLI_DIST_DIR, "esm");

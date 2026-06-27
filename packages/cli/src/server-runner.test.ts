@@ -112,6 +112,40 @@ describe("server-runner", () => {
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
+  it("passes explicit startup overrides through to createServer", async () => {
+    readCliConfig.mockReturnValue({
+      host: "127.0.0.1",
+      port: 4173,
+      stateDir: "/tmp/cli-state",
+    });
+    hasWebAssets.mockReturnValue(true);
+    getStaticAssetsDir.mockReturnValue("/tmp/web");
+
+    const stop = vi.fn().mockResolvedValue(undefined);
+    createServer.mockResolvedValue({ stop });
+
+    await startServer({
+      serverConfig: {
+        host: "0.0.0.0",
+        port: 0,
+        stateDir: "/tmp/desktop-state",
+      },
+      writeRuntimeConfig: true,
+      runtimeJsonPath: "/tmp/runtime.json",
+    });
+
+    expect(createServer).toHaveBeenCalledWith({
+      appVersion: getCliVersion(import.meta.url),
+      update: getUpdateRuntimeInfo(import.meta.url),
+      host: "0.0.0.0",
+      port: 0,
+      stateDir: "/tmp/desktop-state",
+      webRoot: "/tmp/web",
+      writeRuntimeConfig: true,
+      runtimeJsonPath: "/tmp/runtime.json",
+    });
+  });
+
   it("prepares local state storage using the resolved server config", () => {
     readCliConfig.mockReturnValue({
       stateDir: "/tmp/cs-data",

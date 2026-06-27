@@ -73,6 +73,26 @@ describe("runtime config", () => {
     expect(readRuntimeConfig()).toBeNull();
   });
 
+  it("writes, reads, and deletes the runtime file at an explicit path", () => {
+    const runtimePath = join(testHomeDir, "desktop-runtime", "runtime.json");
+    const config: RuntimeConfig = {
+      host: "127.0.0.1",
+      port: 4173,
+      pid: 1234,
+      token: "token",
+      serverInstanceId: "server-1",
+      startedAt: 1,
+    };
+
+    expect(readRuntimeConfig(runtimePath)).toBeNull();
+    writeRuntimeConfig(config, runtimePath);
+    expect(readRuntimeConfig()).toBeNull();
+    expect(readRuntimeConfig(runtimePath)).toEqual(config);
+    deleteRuntimeConfig(runtimePath);
+    expect(readRuntimeConfig()).toBeNull();
+    expect(readRuntimeConfig(runtimePath)).toBeNull();
+  });
+
   it("defaults host to localhost when reading a legacy runtime file", () => {
     const runtimeDir = join(homedir(), ".coder-studio");
     if (!existsSync(runtimeDir)) {

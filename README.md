@@ -55,6 +55,16 @@ Vibe coding feels fast until the agent output turns into real project work: you 
 
 ## Quick Start
 
+### Desktop App (macOS / Windows)
+
+1. Download the latest desktop installer from Releases.
+2. Install and open `Coder Studio`.
+3. Open one local repository and start an agent session.
+
+> The desktop app bundles Node.js. You still need to install the provider CLI for any agent you want to run.
+
+### CLI Install
+
 ```bash
 # Install globally
 npm install -g @spencer-kit/coder-studio
@@ -138,7 +148,7 @@ The current phone layout is not a bottom dock UI. It uses a top bar for workspac
 
 | Dependency | Version | Notes |
 |------------|---------|-------|
-| Node.js | ≥ 24.0.0 | Required for running Coder Studio |
+| Node.js | ≥ 24.0.0 | Required for the CLI install path |
 | AI coding agent CLI | Latest | Optional — install the CLI for each agent you want to run |
 
 ---

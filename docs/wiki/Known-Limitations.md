@@ -8,9 +8,9 @@ Coder Studio is easiest to understand when its boundaries are explicit. It is no
 
 ## System Requirements
 
-- Node.js 24 or newer is required.
-- Coder Studio is installed as a global npm package.
-- Agent sessions depend on local Provider CLIs installed on your machine.
+- Desktop app: Node.js is bundled for macOS and Windows installs.
+- CLI install path: Node.js 24 or newer is still required.
+- Agent sessions still depend on local Provider CLIs installed on your machine.
 
 ## Provider Boundary
 

@@ -159,6 +159,7 @@ export async function assertCliPublishArtifacts(
 
   await assertFile(resolve(cliDir, "dist/bin.js"));
   await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
+  await assertFile(resolve(cliDir, "dist/esm/desktop-server.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
@@ -166,6 +167,7 @@ export async function assertCliPublishArtifacts(
     pkg.dependencies,
     await collectBareImports(resolve(cliDir, "dist/esm"), [
       "bin.mjs",
+      "desktop-server.mjs",
       "index.mjs",
       "server-runner.mjs",
     ]),

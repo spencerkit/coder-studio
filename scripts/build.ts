@@ -1,11 +1,12 @@
 /**
  * Full production build script
- * Runs build:web then build:cli
+ * Runs build:web, build:cli, then build:desktop
  */
 
 import { buildCli } from "./build-cli.js";
+import { buildDesktop } from "./build-desktop.js";
 import { buildWeb } from "./build-web.js";
-import { error, info, log, step, success } from "./shared/index.js";
+import { error, log, step } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
 async function build(): Promise<void> {
@@ -16,6 +17,9 @@ async function build(): Promise<void> {
 
   // Step 2: Build CLI (includes assembling web assets)
   await buildCli();
+
+  // Step 3: Build desktop shell and staged runtime bundle
+  await buildDesktop();
 
   log("\n✓ Full production build complete.\n");
 }
