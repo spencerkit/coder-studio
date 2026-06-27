@@ -32,7 +32,7 @@ describe("browseWslDirectory", () => {
 
     expect(runCommand).toHaveBeenCalledWith(
       "wsl",
-      expect.arrayContaining(["-d", "Ubuntu-24.04", "--"]),
+      expect.arrayContaining(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]),
       { windowsHide: true }
     );
   });
@@ -132,7 +132,7 @@ describe("browseWslDirectory", () => {
 
     expect(runCommand).toHaveBeenCalledWith(
       "wsl",
-      expect.arrayContaining(["-d", "Ubuntu-24.04", "--"]),
+      expect.arrayContaining(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]),
       { windowsHide: true }
     );
   });
@@ -157,10 +157,10 @@ describe("browseWslDirectory", () => {
     });
 
     const [, args] = runCommand.mock.calls[0] as [string, string[], { windowsHide: true }];
-    const script = args[5];
-    expect(args.slice(0, 5)).toEqual(["-d", "Ubuntu-24.04", "--", "sh", "-lc"]);
-    expect(args[6]).toBe("sh");
-    expect(args[7]).toBe(sensitivePath);
+    const script = args[7];
+    expect(args.slice(0, 7)).toEqual(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]);
+    expect(args[8]).toBe("sh");
+    expect(args[9]).toBe(sensitivePath);
     expect(script).not.toContain(sensitivePath);
     expect(script).not.toContain("touch pwned");
     expect(script).not.toContain("$EVILVAR");

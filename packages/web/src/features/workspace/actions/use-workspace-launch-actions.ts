@@ -101,6 +101,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
   const [wslDistrosLoading, setWslDistrosLoading] = useState(false);
   const [wslDistrosError, setWslDistrosError] = useState<string | null>(null);
   const createRequestIdRef = useRef(0);
+  const previousTargetRuntimeRef = useRef<Workspace["targetRuntime"]>("native");
   const isWindowsPlatform =
     typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("win");
 
@@ -264,6 +265,28 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       cancelled = true;
     };
   }, [dispatch, isWindowsPlatform, t]);
+
+  useEffect(() => {
+    if (!isWindowsPlatform) {
+      return;
+    }
+
+    const switchedToWsl = previousTargetRuntimeRef.current !== "wsl" && targetRuntime === "wsl";
+    previousTargetRuntimeRef.current = targetRuntime;
+
+    if (!switchedToWsl) {
+      return;
+    }
+
+    setCurrentPath("");
+    setDirectories([]);
+    setParentPath(null);
+    setSelectedPath(null);
+    setRootPaths(["/"]);
+    setHomePath(null);
+    setError(null);
+    setWslPath("");
+  }, [isWindowsPlatform, targetRuntime]);
 
   useEffect(() => {
     if (!isWindowsPlatform || targetRuntime !== "wsl" || !wslDistro) {

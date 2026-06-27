@@ -104,12 +104,17 @@ function buildWslShellSnippet(mode: WslHelperMode): string {
 }
 
 function getWslArgs(mode: WslHelperMode, input: { distro: string; path?: string }): string[] {
+  // Use `-e sh -c` (not `-- sh -lc`) so WSL executes dash/sh directly. With `-- sh`,
+  // distros whose default shell is zsh can ignore the requested path argument and fail
+  // while trying to cd into $HOME during login-shell startup.
   return [
     "-d",
     input.distro,
-    "--",
+    "--cd",
+    "/",
+    "-e",
     "sh",
-    "-lc",
+    "-c",
     buildWslShellSnippet(mode),
     "sh",
     input.path ?? "~",
