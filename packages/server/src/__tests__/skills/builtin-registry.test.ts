@@ -10,6 +10,7 @@ import {
 import { CODER_STUDIO_CANVAS_SKILL } from "../../skills/builtin/definitions/coder-studio-canvas.js";
 import { CODER_STUDIO_MEMORY_SKILL } from "../../skills/builtin/definitions/coder-studio-memory.js";
 import { CODER_STUDIO_OPEN_SKILL } from "../../skills/builtin/definitions/coder-studio-open.js";
+import { CODER_STUDIO_SESSION_ACTIVITY_SKILL } from "../../skills/builtin/definitions/coder-studio-session-activity.js";
 import { BUILTIN_SKILLS } from "../../skills/builtin/definitions/index.js";
 import type { BuiltinSkillDefinition } from "../../skills/builtin/definitions/types.js";
 import { materializeBuiltinSkills } from "../../skills/builtin/materialize.js";
@@ -242,6 +243,50 @@ describe("builtin skills", () => {
       },
     ]);
     expect(BUILTIN_SKILLS).toContain(CODER_STUDIO_CANVAS_SKILL);
+  });
+
+  it("declares the session activity skill as an auto-mounted built-in", () => {
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL).toMatchObject({
+      slug: "coder-studio-session-activity",
+      displayName: "Coder Studio Session Activity",
+      description:
+        "Record structured session activity for meaningful milestones during a coding session.",
+      version: "1.0.0",
+      defaultEnabled: true,
+      autoMountInMvp: true,
+      mountRendering: "automation_bridge",
+      files: [{ relativePath: AUTOMATION_CMD_FILE_NAME }],
+    });
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      "name: coder-studio-session-activity"
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain("session.activity.record");
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain("session.activity.list");
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      "record structured session activity"
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      "meaningful milestones, not trivial noise"
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind plan_update`
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind command_finish`
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.record --kind edit_finish --files`
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" session.activity.list --json`
+    );
+    expect(CODER_STUDIO_SESSION_ACTIVITY_SKILL.files).toEqual([
+      {
+        relativePath: AUTOMATION_CMD_FILE_NAME,
+        content: BUILTIN_AUTOMATION_BRIDGE_SOURCE,
+      },
+    ]);
+    expect(BUILTIN_SKILLS).toContain(CODER_STUDIO_SESSION_ACTIVITY_SKILL);
   });
 
   it("materializes built-in SKILL.md files", async () => {
