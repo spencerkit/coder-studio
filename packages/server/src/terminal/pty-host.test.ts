@@ -338,7 +338,12 @@ describe("ensureNodePtySpawnHelperExecutable", () => {
 describe("ensureWslLocalNodePtyPackage", () => {
   const sourcePackageJsonPath = "/mnt/c/coder-studio/node_modules/node-pty/package.json";
   const addonPackageJsonPath = "/mnt/c/coder-studio/node_modules/node-addon-api/package.json";
+  const sourcePackageRoot = "/mnt/c/coder-studio/node_modules/node-pty";
+  const addonPackageRoot = "/mnt/c/coder-studio/node_modules/node-addon-api";
   const stagingRoot = "/home/me/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty";
+  const stagedNodePtySourceRoot = `${stagingRoot}/package-sources/node-pty`;
+  const stagedNodePtySourcePackageJsonPath = `${stagedNodePtySourceRoot}/package.json`;
+  const stagedNodeAddonApiSourceRoot = `${stagingRoot}/package-sources/node-addon-api`;
   const localPackageJsonPath = `${stagingRoot}/node_modules/node-pty/package.json`;
   const localNativeBinaryPath = `${stagingRoot}/node_modules/node-pty/build/Release/pty.node`;
   const stampFilePath = `${stagingRoot}/.coder-studio-node-pty-stamp`;
@@ -415,6 +420,7 @@ describe("ensureWslLocalNodePtyPackage", () => {
     const writeFileSync = vi.fn();
     const mkdirSync = vi.fn();
     const rmSync = vi.fn();
+    const cpSync = vi.fn();
     const spawnSync = vi.fn(() => {
       installed = true;
       return {
@@ -440,25 +446,44 @@ describe("ensureWslLocalNodePtyPackage", () => {
         writeFileSync,
         mkdirSync,
         rmSync,
+        cpSync,
         spawnSync,
       })
     ).toBe(localPackageJsonPath);
 
     expect(rmSync).toHaveBeenCalledWith(stagingRoot, { recursive: true, force: true });
     expect(mkdirSync).toHaveBeenCalledWith(stagingRoot, { recursive: true });
+    expect(cpSync).toHaveBeenCalledWith(sourcePackageRoot, stagedNodePtySourceRoot, {
+      recursive: true,
+      force: true,
+      dereference: true,
+      filter: expect.any(Function),
+    });
+    expect(cpSync).toHaveBeenCalledWith(addonPackageRoot, stagedNodeAddonApiSourceRoot, {
+      recursive: true,
+      force: true,
+      dereference: true,
+    });
     expect(writeFileSync).toHaveBeenCalledWith(
       `${stagingRoot}/package.json`,
-      expect.stringContaining('"node-pty": "file:/mnt/c/coder-studio/node_modules/node-pty"')
+      expect.stringContaining('"node-pty": "file:./package-sources/node-pty"')
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      stagedNodePtySourcePackageJsonPath,
+      expect.stringContaining('"node-addon-api": "file:../node-addon-api"')
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(
+      stagedNodePtySourcePackageJsonPath,
+      expect.not.stringContaining('"prepare"')
     );
     expect(writeFileSync).toHaveBeenCalledWith(stampFilePath, stampKey);
     expect(spawnSync).toHaveBeenCalledWith(
       expect.any(String),
-      expect.arrayContaining(["install", "--no-package-lock", "--omit=dev"]),
+      expect.arrayContaining(["install", "--build-from-source", "--no-package-lock", "--omit=dev"]),
       expect.objectContaining({
         cwd: stagingRoot,
         encoding: "utf8",
         env: expect.objectContaining({
-          npm_config_build_from_source: "true",
           npm_config_audit: "false",
           npm_config_fund: "false",
         }),

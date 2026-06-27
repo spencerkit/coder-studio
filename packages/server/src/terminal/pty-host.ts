@@ -29,6 +29,16 @@ export interface EnsureWslLocalNodePtyPackageOptions {
   writeFileSync?: (path: string, contents: string) => void;
   mkdirSync?: (path: string, options?: { recursive?: boolean }) => void;
   rmSync?: (path: string, options?: { recursive?: boolean; force?: boolean }) => void;
+  cpSync?: (
+    src: string,
+    dest: string,
+    options?: {
+      recursive?: boolean;
+      force?: boolean;
+      dereference?: boolean;
+      filter?: (src: string) => boolean;
+    }
+  ) => void;
   spawnSync?: typeof spawnSync;
 }
 
@@ -46,6 +56,8 @@ function expandHomePath(input: string, env: NodeJS.ProcessEnv): string {
 
 function getPreparedNodePtyPaths(stagingRoot: string) {
   return {
+    stagedNodePtySourceRoot: path.posix.join(stagingRoot, "package-sources", "node-pty"),
+    stagedNodeAddonApiSourceRoot: path.posix.join(stagingRoot, "package-sources", "node-addon-api"),
     localPackageJsonPath: path.posix.join(stagingRoot, "node_modules", "node-pty", "package.json"),
     localNativeBinaryPath: path.posix.join(
       stagingRoot,
@@ -61,6 +73,41 @@ function getPreparedNodePtyPaths(stagingRoot: string) {
 
 function getNodePtyStampKey(version: string, nodeAbi: string, arch: NodeJS.Architecture): string {
   return `${version}|${nodeAbi}|${arch}`;
+}
+
+function shouldCopyNodePtySourceFile(sourcePath: string): boolean {
+  const normalized = sourcePath.replace(/\\/g, "/");
+  if (normalized.endsWith("/node_modules")) {
+    return false;
+  }
+
+  return !normalized.includes("/node_modules/");
+}
+
+function rewriteNodePtySourcePackageJson(packageJson: string): string {
+  const sourcePackage = JSON.parse(packageJson) as {
+    dependencies?: Record<string, string>;
+    scripts?: Record<string, string>;
+  };
+
+  const nextScripts = { ...(sourcePackage.scripts ?? {}) };
+  delete nextScripts.prepare;
+  delete nextScripts.build;
+  delete nextScripts.watch;
+  delete nextScripts.prepublishOnly;
+
+  return `${JSON.stringify(
+    {
+      ...sourcePackage,
+      dependencies: {
+        ...(sourcePackage.dependencies ?? {}),
+        "node-addon-api": "file:../node-addon-api",
+      },
+      scripts: nextScripts,
+    },
+    null,
+    2
+  )}\n`;
 }
 
 function getInstallFailureMessage(result: ReturnType<typeof spawnSync>): string {
@@ -128,6 +175,18 @@ export function ensureWslLocalNodePtyPackage(
     options.rmSync ??
     ((dir: string, rmOptions?: { recursive?: boolean; force?: boolean }) =>
       require("node:fs").rmSync(dir, rmOptions));
+  const copyDir =
+    options.cpSync ??
+    ((
+      src: string,
+      dest: string,
+      copyOptions?: {
+        recursive?: boolean;
+        force?: boolean;
+        dereference?: boolean;
+        filter?: (src: string) => boolean;
+      }
+    ) => require("node:fs").cpSync(src, dest, copyOptions));
   const runInstall = options.spawnSync ?? spawnSync;
 
   if (!fileExists(sourcePackageJsonPath)) {
@@ -146,8 +205,13 @@ export function ensureWslLocalNodePtyPackage(
   const nodeAbi = options.nodeAbi ?? process.versions.modules;
   const arch = options.arch ?? process.arch;
   const stagingRoot = expandHomePath(stagingRootRaw, env);
-  const { localPackageJsonPath, localNativeBinaryPath, stampFilePath } =
-    getPreparedNodePtyPaths(stagingRoot);
+  const {
+    stagedNodePtySourceRoot,
+    stagedNodeAddonApiSourceRoot,
+    localPackageJsonPath,
+    localNativeBinaryPath,
+    stampFilePath,
+  } = getPreparedNodePtyPaths(stagingRoot);
   const stampKey = getNodePtyStampKey(sourceVersion, nodeAbi, arch);
 
   if (
@@ -162,6 +226,23 @@ export function ensureWslLocalNodePtyPackage(
   removeDir(stagingRoot, { recursive: true, force: true });
   makeDir(stagingRoot, { recursive: true });
 
+  copyDir(path.posix.dirname(sourcePackageJsonPath), stagedNodePtySourceRoot, {
+    recursive: true,
+    force: true,
+    dereference: true,
+    filter: shouldCopyNodePtySourceFile,
+  });
+  copyDir(path.posix.dirname(addonPackageJsonPath), stagedNodeAddonApiSourceRoot, {
+    recursive: true,
+    force: true,
+    dereference: true,
+  });
+
+  writeFile(
+    path.posix.join(stagedNodePtySourceRoot, "package.json"),
+    rewriteNodePtySourcePackageJson(readFile(sourcePackageJsonPath, "utf8"))
+  );
+
   writeFile(
     path.posix.join(stagingRoot, "package.json"),
     `${JSON.stringify(
@@ -169,8 +250,8 @@ export function ensureWslLocalNodePtyPackage(
         name: "coder-studio-wsl-node-pty",
         private: true,
         dependencies: {
-          "node-pty": `file:${path.posix.dirname(sourcePackageJsonPath)}`,
-          "node-addon-api": `file:${path.posix.dirname(addonPackageJsonPath)}`,
+          "node-pty": "file:./package-sources/node-pty",
+          "node-addon-api": "file:./package-sources/node-addon-api",
         },
       },
       null,
@@ -182,7 +263,6 @@ export function ensureWslLocalNodePtyPackage(
     ...Object.fromEntries(
       Object.entries(env).filter((entry): entry is [string, string] => !!entry[1])
     ),
-    npm_config_build_from_source: "true",
     npm_config_audit: "false",
     npm_config_fund: "false",
     npm_config_update_notifier: "false",
@@ -190,7 +270,7 @@ export function ensureWslLocalNodePtyPackage(
   const installCommand = resolveNpmInstallCommand(fileExists);
   const installResult = runInstall(
     installCommand.file,
-    [...installCommand.args, "install", "--no-package-lock", "--omit=dev"],
+    [...installCommand.args, "install", "--build-from-source", "--no-package-lock", "--omit=dev"],
     {
       cwd: stagingRoot,
       env: installEnv,
