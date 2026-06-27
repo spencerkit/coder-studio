@@ -58,7 +58,11 @@ describe("validateCanvasSource", () => {
     });
   });
 
-  it("accepts a valid report canvas envelope with a chart block", () => {
+  it.each([
+    "line",
+    "bar",
+    "sparkline",
+  ] as const)("accepts a valid report canvas chart block with kind %s", (kind) => {
     const result = validateCanvasSource(
       JSON.stringify({
         version: 1,
@@ -73,10 +77,13 @@ describe("validateCanvasSource", () => {
               blocks: [
                 {
                   type: "chart",
-                  kind: "bar",
+                  kind,
                   title: "Package trends",
+                  summary: "Packages over time.",
+                  unit: "packages",
                   categories: ["Jan", "Feb"],
                   series: [{ name: "Packages", values: [6, 7] }],
+                  showLegend: true,
                 },
               ],
             },
@@ -90,6 +97,24 @@ describe("validateCanvasSource", () => {
       document: expect.objectContaining({
         kind: "report_canvas",
         title: "Audit",
+        document: expect.objectContaining({
+          sections: [
+            expect.objectContaining({
+              blocks: [
+                expect.objectContaining({
+                  type: "chart",
+                  kind,
+                  title: "Package trends",
+                  summary: "Packages over time.",
+                  unit: "packages",
+                  categories: ["Jan", "Feb"],
+                  series: [{ name: "Packages", values: [6, 7] }],
+                  showLegend: true,
+                }),
+              ],
+            }),
+          ],
+        }),
       }),
     });
   });

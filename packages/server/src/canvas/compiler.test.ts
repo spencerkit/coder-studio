@@ -47,7 +47,7 @@ describe("compileCanvasDocument", () => {
     });
   });
 
-  it("produces a report_canvas render model", () => {
+  it("stringifies report stats values", () => {
     const compiled = compileCanvasDocument({
       version: 1,
       kind: "report_canvas",
@@ -93,14 +93,14 @@ describe("compileCanvasDocument", () => {
     });
   });
 
-  it("preserves chart blocks while stringifying report stats values", () => {
+  it("preserves report chart blocks", () => {
     const compiled = compileCanvasDocument({
       version: 1,
       kind: "report_canvas",
       title: "Audit",
       document: {
         summary: "Workspace audit.",
-        stats: [{ label: "Packages", value: 6, tone: "info" }],
+        stats: [],
         sections: [
           {
             title: "Findings",
@@ -111,10 +111,6 @@ describe("compileCanvasDocument", () => {
                 title: "Package trends",
                 categories: ["Jan", "Feb"],
                 series: [{ name: "Packages", values: [6, 7] }],
-              },
-              {
-                type: "stats",
-                items: [{ label: "Warnings", value: 2 }],
               },
             ],
           },
@@ -128,7 +124,7 @@ describe("compileCanvasDocument", () => {
       sections: [
         {
           type: "stats",
-          items: [{ label: "Packages", value: "6", tone: "info" }],
+          items: [],
         },
         {
           type: "section",
@@ -140,10 +136,6 @@ describe("compileCanvasDocument", () => {
               title: "Package trends",
               categories: ["Jan", "Feb"],
               series: [{ name: "Packages", values: [6, 7] }],
-            },
-            {
-              type: "stats",
-              items: [{ label: "Warnings", value: "2", tone: undefined }],
             },
           ],
         },
