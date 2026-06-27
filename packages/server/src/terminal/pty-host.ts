@@ -75,13 +75,20 @@ function getNodePtyStampKey(version: string, nodeAbi: string, arch: NodeJS.Archi
   return `${version}|${nodeAbi}|${arch}`;
 }
 
-function shouldCopyNodePtySourceFile(sourcePath: string): boolean {
-  const normalized = sourcePath.replace(/\\/g, "/");
-  if (normalized.endsWith("/node_modules")) {
+function shouldCopyNodePtySourceFile(sourceRoot: string, sourcePath: string): boolean {
+  const normalizedRoot = sourceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedPath = sourcePath.replace(/\\/g, "/");
+  const relativePath = normalizedPath.startsWith(`${normalizedRoot}/`)
+    ? normalizedPath.slice(normalizedRoot.length + 1)
+    : normalizedPath === normalizedRoot
+      ? ""
+      : normalizedPath;
+
+  if (relativePath === "node_modules") {
     return false;
   }
 
-  return !normalized.includes("/node_modules/");
+  return !relativePath.includes("node_modules/");
 }
 
 function rewriteNodePtySourcePackageJson(packageJson: string): string {
@@ -230,7 +237,8 @@ export function ensureWslLocalNodePtyPackage(
     recursive: true,
     force: true,
     dereference: true,
-    filter: shouldCopyNodePtySourceFile,
+    filter: (sourcePath: string) =>
+      shouldCopyNodePtySourceFile(path.posix.dirname(sourcePackageJsonPath), sourcePath),
   });
   copyDir(path.posix.dirname(addonPackageJsonPath), stagedNodeAddonApiSourceRoot, {
     recursive: true,

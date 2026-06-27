@@ -464,6 +464,15 @@ describe("ensureWslLocalNodePtyPackage", () => {
       force: true,
       dereference: true,
     });
+    const nodePtyCopyFilter = cpSync.mock.calls[0]?.[2]?.filter as
+      | ((sourcePath: string) => boolean)
+      | undefined;
+    expect(nodePtyCopyFilter).toBeTypeOf("function");
+    expect(nodePtyCopyFilter?.(sourcePackageRoot)).toBe(true);
+    expect(nodePtyCopyFilter?.(`${sourcePackageRoot}/node_modules`)).toBe(false);
+    expect(
+      nodePtyCopyFilter?.(`${sourcePackageRoot}/node_modules/node-addon-api/package.json`)
+    ).toBe(false);
     expect(writeFileSync).toHaveBeenCalledWith(
       `${stagingRoot}/package.json`,
       expect.stringContaining('"node-pty": "file:./package-sources/node-pty"')
