@@ -488,11 +488,22 @@ describe("ensureWslLocalNodePtyPackage", () => {
     expect(writeFileSync).toHaveBeenCalledWith(stampFilePath, stampKey);
     expect(spawnSync).toHaveBeenCalledWith(
       expect.any(String),
-      expect.arrayContaining(["install", "--build-from-source", "--no-package-lock", "--omit=dev"]),
+      expect.arrayContaining(["install", "--no-package-lock", "--omit=dev"]),
+      expect.not.objectContaining({
+        args: expect.arrayContaining(["--build-from-source"]),
+      })
+    );
+    expect(spawnSync).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
       expect.objectContaining({
         cwd: stagingRoot,
         encoding: "utf8",
         env: expect.objectContaining({
+          PATH: expect.stringContaining(
+            "/home/spencer/.local/share/fnm/node-versions/v25.9.0/installation/bin"
+          ),
+          npm_config_build_from_source: "true",
           npm_config_audit: "false",
           npm_config_fund: "false",
         }),

@@ -154,6 +154,20 @@ function resolveNpmInstallCommand(exists: (path: string) => boolean): {
   };
 }
 
+function prependPathEntry(pathValue: string | undefined, entry: string): string {
+  const normalizedEntry = entry.trim();
+  if (!normalizedEntry) {
+    return pathValue ?? "";
+  }
+
+  const parts = (pathValue ?? "").split(":").filter(Boolean);
+  if (parts[0] === normalizedEntry) {
+    return parts.join(":");
+  }
+
+  return [normalizedEntry, ...parts.filter((part) => part !== normalizedEntry)].join(":");
+}
+
 export function ensureWslLocalNodePtyPackage(
   options: EnsureWslLocalNodePtyPackageOptions = {}
 ): string | undefined {
@@ -271,6 +285,8 @@ export function ensureWslLocalNodePtyPackage(
     ...Object.fromEntries(
       Object.entries(env).filter((entry): entry is [string, string] => !!entry[1])
     ),
+    PATH: prependPathEntry(env.PATH, path.posix.dirname(process.execPath)),
+    npm_config_build_from_source: "true",
     npm_config_audit: "false",
     npm_config_fund: "false",
     npm_config_update_notifier: "false",
@@ -278,7 +294,7 @@ export function ensureWslLocalNodePtyPackage(
   const installCommand = resolveNpmInstallCommand(fileExists);
   const installResult = runInstall(
     installCommand.file,
-    [...installCommand.args, "install", "--build-from-source", "--no-package-lock", "--omit=dev"],
+    [...installCommand.args, "install", "--no-package-lock", "--omit=dev"],
     {
       cwd: stagingRoot,
       env: installEnv,
