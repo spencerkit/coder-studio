@@ -58,6 +58,42 @@ describe("validateCanvasSource", () => {
     });
   });
 
+  it("accepts a valid report canvas envelope with a chart block", () => {
+    const result = validateCanvasSource(
+      JSON.stringify({
+        version: 1,
+        kind: "report_canvas",
+        title: "Audit",
+        document: {
+          summary: "Workspace audit.",
+          stats: [{ label: "Packages", value: 6 }],
+          sections: [
+            {
+              title: "Findings",
+              blocks: [
+                {
+                  type: "chart",
+                  kind: "bar",
+                  title: "Package trends",
+                  categories: ["Jan", "Feb"],
+                  series: [{ name: "Packages", values: [6, 7] }],
+                },
+              ],
+            },
+          ],
+        },
+      })
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      document: expect.objectContaining({
+        kind: "report_canvas",
+        title: "Audit",
+      }),
+    });
+  });
+
   it("reports a zod field path for invalid envelopes", () => {
     const result = validateCanvasSource(
       JSON.stringify({
@@ -169,6 +205,43 @@ describe("validateCanvasSource", () => {
         category: "validation_error",
         message: "Canvas source must not contain raw HTML",
         fieldPath: "document.sections.0.blocks.0.markdown",
+      },
+    });
+  });
+
+  it("rejects report chart series with mismatched values lengths", () => {
+    const result = validateCanvasSource(
+      JSON.stringify({
+        version: 1,
+        kind: "report_canvas",
+        title: "Broken",
+        document: {
+          summary: "Workspace audit.",
+          stats: [],
+          sections: [
+            {
+              title: "Findings",
+              blocks: [
+                {
+                  type: "chart",
+                  kind: "line",
+                  title: "Package trends",
+                  categories: ["Jan", "Feb"],
+                  series: [{ name: "Packages", values: [6] }],
+                },
+              ],
+            },
+          ],
+        },
+      })
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        category: "validation_error",
+        message: expect.any(String),
+        fieldPath: "document.sections.0.blocks.0.series.0.values",
       },
     });
   });

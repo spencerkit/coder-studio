@@ -93,6 +93,64 @@ describe("compileCanvasDocument", () => {
     });
   });
 
+  it("preserves chart blocks while stringifying report stats values", () => {
+    const compiled = compileCanvasDocument({
+      version: 1,
+      kind: "report_canvas",
+      title: "Audit",
+      document: {
+        summary: "Workspace audit.",
+        stats: [{ label: "Packages", value: 6, tone: "info" }],
+        sections: [
+          {
+            title: "Findings",
+            blocks: [
+              {
+                type: "chart",
+                kind: "bar",
+                title: "Package trends",
+                categories: ["Jan", "Feb"],
+                series: [{ name: "Packages", values: [6, 7] }],
+              },
+              {
+                type: "stats",
+                items: [{ label: "Warnings", value: 2 }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(compiled).toEqual({
+      kind: "report_canvas",
+      title: "Audit",
+      sections: [
+        {
+          type: "stats",
+          items: [{ label: "Packages", value: "6", tone: "info" }],
+        },
+        {
+          type: "section",
+          title: "Findings",
+          blocks: [
+            {
+              type: "chart",
+              kind: "bar",
+              title: "Package trends",
+              categories: ["Jan", "Feb"],
+              series: [{ name: "Packages", values: [6, 7] }],
+            },
+            {
+              type: "stats",
+              items: [{ label: "Warnings", value: "2", tone: undefined }],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("uses Mermaid flowchart compilation for Mermaid architecture canvases", () => {
     const compiled = compileCanvasDocument({
       version: 1,
