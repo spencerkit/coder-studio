@@ -397,6 +397,7 @@ export async function createServer(
         revokeRuntimeTokens: (runtimeIdToRevoke: string) => {
           sessionTokenRepo.revokeByRuntimeId(runtimeIdToRevoke);
         },
+        runtimeBindings,
       });
     },
   });

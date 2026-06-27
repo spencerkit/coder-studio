@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import type { ProviderDefinition, Workspace } from "@coder-studio/core";
+import type { ProviderDefinition, Session, Terminal, Workspace } from "@coder-studio/core";
 import { toProviderListItem } from "@coder-studio/providers";
+import type { WorkspaceRuntimeBindingStore } from "../host/workspace-runtime-binding.js";
 import type { RuntimeCommandContext } from "./context.js";
 import type { RuntimeExecuteMeta, RuntimeHandle, RuntimeHostBridge } from "./contract.js";
 import {
@@ -147,7 +148,141 @@ type WorkspaceWslRuntimeInput = {
   }): Promise<NonNullable<RuntimeExecuteMeta["sessionBootstrap"]>>;
   resolveClientOwnerId?(clientId: string): string | undefined;
   revokeRuntimeTokens?(runtimeId: string): void;
+  runtimeBindings?: WorkspaceRuntimeBindingStore;
 };
+
+const WSL_RUNTIME_HOST_ENV_BLOCKLIST = new Set([
+  "FNM_MULTISHELL_PATH",
+  "NPM_CONFIG_PREFIX",
+  "npm_config_prefix",
+  "NPM_CONFIG_USERCONFIG",
+  "npm_config_userconfig",
+  "NPM_CONFIG_GLOBALCONFIG",
+  "npm_config_globalconfig",
+  "NPM_CONFIG_CACHE",
+  "npm_config_cache",
+  "NPM_CONFIG_NODEDIR",
+  "npm_config_nodedir",
+  "npm_config_build_from_source",
+  "npm_config_verify_deps_before_run",
+  "npm_config__jsr_registry",
+  "_jsr_registry",
+  "npm_globalconfig",
+  "npm_config_npm_globalconfig",
+  "verify_deps_before_run",
+]);
+
+function isWindowsPathEntry(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.startsWith("/mnt/") ||
+    normalized.startsWith("\\\\") ||
+    /^[a-z]:[\\/]/.test(normalized)
+  );
+}
+
+function sanitizeWslLaunchPath(pathValue: string | undefined): string | undefined {
+  if (!pathValue) {
+    return undefined;
+  }
+
+  const sanitized = pathValue
+    .split(":")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && !isWindowsPathEntry(entry))
+    .join(":");
+
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
+function buildSanitizedWslLaunchEnv(
+  hostEnv: NodeJS.ProcessEnv,
+  runtimeEnv: Record<string, string>
+): Record<string, string> {
+  const nextEnv: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(hostEnv)) {
+    if (value == null || WSL_RUNTIME_HOST_ENV_BLOCKLIST.has(key)) {
+      continue;
+    }
+
+    if (key === "PATH") {
+      const sanitizedPath = sanitizeWslLaunchPath(value);
+      if (sanitizedPath) {
+        nextEnv.PATH = sanitizedPath;
+      }
+      continue;
+    }
+
+    if (key.startsWith("npm_config_") || key.startsWith("NPM_CONFIG_")) {
+      continue;
+    }
+
+    nextEnv[key] = value;
+  }
+
+  return {
+    ...nextEnv,
+    ...runtimeEnv,
+  };
+}
+
+function isTerminalShape(value: unknown): value is Terminal {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    typeof (value as { workspaceId?: unknown }).workspaceId === "string" &&
+    typeof (value as { kind?: unknown }).kind === "string" &&
+    typeof (value as { cwd?: unknown }).cwd === "string" &&
+    typeof (value as { title?: unknown }).title === "string"
+  );
+}
+
+function isSessionShape(value: unknown): value is Session {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    typeof (value as { workspaceId?: unknown }).workspaceId === "string" &&
+    typeof (value as { terminalId?: unknown }).terminalId === "string" &&
+    typeof (value as { providerId?: unknown }).providerId === "string" &&
+    typeof (value as { state?: unknown }).state === "string"
+  );
+}
+
+function bindRuntimeResourceResult(
+  bindings: WorkspaceRuntimeBindingStore | undefined,
+  workspaceId: string,
+  op: string,
+  result: unknown
+): void {
+  if (!bindings) {
+    return;
+  }
+
+  if (op === "terminal.create" && isTerminalShape(result)) {
+    bindings.bindTerminal(result);
+    return;
+  }
+
+  if (op === "session.create" && isSessionShape(result)) {
+    bindings.bindSession(result);
+    bindings.bindTerminal({
+      id: result.terminalId,
+      workspaceId,
+      kind: "agent",
+      title: result.title ?? "",
+      cwd: "",
+      argv: [],
+      cols: 120,
+      rows: 30,
+      alive: result.state !== "ended",
+      createdAt: result.startedAt,
+      ...(result.state === "ended" ? { endedAt: result.endedAt, exitCode: 0 } : {}),
+    });
+  }
+}
 
 function shouldInjectSessionBootstrap(
   op: string,
@@ -212,10 +347,7 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
 
   const child = spawn(launchSpec.command, launchSpec.args, {
     cwd: launchSpec.cwd,
-    env: {
-      ...process.env,
-      ...launchSpec.env,
-    },
+    env: buildSanitizedWslLaunchEnv(process.env, launchSpec.env),
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -257,11 +389,13 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
     },
     async execute(op, args, meta) {
       const nextMeta = await augmentExecuteMeta(input, op, args, meta);
-      return rpc.request("execute", {
+      const result = await rpc.request("execute", {
         op,
         args,
         ...(nextMeta ? { meta: nextMeta } : {}),
       } satisfies RemoteExecuteRequest);
+      bindRuntimeResourceResult(input.runtimeBindings, input.workspace.id, op, result);
+      return result;
     },
     async disposeWorkspace(workspaceId) {
       await rpc.request("disposeWorkspace", {

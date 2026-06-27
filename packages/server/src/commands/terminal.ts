@@ -21,7 +21,6 @@ import { registerHostCommand } from "../host/command-registry.js";
 import { registerRuntimeCommand } from "../runtime/command-registry.js";
 import type { RuntimeCommandContext } from "../runtime/context.js";
 import { listTerminalProfiles, resolveTerminalLaunch } from "../terminal-profiles/registry.js";
-import { executeRuntimeCommandOnTarget } from "../ws/dispatch.js";
 
 const TerminalInputActivitySchema = z.enum(TERMINAL_INPUT_ACTIVITIES).optional();
 const TerminalThemeBackgroundSchema = z

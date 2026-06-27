@@ -328,7 +328,7 @@ export async function resolveWslRuntimeLaunchSpec(
         "CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT",
       ].reduce(
         (current, variableName) => appendWslEnvPassThrough(current, variableName),
-        process.env.WSLENV
+        process.env.WSLENV ?? ""
       ),
       CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: serializeWslRuntimeBootstrap(bootstrap),
       CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON: toExecutableWslPath(
