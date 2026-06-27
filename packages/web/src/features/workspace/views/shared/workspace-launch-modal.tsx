@@ -325,7 +325,7 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     </div>
   );
 
-  const wslLaunchSection =
+  const wslLaunchControls =
     isWindowsPlatform && targetRuntime === "wsl" ? (
       <div className="launch-wsl">
         <label className="launch-runtime__label" htmlFor="workspace-wsl-distro">
@@ -360,7 +360,8 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
     <div className="launch-body">
       {recentSection}
       {runtimeSection}
-      {wslLaunchSection ?? nativeFolderPicker}
+      {wslLaunchControls}
+      {nativeFolderPicker}
 
       {error && (
         <div className="form-error" style={{ marginTop: "var(--sp-3)" }}>

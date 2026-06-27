@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useAtomValue } from "jotai";
+import { ArrowUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dispatchCommandAtom } from "../../../../atoms/connection";
 import {
   Button,
   ConfirmDialog,
@@ -9,10 +12,18 @@ import {
   ModalHeader,
   ModalTitle,
   Sheet,
+  Spinner,
+  ThemedIcon,
 } from "../../../../components/ui";
 import { useViewport } from "../../../../hooks/use-viewport";
 import { useTranslation } from "../../../../lib/i18n";
 import { useWorktreeManagementActions } from "../../actions/use-worktree-management-actions";
+import {
+  getAbsolutePathName,
+  getAbsolutePathParent,
+  isAbsoluteWorktreePath,
+  joinAbsoluteChildPath,
+} from "../../path-utils";
 import { WorktreeDetailPanel } from "./worktree-detail-panel";
 
 type WorktreeManagerView = "list" | "detail" | "create" | "confirm-delete";
@@ -36,6 +47,61 @@ const worktreeListEmptyStateTitleStyle = {
   fontWeight: "var(--font-normal)",
 };
 
+const directoryEmptyStateStyle = {
+  minHeight: "auto",
+  padding: "var(--sp-6)",
+  gap: 0,
+};
+
+const directoryLoadingStateStyle = {
+  padding: "var(--sp-8)",
+  gap: "var(--sp-2)",
+};
+
+const directoryEmptyStateTitleStyle = {
+  margin: 0,
+  color: "var(--text-tertiary)",
+  fontWeight: "var(--font-normal)",
+};
+
+const visuallyHiddenTitleStyle = {
+  position: "absolute" as const,
+  width: "1px",
+  height: "1px",
+  padding: 0,
+  margin: "-1px",
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap" as const,
+  border: 0,
+};
+
+interface DirectoryInfo {
+  name: string;
+  path: string;
+  itemCount?: number;
+}
+
+interface BrowseResult {
+  currentPath: string;
+  parentPath: string | null;
+  directories: DirectoryInfo[];
+  rootPaths?: string[];
+}
+
+function isBrowseResult(value: unknown): value is BrowseResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<BrowseResult>;
+  return (
+    typeof candidate.currentPath === "string" &&
+    (typeof candidate.parentPath === "string" || candidate.parentPath === null) &&
+    Array.isArray(candidate.directories)
+  );
+}
+
 function WorktreeListLoadingState({ title }: { title: string }) {
   return (
     <EmptyState
@@ -54,6 +120,7 @@ export function WorktreeManagerSurface({
 }: WorktreeManagerSurfaceProps) {
   const isMobile = useViewport() === "mobile";
   const t = useTranslation();
+  const dispatch = useAtomValue(dispatchCommandAtom);
   const {
     createWorktree,
     currentWorktree,
@@ -61,6 +128,7 @@ export function WorktreeManagerSurface({
     loadWorktrees,
     removeWorktreeByPath,
     suggestedPathForBranch,
+    workspacePath,
   } = useWorktreeManagementActions(workspaceId);
   const [view, setView] = useState<WorktreeManagerView>("list");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -71,15 +139,210 @@ export function WorktreeManagerSurface({
   const [createError, setCreateError] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [browsePath, setBrowsePath] = useState("");
+  const [browseParentPath, setBrowseParentPath] = useState<string | null>(null);
+  const [browseRootPaths, setBrowseRootPaths] = useState<string[]>(["/"]);
+  const [browseDirectories, setBrowseDirectories] = useState<DirectoryInfo[]>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+  const [selectedDirectoryPath, setSelectedDirectoryPath] = useState<string | null>(null);
+  const [browseHomePath, setBrowseHomePath] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const initializedOpenViewRef = useRef(false);
   const branchInputRef = useRef<HTMLInputElement | null>(null);
+  const createFolderInputRef = useRef<HTMLInputElement | null>(null);
+  const browseRequestIdRef = useRef(0);
 
   const resetCreateForm = () => {
     setBranchDraft("");
     setPathDraft("");
     setPathTouched(false);
     setCreateError(null);
+    setSelectedDirectoryPath(null);
+    setBrowseError(null);
+    setIsCreatingFolder(false);
+    setNewFolderName("");
+    setCreateFolderError(null);
+    setCreatingFolder(false);
   };
+
+  const loadBrowseDirectory = useCallback(
+    async (path?: string, options?: { useFallback?: boolean }) => {
+      if (!workspaceId) {
+        return;
+      }
+
+      const requestId = browseRequestIdRef.current + 1;
+      browseRequestIdRef.current = requestId;
+      setBrowseLoading(true);
+      setBrowseError(null);
+
+      const fallbackPath =
+        browsePath || getAbsolutePathParent(pathDraft.trim()) || pathDraft.trim();
+      const requestedPath =
+        path ??
+        (options?.useFallback === false
+          ? undefined
+          : fallbackPath && isAbsoluteWorktreePath(fallbackPath)
+            ? fallbackPath
+            : undefined);
+
+      const result = await dispatch<BrowseResult>("file.browse", {
+        workspaceId,
+        path: requestedPath,
+      });
+
+      if (browseRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (!result.ok || !isBrowseResult(result.data)) {
+        setBrowseError(result.error?.message ?? t("workspace.launch.browse_failed"));
+        setBrowseLoading(false);
+        return;
+      }
+
+      setBrowsePath(result.data.currentPath);
+      setBrowseParentPath(result.data.parentPath);
+      setBrowseDirectories(result.data.directories);
+      const nextRootPaths = result.data.rootPaths?.filter(Boolean) ?? ["/"];
+      setBrowseRootPaths(nextRootPaths);
+      setBrowseHomePath(
+        nextRootPaths.find((candidate) => candidate !== "/" && candidate !== "\\") ?? null
+      );
+      setBrowseLoading(false);
+    },
+    [browsePath, dispatch, pathDraft, t, workspaceId]
+  );
+
+  const updatePathDraft = useCallback((value: string, options?: { markTouched?: boolean }) => {
+    if (options?.markTouched !== false) {
+      setPathTouched(true);
+    }
+
+    setPathDraft(value);
+  }, []);
+
+  const getShortPath = useCallback(
+    (path: string) => {
+      if (browseHomePath && path === browseHomePath) {
+        return "~";
+      }
+
+      if (browseHomePath && path.startsWith(`${browseHomePath}/`)) {
+        return `~${path.slice(browseHomePath.length)}`;
+      }
+
+      if (browseHomePath && path.startsWith(`${browseHomePath}\\`)) {
+        return `~${path.slice(browseHomePath.length)}`;
+      }
+
+      return path;
+    },
+    [browseHomePath]
+  );
+
+  const handleBrowseNavigate = useCallback(
+    (path: string) => {
+      const currentLeafName = getAbsolutePathName(pathDraft.trim());
+      setSelectedDirectoryPath(null);
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      setCreateFolderError(null);
+      setCreatingFolder(false);
+      if (currentLeafName) {
+        updatePathDraft(joinAbsoluteChildPath(path, currentLeafName), { markTouched: true });
+      }
+      void loadBrowseDirectory(path);
+    },
+    [getAbsolutePathName, loadBrowseDirectory, pathDraft, updatePathDraft]
+  );
+
+  const handleBrowseSelect = useCallback((path: string) => {
+    setSelectedDirectoryPath(path);
+    setCreateError(null);
+  }, []);
+
+  const openCreateFolder = useCallback(() => {
+    setIsCreatingFolder(true);
+    setCreateFolderError(null);
+  }, []);
+
+  const closeCreateFolder = useCallback(() => {
+    browseRequestIdRef.current += 1;
+    setIsCreatingFolder(false);
+    setNewFolderName("");
+    setCreateFolderError(null);
+    setCreatingFolder(false);
+  }, []);
+
+  const submitCreateFolder = useCallback(async () => {
+    const trimmedName = newFolderName.trim();
+
+    if (!trimmedName) {
+      setCreateFolderError(t("workspace.launch.folder_name_required"));
+      return;
+    }
+
+    if (trimmedName.includes("/") || trimmedName.includes("\\")) {
+      setCreateFolderError(t("workspace.launch.folder_name_invalid"));
+      return;
+    }
+
+    if (!browsePath || !isAbsoluteWorktreePath(browsePath)) {
+      setCreateFolderError(t("workspace.launch.create_folder_failed"));
+      return;
+    }
+
+    setCreatingFolder(true);
+    setCreateFolderError(null);
+    const requestId = browseRequestIdRef.current + 1;
+    browseRequestIdRef.current = requestId;
+
+    const createPath = joinAbsoluteChildPath(browsePath, trimmedName);
+    const result = await dispatch<{ ok: true }>("file.mkdirAbsolute", {
+      workspaceId,
+      path: createPath,
+    });
+
+    if (browseRequestIdRef.current !== requestId) {
+      return;
+    }
+
+    if (!result.ok) {
+      setCreateFolderError(result.error?.message ?? t("workspace.launch.create_folder_failed"));
+      setCreatingFolder(false);
+      return;
+    }
+
+    const currentLeafName = getAbsolutePathName(pathDraft.trim()) || trimmedName;
+    const nextBrowsePath = createPath;
+    await loadBrowseDirectory(nextBrowsePath);
+
+    if (browseRequestIdRef.current !== requestId) {
+      return;
+    }
+
+    setSelectedDirectoryPath(null);
+    updatePathDraft(joinAbsoluteChildPath(nextBrowsePath, currentLeafName), { markTouched: true });
+    setIsCreatingFolder(false);
+    setNewFolderName("");
+    setCreateFolderError(null);
+    setCreatingFolder(false);
+  }, [
+    getAbsolutePathName,
+    browsePath,
+    dispatch,
+    loadBrowseDirectory,
+    newFolderName,
+    pathDraft,
+    t,
+    updatePathDraft,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!openView) {
@@ -100,6 +363,12 @@ export function WorktreeManagerSurface({
     if (openView === "create") {
       resetCreateForm();
       setView("create");
+      const suggestedPath = suggestedPathForBranch(branchDraft);
+      const initialBrowsePath =
+        getAbsolutePathParent(suggestedPath) ??
+        getAbsolutePathParent(workspacePath) ??
+        (isAbsoluteWorktreePath(workspacePath) ? workspacePath : undefined);
+      void loadBrowseDirectory(initialBrowsePath, { useFallback: false });
     } else {
       setView("list");
     }
@@ -107,15 +376,50 @@ export function WorktreeManagerSurface({
     if (!list.lastLoadedAt && !list.loading) {
       void loadWorktrees();
     }
-  }, [list.lastLoadedAt, list.loading, loadWorktrees, openView]);
+  }, [
+    branchDraft,
+    list.lastLoadedAt,
+    list.loading,
+    loadBrowseDirectory,
+    loadWorktrees,
+    openView,
+    suggestedPathForBranch,
+    workspacePath,
+  ]);
 
   useEffect(() => {
     if (view !== "create" || pathTouched) {
       return;
     }
 
-    setPathDraft(branchDraft.trim() ? suggestedPathForBranch(branchDraft) : "");
+    const nextPath = branchDraft.trim() ? suggestedPathForBranch(branchDraft) : "";
+    setPathDraft(nextPath);
+    setSelectedDirectoryPath(null);
   }, [branchDraft, pathTouched, suggestedPathForBranch, view]);
+
+  useEffect(() => {
+    if (!isCreatingFolder) {
+      return;
+    }
+
+    const input = createFolderInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    const focusInput = () => {
+      input.focus();
+    };
+
+    focusInput();
+
+    if (document.activeElement === input) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(focusInput, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [isCreatingFolder]);
 
   const selected = useMemo(
     () => list.items.find((item) => item.path === selectedPath) ?? null,
@@ -145,8 +449,7 @@ export function WorktreeManagerSurface({
         ? t("worktree.create_title")
         : t("worktree.list_title");
 
-  const canSubmit =
-    branchDraft.trim().length > 0 && /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(pathDraft.trim());
+  const canSubmit = branchDraft.trim().length > 0 && isAbsoluteWorktreePath(pathDraft.trim());
   const pathHintId = `worktree-path-hint-${workspaceId}`;
   const branchPlaceholder = t("worktree.create_branch_placeholder");
   const pathPlaceholder =
@@ -164,6 +467,10 @@ export function WorktreeManagerSurface({
     setSelectedPath(null);
     setNotice(null);
     setView("create");
+    const initialBrowsePath =
+      getAbsolutePathParent(workspacePath) ??
+      (isAbsoluteWorktreePath(workspacePath) ? workspacePath : undefined);
+    void loadBrowseDirectory(initialBrowsePath, { useFallback: false });
   };
 
   const submitDeleteConfirm = () => {
@@ -235,8 +542,7 @@ export function WorktreeManagerSurface({
             id={`worktree-path-${workspaceId}`}
             value={pathDraft}
             onChange={(event) => {
-              setPathTouched(true);
-              setPathDraft(event.target.value);
+              updatePathDraft(event.target.value);
             }}
             placeholder={pathPlaceholder}
             aria-describedby={pathHintId}
@@ -245,6 +551,149 @@ export function WorktreeManagerSurface({
             {t("worktree.create_path_hint")}
           </span>
         </div>
+
+        <div className="folder-picker">
+          <div className="fp-toolbar">
+            <button className="fp-btn" type="button" onClick={() => void loadBrowseDirectory()}>
+              {t("action.refresh")}
+            </button>
+            {browseParentPath ? (
+              <button
+                className="fp-btn"
+                type="button"
+                onClick={() => handleBrowseNavigate(browseParentPath)}
+              >
+                <ArrowUp size={12} />
+                {t("workspace.launch.go_up")}
+              </button>
+            ) : null}
+            <button className="fp-btn" type="button" onClick={openCreateFolder}>
+              {t("workspace.launch.new_folder")}
+            </button>
+          </div>
+
+          <div className="fp-root-chips">
+            {browseRootPaths.map((rootPath) => (
+              <span
+                key={rootPath}
+                className={`fp-chip ${browsePath === rootPath ? "active" : ""}`}
+                onClick={() => handleBrowseNavigate(rootPath)}
+              >
+                {getShortPath(rootPath)}
+              </span>
+            ))}
+            {browsePath && !browseRootPaths.includes(browsePath) ? (
+              <span className="fp-chip active">{getShortPath(browsePath)}</span>
+            ) : null}
+          </div>
+
+          {isCreatingFolder ? (
+            <div className="fp-create-folder">
+              <Input
+                ref={createFolderInputRef}
+                aria-label={t("workspace.launch.folder_name_label")}
+                className="fp-create-folder__input"
+                disabled={creatingFolder}
+                invalid={Boolean(createFolderError)}
+                onChange={(event) => setNewFolderName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void submitCreateFolder();
+                    return;
+                  }
+
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeCreateFolder();
+                  }
+                }}
+                placeholder={t("workspace.launch.new_folder_placeholder")}
+                value={newFolderName}
+              />
+              <button
+                className="fp-create-folder__action"
+                type="button"
+                onClick={() => void submitCreateFolder()}
+                disabled={creatingFolder}
+              >
+                {creatingFolder
+                  ? t("workspace.launch.creating_folder")
+                  : t("workspace.launch.create_folder")}
+              </button>
+              <button
+                className="fp-create-folder__cancel"
+                type="button"
+                onClick={closeCreateFolder}
+                disabled={creatingFolder}
+              >
+                {t("workspace.launch.create_folder_cancel")}
+              </button>
+              {createFolderError ? <div className="form-error">{createFolderError}</div> : null}
+            </div>
+          ) : null}
+
+          <div className="fp-dir-list">
+            {browseLoading ? (
+              <EmptyState
+                className="directory-loading"
+                icon={<Spinner label={t("common.loading")} />}
+                style={directoryLoadingStateStyle}
+                title={<span style={visuallyHiddenTitleStyle}>{t("common.loading")}</span>}
+              />
+            ) : browseDirectories.length === 0 ? (
+              <EmptyState
+                className="directory-empty"
+                style={directoryEmptyStateStyle}
+                title={
+                  <p style={directoryEmptyStateTitleStyle}>
+                    {t("workspace.launch.no_directories")}
+                  </p>
+                }
+              />
+            ) : (
+              browseDirectories.map((dir) => {
+                const isSelected = selectedDirectoryPath === dir.path;
+                return (
+                  <div
+                    key={dir.path}
+                    className={`fp-dir ${isSelected ? "selected" : ""}`}
+                    onClick={() => handleBrowseSelect(dir.path)}
+                    onDoubleClick={() => handleBrowseNavigate(dir.path)}
+                  >
+                    <span className="fp-dir-icon">
+                      <ThemedIcon semantic="file.folder.closed" size={14} />
+                    </span>
+                    <span className={`fp-dir-name ${isSelected ? "selected" : ""}`}>
+                      {dir.name}
+                    </span>
+                    {dir.itemCount !== undefined ? (
+                      <span className="fp-dir-hint">
+                        {t("workspace.launch.items_count", { count: dir.itemCount })}
+                      </span>
+                    ) : null}
+                    {isSelected ? (
+                      <button
+                        className="fp-dir-action"
+                        type="button"
+                        aria-label={t("worktree.use_as_parent", { name: dir.name })}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleBrowseNavigate(dir.path);
+                        }}
+                      >
+                        {t("worktree.use_as_parent")}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {browseError ? <div className="form-error">{browseError}</div> : null}
 
         <div className="worktree-manager__form-actions">
           <Button

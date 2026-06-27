@@ -1114,6 +1114,7 @@
     "create_submit": "Create",
     "create_path_hint": "Path must be absolute. The suggested path is derived from the current workspace path.",
     "create_path_absolute_required": "Path must be an absolute path.",
+    "use_as_parent": "Use as Parent",
     "create_failed_title": "Failed to create worktree",
     "create_failed_body": "Could not create the worktree.",
     "create_success_title": "Worktree created",

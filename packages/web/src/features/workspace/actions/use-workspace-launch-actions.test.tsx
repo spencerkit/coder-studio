@@ -28,10 +28,30 @@ function Harness({ onClose }: { onClose: () => void }) {
     <div>
       <div data-testid="current-path">{actions.currentPath}</div>
       <div data-testid="directories">{actions.directories.map((dir) => dir.name).join("|")}</div>
+      <div data-testid="wsl-path">{actions.wslPath}</div>
+      <div data-testid="wsl-distro">{actions.wslDistro}</div>
       <div data-testid="recent-workspaces">
         {actions.recentWorkspaces.map((entry) => entry.path).join("|")}
       </div>
       <div data-testid="history-loading">{String(actions.historyLoading)}</div>
+      <button type="button" onClick={() => actions.setTargetRuntime("wsl")}>
+        set-runtime-wsl
+      </button>
+      <button type="button" onClick={() => actions.setWslDistro("Ubuntu-24.04")}>
+        set-distro-ubuntu
+      </button>
+      <button type="button" onClick={() => actions.setWslDistro("Debian")}>
+        set-distro-debian
+      </button>
+      <button type="button" onClick={() => actions.openCreateFolder()}>
+        open-create-folder
+      </button>
+      <button type="button" onClick={() => actions.updateNewFolderName("demo")}>
+        set-new-folder-demo
+      </button>
+      <button type="button" onClick={() => void actions.submitCreateFolder()}>
+        submit-create-folder
+      </button>
       <button type="button" onClick={() => void actions.openWorkspaceByPath("/repo/history-app")}>
         open-history
       </button>
@@ -268,6 +288,221 @@ describe("useWorkspaceLaunchActions", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("recent-workspaces")).toHaveTextContent("");
+    });
+  });
+
+  it("loads WSL directories through workspace.wsl.browse when the runtime target is wsl", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/Users/tester",
+          parentPath: "/Users",
+          directories: [],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [];
+      }
+
+      if (op === "workspace.wsl.listDistros") {
+        return {
+          distros: ["Ubuntu-24.04"],
+        };
+      }
+
+      if (op === "workspace.wsl.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          rootPaths: ["/", "/home/spencer"],
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Harness onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "set-runtime-wsl" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.wsl.browse",
+        { distro: "Ubuntu-24.04" },
+        undefined
+      );
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    expect(screen.getByTestId("wsl-path")).toHaveTextContent("/home/spencer");
+  });
+
+  it("reloads WSL browse results when the selected distro changes", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { distro?: string }) => {
+        if (op === "workspace.browse") {
+          return {
+            currentPath: "/Users/tester",
+            parentPath: "/Users",
+            directories: [],
+          };
+        }
+
+        if (op === "workspace.history.list") {
+          return [];
+        }
+
+        if (op === "workspace.wsl.listDistros") {
+          return {
+            distros: ["Ubuntu-24.04", "Debian"],
+          };
+        }
+
+        if (op === "workspace.wsl.browse") {
+          return {
+            currentPath: args?.distro === "Debian" ? "/home/debian" : "/home/spencer",
+            parentPath: "/home",
+            rootPaths: ["/", args?.distro === "Debian" ? "/home/debian" : "/home/spencer"],
+            directories: [],
+          };
+        }
+
+        return {};
+      });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Harness onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "set-runtime-wsl" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.wsl.browse",
+        { distro: "Ubuntu-24.04" },
+        undefined
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "set-distro-debian" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.wsl.browse",
+        { distro: "Debian", path: "/home/spencer" },
+        undefined
+      );
+    });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/home/debian");
+    expect(screen.getByTestId("wsl-path")).toHaveTextContent("/home/debian");
+  });
+
+  it("creates folders through workspace.wsl.mkdir while in WSL mode", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string, args?: { distro?: string; path?: string }) => {
+        if (op === "workspace.browse") {
+          return {
+            currentPath: "/Users/tester",
+            parentPath: "/Users",
+            directories: [],
+          };
+        }
+
+        if (op === "workspace.history.list") {
+          return [];
+        }
+
+        if (op === "workspace.wsl.listDistros") {
+          return {
+            distros: ["Ubuntu-24.04"],
+          };
+        }
+
+        if (op === "workspace.wsl.browse") {
+          if (args?.path === "/home/spencer") {
+            return {
+              currentPath: "/home/spencer",
+              parentPath: "/home",
+              rootPaths: ["/", "/home/spencer"],
+              directories: [
+                { name: "demo", path: "/home/spencer/demo" },
+                { name: "workspace", path: "/home/spencer/workspace" },
+              ],
+            };
+          }
+
+          return {
+            currentPath: "/home/spencer",
+            parentPath: "/home",
+            rootPaths: ["/", "/home/spencer"],
+            directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+          };
+        }
+
+        if (op === "workspace.wsl.mkdir") {
+          return { ok: true };
+        }
+
+        return {};
+      });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Harness onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "set-runtime-wsl" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/home/spencer");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "open-create-folder" }));
+    fireEvent.click(screen.getByRole("button", { name: "set-new-folder-demo" }));
+    fireEvent.click(screen.getByRole("button", { name: "submit-create-folder" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.wsl.mkdir",
+        { distro: "Ubuntu-24.04", path: "/home/spencer/demo" },
+        undefined
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("directories")).toHaveTextContent("demo|workspace");
     });
   });
 });

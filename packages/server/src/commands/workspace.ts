@@ -2,17 +2,17 @@
  * Workspace Commands
  */
 
-import { readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import type { WorkspacePaneNode } from "@coder-studio/core";
 import { z } from "zod";
-import { createDirectory } from "../fs/file-io.js";
+import { browseDirectoryAbsolute, createDirectoryAbsolute } from "../fs/browse.js";
 import { registerHostCommand } from "../host/command-registry.js";
 import { getRuntimeIdForWorkspace } from "../host/runtime-orchestrator.js";
 import { registerRuntimeCommand } from "../runtime/command-registry.js";
 import { WorkspaceHistoryStore } from "../workspace/history-store.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
+import { browseWslDirectory, createWslDirectoryInDistro } from "../workspace/wsl-browse.js";
 import { listWslDistros } from "../workspace/wsl-discovery.js";
 import { registerCommand } from "../ws/dispatch.js";
 
@@ -30,24 +30,12 @@ function resolveBrowsePath(path: string | undefined): string {
   return isAbsolute(path) ? path : resolve(home, path);
 }
 
-async function buildRootPaths(currentPath: string): Promise<string[]> {
-  const roots = new Set<string>(["/"]);
-  const home = homedir();
+function assertRequestedDirectoryPath(path: string): void {
+  const requestedName = basename(path);
 
-  roots.add(home);
-
-  try {
-    roots.add(await realpath(home));
-  } catch {
-    // Ignore realpath resolution failures and keep the visible home path.
+  if (!requestedName || requestedName === "." || requestedName === "..") {
+    throw { code: "invalid_path", message: "Folder name is required" };
   }
-
-  const currentSegments = currentPath.split("/").filter(Boolean);
-  if (currentSegments.length > 0) {
-    roots.add(`/${currentSegments[0]}`);
-  }
-
-  return Array.from(roots);
 }
 
 const workspacePaneLeafSchema = z.union([
@@ -130,47 +118,7 @@ registerCommand(
   z.object({
     path: z.string().optional(),
   }),
-  async (args) => {
-    const basePath = resolveBrowsePath(args.path);
-    const entries = await readdir(basePath, { withFileTypes: true });
-
-    const directories = (
-      await Promise.all(
-        entries.map(async (entry) => {
-          if (entry.isDirectory()) {
-            return {
-              name: entry.name,
-              path: join(basePath, entry.name),
-            };
-          }
-
-          if (!entry.isSymbolicLink()) {
-            return null;
-          }
-
-          const entryPath = join(basePath, entry.name);
-          const entryStats = await stat(entryPath).catch(() => null);
-          if (!entryStats?.isDirectory()) {
-            return null;
-          }
-
-          return {
-            name: entry.name,
-            path: entryPath,
-          };
-        })
-      )
-    )
-      .filter((entry): entry is { name: string; path: string } => entry !== null)
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    return {
-      currentPath: basePath,
-      parentPath: basePath !== "/" ? join(basePath, "..") : null,
-      directories,
-      rootPaths: await buildRootPaths(basePath),
-    };
-  }
+  async (args) => browseDirectoryAbsolute(resolveBrowsePath(args.path))
 );
 
 registerCommand(
@@ -179,21 +127,8 @@ registerCommand(
     path: z.string(),
   }),
   async (args) => {
-    const requestedName = basename(args.path);
-
-    if (!requestedName || requestedName === "." || requestedName === "..") {
-      throw { code: "invalid_path", message: "Folder name is required" };
-    }
-
-    const targetPath = resolveBrowsePath(args.path);
-    const parentPath = dirname(targetPath);
-    const dirName = basename(targetPath);
-
-    if (!dirName || dirName === "." || dirName === "..") {
-      throw { code: "invalid_path", message: "Folder name is required" };
-    }
-
-    await createDirectory(parentPath, dirName);
+    assertRequestedDirectoryPath(args.path);
+    await createDirectoryAbsolute(resolveBrowsePath(args.path));
     return { ok: true };
   }
 );
@@ -241,6 +176,32 @@ registerHostCommand("workspace.wsl.listDistros", z.object({}), async (_args, ctx
 
   return { distros };
 });
+
+registerHostCommand(
+  "workspace.wsl.browse",
+  z.object({
+    distro: z.string(),
+    path: z.string().optional(),
+  }),
+  async (args, ctx) =>
+    browseWslDirectory(args, {
+      commandExists: ctx.providerRuntimeDeps?.commandExists,
+      runCommand: ctx.providerRuntimeDeps?.runCommand,
+    })
+);
+
+registerHostCommand(
+  "workspace.wsl.mkdir",
+  z.object({
+    distro: z.string(),
+    path: z.string(),
+  }),
+  async (args, ctx) =>
+    createWslDirectoryInDistro(args, {
+      commandExists: ctx.providerRuntimeDeps?.commandExists,
+      runCommand: ctx.providerRuntimeDeps?.runCommand,
+    })
+);
 
 registerRuntimeCommand(
   "workspace.intelligence",

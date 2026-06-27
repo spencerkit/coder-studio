@@ -100,7 +100,15 @@ export interface UiPreviewCommands {
     currentPath: string;
     parentPath: string | null;
     directories: Array<{ name: string; path: string; itemCount?: number }>;
+    rootPaths?: string[];
   };
+  workspaceWslBrowse?: {
+    currentPath: string;
+    parentPath: string | null;
+    directories: Array<{ name: string; path: string; itemCount?: number }>;
+    rootPaths?: string[];
+  };
+  workspaceWslDistros?: string[];
   workspaceOpen?: Workspace;
   workspaceUiStateSet?: Workspace;
   workspaceList?: Workspace[];
@@ -112,6 +120,15 @@ export interface UiPreviewCommands {
   gitCommitDetailByWorkspaceId?: Record<string, GitCommitDetail>;
   gitCommitFileDiffByWorkspaceId?: Record<string, GitFileDiffPayload>;
   fileTreeByWorkspaceId?: Record<string, Record<string, FileNode[]>>;
+  fileBrowseByWorkspaceId?: Record<
+    string,
+    {
+      currentPath: string;
+      parentPath: string | null;
+      directories: Array<{ name: string; path: string; itemCount?: number }>;
+      rootPaths?: string[];
+    }
+  >;
   fileSearchByWorkspaceId?: Record<string, FileNode[]>;
   fileSearchSessionByWorkspaceId?: Record<string, SearchSessionStartResult>;
   fileSearchPreviewByWorkspaceId?: Record<string, Record<string, SearchSessionFilePreview>>;
@@ -787,6 +804,34 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
       return ok(commands.workspaceBrowse as T);
     }
 
+    if (op === "workspace.wsl.browse") {
+      const payload = commands.workspaceWslBrowse ?? commands.workspaceBrowse;
+      if (!payload) {
+        return err("Missing workspace.wsl.browse preview handler");
+      }
+      return ok(payload as T);
+    }
+
+    if (op === "workspace.wsl.listDistros") {
+      return ok({ distros: commands.workspaceWslDistros ?? [] } as unknown as T);
+    }
+
+    if (op === "workspace.wsl.mkdir") {
+      return ok({ ok: true } as unknown as T);
+    }
+
+    if (op === "file.browse") {
+      const workspaceId = (args as { workspaceId?: string })?.workspaceId ?? "";
+      const payload =
+        commands.fileBrowseByWorkspaceId?.[workspaceId] ??
+        commands.workspaceBrowse ??
+        commands.workspaceWslBrowse;
+      if (!payload) {
+        return err("Missing file.browse preview handler");
+      }
+      return ok(payload as T);
+    }
+
     if (op === "workspace.open") {
       if (!commands.workspaceOpen) {
         return err("Missing workspace.open preview handler");
@@ -890,6 +935,10 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
       const key = subPath ?? ".";
       const children = commands.fileTreeByWorkspaceId?.[workspaceId]?.[key] ?? [];
       return ok({ path: key, children } as unknown as T);
+    }
+
+    if (op === "file.mkdirAbsolute") {
+      return ok({ ok: true } as unknown as T);
     }
 
     if (op === "file.read") {

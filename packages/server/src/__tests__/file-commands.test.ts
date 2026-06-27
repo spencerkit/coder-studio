@@ -3,7 +3,7 @@
  */
 
 import { execFile } from "child_process";
-import { readFile as fsReadFile, mkdir, rm, writeFile } from "fs/promises";
+import { readFile as fsReadFile, mkdir, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
@@ -562,6 +562,119 @@ describe("File Commands", () => {
     expect(escaped.error).toMatchObject({ code: "path_escape" });
     expect(escapedSource.ok).toBe(false);
     expect(escapedSource.error).toMatchObject({ code: "path_escape" });
+  });
+
+  it("browses directories by absolute path", async () => {
+    const linkedTarget = join(testDir, "linked-target");
+    await mkdir(linkedTarget);
+    await symlink(linkedTarget, join(testDir, "linked-dir"), "dir");
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-browse-1",
+        op: "file.browse",
+        args: {
+          workspaceId,
+          path: testDir,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      currentPath: testDir,
+      parentPath: join(testDir, ".."),
+    });
+    expect((result.data as { rootPaths: string[] }).rootPaths).toEqual(
+      expect.arrayContaining(["/", "/tmp"])
+    );
+    expect(
+      (result.data as { directories: Array<{ name: string; path: string }> }).directories
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "docs",
+          path: join(testDir, "docs"),
+        }),
+        expect.objectContaining({
+          name: "linked-dir",
+          path: join(testDir, "linked-dir"),
+        }),
+        expect.objectContaining({
+          name: "src",
+          path: join(testDir, "src"),
+        }),
+      ])
+    );
+  });
+
+  it("defaults file.browse to the workspace path when path is omitted", async () => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-browse-default-1",
+        op: "file.browse",
+        args: {
+          workspaceId,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      currentPath: testDir,
+      parentPath: join(testDir, ".."),
+    });
+  });
+
+  it("creates a directory at an absolute path with file.mkdirAbsolute", async () => {
+    const targetPath = join(testDir, "nested", "created-dir");
+    await mkdir(join(testDir, "nested"));
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "file-mkdir-absolute-1",
+        op: "file.mkdirAbsolute",
+        args: {
+          workspaceId,
+          path: targetPath,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual({ ok: true });
+  });
+
+  it.each([
+    "",
+    ".",
+    "..",
+    "relative-dir",
+  ])('rejects invalid absolute mkdir path "%s"', async (path) => {
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: `file-mkdir-absolute-invalid-${path || "empty"}`,
+        op: "file.mkdirAbsolute",
+        args: {
+          workspaceId,
+          path,
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatchObject({
+      code: "invalid_path",
+      message: path === "relative-dir" ? "Absolute path is required" : "Folder name is required",
+    });
   });
 
   it("returns image version metadata from file.read", async () => {

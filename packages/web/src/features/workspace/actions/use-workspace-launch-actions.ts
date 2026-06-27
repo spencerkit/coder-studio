@@ -49,6 +49,19 @@ interface OpenWorkspaceOptions {
 
 type TabType = "status" | "diff" | "tree";
 
+function isBrowseResult(value: unknown): value is BrowseResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<BrowseResult>;
+  return (
+    typeof candidate.currentPath === "string" &&
+    (typeof candidate.parentPath === "string" || candidate.parentPath === null) &&
+    Array.isArray(candidate.directories)
+  );
+}
+
 function joinChildPath(parentPath: string, childName: string): string {
   return parentPath === "/" ? `/${childName}` : `${parentPath}/${childName}`;
 }
@@ -97,33 +110,47 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
       ? t("workspace.launch.hint_wsl")
       : t("workspace.launch.hint");
 
+  const applyBrowseResult = useCallback((result: BrowseResult) => {
+    setCurrentPath(result.currentPath);
+    setDirectories(result.directories);
+    setParentPath(result.parentPath);
+    const nextRootPaths = result.rootPaths?.filter(Boolean) ?? ["/"];
+    setRootPaths(nextRootPaths);
+    const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
+    setHomePath(detectedHomePath);
+  }, []);
+
   const loadDirectory = useCallback(
     async (path?: string) => {
       setBrowsing(true);
       setError(null);
 
       try {
-        const result = await dispatch<BrowseResult>("workspace.browse", { path });
+        const isWslLaunch = isWindowsPlatform && targetRuntime === "wsl";
+        const trimmedWslPath = (wslPath ?? "").trim();
+        const result = isWslLaunch
+          ? await dispatch<BrowseResult>("workspace.wsl.browse", {
+              distro: wslDistro,
+              path: path ?? (trimmedWslPath || undefined),
+            })
+          : await dispatch<BrowseResult>("workspace.browse", { path });
 
-        if (!result.ok || !result.data) {
+        if (!result.ok || !isBrowseResult(result.data)) {
           setError(result.error?.message || t("workspace.launch.browse_failed"));
           return;
         }
 
-        setCurrentPath(result.data.currentPath);
-        setDirectories(result.data.directories);
-        setParentPath(result.data.parentPath);
-        const nextRootPaths = result.data.rootPaths?.filter(Boolean) ?? ["/"];
-        setRootPaths(nextRootPaths);
-        const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
-        setHomePath(detectedHomePath);
+        applyBrowseResult(result.data);
+        if (isWslLaunch) {
+          setWslPath(result.data.currentPath);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setBrowsing(false);
       }
     },
-    [dispatch, t]
+    [applyBrowseResult, dispatch, isWindowsPlatform, t, targetRuntime, wslDistro, wslPath]
   );
 
   const loadWorkspaceHistory = useCallback(async () => {
@@ -238,6 +265,14 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     };
   }, [dispatch, isWindowsPlatform, t]);
 
+  useEffect(() => {
+    if (!isWindowsPlatform || targetRuntime !== "wsl" || !wslDistro) {
+      return;
+    }
+
+    void loadDirectory();
+  }, [isWindowsPlatform, loadDirectory, targetRuntime, wslDistro]);
+
   const handleNavigate = useCallback(
     (path: string) => {
       createRequestIdRef.current += 1;
@@ -297,9 +332,16 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     createRequestIdRef.current = requestId;
 
     try {
-      const createResult = await dispatch<CreateDirectoryResult>("workspace.mkdir", {
-        path: joinChildPath(currentPath, trimmedName),
-      });
+      const createPath = joinChildPath(currentPath, trimmedName);
+      const isWslLaunch = isWindowsPlatform && targetRuntime === "wsl";
+      const createResult = isWslLaunch
+        ? await dispatch<CreateDirectoryResult>("workspace.wsl.mkdir", {
+            distro: wslDistro,
+            path: createPath,
+          })
+        : await dispatch<CreateDirectoryResult>("workspace.mkdir", {
+            path: createPath,
+          });
 
       if (createRequestIdRef.current !== requestId) {
         return;
@@ -312,31 +354,33 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
         return;
       }
 
-      const browseResult = await dispatch<BrowseResult>("workspace.browse", { path: currentPath });
+      const browseResult = isWslLaunch
+        ? await dispatch<BrowseResult>("workspace.wsl.browse", {
+            distro: wslDistro,
+            path: currentPath,
+          })
+        : await dispatch<BrowseResult>("workspace.browse", { path: currentPath });
 
       if (createRequestIdRef.current !== requestId) {
         return;
       }
 
-      if (!browseResult.ok || !browseResult.data) {
+      if (!browseResult.ok || !isBrowseResult(browseResult.data)) {
         setCreateFolderError(
           browseResult.error?.message || t("workspace.launch.create_folder_failed")
         );
         return;
       }
 
-      setCurrentPath(browseResult.data.currentPath);
-      setDirectories(browseResult.data.directories);
-      setParentPath(browseResult.data.parentPath);
-      const nextRootPaths = browseResult.data.rootPaths?.filter(Boolean) ?? ["/"];
-      setRootPaths(nextRootPaths);
-      const detectedHomePath = nextRootPaths.find((candidate) => candidate !== "/") ?? null;
-      setHomePath(detectedHomePath);
+      applyBrowseResult(browseResult.data);
+      if (isWslLaunch) {
+        setWslPath(browseResult.data.currentPath);
+      }
       setSelectedPath(joinChildPath(browseResult.data.currentPath, trimmedName));
       setIsCreatingFolder(false);
       setNewFolderName("");
       setCreateFolderError(null);
-    } catch (_err) {
+    } catch (err) {
       if (createRequestIdRef.current !== requestId) {
         return;
       }
@@ -346,7 +390,16 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
         setCreatingFolder(false);
       }
     }
-  }, [currentPath, dispatch, newFolderName, t]);
+  }, [
+    applyBrowseResult,
+    currentPath,
+    dispatch,
+    isWindowsPlatform,
+    newFolderName,
+    t,
+    targetRuntime,
+    wslDistro,
+  ]);
 
   const openWorkspaceByPath = useCallback(
     async (path: string, options: OpenWorkspaceOptions = {}) => {
@@ -435,7 +488,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
         return;
       }
 
-      const trimmedWslPath = wslPath.trim();
+      const trimmedWslPath = (wslPath ?? "").trim();
       if (!trimmedWslPath) {
         setError(t("workspace.launch.wsl_path_required"));
         return;
@@ -474,7 +527,7 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     browsing,
     canOpen:
       targetRuntime === "wsl"
-        ? Boolean(wslDistro && wslPath.trim().length > 0)
+        ? Boolean(wslDistro && (wslPath ?? "").trim().length > 0)
         : Boolean(selectedPath),
     currentPath,
     directories,

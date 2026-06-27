@@ -399,6 +399,137 @@ describe("WorkspaceLaunchModal", () => {
     });
   });
 
+  it("renders the folder picker while in WSL launch mode", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/Users/tester",
+          parentPath: "/Users",
+          directories: [],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [];
+      }
+
+      if (op === "workspace.wsl.listDistros") {
+        return {
+          distros: ["Ubuntu-24.04"],
+        };
+      }
+
+      if (op === "workspace.wsl.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          rootPaths: ["/", "/home/spencer"],
+          directories: [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Workspace Runtime" }), {
+      target: { value: "wsl" },
+    });
+
+    expect(await screen.findByText("workspace")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "WSL Distribution" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Workspace Path" })).toHaveValue("/home/spencer");
+  });
+
+  it("creates folders through workspace.wsl.mkdir while in WSL mode", async () => {
+    vi.spyOn(window.navigator, "platform", "get").mockReturnValue("Win32");
+
+    const sendCommand = vi.fn().mockImplementation(async (op: string, args?: { path?: string }) => {
+      if (op === "workspace.browse") {
+        return {
+          currentPath: "/Users/tester",
+          parentPath: "/Users",
+          directories: [],
+        };
+      }
+
+      if (op === "workspace.history.list") {
+        return [];
+      }
+
+      if (op === "workspace.wsl.listDistros") {
+        return {
+          distros: ["Ubuntu-24.04"],
+        };
+      }
+
+      if (op === "workspace.wsl.browse") {
+        return {
+          currentPath: "/home/spencer",
+          parentPath: "/home",
+          rootPaths: ["/", "/home/spencer"],
+          directories:
+            args?.path === "/home/spencer"
+              ? [
+                  { name: "demo", path: "/home/spencer/demo" },
+                  { name: "workspace", path: "/home/spencer/workspace" },
+                ]
+              : [{ name: "workspace", path: "/home/spencer/workspace" }],
+        };
+      }
+
+      if (op === "workspace.wsl.mkdir") {
+        return { ok: true };
+      }
+
+      return {};
+    });
+
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={vi.fn()} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Workspace Runtime" }), {
+      target: { value: "wsl" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "New Folder" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Folder Name" }), {
+      target: { value: "demo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Folder" }));
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.wsl.mkdir",
+        { distro: "Ubuntu-24.04", path: "/home/spencer/demo" },
+        undefined
+      );
+    });
+
+    expect(await screen.findByText("demo")).toBeInTheDocument();
+  });
+
   it("navigates to /workspace after opening a workspace from outside the workspace page", async () => {
     const onClose = vi.fn();
     const sendCommand = vi.fn().mockImplementation(async (op: string, args: { path?: string }) => {

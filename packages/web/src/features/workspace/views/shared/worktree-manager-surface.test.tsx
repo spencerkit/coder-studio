@@ -8,6 +8,7 @@ import { localeAtom } from "../../../../atoms/app-ui";
 import { wsClientAtom } from "../../../../atoms/connection";
 import { workspacesAtom } from "../../../../atoms/workspaces";
 import { worktreeListAtomFamily } from "../../atoms";
+import { getAbsolutePathParent } from "../../path-utils";
 import { WorktreeManagerSurface } from "./worktree-manager-surface";
 
 const viewportMocks = vi.hoisted(() => ({
@@ -61,6 +62,89 @@ function buildWorkspace(path: string): Workspace {
       focusMode: false,
     },
   };
+}
+
+function buildBrowseResult(
+  currentPath: string,
+  directories: Array<{ name: string; path: string; itemCount?: number }> = []
+) {
+  return {
+    currentPath,
+    parentPath: getAbsolutePathParent(currentPath),
+    directories,
+    rootPaths:
+      currentPath.startsWith("C:\\") || currentPath.startsWith("C:/")
+        ? ["C:\\", "C:\\Users\\tester"]
+        : ["/", "/home/tester"],
+  };
+}
+
+function buildCreateViewSendCommand(
+  workspacePath: string,
+  options?: {
+    browseByPath?: Record<string, ReturnType<typeof buildBrowseResult>>;
+    createdWorktrees?: WorktreeInfo[];
+  }
+) {
+  const defaultBrowsePath = getAbsolutePathParent(workspacePath) ?? workspacePath;
+  const browseByPath = {
+    [defaultBrowsePath]: buildBrowseResult(defaultBrowsePath),
+    ...(options?.browseByPath ?? {}),
+  };
+
+  return vi.fn().mockImplementation(async (op: string, args: Record<string, string>) => {
+    if (op === "file.browse") {
+      const requestedPath = args.path ?? defaultBrowsePath;
+      return browseByPath[requestedPath] ?? buildBrowseResult(requestedPath);
+    }
+
+    if (op === "file.mkdirAbsolute") {
+      return { ok: true };
+    }
+
+    if (op === "worktree.create") {
+      return {
+        worktree: {
+          name: args.branch,
+          path: args.path,
+          branch: args.branch,
+          commit: "aaa1111",
+          status: "clean",
+        },
+      };
+    }
+
+    if (op === "worktree.list") {
+      return {
+        worktrees: options?.createdWorktrees ?? [
+          ...worktrees,
+          {
+            name: "feature/new-worktree",
+            path: args.path ?? "/repo/main-feature-new-worktree",
+            branch: "feature/new-worktree",
+            commit: "aaa1111",
+            status: "clean",
+          },
+        ],
+      };
+    }
+
+    return {};
+  });
+}
+
+function expectWorktreeCreateCall(
+  sendCommand: ReturnType<typeof vi.fn>,
+  matcher: Record<string, string>
+) {
+  expect(
+    sendCommand.mock.calls.some(
+      ([op, args, options]) =>
+        op === "worktree.create" &&
+        options === undefined &&
+        expect.objectContaining(matcher).asymmetricMatch(args)
+    )
+  ).toBe(true);
 }
 
 function buildManagerStore(
@@ -216,38 +300,7 @@ describe("WorktreeManagerSurface", () => {
 
   it("creates a worktree and closes the create surface instead of returning to list mode", async () => {
     const onClose = vi.fn();
-    const sendCommand = vi
-      .fn()
-      .mockImplementation(async (op: string, args: Record<string, string>) => {
-        if (op === "worktree.create") {
-          return {
-            worktree: {
-              name: "feature/new-worktree",
-              path: args.path,
-              branch: args.branch,
-              commit: "aaa1111",
-              status: "clean",
-            },
-          };
-        }
-
-        if (op === "worktree.list") {
-          return {
-            worktrees: [
-              ...worktrees,
-              {
-                name: "feature/new-worktree",
-                path: "/repo/main-feature-new-worktree",
-                branch: "feature/new-worktree",
-                commit: "aaa1111",
-                status: "clean",
-              },
-            ],
-          };
-        }
-
-        return {};
-      });
+    const sendCommand = buildCreateViewSendCommand("/repo/main");
 
     render(
       <Provider store={buildManagerStore(sendCommand, worktrees, "/repo/main")}>
@@ -264,15 +317,11 @@ describe("WorktreeManagerSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "worktree.create",
-        {
-          workspaceId: "ws-1",
-          branch: "feature/new-worktree",
-          path: "/repo/main-feature-new-worktree",
-        },
-        undefined
-      );
+      expectWorktreeCreateCall(sendCommand, {
+        workspaceId: "ws-1",
+        branch: "feature/new-worktree",
+        path: "/repo/main-feature-new-worktree",
+      });
     });
 
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -282,7 +331,9 @@ describe("WorktreeManagerSurface", () => {
     const onClose = vi.fn();
 
     render(
-      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+      <Provider
+        store={buildManagerStore(buildCreateViewSendCommand("/repo/main"), worktrees, "/repo/main")}
+      >
         <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={onClose} />
       </Provider>
     );
@@ -294,7 +345,9 @@ describe("WorktreeManagerSurface", () => {
 
   it("does not show a back button in create-only mode", () => {
     render(
-      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+      <Provider
+        store={buildManagerStore(buildCreateViewSendCommand("/repo/main"), worktrees, "/repo/main")}
+      >
         <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
       </Provider>
     );
@@ -304,7 +357,9 @@ describe("WorktreeManagerSurface", () => {
 
   it("renders the create form fields with shared input compatibility classes", () => {
     render(
-      <Provider store={buildManagerStore(vi.fn(), worktrees, "/repo/main")}>
+      <Provider
+        store={buildManagerStore(buildCreateViewSendCommand("/repo/main"), worktrees, "/repo/main")}
+      >
         <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
       </Provider>
     );
@@ -318,6 +373,38 @@ describe("WorktreeManagerSurface", () => {
     expect(pathInput).toHaveClass("input");
     expect(pathInput).toHaveAttribute("placeholder", "/repo/main-feature-worktree-manager");
     expect(pathInput).toHaveAttribute("aria-describedby", "worktree-path-hint-ws-1");
+  });
+
+  it("updates the suggested worktree path when browsing to a different parent directory", async () => {
+    const sendCommand = buildCreateViewSendCommand("/repo/main", {
+      browseByPath: {
+        "/repo": buildBrowseResult("/repo", [
+          {
+            name: "nested",
+            path: "/repo/nested",
+          },
+        ]),
+        "/repo/nested": buildBrowseResult("/repo/nested"),
+      },
+    });
+
+    render(
+      <Provider store={buildManagerStore(sendCommand, worktrees, "/repo/main")}>
+        <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
+      </Provider>
+    );
+
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "feature/new-worktree" },
+    });
+
+    const nestedRow = await screen.findByText("nested");
+    fireEvent.click(nestedRow);
+    fireEvent.click(screen.getByRole("button", { name: "Use as Parent" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Path")).toHaveValue("/repo/nested/main-feature-new-worktree");
+    });
   });
 
   it("requires a force confirmation for dirty worktree removal", async () => {
@@ -519,38 +606,7 @@ describe("WorktreeManagerSurface", () => {
   });
 
   it("normalizes a trailing slash before creating a worktree", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockImplementation(async (op: string, args: Record<string, string>) => {
-        if (op === "worktree.create") {
-          return {
-            worktree: {
-              name: "feature/new-worktree",
-              path: args.path,
-              branch: args.branch,
-              commit: "aaa1111",
-              status: "clean",
-            },
-          };
-        }
-
-        if (op === "worktree.list") {
-          return {
-            worktrees: [
-              ...worktrees,
-              {
-                name: "feature/new-worktree",
-                path: "/repo/main-feature-new-worktree",
-                branch: "feature/new-worktree",
-                commit: "aaa1111",
-                status: "clean",
-              },
-            ],
-          };
-        }
-
-        return {};
-      });
+    const sendCommand = buildCreateViewSendCommand("/repo/main");
 
     render(
       <Provider store={buildManagerStore(sendCommand, worktrees, "/repo/main")}>
@@ -567,40 +623,16 @@ describe("WorktreeManagerSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "worktree.create",
-        {
-          workspaceId: "ws-1",
-          branch: "feature/new-worktree",
-          path: "/repo/main-feature-new-worktree",
-        },
-        undefined
-      );
+      expectWorktreeCreateCall(sendCommand, {
+        workspaceId: "ws-1",
+        branch: "feature/new-worktree",
+        path: "/repo/main-feature-new-worktree",
+      });
     });
   });
 
   it("allows creating a worktree with a Windows absolute path", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockImplementation(async (op: string, args: Record<string, string>) => {
-        if (op === "worktree.create") {
-          return {
-            worktree: {
-              name: "feature/new-worktree",
-              path: args.path,
-              branch: args.branch,
-              commit: "aaa1111",
-              status: "clean",
-            },
-          };
-        }
-
-        if (op === "worktree.list") {
-          return { worktrees };
-        }
-
-        return {};
-      });
+    const sendCommand = buildCreateViewSendCommand("C:/repo/main");
 
     render(
       <Provider store={buildManagerStore(sendCommand, worktrees, "C:/repo/main")}>
@@ -620,40 +652,16 @@ describe("WorktreeManagerSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "worktree.create",
-        expect.objectContaining({
-          workspaceId: "ws-1",
-          branch: "feature/new-worktree",
-          path: "C:\\repo\\main-feature-new-worktree",
-        }),
-        undefined
-      );
+      expectWorktreeCreateCall(sendCommand, {
+        workspaceId: "ws-1",
+        branch: "feature/new-worktree",
+        path: "C:\\repo\\main-feature-new-worktree",
+      });
     });
   });
 
   it("preserves a Windows drive root when normalizing a worktree path", async () => {
-    const sendCommand = vi
-      .fn()
-      .mockImplementation(async (op: string, args: Record<string, string>) => {
-        if (op === "worktree.create") {
-          return {
-            worktree: {
-              name: "feature/new-worktree",
-              path: args.path,
-              branch: args.branch,
-              commit: "aaa1111",
-              status: "clean",
-            },
-          };
-        }
-
-        if (op === "worktree.list") {
-          return { worktrees };
-        }
-
-        return {};
-      });
+    const sendCommand = buildCreateViewSendCommand("C:\\repo\\main");
 
     render(
       <Provider store={buildManagerStore(sendCommand, worktrees, "C:\\repo\\main")}>
@@ -673,21 +681,23 @@ describe("WorktreeManagerSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(sendCommand).toHaveBeenCalledWith(
-        "worktree.create",
-        expect.objectContaining({
-          workspaceId: "ws-1",
-          branch: "feature/new-worktree",
-          path: "C:\\",
-        }),
-        undefined
-      );
+      expectWorktreeCreateCall(sendCommand, {
+        workspaceId: "ws-1",
+        branch: "feature/new-worktree",
+        path: "C:\\",
+      });
     });
   });
 
   it("keeps UNC share prefixes when suggesting a worktree path", () => {
     render(
-      <Provider store={buildManagerStore(vi.fn(), worktrees, "\\\\server\\share\\repo")}>
+      <Provider
+        store={buildManagerStore(
+          buildCreateViewSendCommand("\\\\server\\share\\repo"),
+          worktrees,
+          "\\\\server\\share\\repo"
+        )}
+      >
         <WorktreeManagerSurface workspaceId="ws-1" openView="create" onClose={vi.fn()} />
       </Provider>
     );

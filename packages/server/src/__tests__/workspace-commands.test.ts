@@ -659,6 +659,109 @@ describe("Workspace Commands", () => {
     });
   });
 
+  describe("workspace.wsl.browse", () => {
+    it("returns WSL browse results through the command surface", async () => {
+      const commandExists = vi.fn(async (command: string) => command === "wsl");
+      const runCommand = vi.fn(async () => ({
+        stdout: JSON.stringify({
+          ok: true,
+          currentPath: "/home/spencer/workspace",
+          parentPath: "/home/spencer",
+          rootPaths: ["/", "/home/spencer"],
+          directories: [
+            {
+              name: "coder-studio",
+              path: "/home/spencer/workspace/coder-studio",
+            },
+          ],
+        }),
+        stderr: "",
+        exitCode: 0,
+      }));
+
+      ctx = {
+        ...ctx,
+        providerRuntimeDeps: {
+          commandExists,
+          runCommand,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-wsl-browse",
+          op: "workspace.wsl.browse",
+          args: {
+            distro: "Ubuntu-24.04",
+            path: "~/workspace",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual({
+        currentPath: "/home/spencer/workspace",
+        parentPath: "/home/spencer",
+        rootPaths: ["/", "/home/spencer"],
+        directories: [
+          {
+            name: "coder-studio",
+            path: "/home/spencer/workspace/coder-studio",
+          },
+        ],
+      });
+      expect(commandExists).toHaveBeenCalledWith("wsl");
+      expect(runCommand).toHaveBeenCalledWith(
+        "wsl",
+        expect.arrayContaining(["-d", "Ubuntu-24.04", "--", "sh", "-lc"]),
+        { windowsHide: true }
+      );
+    });
+  });
+
+  describe("workspace.wsl.mkdir", () => {
+    it("creates a WSL directory through the command surface and returns ok", async () => {
+      const commandExists = vi.fn(async (command: string) => command === "wsl");
+      const runCommand = vi.fn(async () => ({
+        stdout: '{"ok":true}\n',
+        stderr: "",
+        exitCode: 0,
+      }));
+
+      ctx = {
+        ...ctx,
+        providerRuntimeDeps: {
+          commandExists,
+          runCommand,
+        },
+      } as CommandContext;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-wsl-mkdir",
+          op: "workspace.wsl.mkdir",
+          args: {
+            distro: "Ubuntu-24.04",
+            path: "~/workspace/new-dir",
+          },
+        },
+        ctx
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual({ ok: true });
+      expect(commandExists).toHaveBeenCalledWith("wsl");
+      expect(runCommand).toHaveBeenCalledWith(
+        "wsl",
+        expect.arrayContaining(["-d", "Ubuntu-24.04", "--", "sh", "-lc"]),
+        { windowsHide: true }
+      );
+    });
+  });
+
   describe("workspace.close", () => {
     it("should error if workspace not found", async () => {
       const result = await dispatch(

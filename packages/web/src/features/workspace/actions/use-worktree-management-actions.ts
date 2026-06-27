@@ -13,60 +13,13 @@ import {
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications/atoms";
 import { worktreeListAtomFamily } from "../atoms";
+import {
+  buildSuggestedWorktreePath,
+  isAbsoluteWorktreePath,
+  normalizeWorktreePathInput,
+} from "../path-utils";
 import { hydrateWorkspaceEditorState } from "./open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
-
-function slugifyBranchName(branch: string) {
-  return branch
-    .trim()
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function buildSuggestedWorktreePath(workspacePath: string, branch: string) {
-  const raw = workspacePath.trim();
-  const normalized = raw.replace(/[\\/]+$/, "") || raw;
-  const separator = raw.includes("\\") ? "\\" : "/";
-  const driveRootMatch = /^([A-Za-z]:)([\\/]*)(.*)$/.exec(raw);
-  const uncRootMatch = /^(\\\\|\/\/)([^\\/]+)[\\/]+([^\\/]+)(?:[\\/]+(.*))?$/.exec(raw);
-  let prefix = "";
-  let rest = normalized;
-
-  if (driveRootMatch) {
-    prefix = `${driveRootMatch[1]}${separator}`;
-    rest = driveRootMatch[3].replace(/[\\/]+$/, "").replace(/^[\\/]+/, "");
-  } else if (uncRootMatch) {
-    prefix = `${uncRootMatch[1]}${uncRootMatch[2]}${separator}${uncRootMatch[3]}${separator}`;
-    rest = (uncRootMatch[4] ?? "").replace(/[\\/]+$/, "").replace(/^[\\/]+/, "");
-  } else if (normalized.startsWith("/") || normalized.startsWith("\\")) {
-    prefix = normalized[0];
-    rest = normalized.replace(/^[\\/]+/, "");
-  }
-
-  const parts = rest.split(/[\\/]+/).filter(Boolean);
-  const base = parts.pop() ?? "worktree";
-  const parent = parts.length > 0 ? `${parts.join(separator)}${separator}` : "";
-  const suffix = slugifyBranchName(branch || "worktree");
-  return `${prefix}${parent}${base}-${suffix}`;
-}
-
-function normalizeWorktreePathInput(path: string) {
-  const trimmed = path.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
-    return `${trimmed.slice(0, 2)}${trimmed.includes("\\") ? "\\" : "/"}`;
-  }
-
-  const normalized = trimmed.replace(/[\\/]+$/, "");
-  return normalized || trimmed;
-}
-
-function isAbsoluteWorktreePath(path: string) {
-  return /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(path);
-}
 
 export function useWorktreeManagementActions(workspaceId: string) {
   const t = useTranslation();
@@ -260,5 +213,6 @@ export function useWorktreeManagementActions(workspaceId: string) {
     openWorktree,
     removeWorktreeByPath,
     suggestedPathForBranch,
+    workspacePath: workspace?.path ?? "",
   };
 }

@@ -1126,6 +1126,7 @@
     "create_submit": "创建",
     "create_path_hint": "路径必须是绝对路径。默认建议路径会基于当前工作区路径生成。",
     "create_path_absolute_required": "路径必须是绝对路径。",
+    "use_as_parent": "用作父目录",
     "create_failed_title": "创建工作树失败",
     "create_failed_body": "无法创建工作树。",
     "create_success_title": "工作树已创建",

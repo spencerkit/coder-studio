@@ -4,6 +4,7 @@
 
 import { readFile as readFileBytes, realpath, stat } from "node:fs/promises";
 import { z } from "zod";
+import { browseDirectoryAbsolute, createDirectoryAbsolute } from "../fs/browse.js";
 import { searchFileContents } from "../fs/content-search.js";
 import {
   createDirectory,
@@ -121,6 +122,21 @@ async function readWorkspacePreviewResourceAsset(
     throw { code: "not_found", message: "File not found" };
   }
 }
+
+registerRuntimeCommand(
+  "file.browse",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string().optional(),
+  }),
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
+      return browseDirectoryAbsolute(args.path ?? workspace.path);
+    },
+  }
+);
 
 registerRuntimeCommand(
   "file.readTree",
@@ -349,6 +365,27 @@ registerRuntimeCommand(
     handler: async (args, ctx) => {
       const workspace = getWorkspaceOrThrow(ctx, args.workspaceId);
       await createDirectory(workspace.path, args.path);
+      ctx.eventBus.emit({
+        type: "fs.dirty",
+        workspaceId: args.workspaceId,
+        reason: "fs_change",
+      });
+      return { ok: true };
+    },
+  }
+);
+
+registerRuntimeCommand(
+  "file.mkdirAbsolute",
+  z.object({
+    workspaceId: z.string(),
+    path: z.string(),
+  }),
+  {
+    resolveTarget: (args) => ({ kind: "workspace", workspaceId: args.workspaceId }),
+    handler: async (args, ctx) => {
+      getWorkspaceOrThrow(ctx, args.workspaceId);
+      await createDirectoryAbsolute(args.path);
       ctx.eventBus.emit({
         type: "fs.dirty",
         workspaceId: args.workspaceId,
