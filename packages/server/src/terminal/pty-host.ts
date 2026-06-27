@@ -4,6 +4,7 @@
  * Concrete implementation of PtyHost using node-pty
  */
 
+import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -13,6 +14,205 @@ import type { PtyHost, PtyProcess, PtySpawnOptions } from "./types.js";
 
 const require = createRequire(import.meta.url);
 const NODE_PTY_PKG = "node-pty/package.json";
+const WSL_NODE_PTY_SOURCE_PACKAGE_JSON_ENV = "CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON";
+const WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON_ENV =
+  "CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON";
+const WSL_NODE_PTY_STAGING_ROOT_ENV = "CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT";
+const WSL_NODE_PTY_STAMP_FILE = ".coder-studio-node-pty-stamp";
+
+export interface EnsureWslLocalNodePtyPackageOptions {
+  env?: NodeJS.ProcessEnv;
+  nodeAbi?: string;
+  arch?: NodeJS.Architecture;
+  existsSync?: (path: string) => boolean;
+  readFileSync?: (path: string, encoding: BufferEncoding) => string;
+  writeFileSync?: (path: string, contents: string) => void;
+  mkdirSync?: (path: string, options?: { recursive?: boolean }) => void;
+  rmSync?: (path: string, options?: { recursive?: boolean; force?: boolean }) => void;
+  spawnSync?: typeof spawnSync;
+}
+
+function expandHomePath(input: string, env: NodeJS.ProcessEnv): string {
+  if (input === "~") {
+    return env.HOME?.trim() || input;
+  }
+
+  if (input.startsWith("~/") && env.HOME?.trim()) {
+    return path.posix.join(env.HOME.trim(), input.slice(2));
+  }
+
+  return input;
+}
+
+function getPreparedNodePtyPaths(stagingRoot: string) {
+  return {
+    localPackageJsonPath: path.posix.join(stagingRoot, "node_modules", "node-pty", "package.json"),
+    localNativeBinaryPath: path.posix.join(
+      stagingRoot,
+      "node_modules",
+      "node-pty",
+      "build",
+      "Release",
+      "pty.node"
+    ),
+    stampFilePath: path.posix.join(stagingRoot, WSL_NODE_PTY_STAMP_FILE),
+  };
+}
+
+function getNodePtyStampKey(version: string, nodeAbi: string, arch: NodeJS.Architecture): string {
+  return `${version}|${nodeAbi}|${arch}`;
+}
+
+function getInstallFailureMessage(result: ReturnType<typeof spawnSync>): string {
+  if (result.error instanceof Error) {
+    return result.error.message;
+  }
+
+  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+  return stderr || stdout || `npm install exited with code ${result.status ?? "unknown"}`;
+}
+
+function resolveNpmInstallCommand(exists: (path: string) => boolean): {
+  file: string;
+  args: string[];
+} {
+  const candidate = path.resolve(
+    process.execPath,
+    "..",
+    "..",
+    "lib",
+    "node_modules",
+    "npm",
+    "bin",
+    "npm-cli.js"
+  );
+  if (exists(candidate)) {
+    return {
+      file: process.execPath,
+      args: [candidate],
+    };
+  }
+
+  return {
+    file: "npm",
+    args: [],
+  };
+}
+
+export function ensureWslLocalNodePtyPackage(
+  options: EnsureWslLocalNodePtyPackageOptions = {}
+): string | undefined {
+  const env = options.env ?? process.env;
+  const sourcePackageJsonPath = env[WSL_NODE_PTY_SOURCE_PACKAGE_JSON_ENV]?.trim();
+  const addonPackageJsonPath = env[WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON_ENV]?.trim();
+  const stagingRootRaw = env[WSL_NODE_PTY_STAGING_ROOT_ENV]?.trim();
+
+  if (!sourcePackageJsonPath || !addonPackageJsonPath || !stagingRootRaw) {
+    return undefined;
+  }
+
+  const fileExists = options.existsSync ?? existsSync;
+  const readFile =
+    options.readFileSync ??
+    ((file: string, encoding: BufferEncoding) =>
+      require("node:fs").readFileSync(file, encoding) as string);
+  const writeFile =
+    options.writeFileSync ??
+    ((file: string, contents: string) => require("node:fs").writeFileSync(file, contents));
+  const makeDir =
+    options.mkdirSync ??
+    ((dir: string, mkdirOptions?: { recursive?: boolean }) =>
+      require("node:fs").mkdirSync(dir, mkdirOptions));
+  const removeDir =
+    options.rmSync ??
+    ((dir: string, rmOptions?: { recursive?: boolean; force?: boolean }) =>
+      require("node:fs").rmSync(dir, rmOptions));
+  const runInstall = options.spawnSync ?? spawnSync;
+
+  if (!fileExists(sourcePackageJsonPath)) {
+    throw new Error(`Missing node-pty package source at ${sourcePackageJsonPath}`);
+  }
+  if (!fileExists(addonPackageJsonPath)) {
+    throw new Error(`Missing node-addon-api package source at ${addonPackageJsonPath}`);
+  }
+
+  const sourcePackage = JSON.parse(readFile(sourcePackageJsonPath, "utf8")) as { version?: string };
+  const sourceVersion = sourcePackage.version?.trim();
+  if (!sourceVersion) {
+    throw new Error(`Unable to read node-pty version from ${sourcePackageJsonPath}`);
+  }
+
+  const nodeAbi = options.nodeAbi ?? process.versions.modules;
+  const arch = options.arch ?? process.arch;
+  const stagingRoot = expandHomePath(stagingRootRaw, env);
+  const { localPackageJsonPath, localNativeBinaryPath, stampFilePath } =
+    getPreparedNodePtyPaths(stagingRoot);
+  const stampKey = getNodePtyStampKey(sourceVersion, nodeAbi, arch);
+
+  if (
+    fileExists(localPackageJsonPath) &&
+    fileExists(localNativeBinaryPath) &&
+    fileExists(stampFilePath) &&
+    readFile(stampFilePath, "utf8").trim() === stampKey
+  ) {
+    return localPackageJsonPath;
+  }
+
+  removeDir(stagingRoot, { recursive: true, force: true });
+  makeDir(stagingRoot, { recursive: true });
+
+  writeFile(
+    path.posix.join(stagingRoot, "package.json"),
+    `${JSON.stringify(
+      {
+        name: "coder-studio-wsl-node-pty",
+        private: true,
+        dependencies: {
+          "node-pty": `file:${path.posix.dirname(sourcePackageJsonPath)}`,
+          "node-addon-api": `file:${path.posix.dirname(addonPackageJsonPath)}`,
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  const installEnv = {
+    ...Object.fromEntries(
+      Object.entries(env).filter((entry): entry is [string, string] => !!entry[1])
+    ),
+    npm_config_build_from_source: "true",
+    npm_config_audit: "false",
+    npm_config_fund: "false",
+    npm_config_update_notifier: "false",
+  };
+  const installCommand = resolveNpmInstallCommand(fileExists);
+  const installResult = runInstall(
+    installCommand.file,
+    [...installCommand.args, "install", "--no-package-lock", "--omit=dev"],
+    {
+      cwd: stagingRoot,
+      env: installEnv,
+      encoding: "utf8",
+    }
+  );
+
+  if (installResult.status !== 0) {
+    throw new Error(
+      `Unable to prepare WSL-local node-pty package. ${getInstallFailureMessage(installResult)}`
+    );
+  }
+
+  if (!fileExists(localPackageJsonPath) || !fileExists(localNativeBinaryPath)) {
+    throw new Error(
+      `WSL-local node-pty install did not produce ${localNativeBinaryPath}. Check npm and build tools inside WSL.`
+    );
+  }
+
+  writeFile(stampFilePath, stampKey);
+  return localPackageJsonPath;
+}
 
 /**
  * Options for kill escalation polling
@@ -189,13 +389,32 @@ export async function escalateKillWithPolling(
  * Note: node-pty is loaded lazily to avoid native module loading errors during startup
  */
 export class NodePtyHost implements PtyHost {
+  constructor(
+    private readonly deps: {
+      ensureWslLocalNodePtyPackage?: (
+        options?: EnsureWslLocalNodePtyPackageOptions
+      ) => string | undefined;
+      createRequire?: typeof createRequire;
+      defaultRequire?: NodeRequire;
+    } = {}
+  ) {}
+
   spawn(argv: string[], options: PtySpawnOptions): PtyProcess {
     ensureNodePtySpawnHelperExecutable();
 
     // Lazy load node-pty to avoid native module loading errors
     let pty: typeof NodePty;
     try {
-      pty = require("node-pty");
+      const localNodePtyPackageJsonPath =
+        this.deps.ensureWslLocalNodePtyPackage?.() ?? ensureWslLocalNodePtyPackage();
+      if (localNodePtyPackageJsonPath) {
+        const localRequire = (this.deps.createRequire ?? createRequire)(
+          localNodePtyPackageJsonPath
+        );
+        pty = localRequire(path.dirname(localNodePtyPackageJsonPath)) as typeof NodePty;
+      } else {
+        pty = (this.deps.defaultRequire ?? require)("node-pty") as typeof NodePty;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`node-pty native module not available. ${message}`);

@@ -222,6 +222,48 @@ describe("WSL runtime bootstrap", () => {
     expect(spec.bootstrap.hostApiUrl).toBe("http://172.29.224.1:4173");
   });
 
+  it("passes WSL-local node-pty staging hints to the child runtime", async () => {
+    const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-native-deps-test");
+    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    writeFileSync(entryPath, "export {};\n");
+
+    const spec = await resolveWslRuntimeLaunchSpec({
+      runtimeId: "wsl:ws-1",
+      stateRoot: join(tempRoot, "state-root"),
+      workspace: {
+        id: "ws-1",
+        path: "/home/me/app",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 250,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      settingsSnapshot: {},
+      workspaceSnapshot: [],
+      customProviderConfigs: [],
+      runtimeEntryPathResolver: () => entryPath,
+    });
+
+    expect(spec.env.CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON).toContain(
+      "node-pty/package.json"
+    );
+    expect(spec.env.CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON).toContain(
+      "node-addon-api/package.json"
+    );
+    expect(spec.env.CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT).toBe(
+      "~/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty"
+    );
+    expect(spec.env.WSLENV).toContain("CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON/u");
+    expect(spec.env.WSLENV).toContain("CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON/u");
+    expect(spec.env.WSLENV).toContain("CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT/u");
+  });
+
   it("launches wsl.exe from a safe Windows cwd instead of inheriting the workspace path", async () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-safe-cwd-test");
     mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });

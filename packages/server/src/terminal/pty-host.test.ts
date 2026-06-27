@@ -7,8 +7,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ensureNodePtySpawnHelperExecutable,
+  ensureWslLocalNodePtyPackage,
   escalateKillWithPolling,
   killProcessGroup,
+  NodePtyHost,
 } from "./pty-host";
 
 describe("kill escalation", () => {
@@ -330,5 +332,187 @@ describe("ensureNodePtySpawnHelperExecutable", () => {
         chmodSync: vi.fn(),
       })
     ).not.toThrow();
+  });
+});
+
+describe("ensureWslLocalNodePtyPackage", () => {
+  const sourcePackageJsonPath = "/mnt/c/coder-studio/node_modules/node-pty/package.json";
+  const addonPackageJsonPath = "/mnt/c/coder-studio/node_modules/node-addon-api/package.json";
+  const stagingRoot = "/home/me/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty";
+  const localPackageJsonPath = `${stagingRoot}/node_modules/node-pty/package.json`;
+  const localNativeBinaryPath = `${stagingRoot}/node_modules/node-pty/build/Release/pty.node`;
+  const stampFilePath = `${stagingRoot}/.coder-studio-node-pty-stamp`;
+  const stampKey = "1.1.0|127|x64";
+
+  it("returns undefined when the WSL-local node-pty env is not configured", () => {
+    expect(
+      ensureWslLocalNodePtyPackage({
+        env: {},
+        spawnSync: vi.fn(),
+      })
+    ).toBeUndefined();
+  });
+
+  it("reuses a prepared WSL-local node-pty package when the stamp matches", () => {
+    const existsSync = vi.fn((file: string) =>
+      [
+        sourcePackageJsonPath,
+        addonPackageJsonPath,
+        localPackageJsonPath,
+        localNativeBinaryPath,
+        stampFilePath,
+      ].includes(file)
+    );
+    const readFileSync = vi.fn((file: string) => {
+      if (file === sourcePackageJsonPath) {
+        return JSON.stringify({ version: "1.1.0" });
+      }
+      if (file === stampFilePath) {
+        return stampKey;
+      }
+      throw new Error(`Unexpected read: ${file}`);
+    });
+    const spawnSync = vi.fn();
+
+    expect(
+      ensureWslLocalNodePtyPackage({
+        env: {
+          HOME: "/home/me",
+          CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON: sourcePackageJsonPath,
+          CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON: addonPackageJsonPath,
+          CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT:
+            "~/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty",
+        },
+        nodeAbi: "127",
+        arch: "x64",
+        existsSync,
+        readFileSync,
+        spawnSync,
+      })
+    ).toBe(localPackageJsonPath);
+    expect(spawnSync).not.toHaveBeenCalled();
+  });
+
+  it("installs a fresh WSL-local node-pty package when the prepared copy is missing", () => {
+    let installed = false;
+    const existsSync = vi.fn((file: string) => {
+      if (file === sourcePackageJsonPath || file === addonPackageJsonPath) {
+        return true;
+      }
+
+      if (!installed) {
+        return false;
+      }
+
+      return [localPackageJsonPath, localNativeBinaryPath].includes(file);
+    });
+    const readFileSync = vi.fn((file: string) => {
+      if (file === sourcePackageJsonPath) {
+        return JSON.stringify({ version: "1.1.0" });
+      }
+      throw new Error(`Unexpected read: ${file}`);
+    });
+    const writeFileSync = vi.fn();
+    const mkdirSync = vi.fn();
+    const rmSync = vi.fn();
+    const spawnSync = vi.fn(() => {
+      installed = true;
+      return {
+        status: 0,
+        stdout: "",
+        stderr: "",
+      };
+    });
+
+    expect(
+      ensureWslLocalNodePtyPackage({
+        env: {
+          HOME: "/home/me",
+          CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON: sourcePackageJsonPath,
+          CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON: addonPackageJsonPath,
+          CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT:
+            "~/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty",
+        },
+        nodeAbi: "127",
+        arch: "x64",
+        existsSync,
+        readFileSync,
+        writeFileSync,
+        mkdirSync,
+        rmSync,
+        spawnSync,
+      })
+    ).toBe(localPackageJsonPath);
+
+    expect(rmSync).toHaveBeenCalledWith(stagingRoot, { recursive: true, force: true });
+    expect(mkdirSync).toHaveBeenCalledWith(stagingRoot, { recursive: true });
+    expect(writeFileSync).toHaveBeenCalledWith(
+      `${stagingRoot}/package.json`,
+      expect.stringContaining('"node-pty": "file:/mnt/c/coder-studio/node_modules/node-pty"')
+    );
+    expect(writeFileSync).toHaveBeenCalledWith(stampFilePath, stampKey);
+    expect(spawnSync).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(["install", "--no-package-lock", "--omit=dev"]),
+      expect.objectContaining({
+        cwd: stagingRoot,
+        encoding: "utf8",
+        env: expect.objectContaining({
+          npm_config_build_from_source: "true",
+          npm_config_audit: "false",
+          npm_config_fund: "false",
+        }),
+      })
+    );
+  });
+});
+
+describe("NodePtyHost", () => {
+  it("prefers the prepared WSL-local node-pty package when configured", () => {
+    const spawn = vi.fn(() => ({
+      pid: 321,
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+    }));
+    const localRequire = vi.fn((id: string) => {
+      if (
+        id !== "/home/me/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty/node_modules/node-pty"
+      ) {
+        throw new Error(`Unexpected require: ${id}`);
+      }
+
+      return {
+        spawn,
+      };
+    });
+
+    const host = new NodePtyHost({
+      ensureWslLocalNodePtyPackage: vi.fn(
+        () =>
+          "/home/me/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty/node_modules/node-pty/package.json"
+      ),
+      createRequire: vi.fn(() => localRequire),
+      defaultRequire: vi.fn(),
+    });
+
+    host.spawn(["bash"], {
+      cwd: "/home/me/app",
+      env: {},
+      cols: 120,
+      rows: 30,
+    });
+
+    expect(localRequire).toHaveBeenCalledWith(
+      "/home/me/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty/node_modules/node-pty"
+    );
+    expect(spawn).toHaveBeenCalledWith("bash", [], {
+      cwd: "/home/me/app",
+      env: {},
+      cols: 120,
+      rows: 30,
+    });
   });
 });

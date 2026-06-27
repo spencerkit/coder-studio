@@ -715,8 +715,18 @@ describe("Workspace Commands", () => {
       expect(commandExists).toHaveBeenCalledWith("wsl");
       expect(runCommand).toHaveBeenCalledWith(
         "wsl",
-        expect.arrayContaining(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]),
-        { windowsHide: true }
+        expect.arrayContaining([
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "/",
+          "-e",
+          "sh",
+          "-c",
+          "sh",
+          "~/workspace",
+        ]),
+        expect.objectContaining({ windowsHide: true, cwd: process.cwd() })
       );
     });
   });
@@ -756,8 +766,18 @@ describe("Workspace Commands", () => {
       expect(commandExists).toHaveBeenCalledWith("wsl");
       expect(runCommand).toHaveBeenCalledWith(
         "wsl",
-        expect.arrayContaining(["-d", "Ubuntu-24.04", "--cd", "/", "-e", "sh", "-c"]),
-        { windowsHide: true }
+        expect.arrayContaining([
+          "-d",
+          "Ubuntu-24.04",
+          "--cd",
+          "/",
+          "-e",
+          "sh",
+          "-c",
+          "sh",
+          "~/workspace/new-dir",
+        ]),
+        expect.objectContaining({ windowsHide: true, cwd: process.cwd() })
       );
     });
   });

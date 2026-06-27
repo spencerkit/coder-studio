@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { isIP } from "node:net";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,8 @@ import { resolveSafeWslHostCwd, toWslPath } from "../terminal-profiles/wsl.js";
 import type { RuntimeWorkspaceSnapshot, WslRuntimeBootstrapPayload } from "./remote/protocol.js";
 
 const WSL_HOST_IP_PROBE = "ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'";
+const NODE_PTY_PKG = "node-pty/package.json";
+const NODE_ADDON_API_PKG = "node-addon-api/package.json";
 export const WSL_RUNTIME_NODE_LAUNCH_SCRIPT = [
   'ENTRY="${1-}"',
   'NODE="$(command -v node 2>/dev/null || command -v nodejs 2>/dev/null)"',
@@ -105,6 +108,21 @@ function toExecutableWslPath(hostPath: string): string {
   }
 
   return toWslPath(hostPath) ?? hostPath.replace(/\\/g, "/");
+}
+
+function resolveWslRuntimeNativeDependencyHints(): {
+  nodePtySourcePackageJsonPath: string;
+  nodeAddonApiSourcePackageJsonPath: string;
+} {
+  const runtimeRequire = createRequire(import.meta.url);
+  const nodePtySourcePackageJsonPath = runtimeRequire.resolve(NODE_PTY_PKG);
+  const nodePtyRequire = createRequire(nodePtySourcePackageJsonPath);
+  const nodeAddonApiSourcePackageJsonPath = nodePtyRequire.resolve(NODE_ADDON_API_PKG);
+
+  return {
+    nodePtySourcePackageJsonPath,
+    nodeAddonApiSourcePackageJsonPath,
+  };
 }
 
 export async function probeWslHostIp(
@@ -284,6 +302,8 @@ export async function resolveWslRuntimeLaunchSpec(
       capabilities: config.capabilities.map((capability) => ({ ...capability })),
     })),
   };
+  const nativeDependencyHints = resolveWslRuntimeNativeDependencyHints();
+  const wslNodePtyStagingRoot = `${bootstrap.stateRoot}/native-deps/node-pty`;
 
   return {
     command: "wsl.exe",
@@ -301,8 +321,23 @@ export async function resolveWslRuntimeLaunchSpec(
     ],
     cwd: resolveSafeWslHostCwd(),
     env: {
-      WSLENV: appendWslEnvPassThrough(process.env.WSLENV, "CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP"),
+      WSLENV: [
+        "CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP",
+        "CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON",
+        "CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON",
+        "CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT",
+      ].reduce(
+        (current, variableName) => appendWslEnvPassThrough(current, variableName),
+        process.env.WSLENV
+      ),
       CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: serializeWslRuntimeBootstrap(bootstrap),
+      CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON: toExecutableWslPath(
+        nativeDependencyHints.nodePtySourcePackageJsonPath
+      ),
+      CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON: toExecutableWslPath(
+        nativeDependencyHints.nodeAddonApiSourcePackageJsonPath
+      ),
+      CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT: wslNodePtyStagingRoot,
     },
     bootstrap,
   };

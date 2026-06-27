@@ -74,6 +74,12 @@ describe("WslRuntimeHandle", () => {
       cwd: "/tmp",
       env: {
         CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: '{"runtimeId":"wsl:ws-1"}',
+        CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON:
+          "/mnt/c/coder-studio/node_modules/node-pty/package.json",
+        CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON:
+          "/mnt/c/coder-studio/node_modules/node-addon-api/package.json",
+        CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT:
+          "~/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty",
       },
       bootstrap: {
         runtimeId: "wsl:ws-1",
@@ -237,6 +243,14 @@ describe("WslRuntimeHandle", () => {
       mockWslLaunchArgs("Ubuntu-24.04"),
       expect.objectContaining({
         cwd: "/tmp",
+        env: expect.objectContaining({
+          CODER_STUDIO_WSL_NODE_PTY_SOURCE_PACKAGE_JSON:
+            "/mnt/c/coder-studio/node_modules/node-pty/package.json",
+          CODER_STUDIO_WSL_NODE_ADDON_API_SOURCE_PACKAGE_JSON:
+            "/mnt/c/coder-studio/node_modules/node-addon-api/package.json",
+          CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT:
+            "~/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty",
+        }),
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       })

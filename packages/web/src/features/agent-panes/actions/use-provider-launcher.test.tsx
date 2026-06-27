@@ -115,8 +115,8 @@ describe("useProviderLauncher", () => {
         kind: "built_in",
         capability: "full",
         requiredCommands: ["codex"],
-        available: true,
-        missingCommands: [],
+        available: false,
+        missingCommands: ["codex"],
       });
     });
   });
@@ -151,8 +151,8 @@ describe("useProviderLauncher", () => {
     ]);
     expect(result.current.states.cursor?.runtime).toMatchObject({
       providerId: "cursor",
-      available: true,
-      missingCommands: [],
+      available: false,
+      missingCommands: ["agent"],
     });
 
     await waitFor(() => {
@@ -161,6 +161,41 @@ describe("useProviderLauncher", () => {
 
     expect(dispatch).not.toHaveBeenCalledWith("provider.list", {});
     expect(store.get(providerRuntimeStatusAtom)).toEqual({});
+  });
+
+  it("keeps fallback runtime entries unavailable when provider runtime status cannot be loaded", async () => {
+    const store = createStore();
+    store.set(providerListAtom, createProviderList());
+    const wrapper = createWrapper(store);
+    const dispatch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: "command_error",
+        message: "WSL runtime transport unavailable",
+      },
+    }) as DispatchCommand;
+
+    const { result } = renderHook(
+      () =>
+        useProviderLauncher(dispatch, "ws-1", vi.fn(), {
+          launchMode: "replace",
+        }),
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(dispatch).toHaveBeenCalledWith("provider.runtimeStatus", { workspaceId: "ws-1" });
+      expect(result.current.states.claude?.runtime).toMatchObject({
+        providerId: "claude",
+        available: false,
+        missingCommands: ["claude"],
+      });
+      expect(result.current.states.cursor?.runtime).toMatchObject({
+        providerId: "cursor",
+        available: false,
+        missingCommands: ["agent"],
+      });
+    });
   });
 
   it("tracks provider ids directly from the shared provider atom after mount", async () => {
@@ -403,7 +438,12 @@ describe("useProviderLauncher", () => {
         "cursor",
         "opencode",
       ]);
-      expect(result.current.states.claude?.runtime?.available).toBe(false);
+      expect(result.current.states.claude?.runtime).toMatchObject({
+        providerId: "claude",
+        available: false,
+        autoInstallSupported: true,
+        installReadiness: "ready",
+      });
     });
 
     const originalSetTimeout = window.setTimeout.bind(window);
@@ -566,6 +606,7 @@ describe("useProviderLauncher", () => {
 
     await waitFor(() => {
       expect(result.current.providers).toHaveLength(5);
+      expect(result.current.states.claude?.runtime?.available).toBe(true);
     });
 
     await act(async () => {
