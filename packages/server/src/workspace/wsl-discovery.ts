@@ -1,8 +1,10 @@
+import { spawn } from "node:child_process";
 import {
   type CommandAvailabilityCheck,
   checkCommandAvailable,
 } from "../provider-runtime/command-check.js";
-import { type CommandRunner, runCommandAsString } from "../provider-runtime/command-runner.js";
+import { type CommandRunner } from "../provider-runtime/command-runner.js";
+import { decodeWindowsConsoleOutput } from "../terminal-profiles/wsl.js";
 
 export interface WslDiscoveryDeps {
   commandExists?: CommandAvailabilityCheck;
@@ -35,7 +37,32 @@ export async function listWslDistros(input: WslDiscoveryDeps = {}): Promise<stri
     return [];
   }
 
-  const runner = input.runCommand ?? runCommandAsString;
-  const { stdout } = await runner("wsl.exe", ["-l", "-q"], { windowsHide: true });
+  const stdout = input.runCommand
+    ? (await input.runCommand("wsl.exe", ["-l", "-q"], { windowsHide: true })).stdout
+    : await runWslListStdout();
   return parseWslDistroLines(stdout);
+}
+
+function runWslListStdout(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("wsl.exe", ["-l", "-q"], {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdoutChunks: Buffer[] = [];
+
+    child.stdout?.on("data", (chunk: string | Buffer) => {
+      stdoutChunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`wsl.exe exited with code ${code ?? "unknown"}`));
+        return;
+      }
+
+      resolve(decodeWindowsConsoleOutput(Buffer.concat(stdoutChunks)));
+    });
+  });
 }
