@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { SessionTokenRepo } from "../../auth/session-token-repo.js";
 import {
   issueRemoteSessionBootstrap,
   resolveWslHostApiUrl,
+  resolveWslRuntimeEntryPath,
   resolveWslRuntimeLaunchSpec,
   resolveWslRuntimeStateRoot,
   serializeWslRuntimeBootstrap,
@@ -55,7 +57,16 @@ describe("resolveWslHostApiUrl", () => {
 
     expect(runCommand).toHaveBeenCalledWith(
       "wsl.exe",
-      ["-d", "Ubuntu", "--", "sh", "-lc", expect.stringContaining("ip route show default")],
+      [
+        "-d",
+        "Ubuntu",
+        "--cd",
+        "/",
+        "-e",
+        "sh",
+        "-c",
+        expect.stringContaining("ip route show default"),
+      ],
       expect.objectContaining({ windowsHide: true })
     );
     expect(result).toBe("http://172.29.224.1:4173");
@@ -158,12 +169,16 @@ describe("WSL runtime bootstrap", () => {
       "Ubuntu-24.04",
       "--cd",
       "/home/me/app",
-      "--",
-      "node",
+      "-e",
+      "sh",
+      "-c",
+      expect.stringContaining('exec "$NODE" "$ENTRY"'),
+      "sh",
       expect.stringContaining("wsl-runtime-entry.mjs"),
     ]);
     expect(spec.cwd).toBe(process.cwd());
     expect(spec.env.CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP).toBeTypeOf("string");
+    expect(spec.env.WSLENV).toContain("CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP/u");
     expect(spec.bootstrap.hostApiUrl).toBe("http://172.29.224.1:4173");
   });
 
@@ -200,8 +215,11 @@ describe("WSL runtime bootstrap", () => {
       "Ubuntu-24.04",
       "--cd",
       "/home/me/app",
-      "--",
-      "node",
+      "-e",
+      "sh",
+      "-c",
+      expect.stringContaining('exec "$NODE" "$ENTRY"'),
+      "sh",
       expect.stringContaining("wsl-runtime-entry.mjs"),
     ]);
     expect(spec.cwd).toBe(process.cwd());
@@ -234,5 +252,19 @@ describe("WSL runtime bootstrap", () => {
     ).rejects.toThrow("Unable to resolve Coder Studio WSL runtime entry");
 
     expect(existsSync("/tmp/missing-wsl-entry.mjs")).toBe(false);
+  });
+
+  it("does not treat TypeScript source entries as launchable runtime entrypoints", () => {
+    const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-source-entry-test");
+    mkdirSync(join(tempRoot, "packages", "cli", "src"), { recursive: true });
+    const sourceEntryPath = join(tempRoot, "packages", "cli", "src", "wsl-runtime-entry.ts");
+    writeFileSync(sourceEntryPath, "export {};\n");
+
+    expect(() =>
+      resolveWslRuntimeEntryPath(
+        pathToFileURL(join(tempRoot, "packages", "server", "src", "runtime", "wsl-bootstrap.ts"))
+          .href
+      )
+    ).toThrow("Unable to resolve Coder Studio WSL runtime entry");
   });
 });

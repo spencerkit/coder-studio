@@ -6,6 +6,7 @@
 import {
   buildDevServerEnv,
   CLI_DIR,
+  ensureWslRuntimeEntryBuilt,
   error,
   info,
   log,
@@ -24,6 +25,9 @@ const SERVER_HOST = "127.0.0.1";
 
 async function dev(): Promise<void> {
   step("DEV", "Starting parallel development servers...\n");
+
+  info("Ensuring WSL runtime entry is built...");
+  await ensureWslRuntimeEntryBuilt();
 
   info("Starting frontend (Vite dev server)...");
   const viteProcess = runBackground("pnpm", ["vite"], {

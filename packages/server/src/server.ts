@@ -756,7 +756,7 @@ function extractListenPort(app: FastifyInstance): number | undefined {
   return undefined;
 }
 
-if (isDirectExecution(import.meta.url)) {
+if (isDirectExecution(import.meta.url) && process.env.CODER_STUDIO_WSL_RUNTIME_ENTRY !== "1") {
   const server = await createServer();
 
   process.on("SIGINT", async () => {

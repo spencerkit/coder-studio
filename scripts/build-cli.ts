@@ -13,6 +13,7 @@ import {
   copyDir,
   createCliBuildOptions,
   ensureDir,
+  ensureWslRuntimeEntryBuilt,
   error,
   exists,
   info,
@@ -55,6 +56,10 @@ async function buildCli(): Promise<void> {
   const esmOptions = await createCliBuildOptions("esm");
   await esbuild.build(esmOptions);
   success(`ESM bundle: ${resolve(CLI_DIR, "dist/esm/bin.mjs")}`);
+
+  info("Building WSL runtime entry...");
+  const wslRuntimeEntryPath = await ensureWslRuntimeEntryBuilt();
+  success(`WSL runtime entry: ${wslRuntimeEntryPath}`);
 
   // Create bin.js wrapper (for ESM)
   info("Creating bin.js entry point...");

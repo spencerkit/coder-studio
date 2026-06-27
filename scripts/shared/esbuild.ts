@@ -4,7 +4,15 @@
 
 import { type BuildOptions } from "esbuild";
 import { resolve } from "path";
-import { CLI_DIR, CORE_DIR, PACKAGES_DIR, PROVIDERS_DIR, SERVER_DIR, UTILS_DIR } from "./paths.js";
+import {
+  CLI_DIR,
+  CLI_ESM_DIR,
+  CORE_DIR,
+  PACKAGES_DIR,
+  PROVIDERS_DIR,
+  SERVER_DIR,
+  UTILS_DIR,
+} from "./paths.js";
 
 /**
  * Get external dependencies from package.json
@@ -61,7 +69,6 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
       resolve(CLI_DIR, "src/index.ts"),
       resolve(CLI_DIR, "src/server-runner.ts"),
       resolve(CLI_DIR, "src/update-worker.ts"),
-      resolve(CLI_DIR, "src/wsl-runtime-entry.ts"),
     ],
     bundle: true,
     platform: "node",
@@ -82,6 +89,23 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
       "@coder-studio/utils": resolve(UTILS_DIR, "src/index.ts"),
     },
     banner: format === "esm" ? { js: "// @spencer-kit/coder-studio - ESM bundle" } : undefined,
+  };
+}
+
+export async function createWslRuntimeEntryBuildOptions(): Promise<BuildOptions> {
+  const baseOptions = await createCliBuildOptions("esm");
+  return {
+    ...baseOptions,
+    entryPoints: [resolve(CLI_DIR, "src/wsl-runtime-entry.ts")],
+    // Keep third-party deps external so bundled CJS (pino, mime-types, etc.) is not
+    // inlined into ESM. Mixing bundled require shims with top-level await breaks on Node 24.
+    packages: "external",
+    define: {
+      "process.env.CODER_STUDIO_WSL_RUNTIME_ENTRY": '"1"',
+    },
+    banner: {
+      js: "// @spencer-kit/coder-studio - WSL runtime entry",
+    },
   };
 }
 

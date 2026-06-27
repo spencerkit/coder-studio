@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isIP } from "node:net";
 import { dirname, resolve, sep } from "node:path";
@@ -14,6 +15,15 @@ import { toWslPath } from "../terminal-profiles/wsl.js";
 import type { RuntimeWorkspaceSnapshot, WslRuntimeBootstrapPayload } from "./remote/protocol.js";
 
 const WSL_HOST_IP_PROBE = "ip route show default 2>/dev/null | awk '/default/ {print $3; exit}'";
+export const WSL_RUNTIME_NODE_LAUNCH_SCRIPT = [
+  'ENTRY="${1-}"',
+  'NODE="$(command -v node 2>/dev/null || command -v nodejs 2>/dev/null)"',
+  'if [ -z "$NODE" ] && [ -x "$HOME/.local/share/fnm/aliases/default/bin/node" ]; then NODE="$HOME/.local/share/fnm/aliases/default/bin/node"; fi',
+  'if [ -z "$NODE" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh"; NODE="$(command -v node 2>/dev/null)"; fi',
+  'if [ -z "$NODE" ] && [ -x "$HOME/.local/share/fnm/fnm" ]; then eval "$("$HOME/.local/share/fnm/fnm" env)"; NODE="$(command -v node 2>/dev/null)"; fi',
+  'if [ -z "$NODE" ]; then exit 127; fi',
+  'exec "$NODE" "$ENTRY"',
+].join("; ");
 export const REMOTE_RUNTIME_SESSION_TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_WSL_STATE_ROOT_BASE = "~/.coder-studio/runtimes";
 
@@ -107,7 +117,7 @@ export async function probeWslHostIp(
 ): Promise<string | undefined> {
   const { stdout } = await runCommand(
     "wsl.exe",
-    ["-d", wslDistro, "--", "sh", "-lc", WSL_HOST_IP_PROBE],
+    ["-d", wslDistro, "--cd", "/", "-e", "sh", "-c", WSL_HOST_IP_PROBE],
     { windowsHide: true }
   );
 
@@ -144,6 +154,20 @@ export function resolveWslRuntimeStateRoot(runtimeId: string): string {
   return `${DEFAULT_WSL_STATE_ROOT_BASE}/${sanitizeRuntimeRootName(runtimeId)}`;
 }
 
+function appendWslEnvPassThrough(existing: string | undefined, varName: string): string {
+  const entry = `${varName}/u`;
+  if (!existing?.trim()) {
+    return entry;
+  }
+
+  const parts = existing.split(":").filter(Boolean);
+  if (parts.some((part) => part === entry || part.startsWith(`${varName}/`))) {
+    return existing;
+  }
+
+  return `${existing}:${entry}`;
+}
+
 export function serializeWslRuntimeBootstrap(bootstrap: WslRuntimeBootstrapPayload): string {
   return JSON.stringify(bootstrap);
 }
@@ -151,15 +175,14 @@ export function serializeWslRuntimeBootstrap(bootstrap: WslRuntimeBootstrapPaylo
 export function resolveWslRuntimeEntryPath(runtimeModuleUrl: string = import.meta.url): string {
   const modulePath = fileURLToPath(runtimeModuleUrl);
   const moduleDir = dirname(modulePath);
-  const sourceEntryPath = resolve(moduleDir, "../../../cli/src/wsl-runtime-entry.ts");
   const repoDistEntryPath = resolve(moduleDir, "../../../cli/dist/esm/wsl-runtime-entry.mjs");
   const packagedDistEntryPath = resolve(moduleDir, "wsl-runtime-entry.mjs");
   const candidates = isPackagedDistRuntime(modulePath)
-    ? [packagedDistEntryPath, repoDistEntryPath, sourceEntryPath]
-    : [repoDistEntryPath, packagedDistEntryPath, sourceEntryPath];
+    ? [packagedDistEntryPath, repoDistEntryPath]
+    : [repoDistEntryPath, packagedDistEntryPath];
 
   for (const candidate of candidates) {
-    if (existsSync(candidate)) {
+    if (existsSync(candidate) && isExecutableEntryPath(candidate)) {
       return candidate;
     }
   }
@@ -169,16 +192,71 @@ export function resolveWslRuntimeEntryPath(runtimeModuleUrl: string = import.met
   );
 }
 
+function resolveRepoRootFromRuntimeModule(runtimeModuleUrl: string): string {
+  return resolve(dirname(fileURLToPath(runtimeModuleUrl)), "../../../..");
+}
+
+function runDevWslRuntimeEntryBuild(repoRoot: string): Promise<void> {
+  const ensureScript = resolve(repoRoot, "scripts/ensure-wsl-runtime-entry.ts");
+  if (!existsSync(ensureScript)) {
+    return Promise.reject(
+      new Error(
+        `Missing ${ensureScript}. Run "pnpm build:cli" or restart the dev server to build wsl-runtime-entry.mjs.`
+      )
+    );
+  }
+
+  const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, ["exec", "tsx", ensureScript], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      windowsHide: true,
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          `Unable to build WSL runtime entry (exit code ${code ?? "unknown"}). Run "pnpm build:cli" and retry.`
+        )
+      );
+    });
+  });
+}
+
+async function resolveWslRuntimeEntryPathForLaunch(
+  runtimeModuleUrl: string = import.meta.url
+): Promise<string> {
+  try {
+    return resolveWslRuntimeEntryPath(runtimeModuleUrl);
+  } catch (error) {
+    if (process.env.NODE_ENV !== "development") {
+      throw error;
+    }
+  }
+
+  await runDevWslRuntimeEntryBuild(resolveRepoRootFromRuntimeModule(runtimeModuleUrl));
+  return resolveWslRuntimeEntryPath(runtimeModuleUrl);
+}
+
 export async function resolveWslRuntimeLaunchSpec(
   input: ResolveWslRuntimeLaunchSpecInput
 ): Promise<WslRuntimeLaunchSpec> {
-  const entryPath = input.runtimeEntryPathResolver?.() ?? resolveWslRuntimeEntryPath();
+  const entryPath =
+    input.runtimeEntryPathResolver?.() ?? (await resolveWslRuntimeEntryPathForLaunch());
   if (!existsSync(entryPath)) {
     throw new Error(`Unable to resolve Coder Studio WSL runtime entry. Missing ${entryPath}.`);
   }
   if (!isExecutableEntryPath(entryPath)) {
     throw new Error(
-      `Unable to launch Coder Studio WSL runtime from source entry ${entryPath}. Build the CLI bundle first so wsl-runtime-entry.mjs exists.`
+      `Unable to launch Coder Studio WSL runtime from ${entryPath}. Build the CLI bundle first so wsl-runtime-entry.mjs exists.`
     );
   }
 
@@ -218,12 +296,16 @@ export async function resolveWslRuntimeLaunchSpec(
       distro,
       "--cd",
       input.workspace.path,
-      "--",
-      "node",
+      "-e",
+      "sh",
+      "-c",
+      WSL_RUNTIME_NODE_LAUNCH_SCRIPT,
+      "sh",
       toExecutableWslPath(entryPath),
     ],
     cwd: resolveSafeWslHostCwd(),
     env: {
+      WSLENV: appendWslEnvPassThrough(process.env.WSLENV, "CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP"),
       CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: serializeWslRuntimeBootstrap(bootstrap),
     },
     bootstrap,

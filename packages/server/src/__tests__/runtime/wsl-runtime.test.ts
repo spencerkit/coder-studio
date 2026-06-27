@@ -3,6 +3,22 @@ import { PassThrough } from "node:stream";
 import type { CustomProviderConfig, ProviderDefinition, Workspace } from "@coder-studio/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeHandle, RuntimeHostBridge } from "../../runtime/contract.js";
+import { WSL_RUNTIME_NODE_LAUNCH_SCRIPT } from "../../runtime/wsl-bootstrap.js";
+
+function mockWslLaunchArgs(distro: string, entryPath = "/tmp/wsl-runtime-entry.mjs"): string[] {
+  return [
+    "-d",
+    distro,
+    "--cd",
+    "/home/me/app",
+    "-e",
+    "sh",
+    "-c",
+    WSL_RUNTIME_NODE_LAUNCH_SCRIPT,
+    "sh",
+    entryPath,
+  ];
+}
 
 interface MockChildProcess extends Partial<ChildProcessWithoutNullStreams> {
   stdout: PassThrough;
@@ -54,7 +70,7 @@ describe("WslRuntimeHandle", () => {
     const createStdioJsonRpcClient = vi.fn(async () => rpcClient);
     const resolveWslRuntimeLaunchSpec = vi.fn(async () => ({
       command: "wsl.exe",
-      args: ["-d", "Ubuntu-24.04", "--", "node", "/tmp/wsl-runtime-entry.mjs"],
+      args: mockWslLaunchArgs("Ubuntu-24.04"),
       cwd: "/tmp",
       env: {
         CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: '{"runtimeId":"wsl:ws-1"}',
@@ -218,7 +234,7 @@ describe("WslRuntimeHandle", () => {
     expect(rpcClient.request).toHaveBeenNthCalledWith(1, "health", {});
     expect(spawn).toHaveBeenCalledWith(
       "wsl.exe",
-      ["-d", "Ubuntu-24.04", "--", "node", "/tmp/wsl-runtime-entry.mjs"],
+      mockWslLaunchArgs("Ubuntu-24.04"),
       expect.objectContaining({
         cwd: "/tmp",
         stdio: ["pipe", "pipe", "pipe"],
@@ -394,7 +410,7 @@ describe("WslRuntimeHandle", () => {
     );
     const resolveWslRuntimeLaunchSpec = vi.fn(async () => ({
       command: "wsl.exe",
-      args: ["-d", "Ubuntu", "--", "node", "/tmp/wsl-runtime-entry.mjs"],
+      args: mockWslLaunchArgs("Ubuntu"),
       cwd: "/tmp",
       env: {},
       bootstrap: {

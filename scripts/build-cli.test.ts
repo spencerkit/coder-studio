@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { prepareCliOutputDirs } from "./build-cli.js";
-import { CLI_DIR, CORE_DIR, createCliBuildOptions, getProductionDeps } from "./shared/index.js";
+import {
+  CLI_DIR,
+  CORE_DIR,
+  createCliBuildOptions,
+  createWslRuntimeEntryBuildOptions,
+  getProductionDeps,
+} from "./shared/index.js";
 
 describe("build-cli", () => {
   it("removes stale CLI dist files before recreating output directories", async () => {
@@ -61,9 +67,14 @@ describe("build-cli", () => {
     expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/automation-entry.ts"));
   });
 
-  it("emits the WSL runtime entry as an ESM build output", async () => {
-    const buildOptions = await createCliBuildOptions("esm");
+  it("emits the WSL runtime entry with third-party packages externalized", async () => {
+    const buildOptions = await createWslRuntimeEntryBuildOptions();
 
-    expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/wsl-runtime-entry.ts"));
+    expect(buildOptions.entryPoints).toEqual([resolve(CLI_DIR, "src/wsl-runtime-entry.ts")]);
+    expect(buildOptions.format).toBe("esm");
+    expect(buildOptions.packages).toBe("external");
+    expect(buildOptions.define).toEqual({
+      "process.env.CODER_STUDIO_WSL_RUNTIME_ENTRY": '"1"',
+    });
   });
 });

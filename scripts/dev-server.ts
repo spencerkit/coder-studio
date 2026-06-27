@@ -6,6 +6,7 @@
 import {
   buildDevServerEnv,
   CLI_DIR,
+  ensureWslRuntimeEntryBuilt,
   error,
   info,
   log,
@@ -19,6 +20,9 @@ const SERVER_PORT = 4173;
 const SERVER_HOST = "127.0.0.1";
 
 async function devServer(): Promise<void> {
+  info("Ensuring WSL runtime entry is built...");
+  await ensureWslRuntimeEntryBuilt();
+
   info("Starting tsx watch for backend...");
 
   const serverEnv = buildDevServerEnv({

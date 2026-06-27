@@ -3,10 +3,14 @@ import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const buildDevServerEnv = vi.fn(() => ({ PATH: "/tmp/dev-bin" }));
+const ensureWslRuntimeEntryBuilt = vi.fn(
+  async () => "/repo/packages/cli/dist/esm/wsl-runtime-entry.mjs"
+);
 const runBackground = vi.fn();
 
 vi.mock("./shared/index.js", () => ({
   buildDevServerEnv,
+  ensureWslRuntimeEntryBuilt,
   CLI_DIR: "/repo/packages/cli",
   error: vi.fn(),
   info: vi.fn(),
@@ -32,6 +36,7 @@ describe("dev-server", () => {
     vi.restoreAllMocks();
     vi.resetModules();
     runBackground.mockReset();
+    ensureWslRuntimeEntryBuilt.mockClear();
   });
 
   it("exits with the backend watch child status when it closes", async () => {
@@ -55,6 +60,7 @@ describe("dev-server", () => {
 
     await devServer();
 
+    expect(ensureWslRuntimeEntryBuilt).toHaveBeenCalledTimes(1);
     expect(buildDevServerEnv).toHaveBeenCalledWith({
       rootDir: "/repo",
       cliDir: "/repo/packages/cli",
