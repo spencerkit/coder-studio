@@ -41,11 +41,53 @@ const ReportStatSchema = z.object({
   tone: z.enum(["neutral", "info", "success", "warning", "danger"]).optional(),
 });
 
+export const ReportChartSeriesSchema = z.object({
+  label: z.string().trim().min(1),
+  values: z.array(z.number()),
+});
+export type ReportChartSeries = z.infer<typeof ReportChartSeriesSchema>;
+
+export const ReportChartBlockSchema = z.object({
+  type: z.literal("chart"),
+  title: z.string().trim().min(1),
+  categories: z.array(z.string().trim().min(1)).min(1),
+  series: z.array(ReportChartSeriesSchema).min(1),
+});
+export type ReportChartBlock = z.infer<typeof ReportChartBlockSchema>;
+
+function validateReportChartSeriesAlignment(
+  sections: Array<{
+    blocks: Array<{ type: string; series?: Array<{ values: unknown[] }>; categories?: unknown[] }>;
+  }>,
+  ctx: z.RefinementCtx
+) {
+  sections.forEach((section, sectionIndex) => {
+    section.blocks.forEach((block, blockIndex) => {
+      if (block.type !== "chart") {
+        return;
+      }
+
+      block.series?.forEach((series, seriesIndex) => {
+        if (series.values.length === block.categories?.length) {
+          return;
+        }
+
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "series", seriesIndex, "values"],
+          message: "series.values length must match categories length",
+        });
+      });
+    });
+  });
+}
+
 const ReportBlockSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("stats"),
     items: z.array(ReportStatSchema).min(1),
   }),
+  ReportChartBlockSchema,
   z.object({
     type: z.literal("markdown"),
     markdown: z.string().trim().min(1),
@@ -67,7 +109,7 @@ const ReportBlockSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const ReportCanvasDocumentSchema = z.object({
+const ReportCanvasDocumentBaseSchema = z.object({
   summary: z.string().trim().min(1),
   stats: z.array(ReportStatSchema),
   sections: z
@@ -79,6 +121,11 @@ const ReportCanvasDocumentSchema = z.object({
     )
     .min(1),
 });
+export const ReportCanvasDocumentSchema = ReportCanvasDocumentBaseSchema.superRefine(
+  (value, ctx) => {
+    validateReportChartSeriesAlignment(value.sections, ctx);
+  }
+);
 export type ReportCanvasDocument = z.infer<typeof ReportCanvasDocumentSchema>;
 
 export const CanvasDocumentEnvelopeSchema = z.discriminatedUnion("kind", [
@@ -168,9 +215,10 @@ const CompiledReportBlockSchema = z.discriminatedUnion("type", [
       })
     ),
   }),
+  ReportChartBlockSchema,
 ]);
 
-const CompiledReportCanvasSchema = z.object({
+const CompiledReportCanvasBaseSchema = z.object({
   kind: z.literal("report_canvas"),
   title: z.string().trim().min(1),
   sections: z.array(
@@ -192,6 +240,27 @@ const CompiledReportCanvasSchema = z.object({
       }),
     ])
   ),
+});
+const CompiledReportCanvasSchema = CompiledReportCanvasBaseSchema.superRefine((value, ctx) => {
+  value.sections.forEach((section, sectionIndex) => {
+    section.blocks.forEach((block, blockIndex) => {
+      if (block.type !== "chart") {
+        return;
+      }
+
+      block.series.forEach((series, seriesIndex) => {
+        if (series.values.length === block.categories.length) {
+          return;
+        }
+
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "series", seriesIndex, "values"],
+          message: "series.values length must match categories length",
+        });
+      });
+    });
+  });
 });
 
 export const CompiledCanvasSchema = z.discriminatedUnion("kind", [

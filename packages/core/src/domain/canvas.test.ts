@@ -21,6 +21,75 @@ describe("canvas domain", () => {
     expect(parsed.document.diagram.dsl).toBe("mermaid");
   });
 
+  it("parses a report canvas envelope with a chart block", () => {
+    const parsed = parseCanvasDocumentEnvelope({
+      version: 1,
+      kind: "report_canvas",
+      title: "Weekly Metrics",
+      document: {
+        summary: "Weekly metrics at a glance.",
+        stats: [{ label: "Active users", value: 42 }],
+        sections: [
+          {
+            title: "Usage",
+            blocks: [
+              {
+                type: "chart",
+                title: "Traffic by day",
+                categories: ["Mon", "Tue", "Wed"],
+                series: [
+                  {
+                    label: "Desktop",
+                    values: [12, 18, 24],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(parsed.kind).toBe("report_canvas");
+    expect(parsed.document.sections[0]?.blocks[0]).toMatchObject({
+      type: "chart",
+      title: "Traffic by day",
+      categories: ["Mon", "Tue", "Wed"],
+    });
+  });
+
+  it("rejects report chart series with mismatched values", () => {
+    expect(() =>
+      parseCanvasDocumentEnvelope({
+        version: 1,
+        kind: "report_canvas",
+        title: "Weekly Metrics",
+        document: {
+          summary: "Weekly metrics at a glance.",
+          stats: [{ label: "Active users", value: 42 }],
+          sections: [
+            {
+              title: "Usage",
+              blocks: [
+                {
+                  type: "chart",
+                  title: "Traffic by day",
+                  categories: ["Mon", "Tue", "Wed"],
+                  series: [
+                    {
+                      label: "Desktop",
+                      values: [12, 18],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      })
+    ).toThrow();
+  });
+
   it("rejects ready responses without a compiled document", () => {
     const result = CanvasDataResponseSchema.safeParse({
       canvasId: "canvas-1",
