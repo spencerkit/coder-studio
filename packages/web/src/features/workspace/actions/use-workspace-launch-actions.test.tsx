@@ -413,7 +413,7 @@ describe("useWorkspaceLaunchActions", () => {
     await waitFor(() => {
       expect(sendCommand).toHaveBeenCalledWith(
         "workspace.wsl.browse",
-        { distro: "Debian", path: "/home/spencer" },
+        { distro: "Debian" },
         undefined
       );
     });

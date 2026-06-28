@@ -7,7 +7,7 @@ import {
   EmptyState,
   IconButton,
   Input,
-  Select,
+  SegmentedControl,
   Sheet,
   Spinner,
   ThemedIcon,
@@ -172,20 +172,35 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       </section>
     ) : null;
 
+  const runtimeValue =
+    targetRuntime === "wsl"
+      ? wslDistros.includes(wslDistro)
+        ? wslDistro
+        : (wslDistros[0] ?? "native")
+      : "native";
+
   const runtimeSection = isWindowsPlatform ? (
     <section className="launch-runtime">
-      <label className="launch-runtime__label" htmlFor="workspace-runtime-select">
-        {t("workspace.launch.runtime_label")}
-      </label>
-      <Select
-        id="workspace-runtime-select"
+      <div className="launch-runtime__label">{t("workspace.launch.runtime_label")}</div>
+      <SegmentedControl
         aria-label={t("workspace.launch.runtime_label")}
+        className="launch-runtime__tabs"
+        onChange={(value) => {
+          if (value === "native") {
+            setTargetRuntime("native");
+            return;
+          }
+
+          setTargetRuntime("wsl");
+          setWslDistro(value);
+        }}
+        optionClassName="launch-runtime__tab"
         options={[
           { value: "native", label: t("workspace.launch.runtime_native_windows") },
-          { value: "wsl", label: t("workspace.launch.runtime_wsl") },
+          ...wslDistros.map((distro) => ({ value: distro, label: distro })),
         ]}
-        value={targetRuntime}
-        onValueChange={(value) => setTargetRuntime(value)}
+        size="sm"
+        value={runtimeValue}
       />
     </section>
   ) : null;
@@ -328,17 +343,6 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const wslLaunchControls =
     isWindowsPlatform && targetRuntime === "wsl" ? (
       <div className="launch-wsl">
-        <label className="launch-runtime__label" htmlFor="workspace-wsl-distro">
-          {t("workspace.launch.wsl_distro_label")}
-        </label>
-        <Select
-          id="workspace-wsl-distro"
-          aria-label={t("workspace.launch.wsl_distro_label")}
-          options={wslDistros.map((distro) => ({ value: distro, label: distro }))}
-          value={wslDistro}
-          disabled={wslDistrosLoading || wslDistros.length === 0}
-          onValueChange={(value) => setWslDistro(value)}
-        />
         <label className="launch-runtime__label" htmlFor="workspace-wsl-path">
           {t("workspace.launch.wsl_path_label")}
         </label>
@@ -350,8 +354,8 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
           onChange={(event) => setWslPath(event.target.value)}
         />
         {wslDistrosError ? <div className="form-error">{wslDistrosError}</div> : null}
-        {!wslDistrosLoading && wslDistros.length === 0 && !wslDistrosError ? (
-          <div className="form-error">{t("workspace.launch.wsl_no_distros")}</div>
+        {!wslDistrosLoading && wslDistros.length === 0 ? (
+          <div className="launch-runtime__note">{t("workspace.launch.wsl_no_distros")}</div>
         ) : null}
       </div>
     ) : null;

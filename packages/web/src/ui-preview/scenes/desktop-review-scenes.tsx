@@ -22,7 +22,8 @@ const workspace: Workspace = {
   id: "ws-review",
   name: "coder-studio",
   path: "/home/spencer/workspace/coder-studio",
-  targetRuntime: "native",
+  targetRuntime: "wsl",
+  wslDistro: "Ubuntu-24.04",
   openedAt: 1,
   lastActiveAt: 1,
   uiState: {
@@ -163,6 +164,8 @@ function buildWorkspaceSeed(context: {
         id: "ws-review-2",
         name: "playground",
         path: "/home/spencer/workspace/playground",
+        targetRuntime: "native",
+        wslDistro: undefined,
       },
     ],
     activeWorkspaceId: workspace.id,

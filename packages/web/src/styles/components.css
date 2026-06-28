@@ -5463,15 +5463,38 @@ body.is-dragging-pane {
   background: var(--text-tertiary);
 }
 
-/* Workspace Tab unread badge */
+/* Workspace Tab runtime tag */
 .workspace-tab-badge {
-  padding: var(--sp-1) var(--sp-2);
-  background: var(--status-info-fg);
-  border-radius: var(--radius-full);
-  font-size: var(--type-body-6-size);
-  line-height: var(--type-body-6-line-height);
-  font-weight: var(--type-body-6-weight);
-  color: var(--text-inverse);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 9px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--component-mix-status-info-fg-16pct-transparent);
+  font-size: 7px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--component-mix-status-info-fg-58pct-text-tertiary-42pct);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.topbar-tab-name-row {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.topbar-tab-name-row--wsl {
+  padding-left: 0;
 }
 
 /* ========== Supervisor Strip (Phase 3) ==========
@@ -8087,6 +8110,39 @@ body.is-dragging-pane {
 
 .launch-recent {
   margin-bottom: var(--sp-4);
+}
+
+.launch-runtime,
+.launch-wsl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.launch-runtime__label {
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+.launch-runtime__tabs {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.launch-runtime__tab {
+  flex: 0 1 auto;
+  justify-content: center;
+}
+
+.launch-runtime__note {
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
 }
 
 .launch-section-header {
@@ -14645,6 +14701,11 @@ body.is-dragging-pane .session-action-btn-drag {
   }
 
   .mobile-launch-sheet .launch-recent {
+    margin-bottom: var(--sp-3);
+  }
+
+  .mobile-launch-sheet .launch-runtime,
+  .mobile-launch-sheet .launch-wsl {
     margin-bottom: var(--sp-3);
   }
 

@@ -109,6 +109,30 @@ describe("WorkspaceTab", () => {
     expect(label).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
   });
 
+  it("shows a WSL badge for workspaces opened with the wsl runtime", () => {
+    const workspace = {
+      ...createWorkspace("ws-2", "/home/spencer/workspace/coder-studio"),
+      targetRuntime: "wsl" as const,
+      wslDistro: "Ubuntu-24.04",
+      name: "/home/spencer/workspace/coder-studio",
+    };
+    const store = createStore();
+    store.set(localeAtom, "en");
+
+    renderWorkspaceTab(store, workspace);
+
+    const badge = screen.getByText("WSL");
+    const row = screen.getByText("coder-studio").closest(".topbar-tab-name-row");
+    const tab = screen.getByRole("tab", { name: "coder-studio" });
+    const content = screen.getByText("coder-studio").closest(".topbar-tab-content");
+
+    expect(badge).toBeInTheDocument();
+    expect(row).not.toContainElement(badge);
+    expect(content).not.toContainElement(badge);
+    expect(tab.firstElementChild).toBe(badge);
+    expect(tab).toBeInTheDocument();
+  });
+
   it("sets the active workspace without navigating when a tab is clicked", () => {
     const workspace = createWorkspace("ws-2", "/tmp/two");
     const store = createStore();

@@ -1195,6 +1195,16 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
               { name: "playground", path: "/home/spencer/workspace/playground", itemCount: 6 },
             ],
           },
+          workspaceWslDistros: ["Ubuntu-24.04", "Debian"],
+          workspaceWslBrowse: {
+            currentPath: "/home/spencer",
+            parentPath: "/home",
+            rootPaths: ["/", "/home/spencer"],
+            directories: [
+              { name: "workspace", path: "/home/spencer/workspace", itemCount: 24 },
+              { name: "sandbox", path: "/home/spencer/sandbox", itemCount: 6 },
+            ],
+          },
           workspaceOpen: workspace,
         },
       }),

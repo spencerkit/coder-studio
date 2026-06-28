@@ -39,6 +39,7 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   const selectWorkspaceTarget = useSelectWorkspaceTarget();
   const { paneLayout, sessions } = useWorkspaceSessions(workspace, { disabled: isActive });
   const displayName = formatWorkspaceLabel(workspace) || workspace.id;
+  const isWslWorkspace = workspace.targetRuntime === "wsl";
   const sessionsById = Object.fromEntries(sessions.map((session) => [session.id, session]));
   const miniMapCells = buildWorkspaceSessionMiniMapCells(paneLayout, sessionsById);
   const miniMapColumns = measureWorkspaceSessionMiniMapColumns(paneLayout);
@@ -61,10 +62,19 @@ export const WorkspaceTab: FC<WorkspaceTabProps> = ({ workspace, isActive }) => 
   return (
     <div className={`topbar-tab-shell ${isActive ? "active" : ""}`} role="presentation">
       <Tab className="topbar-tab" onClick={handleClick} value={workspace.id}>
+        {isWslWorkspace ? (
+          <span aria-hidden="true" className="workspace-tab-badge">
+            WSL
+          </span>
+        ) : null}
         <span className="topbar-tab-content">
-          <Tooltip content={workspace.path || workspace.id}>
-            <span className="topbar-tab-name">{displayName}</span>
-          </Tooltip>
+          <span
+            className={`topbar-tab-name-row ${isWslWorkspace ? "topbar-tab-name-row--wsl" : ""}`}
+          >
+            <Tooltip content={workspace.path || workspace.id}>
+              <span className="topbar-tab-name">{displayName}</span>
+            </Tooltip>
+          </span>
           <WorkspaceSessionMiniMap cells={miniMapCells} columns={miniMapColumns} />
         </span>
       </Tab>

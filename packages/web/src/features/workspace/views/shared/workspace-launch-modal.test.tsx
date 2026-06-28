@@ -333,7 +333,7 @@ describe("WorkspaceLaunchModal", () => {
 
           if (op === "workspace.wsl.listDistros") {
             return {
-              distros: ["Ubuntu-24.04"],
+              distros: ["Ubuntu-24.04", "Debian"],
             };
           }
 
@@ -369,14 +369,22 @@ describe("WorkspaceLaunchModal", () => {
       </Provider>
     );
 
-    const runtimeSelect = await screen.findByRole("combobox", { name: "Workspace Runtime" });
-    expect(screen.getByText("Native Windows")).toBeInTheDocument();
-    expect(screen.getByText("WSL")).toBeInTheDocument();
+    expect(await screen.findByRole("tablist", { name: "Workspace Runtime" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Native Windows" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByRole("tab", { name: "Ubuntu-24.04" })).toHaveAttribute(
+      "aria-selected",
+      "false"
+    );
+    expect(screen.getByRole("tab", { name: "Debian" })).toHaveAttribute("aria-selected", "false");
 
-    fireEvent.change(runtimeSelect, { target: { value: "wsl" } });
-    fireEvent.change(await screen.findByRole("combobox", { name: "WSL Distribution" }), {
-      target: { value: "Ubuntu-24.04" },
-    });
+    fireEvent.click(screen.getByRole("tab", { name: "Ubuntu-24.04" }));
+    expect(screen.getByRole("tab", { name: "Ubuntu-24.04" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     fireEvent.change(screen.getByRole("textbox", { name: "Workspace Path" }), {
       target: { value: "/home/spencer/workspace" },
     });
@@ -417,7 +425,7 @@ describe("WorkspaceLaunchModal", () => {
 
       if (op === "workspace.wsl.listDistros") {
         return {
-          distros: ["Ubuntu-24.04"],
+          distros: ["Ubuntu-24.04", "Debian"],
         };
       }
 
@@ -445,12 +453,9 @@ describe("WorkspaceLaunchModal", () => {
       </Provider>
     );
 
-    fireEvent.change(await screen.findByRole("combobox", { name: "Workspace Runtime" }), {
-      target: { value: "wsl" },
-    });
+    fireEvent.click(await screen.findByRole("tab", { name: "Ubuntu-24.04" }));
 
     expect(await screen.findByText("workspace")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "WSL Distribution" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Workspace Path" })).toHaveValue("/home/spencer");
   });
 
@@ -472,7 +477,7 @@ describe("WorkspaceLaunchModal", () => {
 
       if (op === "workspace.wsl.listDistros") {
         return {
-          distros: ["Ubuntu-24.04"],
+          distros: ["Ubuntu-24.04", "Debian"],
         };
       }
 
@@ -510,9 +515,7 @@ describe("WorkspaceLaunchModal", () => {
       </Provider>
     );
 
-    fireEvent.change(await screen.findByRole("combobox", { name: "Workspace Runtime" }), {
-      target: { value: "wsl" },
-    });
+    fireEvent.click(await screen.findByRole("tab", { name: "Ubuntu-24.04" }));
     fireEvent.click(await screen.findByRole("button", { name: "New Folder" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Folder Name" }), {
       target: { value: "demo" },
@@ -650,7 +653,7 @@ describe("WorkspaceLaunchModal", () => {
 
           if (op === "workspace.wsl.listDistros") {
             return {
-              distros: ["Ubuntu-24.04"],
+              distros: ["Ubuntu-24.04", "Debian"],
             };
           }
 
@@ -678,12 +681,7 @@ describe("WorkspaceLaunchModal", () => {
       </Provider>
     );
 
-    fireEvent.change(await screen.findByRole("combobox", { name: "Workspace Runtime" }), {
-      target: { value: "wsl" },
-    });
-    fireEvent.change(await screen.findByRole("combobox", { name: "WSL Distribution" }), {
-      target: { value: "Ubuntu-24.04" },
-    });
+    fireEvent.click(await screen.findByRole("tab", { name: "Ubuntu-24.04" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Workspace Path" }), {
       target: { value: "/home/spencer/workspace" },
     });
