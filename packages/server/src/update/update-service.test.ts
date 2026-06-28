@@ -456,4 +456,76 @@ describe("UpdateService", () => {
       })
     );
   });
+
+  it("reports desktop-managed installs as supported", () => {
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: true,
+          installKind: "desktop_managed",
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+        } as UpdateRuntimeConfig,
+      })
+    );
+
+    expect(service.getStateView()).toMatchObject({
+      supported: true,
+      installKind: "desktop_managed",
+      unsupportedReason: null,
+    });
+  });
+
+  it("does not require an npm worker for desktop-managed installs", async () => {
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: true,
+          installKind: "desktop_managed",
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+        } as UpdateRuntimeConfig,
+        updateStateRepo: {
+          getFilePath: vi.fn(() => "/tmp/update-state.json"),
+          get: vi.fn(() => ({
+            version: 1,
+            currentVersion: "0.4.0",
+            latestVersion: "0.5.0",
+            availability: "update_available",
+            updateStatus: "idle",
+            lastCheckedAt: 5,
+            targetVersion: null,
+            startedAt: null,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+          })),
+          update: vi.fn((patch: unknown) => ({
+            version: 1,
+            currentVersion: "0.4.0",
+            latestVersion: "0.5.0",
+            availability: "update_available",
+            updateStatus: "installing",
+            lastCheckedAt: 5,
+            targetVersion: "0.5.0",
+            startedAt: 1000,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+            ...(typeof patch === "function" ? patch({}) : patch),
+          })),
+        },
+        spawnDetachedWorker: vi.fn(async () => {}),
+      })
+    );
+
+    const result = await service.startInstall({ targetVersion: "0.5.0", force: true });
+
+    expect(result.updateStatus).toBe("installing");
+    expect(result.requiresManualStep).toBe(false);
+  });
 });

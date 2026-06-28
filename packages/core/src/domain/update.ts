@@ -38,7 +38,7 @@ export interface UpdateActivitySummary {
 
 export interface UpdateSupportInfo {
   supported: boolean;
-  installKind: "global_npm" | "unsupported";
+  installKind: "global_npm" | "desktop_managed" | "unsupported";
   unsupportedReason: string | null;
 }
 

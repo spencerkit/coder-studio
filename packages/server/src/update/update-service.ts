@@ -15,7 +15,7 @@ import type { Broadcaster } from "../ws/hub.js";
 
 export interface UpdateRuntimeConfig {
   supported: boolean;
-  installKind: "global_npm" | "unsupported";
+  installKind: "global_npm" | "desktop_managed" | "unsupported";
   packageName: string;
   currentVersion: string;
   cliCommand: string;
@@ -232,6 +232,18 @@ export class UpdateService {
         "Active work must be confirmed before updating"
       );
     }
+    if (this.runtime.installKind === "desktop_managed") {
+      return this.persistAndBroadcast({
+        latestVersion: targetVersion,
+        targetVersion,
+        updateStatus: "installing",
+        startedAt: this.now(),
+        finishedAt: null,
+        requiresManualStep: false,
+        manualCommand: null,
+        errorSummary: null,
+      });
+    }
     if (!this.runtime.workerEntryPath) {
       const manualState = this.persistAndBroadcast({
         latestVersion: targetVersion,
@@ -342,7 +354,7 @@ export class UpdateService {
     }
     return {
       supported: true,
-      installKind: "global_npm",
+      installKind: this.runtime.installKind,
       unsupportedReason: null,
     };
   }

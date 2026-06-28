@@ -41,7 +41,7 @@ export interface ServerConfig {
   };
   update: {
     supported: boolean;
-    installKind: "global_npm" | "unsupported";
+    installKind: "global_npm" | "desktop_managed" | "unsupported";
     packageName: string;
     cliCommand: string;
     workerEntryPath?: string;
