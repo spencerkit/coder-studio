@@ -188,8 +188,10 @@ function sanitizeWslLaunchPath(pathValue: string | undefined): string | undefine
     return undefined;
   }
 
+  // The host PATH comes from Windows, so it is semicolon-delimited even though the
+  // WSL-side PATH we want to hand to Linux must use ':'.
   const sanitized = pathValue
-    .split(":")
+    .split(";")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0 && !isWindowsPathEntry(entry))
     .join(":");

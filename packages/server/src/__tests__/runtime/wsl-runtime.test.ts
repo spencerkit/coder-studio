@@ -475,7 +475,7 @@ describe("WslRuntimeHandle", () => {
         "/usr/bin",
         "/mnt/c/Users/yeshaopeng/AppData/Local/fnm_multishells/12345_1782561599614/bin",
         "/mnt/c/Program Files/nodejs",
-      ].join(":")
+      ].join(";")
     );
     vi.stubEnv(
       "FNM_MULTISHELL_PATH",
