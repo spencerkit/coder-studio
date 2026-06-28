@@ -17,7 +17,7 @@ import {
 import { isDirectExecution, runBackground } from "./shared/process.js";
 
 const SERVER_PORT = 4173;
-const SERVER_HOST = "127.0.0.1";
+const SERVER_HOST = "0.0.0.0";
 
 async function devServer(): Promise<void> {
   info("Ensuring WSL runtime entry is built...");
@@ -57,7 +57,9 @@ async function devServer(): Promise<void> {
     process.exit(exitCode);
   });
 
-  success(`Backend dev server running at http://${SERVER_HOST}:${SERVER_PORT}`);
+  success(
+    `Backend dev server running at http://127.0.0.1:${SERVER_PORT} (bound on ${SERVER_HOST})`
+  );
 
   // Handle process termination
   process.on("SIGINT", () => {

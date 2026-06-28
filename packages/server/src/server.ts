@@ -6,7 +6,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AutomationPermission, DomainEvent, Workspace } from "@coder-studio/core";
+import type { AutomationPermission, DomainEvent } from "@coder-studio/core";
 import {
   deleteRuntimeConfig,
   getRuntimePath,
@@ -42,10 +42,14 @@ import { MonitoringService } from "./monitoring/service.js";
 import { buildCustomProviderDefinition } from "./provider-runtime/custom-provider.js";
 import { createE2EProviderMockOverrides } from "./provider-runtime/e2e-provider-mock.js";
 import { type RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
-import type { RuntimeHandle } from "./runtime/contract.js";
+import type { RuntimeHandle, RuntimeRouteTarget } from "./runtime/contract.js";
 import { createNativeRuntime } from "./runtime/native-runtime.js";
 import { buildRemoteStateSnapshot } from "./runtime/remote/state-snapshot.js";
-import { issueRemoteSessionBootstrap, resolveWslHostApiUrl } from "./runtime/wsl-bootstrap.js";
+import {
+  issueRemoteSessionBootstrap,
+  resolveWslSessionHostApiUrl,
+} from "./runtime/wsl-bootstrap.js";
+import type { RelayHostCommandInput } from "./runtime/wsl-host-api-proxy.js";
 import { createWslRuntime } from "./runtime/wsl-runtime.js";
 import { SessionManager } from "./session/manager.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
@@ -63,7 +67,11 @@ import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
 import { WorkspaceManager } from "./workspace/manager.js";
 import { ActivationManager } from "./ws/activation.js";
 import type { CommandContext } from "./ws/dispatch.js";
-import { dispatch } from "./ws/dispatch.js";
+import {
+  dispatch,
+  dispatchRelayedSessionCommand,
+  executeRuntimeCommandOnTarget,
+} from "./ws/dispatch.js";
 import { FencingManager } from "./ws/fencing.js";
 import { WsHub } from "./ws/hub.js";
 
@@ -78,6 +86,26 @@ function logStartupPhase(app: FastifyInstance | null, label: string, startedAt: 
   }
 
   console.log(message);
+}
+
+function resolveSessionAnalysisAutoRunTarget(
+  bindings: WorkspaceRuntimeBindingStore,
+  event: Extract<DomainEvent, { type: "session.state.changed" }>
+): RuntimeRouteTarget {
+  if (bindings.findWorkspaceIdBySessionId(event.sessionId)) {
+    return { kind: "session", sessionId: event.sessionId };
+  }
+
+  return { kind: "workspace", workspaceId: event.workspaceId };
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 export interface Server {
@@ -300,20 +328,9 @@ export async function createServer(
     });
   };
 
-  const resolveCurrentWslHostApiUrl = async (workspace: Pick<Workspace, "wslDistro">) => {
-    const port = activeApp ? (extractListenPort(activeApp) ?? config.port) : config.port;
-    if (!Number.isInteger(port) || port <= 0) {
-      return undefined;
-    }
-
-    return resolveWslHostApiUrl({
-      configuredUrl:
-        process.env.CODER_STUDIO_WSL_HOST_API_URL ?? process.env.CODER_STUDIO_HOST_API_URL,
-      boundHost: config.host,
-      port,
-      wslDistro: workspace.wslDistro,
-    });
-  };
+  const relayHostCommandRef: {
+    current?: (input: RelayHostCommandInput) => ReturnType<typeof dispatchRelayedSessionCommand>;
+  } = {};
 
   const authSessionRepo = new AuthSessionRepo({
     filePath: join(stateRoot, "state", "auth-sessions.json"),
@@ -347,17 +364,11 @@ export async function createServer(
     },
     nativeRuntimeId: "native-default",
     createWslRuntime: async (workspace, runtimeId) => {
-      const resolvedHostApiUrl = await resolveCurrentWslHostApiUrl(workspace);
-      const wslHostBridge = {
-        ...hostBridge,
-        getHostApiUrl: () => resolvedHostApiUrl,
-      };
-
       return createWslRuntime({
         runtimeId,
         workspace,
         stateRoot,
-        hostBridge: wslHostBridge,
+        hostBridge,
         providerRegistry: activeProviderRegistry,
         workspaceLookup: {
           get: (workspaceId) => workspaceMgr.get(workspaceId),
@@ -371,20 +382,23 @@ export async function createServer(
           providerId,
           runtimeId: sessionRuntimeId,
         }) => {
-          const apiUrl = resolvedHostApiUrl ?? (await resolveCurrentWslHostApiUrl(workspace));
-          if (!apiUrl) {
-            throw new Error(
-              `Unable to resolve a WSL-reachable host callback URL for distro ${workspace.wslDistro ?? "unknown"}`
-            );
-          }
-
           return issueRemoteSessionBootstrap({
             sessionTokenRepo,
             workspaceId,
             providerId,
             runtimeId: sessionRuntimeId,
-            callbackApiUrl: apiUrl,
+            callbackApiUrl: resolveWslSessionHostApiUrl(),
           });
+        },
+        relayHostCommand: (input) => {
+          const relay = relayHostCommandRef.current;
+          if (!relay) {
+            throw {
+              code: "relay_unavailable",
+              message: "Host command relay is not ready",
+            };
+          }
+          return relay(input);
         },
         resolveClientOwnerId: (clientId: string) => {
           const activeLease = activationMgr.getLease();
@@ -645,10 +659,18 @@ export async function createServer(
     automationAuditLog,
     memoryRepo,
     stateRoot,
+    sessionTokenRepo,
     agentInstructionPublisher,
   };
 
   wsHub.setCommandContext(commandContext);
+
+  relayHostCommandRef.current = (input) =>
+    dispatchRelayedSessionCommand(
+      { kind: "command", id: input.id, op: input.op, args: input.args },
+      commandContext,
+      input.sessionToken ?? ""
+    );
 
   eventBus.on(
     "session.state.changed",
@@ -657,7 +679,28 @@ export async function createServer(
         return;
       }
 
-      void sessionAnalysisService.run({ sessionId: event.sessionId }).catch((error) => {
+      void executeRuntimeCommandOnTarget(
+        "session.analysis.run",
+        {
+          sessionId: event.sessionId,
+          ...(event.session ? { sessionSnapshot: event.session } : {}),
+        },
+        commandContext,
+        undefined,
+        resolveSessionAnalysisAutoRunTarget(runtimeBindings, event)
+      ).catch((error) => {
+        const code = getErrorCode(error);
+        if (code === "session_analysis_context_unavailable") {
+          app.log.debug(
+            {
+              err: error,
+              sessionId: event.sessionId,
+            },
+            "Session analysis auto-run skipped because session context is unavailable"
+          );
+          return;
+        }
+
         app.log.warn(
           {
             err: error,

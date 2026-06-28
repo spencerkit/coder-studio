@@ -170,6 +170,7 @@ describe("WslRuntimeHandle", () => {
       return {
         ...actual,
         resolveWslRuntimeLaunchSpec,
+        resolveWslRuntimeConnectHost: vi.fn(async (readyHost: string) => readyHost),
       };
     });
 
@@ -498,6 +499,7 @@ describe("WslRuntimeHandle", () => {
       return {
         ...actual,
         resolveWslRuntimeLaunchSpec,
+        resolveWslRuntimeConnectHost: vi.fn(async (readyHost: string) => readyHost),
       };
     });
 
@@ -629,6 +631,7 @@ describe("WslRuntimeHandle", () => {
       return {
         ...actual,
         resolveWslRuntimeLaunchSpec,
+        resolveWslRuntimeConnectHost: vi.fn(async (readyHost: string) => readyHost),
       };
     });
 
@@ -747,6 +750,7 @@ describe("WslRuntimeHandle", () => {
       return {
         ...actual,
         resolveWslRuntimeLaunchSpec,
+        resolveWslRuntimeConnectHost: vi.fn(async (readyHost: string) => readyHost),
       };
     });
 
@@ -895,6 +899,7 @@ describe("WslRuntimeHandle", () => {
       return {
         ...actual,
         resolveWslRuntimeLaunchSpec,
+        resolveWslRuntimeConnectHost: vi.fn(async (readyHost: string) => readyHost),
       };
     });
 

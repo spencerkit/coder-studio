@@ -1,3 +1,4 @@
+import type { Session } from "@coder-studio/core";
 import { getGitDiffStatSummary, getGitStatus, getGitStatusSummary } from "../git/cli.js";
 import type { SessionManager } from "../session/manager.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -8,18 +9,23 @@ const TERMINAL_MAX_CHARS = 12_000;
 
 export interface SessionAnalysisContextCollectorInput {
   sessionId: string;
+  sessionSnapshot?: Session;
 }
 
 export interface SessionAnalysisContextCollectorDeps {
-  sessionMgr: Pick<SessionManager, "get" | "getRenderedSnapshot" | "getLatestSubmittedUserInput">;
+  sessionMgr: Pick<
+    SessionManager,
+    "get" | "getRenderedSnapshot" | "getLatestSubmittedUserInput" | "getPersisted"
+  >;
   workspaceMgr: Pick<WorkspaceManager, "get">;
 }
 
 export function createSessionAnalysisContextCollector(
   deps: SessionAnalysisContextCollectorDeps
 ): (input: SessionAnalysisContextCollectorInput) => Promise<SessionAnalysisContext> {
-  return async ({ sessionId }) => {
-    const session = deps.sessionMgr.get(sessionId);
+  return async ({ sessionId, sessionSnapshot }) => {
+    const session =
+      deps.sessionMgr.get(sessionId) ?? sessionSnapshot ?? deps.sessionMgr.getPersisted(sessionId);
     if (!session) {
       throw {
         code: "session_analysis_context_unavailable",

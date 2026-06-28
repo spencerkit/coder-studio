@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ProviderDefinition, Session, Terminal, Workspace } from "@coder-studio/core";
+import type { ProviderDefinition, Result, Session, Terminal, Workspace } from "@coder-studio/core";
 import { toProviderListItem } from "@coder-studio/providers";
 import type { WorkspaceRuntimeBindingStore } from "../host/workspace-runtime-binding.js";
 import type { RuntimeCommandContext } from "./context.js";
@@ -19,7 +19,12 @@ import {
   cloneSettingsSnapshot,
   cloneWorkspaceSnapshots,
 } from "./remote/state-snapshot.js";
-import { resolveWslRuntimeLaunchSpec } from "./wsl-bootstrap.js";
+import {
+  resolveWslRuntimeConnectHost,
+  resolveWslRuntimeLaunchSpec,
+  resolveWslSessionHostApiUrl,
+} from "./wsl-bootstrap.js";
+import type { RelayHostCommandInput } from "./wsl-host-api-proxy.js";
 
 function serializeProviderSnapshot(providers: ProviderDefinition[]): RemoteProviderSnapshot {
   return {
@@ -97,7 +102,8 @@ async function routeHostNotification(
 async function routeHostRequest(
   hostBridge: RuntimeHostBridge,
   method: HostRequestMessage["method"],
-  params: unknown
+  params: unknown,
+  relayHostCommand?: (input: RelayHostCommandInput) => Promise<Result>
 ): Promise<unknown> {
   if (method === "sendToClient") {
     const message = params as Extract<HostRequestMessage, { method: "sendToClient" }>["params"];
@@ -122,6 +128,17 @@ async function routeHostRequest(
     >["params"];
     hostBridge.revokeSessionTokensBySessionId(message.sessionId);
     return { revoked: true };
+  }
+
+  if (method === "relayHostCommand") {
+    const message = params as Extract<HostRequestMessage, { method: "relayHostCommand" }>["params"];
+    if (!relayHostCommand) {
+      throw {
+        code: "relay_unavailable",
+        message: "Host command relay is not configured for this WSL runtime",
+      };
+    }
+    return relayHostCommand(message);
   }
 
   throw {
@@ -151,6 +168,7 @@ type WorkspaceWslRuntimeInput = {
   resolveClientOwnerId?(clientId: string): string | undefined;
   revokeRuntimeTokens?(runtimeId: string): void;
   runtimeBindings?: WorkspaceRuntimeBindingStore;
+  relayHostCommand?: (input: RelayHostCommandInput) => Promise<Result>;
 };
 
 const WSL_RUNTIME_HOST_ENV_BLOCKLIST = new Set([
@@ -188,10 +206,10 @@ function sanitizeWslLaunchPath(pathValue: string | undefined): string | undefine
     return undefined;
   }
 
-  // The host PATH comes from Windows, so it is semicolon-delimited even though the
-  // WSL-side PATH we want to hand to Linux must use ':'.
+  // The host PATH comes from Windows and may use ';' or ':' depending on how WSL
+  // imported it. Strip Windows-mounted entries so Linux-side lookups stay native.
   const sanitized = pathValue
-    .split(";")
+    .split(/[:;]/)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0 && !isWindowsPathEntry(entry))
     .join(":");
@@ -446,7 +464,7 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
     settingsSnapshot: cloneSettingsSnapshot(input.settingsSnapshot),
     workspaceSnapshot: cloneWorkspaceSnapshots(input.workspaceLookup.list()),
     customProviderConfigs: cloneCustomProviderConfigs(input.customProviderConfigs),
-    hostApiUrl: input.hostBridge.getHostApiUrl(),
+    hostApiUrl: resolveWslSessionHostApiUrl(),
   });
 
   const child = spawn(launchSpec.command, launchSpec.args, {
@@ -457,16 +475,25 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
   });
 
   const ready = await waitForWslRuntimeReady(child, input.runtimeId);
+  const connectHost = await resolveWslRuntimeConnectHost(ready.host, input.workspace.wslDistro);
   const rpc = await createSocketJsonRpcClient({
-    host: ready.host,
+    host: connectHost,
     port: ready.port,
     runtimeId: input.runtimeId,
     onNotification: (method, params) =>
       routeHostNotification(input.hostBridge, method as HostNotificationMessage["method"], params),
     onRequest: (method, params) =>
-      routeHostRequest(input.hostBridge, method as HostRequestMessage["method"], params),
+      routeHostRequest(
+        input.hostBridge,
+        method as HostRequestMessage["method"],
+        params,
+        input.relayHostCommand
+      ),
   });
-  await rpc.request("health", {});
+  const health = (await rpc.request("health", {})) as { ok?: boolean };
+  if (!health?.ok) {
+    throw new Error(`WSL runtime ${input.runtimeId} failed health check`);
+  }
 
   let stopped = false;
 

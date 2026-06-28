@@ -6,7 +6,7 @@ import type { SessionAnalysisContext } from "../session-analysis/types.js";
 
 type SessionManagerStub = Pick<
   import("../session/manager.js").SessionManager,
-  "get" | "getRenderedSnapshot" | "getLatestSubmittedUserInput"
+  "get" | "getPersisted" | "getRenderedSnapshot" | "getLatestSubmittedUserInput"
 >;
 
 type WorkspaceManagerStub = Pick<import("../workspace/manager.js").WorkspaceManager, "get">;
@@ -40,6 +40,7 @@ function createWorkspace(overrides?: Partial<Workspace>): Workspace {
 function createSessionMgr(session?: Session): SessionManagerStub {
   return {
     get: vi.fn((sessionId: string) => (sessionId === session?.id ? session : undefined)),
+    getPersisted: vi.fn((sessionId: string) => (sessionId === session?.id ? session : undefined)),
     getRenderedSnapshot: vi.fn(async () => "build failed\nfix tests\n"),
     getLatestSubmittedUserInput: vi.fn(() => "fix the failing test"),
   };
@@ -138,6 +139,25 @@ describe("createSessionAnalysisContextCollector", () => {
       startedAt: 100,
       lastActiveAt: 200,
       changedFiles: [],
+    });
+  });
+
+  it("uses a provided session snapshot when the live session has already been removed", async () => {
+    const session = createSession({ state: "ended", endedAt: 300 });
+    const workspace = createWorkspace();
+    const collect = createSessionAnalysisContextCollector({
+      sessionMgr: createSessionMgr() as import("../session/manager.js").SessionManager,
+      workspaceMgr: createWorkspaceMgr(
+        workspace
+      ) as import("../workspace/manager.js").WorkspaceManager,
+    });
+
+    await expect(
+      collect({ sessionId: session.id, sessionSnapshot: session })
+    ).resolves.toMatchObject({
+      sessionId: session.id,
+      workspaceId: workspace.id,
+      sessionState: "ended",
     });
   });
 

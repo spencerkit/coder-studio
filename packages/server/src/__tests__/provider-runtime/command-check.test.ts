@@ -27,7 +27,23 @@ describe("checkCommandAvailable", () => {
     await expect(
       checkCommandAvailable("codex", { platform: "linux", runCommand: execFile })
     ).resolves.toBe(true);
-    expect(execFile).toHaveBeenCalledWith("which", ["codex"], { windowsHide: true });
+    expect(execFile).toHaveBeenCalledWith("which", ["codex"], {
+      windowsHide: true,
+      env: undefined,
+    });
+  });
+
+  it("treats Windows-mounted lookup results as unavailable on Linux", async () => {
+    const execFile = vi.fn(
+      async (_file: string, _args: string[], _options?: { windowsHide: boolean }) => ({
+        stdout: "/mnt/c/Users/me/AppData/Local/fnm_multishells/123/codex\n",
+        stderr: "",
+      })
+    );
+
+    await expect(
+      checkCommandAvailable("codex", { platform: "linux", runCommand: execFile })
+    ).resolves.toBe(false);
   });
 
   it("returns false when the lookup command fails", async () => {

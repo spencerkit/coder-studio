@@ -289,12 +289,12 @@ export async function assembleRuntime(input: {
   await supervisorMgr.hydrate();
 
   const providerInstallMgr = new ProviderInstallManager(input.providerRegistry, {
-    ...input.providerRuntimeDeps,
     runCommand: runCommandAsString,
+    ...input.providerRuntimeDeps,
   });
   const systemDependencyInstallMgr = new SystemDependencyInstallManager({
-    ...input.providerRuntimeDeps,
     runCommand: runCommandAsString,
+    ...input.providerRuntimeDeps,
     ptyHost: createPtyHost(),
     hostBridge: input.hostBridge,
   });

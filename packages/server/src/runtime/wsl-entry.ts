@@ -1,7 +1,11 @@
 import { access } from "node:fs/promises";
+import type { Result } from "@coder-studio/core";
 import { providerRegistry as builtinProviderRegistry } from "@coder-studio/providers";
 import "../commands/index.js";
+import { checkCommandAvailable } from "../provider-runtime/command-check.js";
+import { runCommandAsString } from "../provider-runtime/command-runner.js";
 import { buildCustomProviderDefinition } from "../provider-runtime/custom-provider.js";
+import type { RuntimeStatusDeps } from "../provider-runtime/runtime-status.js";
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import { getRegisteredRuntimeCommands } from "./command-registry.js";
 import type { RuntimeHostBridge } from "./contract.js";
@@ -16,6 +20,44 @@ import {
 } from "./remote/protocol.js";
 import { createSocketJsonRpcServer } from "./remote/socket-json-rpc.js";
 import { buildRemoteStateSnapshot } from "./remote/state-snapshot.js";
+import { resolveWslSessionHostApiUrl, WSL_LOCAL_HOST_API_PORT } from "./wsl-bootstrap.js";
+import { startWslHostApiProxy } from "./wsl-host-api-proxy.js";
+import {
+  createWslLinuxNativeProcessEnv,
+  isWslLinuxNativeCommandAvailable,
+  normalizeWslRuntimeProcessPath,
+} from "./wsl-runtime-path.js";
+
+function createWslProviderRuntimeDeps(): RuntimeStatusDeps {
+  const linuxNativeEnv = () => createWslLinuxNativeProcessEnv();
+
+  const commandExists = async (command: string): Promise<boolean> => {
+    const env = linuxNativeEnv();
+    if (isWslLinuxNativeCommandAvailable(command, env)) {
+      return true;
+    }
+
+    return checkCommandAvailable(command, {
+      platform: "linux",
+      env,
+      runCommand: (file, args, options) =>
+        runCommandAsString(file, args, {
+          ...options,
+          env: options?.env ?? env,
+        }),
+    });
+  };
+
+  return {
+    platform: "linux",
+    runCommand: (file, args, options) =>
+      runCommandAsString(file, args, {
+        ...options,
+        env: options?.env ?? linuxNativeEnv(),
+      }),
+    commandExists,
+  };
+}
 
 function assertRemoteRuntimeLoaded(): void {
   if (getRegisteredRuntimeCommands({ includeInternal: true }).length > 0) {
@@ -166,17 +208,12 @@ function createRemoteHostBridge(
 
 export async function runWslRuntimeEntrypoint(): Promise<void> {
   assertRemoteRuntimeLoaded();
+  normalizeWslRuntimeProcessPath();
   const bootstrap = parseBootstrapPayload();
   await validateBootstrapWorkspace(bootstrap);
   const socketServer = await createSocketJsonRpcServer({
     host: "0.0.0.0",
   });
-  const ready: WslRuntimeReadySignal = {
-    type: "wslRuntime.ready",
-    host: "127.0.0.1",
-    port: socketServer.port,
-  };
-  await writeMessage(process.stdout, ready as unknown as Record<string, unknown>);
 
   const workspaceLookup = createMutableWorkspaceLookup(bootstrap.workspaces);
   const settingsStore = createMutableSettingsStore(bootstrap.settings);
@@ -187,12 +224,6 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
   }));
   let providerRegistry = createProviderRegistrySnapshot(customProviders);
-  const rpcHandlers: {
-    onNotification?(method: string, params: unknown): Promise<void> | void;
-    onRequest?(method: string, params: unknown): Promise<unknown> | unknown;
-  } = {};
-  const peer = await socketServer.acceptOnce(rpcHandlers);
-  const hostBridge = createRemoteHostBridge(peer, bootstrap.hostApiUrl);
   type RuntimeServices = {
     runtime: Awaited<ReturnType<typeof createNativeRuntime>>;
     applySnapshot(snapshot: RemoteStateSnapshot): Promise<void>;
@@ -200,9 +231,76 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     stop(): Promise<void>;
   };
   let resolveRuntimeServices: ((services: RuntimeServices) => void) | undefined;
-  const runtimeServices = new Promise<RuntimeServices>((resolve) => {
+  let rejectRuntimeServices: ((error: unknown) => void) | undefined;
+  const runtimeServices = new Promise<RuntimeServices>((resolve, reject) => {
     resolveRuntimeServices = resolve;
+    rejectRuntimeServices = reject;
   });
+  const rpcHandlers: {
+    onNotification?(method: string, params: unknown): Promise<void> | void;
+    onRequest?(method: string, params: unknown): Promise<unknown> | unknown;
+  } = {
+    onNotification: async (method, params) => {
+      const services = await runtimeServices;
+      if (method === "updateSnapshot") {
+        await services.applySnapshot(params as RemoteStateSnapshot);
+        return;
+      }
+      if (method === "updateProviders") {
+        await services.applyProviderSnapshot(params as RemoteProviderSnapshot);
+      }
+    },
+    onRequest: async (method, params) => {
+      const services = await runtimeServices;
+      if (method === "execute") {
+        const request = params as {
+          op: string;
+          args: unknown;
+          meta?: unknown;
+        };
+        return services.runtime.execute(request.op, request.args, request.meta as never);
+      }
+
+      if (method === "disposeWorkspace") {
+        const request = params as { workspaceId: string };
+        await services.runtime.disposeWorkspace(request.workspaceId);
+        return { disposed: true };
+      }
+
+      if (method === "health") {
+        return services.runtime.health();
+      }
+
+      if (method === "stop") {
+        setImmediate(() => {
+          void services.stop();
+        });
+        return { stopped: true };
+      }
+
+      throw {
+        code: "unknown_method",
+        message: `Unknown WSL runtime RPC method: ${method}`,
+      };
+    },
+  };
+
+  const ready: WslRuntimeReadySignal = {
+    type: "wslRuntime.ready",
+    host: "127.0.0.1",
+    port: socketServer.port,
+  };
+  await writeMessage(process.stdout, ready as unknown as Record<string, unknown>);
+
+  const peer = await socketServer.acceptOnce(rpcHandlers);
+  const hostApiProxy = await startWslHostApiProxy({
+    port: WSL_LOCAL_HOST_API_PORT,
+    relay: async (command) => (await peer.request("relayHostCommand", command)) as Result,
+  });
+  const hostBridge = createRemoteHostBridge(
+    peer,
+    hostApiProxy.url || resolveWslSessionHostApiUrl()
+  );
   const readonlySettingsRepo = {
     get: <T = unknown>(key: string) => settingsStore.getAll()[key] as T | undefined,
     set: () => {
@@ -222,6 +320,7 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     hostBridge,
     providerRegistry,
     workspaceLookup,
+    providerRuntimeDeps: createWslProviderRuntimeDeps(),
     settingsRepo: readonlySettingsRepo as unknown as Parameters<
       typeof createNativeRuntime
     >[0]["settingsRepo"],
@@ -261,66 +360,28 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     resources?.providerInstallMgr.setProviders(providerRegistry);
   };
 
-  rpcHandlers.onNotification = async (method, params) => {
-    const services = await runtimeServices;
-    if (method === "updateSnapshot") {
-      await services.applySnapshot(params as RemoteStateSnapshot);
-      return;
-    }
-    if (method === "updateProviders") {
-      await services.applyProviderSnapshot(params as RemoteProviderSnapshot);
-    }
-  };
-  rpcHandlers.onRequest = async (method, params) => {
-    const services = await runtimeServices;
-    if (method === "execute") {
-      const request = params as {
-        op: string;
-        args: unknown;
-        meta?: unknown;
-      };
-      return services.runtime.execute(request.op, request.args, request.meta as never);
-    }
-
-    if (method === "disposeWorkspace") {
-      const request = params as { workspaceId: string };
-      await services.runtime.disposeWorkspace(request.workspaceId);
-      return { disposed: true };
-    }
-
-    if (method === "health") {
-      return services.runtime.health();
-    }
-
-    if (method === "stop") {
-      setImmediate(() => {
-        void services.stop();
-      });
-      return { stopped: true };
-    }
-
-    throw {
-      code: "unknown_method",
-      message: `Unknown WSL runtime RPC method: ${method}`,
-    };
-  };
-
-  await applySnapshot(
-    buildRemoteStateSnapshot({
-      settings: bootstrap.settings,
-      workspaces: bootstrap.workspaces,
-      customProviders,
-    })
-  );
-  resolveRuntimeServices?.({
-    runtime,
-    applySnapshot,
-    applyProviderSnapshot,
-    async stop() {
-      await runtime.stop?.();
-      await peer.dispose();
-      await socketServer.close();
-      process.exit(0);
-    },
-  });
+  try {
+    await applySnapshot(
+      buildRemoteStateSnapshot({
+        settings: bootstrap.settings,
+        workspaces: bootstrap.workspaces,
+        customProviders,
+      })
+    );
+    resolveRuntimeServices?.({
+      runtime,
+      applySnapshot,
+      applyProviderSnapshot,
+      async stop() {
+        await hostApiProxy.close();
+        await runtime.stop?.();
+        await peer.dispose();
+        await socketServer.close();
+        process.exit(0);
+      },
+    });
+  } catch (error) {
+    rejectRuntimeServices?.(error);
+    throw error;
+  }
 }

@@ -10,7 +10,21 @@ import { registerHostCommand } from "../host/command-registry.js";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
 import { registerRuntimeCommand } from "../runtime/command-registry.js";
 import { applyPaneDisposition } from "../workspace/pane-layout.js";
-import { executeRuntimeCommandOnTarget, registerCommand } from "../ws/dispatch.js";
+import { executeRuntimeCommandOnTarget } from "../ws/dispatch.js";
+
+const sessionSnapshotSchema = z
+  .object({
+    id: z.string(),
+    workspaceId: z.string(),
+    terminalId: z.string(),
+    providerId: z.string(),
+    state: z.enum(["draft", "starting", "running", "idle", "ended"]),
+    capability: z.enum(["full", "limited", "unsupported"]),
+    startedAt: z.number().optional(),
+    lastActiveAt: z.number(),
+    endedAt: z.number().optional(),
+  })
+  .passthrough();
 
 function getProviderFromRegistry(
   providerId: string,
@@ -212,37 +226,44 @@ registerHostCommand(
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "session.analysis.get",
   z.object({
     sessionId: z.string(),
   }),
-  async (args, ctx) => {
-    if (!ctx.sessionAnalysisService) {
-      throw {
-        code: "session_analysis_unavailable",
-        message: "Session analysis service is unavailable",
-      };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "session", sessionId: args.sessionId }),
+    handler: async (args, ctx) => {
+      if (!ctx.sessionAnalysisService) {
+        throw {
+          code: "session_analysis_unavailable",
+          message: "Session analysis service is unavailable",
+        };
+      }
 
-    return ctx.sessionAnalysisService.get(args.sessionId);
+      return ctx.sessionAnalysisService.get(args.sessionId);
+    },
   }
 );
 
-registerCommand(
+registerRuntimeCommand(
   "session.analysis.run",
   z.object({
     sessionId: z.string(),
     force: z.boolean().optional(),
+    sessionSnapshot: sessionSnapshotSchema.optional(),
   }),
-  async (args, ctx) => {
-    if (!ctx.sessionAnalysisService) {
-      throw {
-        code: "session_analysis_unavailable",
-        message: "Session analysis service is unavailable",
-      };
-    }
+  {
+    resolveTarget: (args) => ({ kind: "session", sessionId: args.sessionId }),
+    handler: async (args, ctx) => {
+      if (!ctx.sessionAnalysisService) {
+        throw {
+          code: "session_analysis_unavailable",
+          message: "Session analysis service is unavailable",
+        };
+      }
 
-    return await ctx.sessionAnalysisService.run(args);
+      return await ctx.sessionAnalysisService.run(args);
+    },
   }
 );

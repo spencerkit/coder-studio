@@ -113,6 +113,32 @@ export function clearPendingTerminalInput(streamId: number): void {
   pendingTerminalInput.delete(streamId);
 }
 
+export function isBinaryTerminalInputArgs(args: unknown): args is TerminalInputBinaryArgs {
+  return (
+    typeof args === "object" &&
+    args !== null &&
+    "transport" in args &&
+    (args as TerminalInputBinaryArgs).transport === "binary"
+  );
+}
+
+/** Resolve host-side binary transport args to base64 before forwarding to a remote runtime. */
+export function materializeTerminalInputArgsForRemoteRuntime(
+  args: TerminalInputBase64Args | TerminalInputBinaryArgs
+): TerminalInputBase64Args {
+  if ("bytes" in args) {
+    return args;
+  }
+
+  const buffer = decodeTerminalInput(args);
+  return {
+    terminalId: args.terminalId,
+    bytes: buffer.toString("base64"),
+    activity: args.activity,
+    submittedText: args.submittedText,
+  };
+}
+
 function allocateOutboundBinaryStreamId(): number {
   nextOutboundBinaryStreamId = (nextOutboundBinaryStreamId + 1) >>> 0;
   return nextOutboundBinaryStreamId;

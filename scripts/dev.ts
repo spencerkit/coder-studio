@@ -21,7 +21,7 @@ import { isDirectExecution, runBackground, waitForProcesses } from "./shared/pro
 const VITE_PORT = 5173;
 const VITE_HOST = "localhost";
 const SERVER_PORT = 4173;
-const SERVER_HOST = "127.0.0.1";
+const SERVER_HOST = "0.0.0.0";
 
 async function dev(): Promise<void> {
   step("DEV", "Starting parallel development servers...\n");
@@ -66,7 +66,7 @@ async function dev(): Promise<void> {
   setTimeout(() => {
     success("\n✓ Development environment ready:");
     log(`  Frontend: http://${VITE_HOST}:${VITE_PORT}`);
-    log(`  Backend:  http://${SERVER_HOST}:${SERVER_PORT}`);
+    log(`  Backend:  http://127.0.0.1:${SERVER_PORT} (WSL callback via host gateway IP)`);
     log("\n  Press Ctrl+C to stop both servers...\n");
   }, 2000);
 

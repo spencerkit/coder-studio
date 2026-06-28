@@ -9,6 +9,7 @@ export interface CommandCheckDeps {
   runCommand?: CommandRunner;
   existsSync?: (file: string) => boolean;
   pathExt?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function getCommandLookupExecutable(platform: NodeJS.Platform): "where" | "which" {
@@ -28,6 +29,14 @@ function parsePathExt(pathExt: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+function isWindowsMountedPath(entry: string): boolean {
+  return entry.startsWith("/mnt/");
+}
+
+function firstLookupResult(stdout: string): string {
+  return stdout.trim().split(/\r?\n/, 1)[0]?.trim() ?? "";
+}
+
 export async function checkCommandAvailable(
   command: string,
   deps: CommandCheckDeps = {}
@@ -41,6 +50,10 @@ export async function checkCommandAvailable(
   // managed LSP install fail at the verify step. Resolve such inputs by direct
   // filesystem existence checks (mirroring `where`'s PATHEXT fallback on win32).
   if (isAbsoluteForPlatform(command, platform)) {
+    if (platform === "linux" && isWindowsMountedPath(command)) {
+      return false;
+    }
+
     if (existsSync(command)) {
       return true;
     }
@@ -59,8 +72,22 @@ export async function checkCommandAvailable(
   const lookup = getCommandLookupExecutable(platform);
 
   try {
-    const { stdout } = await runCommand(lookup, [command], { windowsHide: true });
-    return stdout.trim().length > 0;
+    const { stdout } = await runCommand(lookup, [command], {
+      windowsHide: true,
+      env: deps.env,
+    });
+    const resolved = firstLookupResult(stdout);
+    if (!resolved) {
+      return false;
+    }
+
+    // WSL interop injects Windows npm/fnm shims into PATH. They must not count
+    // as installed Linux provider CLIs or the UI skips auto-install.
+    if (platform === "linux" && isWindowsMountedPath(resolved)) {
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }

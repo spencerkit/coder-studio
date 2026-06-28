@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import { SessionTokenRepo } from "../../auth/session-token-repo.js";
 import {
   issueRemoteSessionBootstrap,
+  probeWslDistroIp,
   resolveWslHostApiUrl,
+  resolveWslRuntimeConnectHost,
   resolveWslRuntimeEntryPath,
   resolveWslRuntimeLaunchSpec,
   resolveWslRuntimeStateRoot,
@@ -137,6 +139,73 @@ describe("resolveWslHostApiUrl", () => {
       mode: "remote_runtime",
       runtimeId: "wsl:ws-1",
     });
+  });
+});
+
+describe("resolveWslRuntimeConnectHost", () => {
+  it("returns the ready host unchanged on non-Windows platforms", async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "linux" });
+
+    try {
+      const runCommand = vi.fn();
+      await expect(
+        resolveWslRuntimeConnectHost("127.0.0.1", "Ubuntu-24.04", runCommand)
+      ).resolves.toBe("127.0.0.1");
+      expect(runCommand).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+    }
+  });
+
+  it("probes the distro IP on Windows when the ready host is loopback", async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    const runCommand = vi.fn(async () => ({
+      stdout: "172.17.21.22\n",
+      stderr: "",
+    }));
+
+    try {
+      await expect(
+        resolveWslRuntimeConnectHost("127.0.0.1", "Ubuntu-24.04", runCommand)
+      ).resolves.toBe("172.17.21.22");
+      expect(runCommand).toHaveBeenCalledWith(
+        "wsl.exe",
+        ["-d", "Ubuntu-24.04", "-e", "hostname", "-I"],
+        expect.objectContaining({ windowsHide: true })
+      );
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+    }
+  });
+
+  it("falls back to the ready host when the distro IP probe fails", async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    const runCommand = vi.fn(async () => ({
+      stdout: "",
+      stderr: "",
+    }));
+
+    try {
+      await expect(
+        resolveWslRuntimeConnectHost("localhost", "Ubuntu-24.04", runCommand)
+      ).resolves.toBe("localhost");
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+    }
+  });
+});
+
+describe("probeWslDistroIp", () => {
+  it("returns the first address from hostname -I", async () => {
+    const runCommand = vi.fn(async () => ({
+      stdout: "172.17.21.22 fe80::1\n",
+      stderr: "",
+    }));
+
+    await expect(probeWslDistroIp("Ubuntu-24.04", runCommand)).resolves.toBe("172.17.21.22");
   });
 });
 

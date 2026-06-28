@@ -470,6 +470,10 @@ export class SessionManager {
     return this.sessions.get(sessionId)?.toDTO();
   }
 
+  getPersisted(sessionId: string): Session | undefined {
+    return this.get(sessionId) ?? this.deps.db.findById(sessionId);
+  }
+
   /**
    * Get all sessions for a workspace
    */

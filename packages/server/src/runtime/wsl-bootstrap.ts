@@ -125,6 +125,49 @@ function resolveWslRuntimeNativeDependencyHints(): {
   };
 }
 
+export const WSL_LOCAL_HOST_API_PORT = 4174;
+export const WSL_LOCAL_HOST_API_URL = `http://127.0.0.1:${WSL_LOCAL_HOST_API_PORT}`;
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
+}
+
+export async function probeWslDistroIp(
+  wslDistro: string,
+  runCommand: CommandRunner = runCommandAsString
+): Promise<string | undefined> {
+  const { stdout } = await runCommand("wsl.exe", ["-d", wslDistro, "-e", "hostname", "-I"], {
+    windowsHide: true,
+    cwd: resolveSafeWslHostCwd(),
+  });
+
+  const ip = stdout
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .find((part) => part.length > 0);
+
+  return ip || undefined;
+}
+
+export async function resolveWslRuntimeConnectHost(
+  readyHost: string,
+  wslDistro: string | undefined,
+  runCommand: CommandRunner = runCommandAsString
+): Promise<string> {
+  if (process.platform !== "win32" || !isLoopbackHost(readyHost)) {
+    return readyHost;
+  }
+
+  const distro = wslDistro?.trim();
+  if (!distro) {
+    return readyHost;
+  }
+
+  const distroIp = await probeWslDistroIp(distro, runCommand);
+  return distroIp ?? readyHost;
+}
+
 export async function probeWslHostIp(
   wslDistro: string,
   runCommand: CommandRunner = runCommandAsString
@@ -141,6 +184,10 @@ export async function probeWslHostIp(
     .find((line) => line.length > 0);
 
   return ip || undefined;
+}
+
+export function resolveWslSessionHostApiUrl(): string {
+  return WSL_LOCAL_HOST_API_URL;
 }
 
 export async function resolveWslHostApiUrl(

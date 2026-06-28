@@ -1455,6 +1455,62 @@ describe("terminal commands", () => {
     clearPendingTerminalInput(streamId);
   });
 
+  it("materializes binary terminal.input payload before routing to a remote runtime", async () => {
+    const executeOnTarget = vi.fn().mockResolvedValue(undefined);
+    const ctx = createContext({
+      runtimeRouter: {
+        executeOnTarget,
+      } as never,
+      sessionMgr: {
+        findSessionIdByTerminal: vi.fn().mockReturnValue(undefined),
+        sendInput: vi.fn(),
+        resize: vi.fn(),
+      } as never,
+    });
+    const bytes = Buffer.from("ls\n");
+    const streamId = 99;
+
+    registerPendingTerminalInput(
+      {
+        terminalId: "term-wsl",
+        transport: "binary",
+        streamId,
+        size: bytes.length,
+        activity: "submit",
+      },
+      bytes
+    );
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "terminal-input-remote-1",
+        op: "terminal.input",
+        args: {
+          terminalId: "term-wsl",
+          transport: "binary",
+          streamId,
+          size: bytes.length,
+          activity: "submit",
+        },
+      },
+      ctx
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executeOnTarget).toHaveBeenCalledWith(
+      { kind: "terminal", terminalId: "term-wsl" },
+      "terminal.input",
+      expect.objectContaining({
+        terminalId: "term-wsl",
+        bytes: bytes.toString("base64"),
+        activity: "submit",
+      }),
+      expect.any(Object)
+    );
+    expect(ctx.terminalMgr.write).not.toHaveBeenCalled();
+  });
+
   it("delegates terminal.resize to sessionMgr.resize when a session owns the terminal", async () => {
     const ctx = createContext({
       sessionMgr: {

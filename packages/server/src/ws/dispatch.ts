@@ -9,9 +9,14 @@ import type { AutomationPermission, Command, ProviderDefinition, Result } from "
 import { z } from "zod";
 import type { AgentInstructionsPublisher } from "../agent-instructions/publisher.js";
 import type { RequestAuthContext } from "../auth/index.js";
+import type { SessionTokenRepo } from "../auth/session-token-repo.js";
 import type { AutomationAuditLog } from "../automation/audit-log.js";
 import type { EventBus } from "../bus/event-bus.js";
 import type { CanvasService } from "../canvas/service.js";
+import {
+  isBinaryTerminalInputArgs,
+  materializeTerminalInputArgsForRemoteRuntime,
+} from "../commands/terminal.js";
 import type { ServerConfig } from "../config.js";
 import type { AutoFetchRuntime } from "../git/auto-fetch.js";
 import { getHostCommandDefinition, getRegisteredHostCommands } from "../host/command-registry.js";
@@ -102,6 +107,7 @@ export interface CommandContext extends HostCommandContext {
   automationAuditLog?: AutomationAuditLog;
   memoryRepo?: MemoryRepo;
   stateRoot?: string;
+  sessionTokenRepo?: SessionTokenRepo;
 }
 
 /**
@@ -288,7 +294,11 @@ export async function executeRuntimeCommandOnTarget(
   return executeWithWorkspaceOperationLock(op, parsedArgs, ctx, meta, async () => {
     if (typeof ctx.runtimeRouter?.executeOnTarget === "function") {
       try {
-        return await ctx.runtimeRouter.executeOnTarget(target, op, parsedArgs, meta);
+        const forwardedArgs =
+          op === "terminal.input" && isBinaryTerminalInputArgs(parsedArgs)
+            ? materializeTerminalInputArgsForRemoteRuntime(parsedArgs)
+            : parsedArgs;
+        return await ctx.runtimeRouter.executeOnTarget(target, op, forwardedArgs, meta);
       } catch (error) {
         if (!shouldFallbackRuntimeRouting(error, target)) {
           throw error;
@@ -662,6 +672,97 @@ export async function dispatch(
 
     const data = await executeHostCommand(msg.op, msg.args, ctx, {
       clientId,
+      authContext,
+    });
+
+    return {
+      kind: "result",
+      id: msg.id,
+      ok: true,
+      data,
+    };
+  } catch (error: unknown) {
+    return {
+      kind: "result",
+      id: msg.id,
+      ok: false,
+      error: normalizeError(error),
+    };
+  }
+}
+
+export async function dispatchRelayedSessionCommand(
+  msg: Command,
+  ctx: CommandContext,
+  sessionToken: string
+): Promise<Result> {
+  const tokenRecord = ctx.sessionTokenRepo?.get(sessionToken);
+  if (!tokenRecord) {
+    return {
+      kind: "result",
+      id: msg.id,
+      ok: false,
+      error: {
+        code: "unauthorized",
+        message: "Invalid session token",
+      },
+    };
+  }
+
+  if (tokenRecord.expiresAt !== undefined && tokenRecord.expiresAt <= Date.now()) {
+    return {
+      kind: "result",
+      id: msg.id,
+      ok: false,
+      error: {
+        code: "unauthorized",
+        message: "Session token expired",
+      },
+    };
+  }
+
+  const { mode: tokenMode, ...tokenFields } = tokenRecord;
+  const authContext: SessionTokenAuthContext = {
+    mode: "session_token",
+    tokenMode,
+    ...tokenFields,
+  };
+
+  const authorizationError = authorizeSessionTokenCommand(msg, authContext, ctx);
+  if (authorizationError) {
+    return {
+      kind: "result",
+      id: msg.id,
+      ok: false,
+      error: authorizationError,
+    };
+  }
+
+  try {
+    const runtimeDefinition = getRuntimeCommandDefinition(msg.op, { includeInternal: false });
+    if (runtimeDefinition) {
+      const parsedArgs = runtimeDefinition.schema.parse(msg.args);
+      const data = await executeRuntimeCommandOnTarget(
+        msg.op,
+        parsedArgs,
+        ctx,
+        {
+          clientId: undefined,
+          authContext,
+        },
+        runtimeDefinition.resolveTarget(parsedArgs)
+      );
+
+      return {
+        kind: "result",
+        id: msg.id,
+        ok: true,
+        data,
+      };
+    }
+
+    const data = await executeHostCommand(msg.op, msg.args, ctx, {
+      clientId: undefined,
       authContext,
     });
 

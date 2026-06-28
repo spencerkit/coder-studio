@@ -59,6 +59,13 @@ export interface HostRevokeSessionTokensRequest {
   sessionId: string;
 }
 
+export interface HostRelayCommandRequest {
+  id: string;
+  op: string;
+  args: unknown;
+  sessionToken?: string;
+}
+
 export type HostNotificationMessage =
   | {
       method: "domainEvent";
@@ -92,6 +99,10 @@ export type HostRequestMessage =
   | {
       method: "revokeSessionTokensBySessionId";
       params: HostRevokeSessionTokensRequest;
+    }
+  | {
+      method: "relayHostCommand";
+      params: HostRelayCommandRequest;
     };
 
 export interface JsonRpcRequestMessage {

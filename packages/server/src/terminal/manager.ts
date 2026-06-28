@@ -2,6 +2,10 @@
 
 import type { DomainEvent, Terminal } from "@coder-studio/core";
 import type { EventBus } from "../bus/event-bus";
+import {
+  createWslLinuxNativeProcessEnv,
+  normalizeWslRuntimeProcessPath,
+} from "../runtime/wsl-runtime-path.js";
 import { ActiveTerminal } from "./active-terminal";
 import { RING_BUFFER_SIZE } from "./constants";
 import {
@@ -194,6 +198,14 @@ export class TerminalManager {
     }
     if (spec.env?.COLORFGBG) {
       terminalEnv.COLORFGBG = spec.env.COLORFGBG;
+    }
+
+    if (process.platform === "linux" && (terminalEnv.PATH ?? "").includes("/mnt/")) {
+      if (spec.kind === "agent" || spec.kind === "task") {
+        Object.assign(terminalEnv, createWslLinuxNativeProcessEnv(terminalEnv));
+      } else {
+        normalizeWslRuntimeProcessPath(terminalEnv);
+      }
     }
 
     let pty: PtyProcess;

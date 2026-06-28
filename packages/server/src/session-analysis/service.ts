@@ -1,3 +1,4 @@
+import type { Session } from "@coder-studio/core";
 import type { SessionManager } from "../session/manager.js";
 import type { SessionAnalysisRepo } from "../storage/repositories/session-analysis-repo.js";
 import type { WorkspaceManager } from "../workspace/manager.js";
@@ -8,11 +9,17 @@ import type { SessionAnalysisContext, SessionAnalysisRecord } from "./types.js";
 
 export interface SessionAnalysisServiceDeps {
   repo: Pick<SessionAnalysisRepo, "findBySessionId" | "upsert">;
-  sessionMgr: Pick<SessionManager, "get" | "getRenderedSnapshot" | "getLatestSubmittedUserInput">;
+  sessionMgr: Pick<
+    SessionManager,
+    "get" | "getPersisted" | "getRenderedSnapshot" | "getLatestSubmittedUserInput"
+  >;
   workspaceMgr: Pick<WorkspaceManager, "get">;
   runner: Pick<SessionAnalysisRunner, "run">;
   readTranscript?: ReturnType<typeof createSessionTranscriptReader>;
-  collectContext?: (input: { sessionId: string }) => Promise<SessionAnalysisContext>;
+  collectContext?: (input: {
+    sessionId: string;
+    sessionSnapshot?: Session;
+  }) => Promise<SessionAnalysisContext>;
   now?: () => number;
 }
 
@@ -21,6 +28,7 @@ export class SessionAnalysisService {
   private readonly readTranscript: ReturnType<typeof createSessionTranscriptReader>;
   private readonly collectContext: (input: {
     sessionId: string;
+    sessionSnapshot?: Session;
   }) => Promise<SessionAnalysisContext>;
 
   constructor(private readonly deps: SessionAnalysisServiceDeps) {
@@ -38,8 +46,15 @@ export class SessionAnalysisService {
     return this.deps.repo.findBySessionId(sessionId);
   }
 
-  async run(input: { sessionId: string; force?: boolean }): Promise<SessionAnalysisRecord> {
-    const context = await this.collectContext({ sessionId: input.sessionId });
+  async run(input: {
+    sessionId: string;
+    force?: boolean;
+    sessionSnapshot?: Session;
+  }): Promise<SessionAnalysisRecord> {
+    const context = await this.collectContext({
+      sessionId: input.sessionId,
+      sessionSnapshot: input.sessionSnapshot,
+    });
     const transcript = await this.readTranscript({
       providerId: context.providerId,
       sessionId: context.sessionId,

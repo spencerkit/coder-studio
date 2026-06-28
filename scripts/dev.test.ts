@@ -59,7 +59,7 @@ describe("dev", () => {
       cliDir: "/repo/packages/cli",
       env: expect.objectContaining({
         NODE_ENV: "development",
-        HOST: "127.0.0.1",
+        HOST: "0.0.0.0",
         PORT: "4173",
       }),
     });
