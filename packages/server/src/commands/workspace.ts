@@ -10,6 +10,7 @@ import { browseDirectoryAbsolute, createDirectoryAbsolute } from "../fs/browse.j
 import { registerHostCommand } from "../host/command-registry.js";
 import { getRuntimeIdForWorkspace } from "../host/runtime-orchestrator.js";
 import { registerRuntimeCommand } from "../runtime/command-registry.js";
+import { exportAgentSkillSnapshot } from "../runtime/wsl-skill-export.js";
 import { WorkspaceHistoryStore } from "../workspace/history-store.js";
 import { inspectWorkspaceIntelligence } from "../workspace/intelligence.js";
 import { browseWslDirectory, createWslDirectoryInDistro } from "../workspace/wsl-browse.js";
@@ -176,6 +177,12 @@ registerHostCommand("workspace.wsl.listDistros", z.object({}), async (_args, ctx
 
   return { distros };
 });
+
+registerHostCommand("workspace.wsl.exportAgentSkills", z.object({}), async (_args, ctx) =>
+  exportAgentSkillSnapshot({
+    providerRegistry: ctx.providerRegistry,
+  })
+);
 
 registerHostCommand(
   "workspace.wsl.browse",

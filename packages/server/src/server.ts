@@ -92,8 +92,13 @@ function resolveSessionAnalysisAutoRunTarget(
   bindings: WorkspaceRuntimeBindingStore,
   event: Extract<DomainEvent, { type: "session.state.changed" }>
 ): RuntimeRouteTarget {
-  if (bindings.findWorkspaceIdBySessionId(event.sessionId)) {
+  const boundWorkspaceId = bindings.findWorkspaceIdBySessionId(event.sessionId);
+  if (boundWorkspaceId) {
     return { kind: "session", sessionId: event.sessionId };
+  }
+
+  if (!event.workspaceId) {
+    return { kind: "default" };
   }
 
   return { kind: "workspace", workspaceId: event.workspaceId };

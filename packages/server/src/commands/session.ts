@@ -4,7 +4,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { ProviderDefinition } from "@coder-studio/core";
+import type { ProviderDefinition, Session } from "@coder-studio/core";
 import { z } from "zod";
 import { registerHostCommand } from "../host/command-registry.js";
 import { buildProviderRuntimeStatus } from "../provider-runtime/runtime-status.js";
@@ -12,7 +12,7 @@ import { registerRuntimeCommand } from "../runtime/command-registry.js";
 import { applyPaneDisposition } from "../workspace/pane-layout.js";
 import { executeRuntimeCommandOnTarget } from "../ws/dispatch.js";
 
-const sessionSnapshotSchema = z
+const sessionSnapshotSchema: z.ZodType<Session> = z
   .object({
     id: z.string(),
     workspaceId: z.string(),
@@ -20,11 +20,15 @@ const sessionSnapshotSchema = z
     providerId: z.string(),
     state: z.enum(["draft", "starting", "running", "idle", "ended"]),
     capability: z.enum(["full", "limited", "unsupported"]),
-    startedAt: z.number().optional(),
+    startedAt: z.number(),
     lastActiveAt: z.number(),
     endedAt: z.number().optional(),
+    completionPercent: z.number().optional(),
+    errorReason: z.string().optional(),
+    title: z.string().optional(),
+    firstSubmittedUserInput: z.string().optional(),
   })
-  .passthrough();
+  .strict();
 
 function getProviderFromRegistry(
   providerId: string,

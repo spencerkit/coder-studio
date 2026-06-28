@@ -27,6 +27,7 @@ import {
   isWslLinuxNativeCommandAvailable,
   normalizeWslRuntimeProcessPath,
 } from "./wsl-runtime-path.js";
+import { syncWindowsAgentSkillsFromHost } from "./wsl-skill-sync.js";
 
 function createWslProviderRuntimeDeps(): RuntimeStatusDeps {
   const linuxNativeEnv = () => createWslLinuxNativeProcessEnv();
@@ -297,6 +298,17 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     port: WSL_LOCAL_HOST_API_PORT,
     relay: async (command) => (await peer.request("relayHostCommand", command)) as Result,
   });
+  try {
+    await syncWindowsAgentSkillsFromHost({
+      relayHostCommand: async (command) =>
+        (await peer.request("relayHostCommand", command)) as Result,
+    });
+  } catch (error) {
+    console.warn(
+      "[wsl-runtime] agent skill sync failed:",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
   const hostBridge = createRemoteHostBridge(
     peer,
     hostApiProxy.url || resolveWslSessionHostApiUrl()

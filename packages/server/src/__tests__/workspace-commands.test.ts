@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ProviderDefinition } from "@coder-studio/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../bus/event-bus.js";
 import { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
@@ -15,6 +16,29 @@ import { dispatch } from "../ws/dispatch.js";
 // Import command handlers to register them
 import "../commands/workspace.js";
 import "../commands/workspace-activity.js";
+
+function createSkillProvider(id: string, roots: string[]): ProviderDefinition {
+  return {
+    id,
+    displayName: id,
+    badge: id,
+    kind: "built_in",
+    capability: "full",
+    capabilities: [],
+    install: {
+      prerequisites: [],
+      manualGuideKeys: [],
+      docUrls: { provider: "", prerequisites: {} },
+      strategies: {},
+    },
+    buildCommand: () => ({ argv: [id], env: {}, cwd: "/" }),
+    configSchema: { parse: (value: unknown) => value } as never,
+    defaultConfig: {},
+    requiredCommands: [id],
+    supportsSkillsMount: true,
+    skillMountDirectories: roots,
+  } satisfies ProviderDefinition;
+}
 
 describe("Workspace Commands", () => {
   let ctx: CommandContext;
@@ -779,6 +803,59 @@ describe("Workspace Commands", () => {
         ]),
         expect.objectContaining({ windowsHide: true, cwd: process.cwd() })
       );
+    });
+  });
+
+  describe("workspace.wsl.exportAgentSkills", () => {
+    it("exports agent skill directories through the host command surface", async () => {
+      const tempHome = await mkdtemp(join(homedir(), ".coder-studio-wsl-export-"));
+      try {
+        const sharedRoot = join(tempHome, ".agents", "skills");
+        await mkdir(join(sharedRoot, "reviewer", "notes"), { recursive: true });
+        await writeFile(join(sharedRoot, "reviewer", "SKILL.md"), "# Reviewer\n");
+        await writeFile(join(sharedRoot, "reviewer", "notes", "tips.md"), "tips\n");
+
+        ctx = {
+          ...ctx,
+          providerRegistry: [createSkillProvider("codex", [sharedRoot])],
+        } as CommandContext;
+
+        const result = await dispatch(
+          {
+            kind: "command",
+            id: "workspace-wsl-export-agent-skills",
+            op: "workspace.wsl.exportAgentSkills",
+            args: {},
+          },
+          ctx
+        );
+
+        expect(result.ok).toBe(true);
+        expect(result.data).toEqual({
+          roots: [
+            {
+              homeRelativeRoot: `${tempHome.slice(homedir().length + 1).replace(/\\/g, "/")}/.agents/skills`,
+              skills: [
+                {
+                  slug: "reviewer",
+                  files: [
+                    {
+                      relativePath: "SKILL.md",
+                      contentBase64: Buffer.from("# Reviewer\n").toString("base64"),
+                    },
+                    {
+                      relativePath: "notes/tips.md",
+                      contentBase64: Buffer.from("tips\n").toString("base64"),
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+      } finally {
+        await rm(tempHome, { recursive: true, force: true });
+      }
     });
   });
 
