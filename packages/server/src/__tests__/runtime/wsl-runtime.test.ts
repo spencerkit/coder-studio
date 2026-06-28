@@ -32,28 +32,64 @@ interface MockChildProcess extends Partial<ChildProcessWithoutNullStreams> {
 }
 
 function createMockChildProcess(): MockChildProcess {
+  const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   const child: MockChildProcess = {
     stdout: new PassThrough(),
     stdin: new PassThrough(),
     stderr: new PassThrough(),
     kill: vi.fn(() => true),
-    on: vi.fn((_event: string, _handler: (...args: unknown[]) => void) => child),
-    once: vi.fn((_event: string, _handler: (...args: unknown[]) => void) => child),
-    removeListener: vi.fn((_event: string, _handler: (...args: unknown[]) => void) => child),
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      const next = listeners.get(event) ?? [];
+      next.push(handler);
+      listeners.set(event, next);
+      return child;
+    }),
+    once: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      const wrapped = (...args: unknown[]) => {
+        child.removeListener(event, wrapped);
+        handler(...args);
+      };
+      const next = listeners.get(event) ?? [];
+      next.push(wrapped);
+      listeners.set(event, next);
+      return child;
+    }),
+    removeListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      const next = (listeners.get(event) ?? []).filter((candidate) => candidate !== handler);
+      listeners.set(event, next);
+      return child;
+    }),
   };
+  Object.assign(child, {
+    emit(event: string, ...args: unknown[]) {
+      for (const listener of listeners.get(event) ?? []) {
+        listener(...args);
+      }
+      return true;
+    },
+  });
   return child;
+}
+
+function emitReady(child: MockChildProcess, port = 41733): void {
+  queueMicrotask(() => {
+    child.stdout.write(
+      `${JSON.stringify({ type: "wslRuntime.ready", host: "127.0.0.1", port })}\n`
+    );
+  });
 }
 
 describe("WslRuntimeHandle", () => {
   afterEach(() => {
     vi.resetModules();
     vi.doUnmock("node:child_process");
-    vi.doUnmock("../../runtime/remote/stdio-json-rpc.js");
+    vi.doUnmock("../../runtime/remote/socket-json-rpc.js");
     vi.doUnmock("../../runtime/wsl-bootstrap.js");
   });
 
-  it("launches a WSL child process and routes runtime operations over stdio RPC", async () => {
+  it("launches a WSL child process and routes runtime operations over socket RPC", async () => {
     const child = createMockChildProcess();
+    emitReady(child);
     const spawn = vi.fn(() => child);
     const rpcClient = {
       request: vi.fn(async (method: string, params: unknown) => {
@@ -68,7 +104,7 @@ describe("WslRuntimeHandle", () => {
       notify: vi.fn(async () => undefined),
       dispose: vi.fn(async () => undefined),
     };
-    const createStdioJsonRpcClient = vi.fn(async () => rpcClient);
+    const createSocketJsonRpcClient = vi.fn(async () => rpcClient);
     const resolveWslRuntimeLaunchSpec = vi.fn(async () => ({
       command: "wsl.exe",
       args: mockWslLaunchArgs("Ubuntu-24.04"),
@@ -124,8 +160,8 @@ describe("WslRuntimeHandle", () => {
     vi.doMock("node:child_process", () => ({
       spawn,
     }));
-    vi.doMock("../../runtime/remote/stdio-json-rpc.js", () => ({
-      createStdioJsonRpcClient,
+    vi.doMock("../../runtime/remote/socket-json-rpc.js", () => ({
+      createSocketJsonRpcClient,
     }));
     vi.doMock("../../runtime/wsl-bootstrap.js", async () => {
       const actual = await vi.importActual<typeof import("../../runtime/wsl-bootstrap.js")>(
@@ -252,13 +288,14 @@ describe("WslRuntimeHandle", () => {
           CODER_STUDIO_WSL_NODE_PTY_STAGING_ROOT:
             "~/.coder-studio/runtimes/wsl_ws-1/native-deps/node-pty",
         }),
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
       })
     );
-    expect(createStdioJsonRpcClient).toHaveBeenCalledWith(
+    expect(createSocketJsonRpcClient).toHaveBeenCalledWith(
       expect.objectContaining({
-        child,
+        host: "127.0.0.1",
+        port: 41733,
         runtimeId: "wsl:ws-1",
       })
     );
@@ -398,13 +435,14 @@ describe("WslRuntimeHandle", () => {
 
   it("sanitizes the WSL launch environment so Linux-side node tooling does not resolve to Windows shims", async () => {
     const child = createMockChildProcess();
+    emitReady(child);
     const spawn = vi.fn(() => child);
     const rpcClient = {
       request: vi.fn(async (method: string) => (method === "health" ? { ok: true as const } : {})),
       notify: vi.fn(async () => undefined),
       dispose: vi.fn(async () => undefined),
     };
-    const createStdioJsonRpcClient = vi.fn(async () => rpcClient);
+    const createSocketJsonRpcClient = vi.fn(async () => rpcClient);
     const resolveWslRuntimeLaunchSpec = vi.fn(async () => ({
       command: "wsl.exe",
       args: mockWslLaunchArgs("Ubuntu-24.04"),
@@ -450,8 +488,8 @@ describe("WslRuntimeHandle", () => {
     vi.doMock("node:child_process", () => ({
       spawn,
     }));
-    vi.doMock("../../runtime/remote/stdio-json-rpc.js", () => ({
-      createStdioJsonRpcClient,
+    vi.doMock("../../runtime/remote/socket-json-rpc.js", () => ({
+      createSocketJsonRpcClient,
     }));
     vi.doMock("../../runtime/wsl-bootstrap.js", async () => {
       const actual = await vi.importActual<typeof import("../../runtime/wsl-bootstrap.js")>(
@@ -513,6 +551,7 @@ describe("WslRuntimeHandle", () => {
 
   it("hydrates terminal and session bindings immediately from remote create results", async () => {
     const child = createMockChildProcess();
+    emitReady(child);
     const spawn = vi.fn(() => child);
     const rpcClient = {
       request: vi.fn(async (method: string, params: unknown) => {
@@ -554,7 +593,7 @@ describe("WslRuntimeHandle", () => {
       notify: vi.fn(async () => undefined),
       dispose: vi.fn(async () => undefined),
     };
-    const createStdioJsonRpcClient = vi.fn(async () => rpcClient);
+    const createSocketJsonRpcClient = vi.fn(async () => rpcClient);
     const resolveWslRuntimeLaunchSpec = vi.fn(async () => ({
       command: "wsl.exe",
       args: mockWslLaunchArgs("Ubuntu-24.04"),
@@ -580,8 +619,8 @@ describe("WslRuntimeHandle", () => {
     vi.doMock("node:child_process", () => ({
       spawn,
     }));
-    vi.doMock("../../runtime/remote/stdio-json-rpc.js", () => ({
-      createStdioJsonRpcClient,
+    vi.doMock("../../runtime/remote/socket-json-rpc.js", () => ({
+      createSocketJsonRpcClient,
     }));
     vi.doMock("../../runtime/wsl-bootstrap.js", async () => {
       const actual = await vi.importActual<typeof import("../../runtime/wsl-bootstrap.js")>(
@@ -649,6 +688,7 @@ describe("WslRuntimeHandle", () => {
 
   it("projects remote host bridge notifications and requests back into the host bridge", async () => {
     const child = createMockChildProcess();
+    emitReady(child);
     const spawn = vi.fn(() => child);
     let hostHandlers:
       | {
@@ -661,7 +701,7 @@ describe("WslRuntimeHandle", () => {
       notify: vi.fn(async () => undefined),
       dispose: vi.fn(async () => undefined),
     };
-    const createStdioJsonRpcClient = vi.fn(
+    const createSocketJsonRpcClient = vi.fn(
       async (
         input: typeof hostHandlers extends never
           ? never
@@ -697,8 +737,8 @@ describe("WslRuntimeHandle", () => {
     vi.doMock("node:child_process", () => ({
       spawn,
     }));
-    vi.doMock("../../runtime/remote/stdio-json-rpc.js", () => ({
-      createStdioJsonRpcClient,
+    vi.doMock("../../runtime/remote/socket-json-rpc.js", () => ({
+      createSocketJsonRpcClient,
     }));
     vi.doMock("../../runtime/wsl-bootstrap.js", async () => {
       const actual = await vi.importActual<typeof import("../../runtime/wsl-bootstrap.js")>(
@@ -815,5 +855,98 @@ describe("WslRuntimeHandle", () => {
       })
     ).resolves.toEqual({ revoked: true });
     expect(hostBridge.revokeSessionTokensBySessionId).toHaveBeenCalledWith("sess-1");
+  });
+
+  it("surfaces runtime bootstrap diagnostics when the WSL service exits before announcing its socket", async () => {
+    const child = createMockChildProcess();
+    const spawn = vi.fn(() => child);
+    const resolveWslRuntimeLaunchSpec = vi.fn(async () => ({
+      command: "wsl.exe",
+      args: mockWslLaunchArgs("Ubuntu-24.04"),
+      cwd: "/tmp",
+      env: {
+        CODER_STUDIO_WSL_RUNTIME_BOOTSTRAP: '{"runtimeId":"wsl:ws-1"}',
+      },
+      bootstrap: {
+        runtimeId: "wsl:ws-1",
+        workspace: {
+          id: "ws-1",
+          path: "/home/me/app",
+          targetRuntime: "wsl",
+          wslDistro: "Ubuntu-24.04",
+        } satisfies Workspace,
+        stateRoot: "/home/me/.coder-studio",
+        settings: {},
+        workspaces: [],
+        customProviders: [],
+      },
+    }));
+
+    vi.doMock("node:child_process", () => ({
+      spawn,
+    }));
+    vi.doMock("../../runtime/remote/socket-json-rpc.js", () => ({
+      createSocketJsonRpcClient: vi.fn(),
+    }));
+    vi.doMock("../../runtime/wsl-bootstrap.js", async () => {
+      const actual = await vi.importActual<typeof import("../../runtime/wsl-bootstrap.js")>(
+        "../../runtime/wsl-bootstrap.js"
+      );
+      return {
+        ...actual,
+        resolveWslRuntimeLaunchSpec,
+      };
+    });
+
+    const { createWslRuntime } = await import("../../runtime/wsl-runtime.js");
+
+    const createPromise = createWslRuntime({
+      runtimeId: "wsl:ws-1",
+      workspace: {
+        id: "ws-1",
+        path: "/home/me/app",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 250,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      stateRoot: "/tmp/state-root",
+      hostBridge: {
+        issueSessionToken: vi.fn(() => ({ token: "token" })),
+        revokeSessionTokensBySessionId: vi.fn(),
+        getHostApiUrl: vi.fn(() => "http://127.0.0.1:4173"),
+        emitDomainEvent: vi.fn(),
+        broadcast: vi.fn(),
+        recordWorkspaceFetch: vi.fn(),
+        sendToClient: vi.fn(() => true),
+        sendBinaryToClient: vi.fn(() => true),
+      } satisfies RuntimeHostBridge,
+      providerRegistry: [],
+      workspaceLookup: {
+        get: () => undefined,
+        list: () => [],
+      },
+      settingsSnapshot: {},
+      customProviderConfigs: [],
+    });
+
+    queueMicrotask(() => {
+      child.stderr.write("boom on boot\n");
+      (child as MockChildProcess & { emit(event: string, ...args: unknown[]): boolean }).emit(
+        "exit",
+        17,
+        null
+      );
+    });
+
+    await expect(createPromise).rejects.toThrow(
+      "WSL runtime wsl:ws-1 exited before announcing its socket"
+    );
+    await expect(createPromise).rejects.toThrow("boom on boot");
   });
 });

@@ -9,15 +9,12 @@ import { createNativeRuntime } from "./native-runtime.js";
 import {
   type HostNotificationMessage,
   type HostRequestMessage,
-  type JsonRpcInboundMessage,
-  type JsonRpcNotificationMessage,
-  type JsonRpcRequestMessage,
-  type JsonRpcSuccessMessage,
-  normalizeRemoteError,
   type RemoteProviderSnapshot,
   type RemoteStateSnapshot,
   type WslRuntimeBootstrapPayload,
+  type WslRuntimeReadySignal,
 } from "./remote/protocol.js";
+import { createSocketJsonRpcServer } from "./remote/socket-json-rpc.js";
 import { buildRemoteStateSnapshot } from "./remote/state-snapshot.js";
 
 function assertRemoteRuntimeLoaded(): void {
@@ -111,61 +108,25 @@ function writeMessage(
   });
 }
 
-function isRequestMessage(message: JsonRpcInboundMessage): message is JsonRpcRequestMessage {
-  return "id" in message && "method" in message;
-}
-
-function isNotificationMessage(
-  message: JsonRpcInboundMessage
-): message is JsonRpcNotificationMessage {
-  return !("id" in message) && "method" in message;
-}
-
-function isSuccessMessage(message: JsonRpcInboundMessage): message is JsonRpcSuccessMessage {
-  return "id" in message && "result" in message;
-}
-
 async function sendHostBridgeNotification(
+  notify: (method: string, params: unknown) => Promise<void>,
   method: HostNotificationMessage["method"],
   params: HostNotificationMessage["params"]
 ): Promise<void> {
-  await writeMessage(process.stdout, {
-    jsonrpc: "2.0",
-    method,
-    params,
-  });
+  await notify(method, params);
 }
 
-function createRemoteHostBridge(hostApiUrl?: string): RuntimeHostBridge {
-  let nextId = 1;
-  const pending = new Map<
-    number,
-    {
-      resolve(value: unknown): void;
-      reject(error: unknown): void;
-    }
-  >();
-
+function createRemoteHostBridge(
+  transport: {
+    request(method: string, params: unknown): Promise<unknown>;
+    notify(method: string, params: unknown): Promise<void>;
+  },
+  hostApiUrl?: string
+): RuntimeHostBridge {
   const requestHost = async (
     method: HostRequestMessage["method"],
     params: HostRequestMessage["params"]
-  ): Promise<unknown> => {
-    const id = nextId++;
-    return new Promise(async (resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      try {
-        await writeMessage(process.stdout, {
-          jsonrpc: "2.0",
-          id,
-          method,
-          params,
-        });
-      } catch (error) {
-        pending.delete(id);
-        reject(error);
-      }
-    });
-  };
+  ): Promise<unknown> => transport.request(method, params);
 
   return {
     issueSessionToken() {
@@ -178,13 +139,13 @@ function createRemoteHostBridge(hostApiUrl?: string): RuntimeHostBridge {
       return hostApiUrl;
     },
     emitDomainEvent(event) {
-      void sendHostBridgeNotification("domainEvent", { event });
+      void sendHostBridgeNotification(transport.notify, "domainEvent", { event });
     },
     broadcast(topic, payload) {
-      void sendHostBridgeNotification("broadcast", { topic, payload });
+      void sendHostBridgeNotification(transport.notify, "broadcast", { topic, payload });
     },
     recordWorkspaceFetch(workspaceId) {
-      void sendHostBridgeNotification("recordWorkspaceFetch", { workspaceId });
+      void sendHostBridgeNotification(transport.notify, "recordWorkspaceFetch", { workspaceId });
     },
     resolveClientOwnerId(clientId) {
       return clientId;
@@ -200,9 +161,6 @@ function createRemoteHostBridge(hostApiUrl?: string): RuntimeHostBridge {
       });
       return true;
     },
-    __pending: pending,
-  } as RuntimeHostBridge & {
-    __pending: Map<number, { resolve(value: unknown): void; reject(error: unknown): void }>;
   };
 }
 
@@ -210,6 +168,15 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
   assertRemoteRuntimeLoaded();
   const bootstrap = parseBootstrapPayload();
   await validateBootstrapWorkspace(bootstrap);
+  const socketServer = await createSocketJsonRpcServer({
+    host: "0.0.0.0",
+  });
+  const ready: WslRuntimeReadySignal = {
+    type: "wslRuntime.ready",
+    host: "127.0.0.1",
+    port: socketServer.port,
+  };
+  await writeMessage(process.stdout, ready as unknown as Record<string, unknown>);
 
   const workspaceLookup = createMutableWorkspaceLookup(bootstrap.workspaces);
   const settingsStore = createMutableSettingsStore(bootstrap.settings);
@@ -220,7 +187,22 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     capabilities: config.capabilities.map((capability) => ({ ...capability })),
   }));
   let providerRegistry = createProviderRegistrySnapshot(customProviders);
-  const hostBridge = createRemoteHostBridge(bootstrap.hostApiUrl);
+  const rpcHandlers: {
+    onNotification?(method: string, params: unknown): Promise<void> | void;
+    onRequest?(method: string, params: unknown): Promise<unknown> | unknown;
+  } = {};
+  const peer = await socketServer.acceptOnce(rpcHandlers);
+  const hostBridge = createRemoteHostBridge(peer, bootstrap.hostApiUrl);
+  type RuntimeServices = {
+    runtime: Awaited<ReturnType<typeof createNativeRuntime>>;
+    applySnapshot(snapshot: RemoteStateSnapshot): Promise<void>;
+    applyProviderSnapshot(snapshot: RemoteProviderSnapshot): Promise<void>;
+    stop(): Promise<void>;
+  };
+  let resolveRuntimeServices: ((services: RuntimeServices) => void) | undefined;
+  const runtimeServices = new Promise<RuntimeServices>((resolve) => {
+    resolveRuntimeServices = resolve;
+  });
   const readonlySettingsRepo = {
     get: <T = unknown>(key: string) => settingsStore.getAll()[key] as T | undefined,
     set: () => {
@@ -279,111 +261,49 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
     resources?.providerInstallMgr.setProviders(providerRegistry);
   };
 
-  const readline = (await import("node:readline")).createInterface({
-    input: process.stdin,
-    crlfDelay: Infinity,
-  });
-
-  const pendingHost = (
-    hostBridge as RuntimeHostBridge & {
-      __pending: Map<number, { resolve(value: unknown): void; reject(error: unknown): void }>;
+  rpcHandlers.onNotification = async (method, params) => {
+    const services = await runtimeServices;
+    if (method === "updateSnapshot") {
+      await services.applySnapshot(params as RemoteStateSnapshot);
+      return;
     }
-  ).__pending;
-
-  const replySuccess = async (id: number, result: unknown): Promise<void> => {
-    await writeMessage(process.stdout, {
-      jsonrpc: "2.0",
-      id,
-      result,
-    });
+    if (method === "updateProviders") {
+      await services.applyProviderSnapshot(params as RemoteProviderSnapshot);
+    }
   };
+  rpcHandlers.onRequest = async (method, params) => {
+    const services = await runtimeServices;
+    if (method === "execute") {
+      const request = params as {
+        op: string;
+        args: unknown;
+        meta?: unknown;
+      };
+      return services.runtime.execute(request.op, request.args, request.meta as never);
+    }
 
-  const replyError = async (id: number, error: unknown): Promise<void> => {
-    await writeMessage(process.stdout, {
-      jsonrpc: "2.0",
-      id,
-      error: normalizeRemoteError(error),
-    });
+    if (method === "disposeWorkspace") {
+      const request = params as { workspaceId: string };
+      await services.runtime.disposeWorkspace(request.workspaceId);
+      return { disposed: true };
+    }
+
+    if (method === "health") {
+      return services.runtime.health();
+    }
+
+    if (method === "stop") {
+      setImmediate(() => {
+        void services.stop();
+      });
+      return { stopped: true };
+    }
+
+    throw {
+      code: "unknown_method",
+      message: `Unknown WSL runtime RPC method: ${method}`,
+    };
   };
-
-  readline.on("line", (line) => {
-    void (async () => {
-      if (!line.trim()) {
-        return;
-      }
-
-      const parsed = JSON.parse(line) as JsonRpcInboundMessage;
-      if (isSuccessMessage(parsed)) {
-        pendingHost.get(parsed.id)?.resolve(parsed.result);
-        pendingHost.delete(parsed.id);
-        return;
-      }
-
-      if ("id" in parsed && "error" in parsed) {
-        pendingHost.get(parsed.id)?.reject(parsed.error);
-        pendingHost.delete(parsed.id);
-        return;
-      }
-
-      if (isNotificationMessage(parsed)) {
-        if (parsed.method === "updateSnapshot") {
-          await applySnapshot(parsed.params as RemoteStateSnapshot);
-          return;
-        }
-        if (parsed.method === "updateProviders") {
-          await applyProviderSnapshot(parsed.params as RemoteProviderSnapshot);
-        }
-        return;
-      }
-
-      if (!isRequestMessage(parsed)) {
-        return;
-      }
-
-      const request: JsonRpcRequestMessage = parsed;
-
-      try {
-        if (request.method === "execute") {
-          const params = request.params as {
-            op: string;
-            args: unknown;
-            meta?: unknown;
-          };
-          await replySuccess(
-            request.id,
-            await runtime.execute(params.op, params.args, params.meta as never)
-          );
-          return;
-        }
-
-        if (request.method === "disposeWorkspace") {
-          const params = request.params as { workspaceId: string };
-          await runtime.disposeWorkspace(params.workspaceId);
-          await replySuccess(request.id, { disposed: true });
-          return;
-        }
-
-        if (request.method === "health") {
-          await replySuccess(request.id, await runtime.health());
-          return;
-        }
-
-        if (request.method === "stop") {
-          await replySuccess(request.id, { stopped: true });
-          await runtime.stop?.();
-          readline.close();
-          process.exit(0);
-        }
-
-        await replyError(request.id, {
-          code: "unknown_method",
-          message: `Unknown WSL runtime RPC method: ${request.method}`,
-        });
-      } catch (error) {
-        await replyError(request.id, error);
-      }
-    })();
-  });
 
   await applySnapshot(
     buildRemoteStateSnapshot({
@@ -392,4 +312,15 @@ export async function runWslRuntimeEntrypoint(): Promise<void> {
       customProviders,
     })
   );
+  resolveRuntimeServices?.({
+    runtime,
+    applySnapshot,
+    applyProviderSnapshot,
+    async stop() {
+      await runtime.stop?.();
+      await peer.dispose();
+      await socketServer.close();
+      process.exit(0);
+    },
+  });
 }

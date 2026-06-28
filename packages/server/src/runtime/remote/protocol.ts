@@ -19,6 +19,12 @@ export interface WslRuntimeBootstrapPayload {
   customProviders: CustomProviderConfig[];
 }
 
+export interface WslRuntimeReadySignal {
+  type: "wslRuntime.ready";
+  host: string;
+  port: number;
+}
+
 export interface RemoteProviderSnapshot {
   providers: ProviderListItem[];
 }

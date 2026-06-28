@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import type { ProviderDefinition, Session, Terminal, Workspace } from "@coder-studio/core";
 import { toProviderListItem } from "@coder-studio/providers";
 import type { WorkspaceRuntimeBindingStore } from "../host/workspace-runtime-binding.js";
@@ -10,13 +11,14 @@ import {
   type RemoteDisposeWorkspaceRequest,
   type RemoteExecuteRequest,
   type RemoteProviderSnapshot,
+  type WslRuntimeReadySignal,
 } from "./remote/protocol.js";
+import { createSocketJsonRpcClient } from "./remote/socket-json-rpc.js";
 import {
   cloneCustomProviderConfigs,
   cloneSettingsSnapshot,
   cloneWorkspaceSnapshots,
 } from "./remote/state-snapshot.js";
-import { createStdioJsonRpcClient } from "./remote/stdio-json-rpc.js";
 import { resolveWslRuntimeLaunchSpec } from "./wsl-bootstrap.js";
 
 function serializeProviderSnapshot(providers: ProviderDefinition[]): RemoteProviderSnapshot {
@@ -227,6 +229,106 @@ function buildSanitizedWslLaunchEnv(
   };
 }
 
+function isReadySignal(value: unknown): value is WslRuntimeReadySignal {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "wslRuntime.ready" &&
+    typeof (value as { host?: unknown }).host === "string" &&
+    typeof (value as { port?: unknown }).port === "number"
+  );
+}
+
+async function waitForWslRuntimeReady(
+  child: ReturnType<typeof spawn>,
+  runtimeId: string
+): Promise<WslRuntimeReadySignal> {
+  if (!child.stdout) {
+    throw new Error(`WSL runtime ${runtimeId} launched without stdout pipe`);
+  }
+  if (!child.stderr) {
+    throw new Error(`WSL runtime ${runtimeId} launched without stderr pipe`);
+  }
+
+  const stdout = createInterface({
+    input: child.stdout,
+    crlfDelay: Infinity,
+  });
+
+  const stderrChunks: string[] = [];
+  child.stderr.on("data", (chunk: Buffer | string) => {
+    stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+    if (stderrChunks.length > 32) {
+      stderrChunks.shift();
+    }
+  });
+
+  return new Promise<WslRuntimeReadySignal>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      stdout.close();
+      child.removeListener("exit", onExit);
+      child.removeListener("error", onError);
+    };
+
+    const finishResolve = (value: WslRuntimeReadySignal) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const finishReject = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const buildStartupError = (reason: string) => {
+      const stderr = stderrChunks.join("").trim();
+      return new Error(
+        stderr.length > 0
+          ? `WSL runtime ${runtimeId} exited before announcing its socket (${reason}). ${stderr}`
+          : `WSL runtime ${runtimeId} exited before announcing its socket (${reason}).`
+      );
+    };
+
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      finishReject(buildStartupError(`code=${code ?? "null"}, signal=${signal ?? "null"}`));
+    };
+
+    const onError = (error: Error) => {
+      finishReject(error);
+    };
+
+    stdout.on("line", (line) => {
+      if (!line.trim()) {
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        return;
+      }
+
+      if (isReadySignal(parsed)) {
+        finishResolve(parsed);
+      }
+    });
+
+    child.once("exit", onExit);
+    child.once("error", onError);
+  });
+}
+
 function isTerminalShape(value: unknown): value is Terminal {
   return (
     !!value &&
@@ -348,12 +450,14 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
   const child = spawn(launchSpec.command, launchSpec.args, {
     cwd: launchSpec.cwd,
     env: buildSanitizedWslLaunchEnv(process.env, launchSpec.env),
-    stdio: ["pipe", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
 
-  const rpc = await createStdioJsonRpcClient({
-    child,
+  const ready = await waitForWslRuntimeReady(child, input.runtimeId);
+  const rpc = await createSocketJsonRpcClient({
+    host: ready.host,
+    port: ready.port,
     runtimeId: input.runtimeId,
     onNotification: (method, params) =>
       routeHostNotification(input.hostBridge, method as HostNotificationMessage["method"], params),
