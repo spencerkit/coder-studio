@@ -298,4 +298,73 @@ describe("SkillMountManager", () => {
     ).resolves.toBe("# Mounted\noverride\n");
     await expect(readFile(sharedPath, "utf8")).resolves.toBe("# Shared\nsource\n");
   });
+
+  it("preserves an existing mounted skill when copy mount update fails", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "skill-mount-manager-"));
+    tempDirs.push(tempDir);
+    const libraryPath = join(tempDir, "state", "skills", "custom", "coder-studio-open");
+    const skillDir = join(tempDir, ".agents", "skills");
+    const targetPath = join(skillDir, "coder-studio-open");
+    const originalContent = "---\nname: coder-studio-open\ndescription: original\n---\n";
+    await mkdir(libraryPath, { recursive: true });
+    await mkdir(targetPath, { recursive: true });
+    await writeFile(join(libraryPath, "SKILL.md"), "# Replacement\n", "utf8");
+    await writeFile(join(targetPath, "SKILL.md"), originalContent, "utf8");
+
+    const skillLibraryRepo = new SkillLibraryRepo({
+      filePath: join(tempDir, "library-index.json"),
+    });
+    const skillMountRepo = new SkillMountRepo({
+      filePath: join(tempDir, "mounts.json"),
+    });
+    skillLibraryRepo.set({
+      slug: "coder-studio-open",
+      displayName: "Coder Studio Open",
+      version: "local",
+      source: "custom",
+      origin: "filesystem",
+      libraryPath,
+      installState: "installed",
+      installedAt: 1,
+      updatedAt: 1,
+    });
+
+    vi.resetModules();
+    vi.doMock("node:fs/promises", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:fs/promises")>();
+      return {
+        ...actual,
+        copyFile: vi.fn(async (from, to) => {
+          if (
+            typeof to === "string" &&
+            to.endsWith("/SKILL.md") &&
+            to.includes("coder-studio-open")
+          ) {
+            await actual.writeFile(to, "", "utf8");
+            throw new Error("simulated copy failure");
+          }
+
+          return actual.copyFile(from, to);
+        }),
+      };
+    });
+
+    const { SkillMountManager } = await import("../../skills/mount-manager.js");
+
+    const manager = new SkillMountManager({
+      getProviderRegistry: () => [provider("codex", skillDir)],
+      skillLibraryRepo,
+      skillMountRepo,
+    });
+
+    await expect(
+      manager.mount({
+        providerId: "codex",
+        skillSlug: "coder-studio-open",
+        enabled: true,
+        preferredMode: "copy",
+      })
+    ).rejects.toThrow("simulated copy failure");
+    await expect(readFile(join(targetPath, "SKILL.md"), "utf8")).resolves.toBe(originalContent);
+  });
 });
