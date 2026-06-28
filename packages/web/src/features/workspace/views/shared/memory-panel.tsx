@@ -23,6 +23,7 @@ import {
   ModalTitle,
 } from "../../../../components/ui/modal";
 import { Select, type SelectOption } from "../../../../components/ui/select";
+import { Tooltip } from "../../../../components/ui/tooltip";
 import { formatRelativeTime, useTranslation } from "../../../../lib/i18n";
 import { useMemoryPanel } from "../../actions/use-memory-panel";
 
@@ -60,9 +61,17 @@ function entryMatchesQuery(entry: WorkspaceMemoryEntry, query: string): boolean 
   return [entry.content, entry.type].some((value) => value.toLowerCase().includes(trimmed));
 }
 
+function normalizeMemoryContent(content: string): string {
+  return content.trim().replace(/\s+/gu, " ");
+}
+
 function previewContent(content: string): string {
-  const normalized = content.trim().replace(/\s+/gu, " ");
+  const normalized = normalizeMemoryContent(content);
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+}
+
+function shouldShowPreviewTooltip(content: string): boolean {
+  return previewContent(content) !== normalizeMemoryContent(content);
 }
 
 function memoryLabel(entry: WorkspaceMemoryEntry): string {
@@ -366,6 +375,9 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
                 const label = memoryLabel(entry);
                 const editLabel = t("workspace.memory.edit_entry", { label });
                 const deleteLabel = t("workspace.memory.delete_entry", { label });
+                const preview = previewContent(entry.content);
+                const normalizedContent = normalizeMemoryContent(entry.content);
+                const previewNode = <span className="memory-panel__item-content">{preview}</span>;
 
                 return (
                   <li key={entry.id} className="memory-panel__list-row">
@@ -381,9 +393,11 @@ export const MemoryPanel: FC<MemoryPanelProps> = ({ workspaceId, refreshToken = 
                           setSelectedId(entry.id);
                         }}
                       >
-                        <span className="memory-panel__item-content">
-                          {previewContent(entry.content)}
-                        </span>
+                        {shouldShowPreviewTooltip(entry.content) ? (
+                          <Tooltip content={normalizedContent}>{previewNode}</Tooltip>
+                        ) : (
+                          previewNode
+                        )}
                       </button>
                       <div className="memory-panel__item-meta">
                         <span className="memory-panel__item-meta-main">

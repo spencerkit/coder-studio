@@ -10,7 +10,13 @@ import { getUpdateRuntimeInfo } from "./update-runtime.js";
 
 const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
 
-export const buildServerConfig = (): ServerConfigInput => {
+export interface StartServerOptions {
+  serverConfig?: ServerConfigInput;
+  writeRuntimeConfig?: boolean;
+  runtimeJsonPath?: string;
+}
+
+export const buildServerConfig = (overrides: ServerConfigInput = {}): ServerConfigInput => {
   const savedConfig = readCliConfig();
   const config: ServerConfigInput = {
     appVersion: getCliVersion(import.meta.url),
@@ -26,6 +32,7 @@ export const buildServerConfig = (): ServerConfigInput => {
           },
         }
       : {}),
+    ...overrides,
   };
 
   if (hasWebAssets()) {
@@ -73,10 +80,16 @@ export const runServerEntrypoint = async (moduleUrl: string, argvEntry?: string)
   await startServer();
 };
 
-export const startServer = async (): Promise<Server> => {
+export const startServer = async (options: StartServerOptions = {}): Promise<Server> => {
   assertSupportedNodeVersion();
   const { createServer } = await import("@coder-studio/server");
-  const server = await createServer(buildServerConfig());
+  const server = await createServer({
+    ...buildServerConfig(options.serverConfig),
+    ...(options.writeRuntimeConfig === undefined
+      ? {}
+      : { writeRuntimeConfig: options.writeRuntimeConfig }),
+    ...(options.runtimeJsonPath ? { runtimeJsonPath: options.runtimeJsonPath } : {}),
+  });
   const shutdown = createShutdownHandler(server);
 
   process.on("SIGINT", shutdown);

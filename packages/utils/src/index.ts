@@ -7,6 +7,7 @@ export {
   WINDOWS_COMMAND_LINE_LIMIT,
 } from "./headless-prompt-delivery.js";
 export { markdownUsesMermaid } from "./markdown-mermaid.js";
+export * from "./process-lock.js";
 export { formatTokenMetric } from "./token-metric.js";
 export { shouldUseShellForCommand } from "./windows-shim.js";
 export type {

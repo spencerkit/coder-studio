@@ -1,0 +1,44 @@
+{
+  "name": "@coder-studio/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/electron/main.mjs",
+  "build": {
+    "appId": "kit.spencer.coder-studio.desktop",
+    "productName": "Coder Studio",
+    "directories": {
+      "output": "dist/release"
+    },
+    "files": ["dist/electron/**/*", "package.json"],
+    "extraResources": [
+      {
+        "from": "dist/runtime",
+        "to": "runtime"
+      }
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "publish": "never"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "electron": "42.5.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.5"
+  },
+  "dependencies": {
+    "@coder-studio/core": "workspace:*"
+  }
+}

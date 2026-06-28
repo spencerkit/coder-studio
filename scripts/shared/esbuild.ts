@@ -66,6 +66,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
     entryPoints: [
       resolve(CLI_DIR, "src/automation-entry.ts"),
       resolve(CLI_DIR, "src/bin.ts"),
+      resolve(CLI_DIR, "src/desktop-server.ts"),
       resolve(CLI_DIR, "src/index.ts"),
       resolve(CLI_DIR, "src/server-runner.ts"),
       resolve(CLI_DIR, "src/update-worker.ts"),

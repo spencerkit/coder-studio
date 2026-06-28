@@ -20,17 +20,21 @@ export function getRuntimeDir(): string {
   return join(homedir(), ".coder-studio");
 }
 
-export function getRuntimePath(): string {
-  const pathOverride = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+export function getRuntimePath(pathOverride?: string): string {
   if (pathOverride && pathOverride.trim()) {
     return pathOverride;
+  }
+
+  const envOverride = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+  if (envOverride && envOverride.trim()) {
+    return envOverride;
   }
 
   return join(getRuntimeDir(), "runtime.json");
 }
 
-export function readRuntimeConfig(): RuntimeConfig | null {
-  const runtimePath = getRuntimePath();
+export function readRuntimeConfig(pathOverride?: string): RuntimeConfig | null {
+  const runtimePath = getRuntimePath(pathOverride);
   if (!existsSync(runtimePath)) {
     return null;
   }
@@ -60,8 +64,8 @@ export function readRuntimeConfig(): RuntimeConfig | null {
   }
 }
 
-export function writeRuntimeConfig(config: RuntimeConfig): void {
-  const runtimePath = getRuntimePath();
+export function writeRuntimeConfig(config: RuntimeConfig, pathOverride?: string): void {
+  const runtimePath = getRuntimePath(pathOverride);
   const runtimeDir = dirname(runtimePath);
   if (!existsSync(runtimeDir)) {
     mkdirSync(runtimeDir, { recursive: true });
@@ -70,8 +74,8 @@ export function writeRuntimeConfig(config: RuntimeConfig): void {
   writeFileSync(runtimePath, JSON.stringify(config, null, 2), "utf-8");
 }
 
-export function deleteRuntimeConfig(): void {
-  const runtimePath = getRuntimePath();
+export function deleteRuntimeConfig(pathOverride?: string): void {
+  const runtimePath = getRuntimePath(pathOverride);
   if (!existsSync(runtimePath)) {
     return;
   }
