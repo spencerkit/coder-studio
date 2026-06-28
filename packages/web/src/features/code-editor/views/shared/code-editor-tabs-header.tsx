@@ -1,6 +1,7 @@
 import { FileCode2, Globe, PanelsTopLeft, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Portal } from "../../../../components/ui/_internal/portal";
 import { useTranslation } from "../../../../lib/i18n";
 import type { OpenFile, WorkspaceEditorTab } from "../../../workspace/atoms";
 
@@ -551,40 +552,42 @@ export function CodeEditorTabsHeader({
         </nav>
       ) : null}
       {contextMenu ? (
-        <div className="file-context-menu-layer">
-          <div
-            ref={menuRef}
-            role="menu"
-            tabIndex={-1}
-            aria-label={t("code_editor.editor_tab_actions")}
-            className="file-context-menu code-editor-tab-context-menu"
-            style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y }}
-          >
-            <div className="file-context-menu__section">
-              <div className="file-context-menu__section-items">
-                {contextMenuItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="menuitem"
-                    className="file-context-menu__item"
-                    disabled={item.disabled}
-                    onClick={() => {
-                      if (item.disabled) {
-                        return;
-                      }
+        <Portal>
+          <div className="file-context-menu-layer">
+            <div
+              ref={menuRef}
+              role="menu"
+              tabIndex={-1}
+              aria-label={t("code_editor.editor_tab_actions")}
+              className="file-context-menu code-editor-tab-context-menu"
+              style={{ position: "fixed", left: contextMenu.x, top: contextMenu.y }}
+            >
+              <div className="file-context-menu__section">
+                <div className="file-context-menu__section-items">
+                  {contextMenuItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      className="file-context-menu__item"
+                      disabled={item.disabled}
+                      onClick={() => {
+                        if (item.disabled) {
+                          return;
+                        }
 
-                      item.onSelect();
-                      closeContextMenu();
-                    }}
-                  >
-                    <span>{item.label}</span>
-                  </button>
-                ))}
+                        item.onSelect();
+                        closeContextMenu();
+                      }}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </Portal>
       ) : null}
     </header>
   );
