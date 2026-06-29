@@ -66,6 +66,7 @@ function createDeps(overrides?: Partial<ConstructorParameters<typeof UpdateServi
     countActiveSupervisors: vi.fn(() => 0),
     runLatestVersionLookup: vi.fn(async () => "0.5.0"),
     spawnDetachedWorker: vi.fn(async () => {}),
+    desktopUpdateAdapter: undefined,
     now: vi.fn(() => 1000),
     ...overrides,
   };
@@ -101,6 +102,39 @@ describe("UpdateService", () => {
     const result = await service.checkForUpdates({ manual: true });
 
     expect(result.latestVersion).toBe("0.5.0");
+    expect(result.availability).toBe("update_available");
+    expect(result.updateStatus).toBe("idle");
+  });
+
+  it("checks desktop-managed updates through the desktop adapter instead of npm", async () => {
+    const checkForUpdates = vi.fn(async () => ({
+      latestVersion: "0.5.5",
+    }));
+    const runLatestVersionLookup = vi.fn(async () => "9.9.9");
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: true,
+          installKind: "desktop_managed",
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+        } as UpdateRuntimeConfig,
+        runLatestVersionLookup,
+        desktopUpdateAdapter: {
+          startInstall: vi.fn(async () => {}),
+          checkForUpdates,
+        } as never,
+      })
+    );
+
+    const result = await service.checkForUpdates({ manual: true });
+
+    expect(checkForUpdates).toHaveBeenCalledWith({
+      currentVersion: "0.4.0",
+    });
+    expect(runLatestVersionLookup).not.toHaveBeenCalled();
+    expect(result.latestVersion).toBe("0.5.5");
     expect(result.availability).toBe("update_available");
     expect(result.updateStatus).toBe("idle");
   });
@@ -478,6 +512,7 @@ describe("UpdateService", () => {
   });
 
   it("does not require an npm worker for desktop-managed installs", async () => {
+    const startInstall = vi.fn(async () => {});
     const service = new UpdateService(
       createDeps({
         runtime: {
@@ -520,6 +555,9 @@ describe("UpdateService", () => {
           })),
         },
         spawnDetachedWorker: vi.fn(async () => {}),
+        desktopUpdateAdapter: {
+          startInstall,
+        },
       })
     );
 
@@ -527,5 +565,79 @@ describe("UpdateService", () => {
 
     expect(result.updateStatus).toBe("installing");
     expect(result.requiresManualStep).toBe(false);
+    expect(startInstall).toHaveBeenCalledWith({
+      targetVersion: "0.5.0",
+      currentVersion: "0.4.0",
+    });
+  });
+
+  it("fails desktop-managed installs when the desktop adapter rejects", async () => {
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: true,
+          installKind: "desktop_managed",
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+        } as UpdateRuntimeConfig,
+        desktopUpdateAdapter: {
+          startInstall: vi.fn(async () => {
+            throw new Error("desktop bridge unavailable");
+          }),
+        },
+      })
+    );
+
+    const result = await service.startInstall({ targetVersion: "0.5.0", force: true });
+
+    expect(result.updateStatus).toBe("failed");
+    expect(result.errorSummary).toBe("desktop bridge unavailable");
+  });
+
+  it("applies desktop-managed state patches from the bound desktop adapter controller", () => {
+    let boundController:
+      | {
+          applyPatch: (patch: Record<string, unknown>) => void;
+        }
+      | undefined;
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: true,
+          installKind: "desktop_managed",
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+        } as UpdateRuntimeConfig,
+        desktopUpdateAdapter: {
+          startInstall: vi.fn(async () => {}),
+          bindStateController: vi.fn((controller) => {
+            boundController = controller;
+          }),
+        },
+      })
+    );
+
+    expect(boundController).toBeDefined();
+    boundController?.applyPatch({
+      currentVersion: "0.5.0",
+      latestVersion: "0.5.0",
+      availability: "up_to_date",
+      updateStatus: "succeeded",
+      targetVersion: "0.5.0",
+      finishedAt: 2000,
+      errorSummary: null,
+    });
+
+    expect(service.getStateView()).toMatchObject({
+      currentVersion: "0.5.0",
+      latestVersion: "0.5.0",
+      availability: "up_to_date",
+      updateStatus: "succeeded",
+      targetVersion: "0.5.0",
+      finishedAt: 2000,
+      errorSummary: null,
+    });
   });
 });

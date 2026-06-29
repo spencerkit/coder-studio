@@ -10,6 +10,7 @@ describe("DesktopAppController", () => {
       startSidecar: vi.fn(async () => ({
         browserUrl: "http://127.0.0.1:4173",
         getLogExcerpt: vi.fn(() => ""),
+        send: vi.fn(),
         stop: vi.fn(),
         on: vi.fn(),
       })),
@@ -43,9 +44,43 @@ describe("DesktopAppController", () => {
     expect(showErrorPage).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        title: "Coder Studio failed to start",
+        title: "Coder Studio runtime failed to start",
         detail: "state directory already in use",
         logExcerpt: "stderr: Runtime state directory is already in use by pid 5003",
+      })
+    );
+  });
+
+  it("shows a bootstrap-specific error page when runtime preparation fails", async () => {
+    const showErrorPage = vi.fn();
+    const controller = new DesktopAppController({
+      createWindow: () => ({ loadURL: vi.fn(), focus: vi.fn(), show: vi.fn() }),
+      prepareRuntime: vi.fn(async () => {
+        throw Object.assign(new Error("release index unavailable"), {
+          phase: "resolve_release",
+          releaseSource: "github-release",
+        });
+      }),
+      startSidecar: vi.fn(async () => ({
+        browserUrl: "http://127.0.0.1:4173",
+        getLogExcerpt: vi.fn(() => ""),
+        send: vi.fn(),
+        stop: vi.fn(),
+        on: vi.fn(),
+      })),
+      loadDesktopUrl: vi.fn(),
+      showErrorPage,
+    });
+
+    await controller.launch();
+
+    expect(showErrorPage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        title: "Coder Studio runtime bootstrap failed",
+        detail: "release index unavailable",
+        diagnosticLabel: "Bootstrap source",
+        diagnosticValue: "github-release",
       })
     );
   });
@@ -57,6 +92,7 @@ describe("DesktopAppController", () => {
       startSidecar: vi.fn(async () => ({
         browserUrl: "http://127.0.0.1:4173",
         getLogExcerpt: vi.fn(() => ""),
+        send: vi.fn(),
         stop,
         on: vi.fn(),
       })),
@@ -82,6 +118,7 @@ describe("DesktopAppController", () => {
       startSidecar: vi.fn(async () => ({
         browserUrl: "http://127.0.0.1:4173",
         getLogExcerpt: vi.fn(() => ""),
+        send: vi.fn(),
         stop,
         on: vi.fn((event, listener) => {
           if (event === "exit") {

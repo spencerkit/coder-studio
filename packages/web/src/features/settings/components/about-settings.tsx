@@ -11,6 +11,7 @@ import {
   Switch,
 } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
+import { useShellUpdate } from "../../desktop-shell/use-shell-update";
 import { pushToastAtom } from "../../notifications";
 import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
 
@@ -75,8 +76,11 @@ export function AboutSettings({
   const setUpdateState = useSetAtom(updateStateAtom);
   const setUpdatePrepareInstall = useSetAtom(updatePrepareInstallAtom);
   const pushToast = useSetAtom(pushToastAtom);
+  const shellUpdate = useShellUpdate();
   const [confirmState, setConfirmState] = useState<UpdatePrepareInstallResponse | null>(null);
-  const [loading, setLoading] = useState<null | "check" | "prepare" | "install">(null);
+  const [loading, setLoading] = useState<
+    null | "check" | "prepare" | "install" | "shell-check" | "shell-install"
+  >(null);
   const autoCheckLabelId = useId();
   const autoCheckDescId = useId();
   const checkIntervalLabelId = useId();
@@ -121,6 +125,44 @@ export function AboutSettings({
         return t("settings.about.availability_check_failed");
     }
   }, [t, updateState]);
+
+  const shellAvailabilityLabel = useMemo(() => {
+    if (!shellUpdate.state) {
+      return t("settings.about.availability_unknown");
+    }
+    switch (shellUpdate.state.availability) {
+      case "unknown":
+        return t("settings.about.availability_unknown");
+      case "up_to_date":
+        return t("settings.about.availability_up_to_date");
+      case "update_available":
+        return t("settings.about.availability_update_available");
+      case "downloaded":
+        return t("settings.about.shell_update_downloaded");
+      case "error":
+        return t("settings.about.availability_check_failed");
+    }
+  }, [shellUpdate.state, t]);
+
+  const shellStatusLabel = useMemo(() => {
+    if (!shellUpdate.state) {
+      return t("settings.about.update_status_unknown");
+    }
+    switch (shellUpdate.state.status) {
+      case "idle":
+        return t("settings.about.update_status_idle");
+      case "checking":
+        return t("settings.about.update_status_checking");
+      case "downloading":
+        return t("settings.about.shell_update_downloading");
+      case "ready_to_restart":
+        return t("settings.about.shell_update_ready_to_restart");
+      case "installing":
+        return t("settings.about.shell_update_installing");
+      case "failed":
+        return t("settings.about.update_status_failed");
+    }
+  }, [shellUpdate.state, t]);
 
   const intervalOptions = useMemo(
     () =>
@@ -186,6 +228,28 @@ export function AboutSettings({
     setUpdateState(result.data);
   };
 
+  const handleShellCheck = async () => {
+    setLoading("shell-check");
+    const result = await shellUpdate.check();
+    setLoading(null);
+    if (!result) {
+      return;
+    }
+  };
+
+  const handleShellInstall = async () => {
+    if (shellUpdate.state?.status === "ready_to_restart") {
+      await shellUpdate.restartToApply();
+      return;
+    }
+    setLoading("shell-install");
+    const result = await shellUpdate.install();
+    setLoading(null);
+    if (!result) {
+      return;
+    }
+  };
+
   return (
     <div className="settings-section" data-testid="about-settings">
       {showProduct ? (
@@ -198,8 +262,16 @@ export function AboutSettings({
             <span className="settings-info-value">Coder Studio</span>
           </div>
           <div className="settings-info-row">
-            <span className="settings-info-label">{t("settings.about.current_version")}</span>
-            <span className="settings-info-value">v{serverInfo?.version ?? "0.0.0"}</span>
+            <span className="settings-info-label">{t("settings.about.app_version")}</span>
+            <span className="settings-info-value">
+              v{serverInfo?.appVersion ?? serverInfo?.version ?? "0.0.0"}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.runtime_version")}</span>
+            <span className="settings-info-value">
+              v{serverInfo?.runtimeVersion ?? serverInfo?.version ?? "0.0.0"}
+            </span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
@@ -296,6 +368,106 @@ export function AboutSettings({
               {loading === "install" || loading === "prepare"
                 ? t("settings.about.installing")
                 : t("settings.about.update_now")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {showUpdateStatus && shellUpdate.available ? (
+        <div className="settings-group">
+          <h3 className="settings-group-title">{t("settings.about.shell_update_group")}</h3>
+          <p className="settings-group-desc">{t("settings.about.shell_update_group_hint")}</p>
+
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.app_version")}</span>
+            <span className="settings-info-value">
+              v{shellUpdate.state?.currentVersion ?? serverInfo?.appVersion ?? "0.0.0"}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.latest_version")}</span>
+            <span className="settings-info-value">
+              {shellUpdate.state?.latestVersion ? `v${shellUpdate.state.latestVersion}` : "-"}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.last_checked")}</span>
+            <span className="settings-info-value">
+              {formatTime(
+                shellUpdate.state?.lastCheckedAt ?? null,
+                locale,
+                t("settings.about.availability_unknown")
+              )}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.availability")}</span>
+            <span className="settings-info-value">{shellAvailabilityLabel}</span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.update_status")}</span>
+            <span className="settings-info-value settings-info-value--with-dot">
+              <StatusDot
+                tone={
+                  shellUpdate.state?.status === "failed"
+                    ? "error"
+                    : shellUpdate.state?.status === "ready_to_restart"
+                      ? "success"
+                      : shellUpdate.state?.status === "checking" ||
+                          shellUpdate.state?.status === "downloading" ||
+                          shellUpdate.state?.status === "installing"
+                        ? "info"
+                        : "neutral"
+                }
+                size="sm"
+              />
+              <span>{shellStatusLabel}</span>
+            </span>
+          </div>
+
+          {shellUpdate.state?.errorSummary ? (
+            <Notice
+              tone="error"
+              title={t("settings.about.error_summary")}
+              message={shellUpdate.state.errorSummary}
+            />
+          ) : null}
+
+          {shellUpdate.state?.releaseNotes ? (
+            <Notice
+              tone="info"
+              title={t("settings.about.shell_update_release_notes")}
+              message={shellUpdate.state.releaseNotes}
+            />
+          ) : null}
+
+          <div className="settings-actions-row settings-actions-row--end">
+            <Button
+              onClick={() => {
+                void handleShellCheck();
+              }}
+              disabled={loading !== null || shellUpdate.state?.status === "checking"}
+            >
+              {loading === "shell-check"
+                ? t("settings.about.checking")
+                : t("settings.about.shell_update_check_now")}
+            </Button>
+            <Button
+              onClick={() => {
+                void handleShellInstall();
+              }}
+              disabled={
+                loading !== null ||
+                !shellUpdate.state ||
+                (shellUpdate.state.availability !== "update_available" &&
+                  shellUpdate.state.status !== "ready_to_restart")
+              }
+            >
+              {shellUpdate.state?.status === "ready_to_restart"
+                ? t("settings.about.shell_update_restart_now")
+                : loading === "shell-install"
+                  ? t("settings.about.shell_update_installing")
+                  : t("settings.about.shell_update_install_now")}
             </Button>
           </div>
         </div>

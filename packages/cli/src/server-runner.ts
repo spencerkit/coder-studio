@@ -18,8 +18,10 @@ export interface StartServerOptions {
 
 export const buildServerConfig = (overrides: ServerConfigInput = {}): ServerConfigInput => {
   const savedConfig = readCliConfig();
+  const cliVersion = getCliVersion(import.meta.url);
   const config: ServerConfigInput = {
-    appVersion: getCliVersion(import.meta.url),
+    appVersion: cliVersion,
+    runtimeVersion: cliVersion,
     update: getUpdateRuntimeInfo(import.meta.url),
     ...(savedConfig?.host !== undefined ? { host: savedConfig.host } : {}),
     ...(savedConfig?.port !== undefined && savedConfig.port > 0 ? { port: savedConfig.port } : {}),

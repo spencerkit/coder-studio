@@ -9,6 +9,72 @@ import { toastsAtom } from "../../notifications/atoms";
 import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
 import { AboutSettings } from "./about-settings";
 
+declare global {
+  interface Window {
+    coderStudioDesktop?: {
+      shellUpdate?: {
+        getState(): Promise<unknown>;
+        check(): Promise<unknown>;
+        install(): Promise<unknown>;
+        restartToApply(): Promise<void>;
+        subscribe(listener: (state: unknown) => void): () => void;
+      };
+    };
+  }
+}
+
+function createDesktopShellUpdateApi() {
+  const listeners = new Set<(state: unknown) => void>();
+  const api = {
+    getState: vi.fn(async () => ({
+      supported: true,
+      currentVersion: "1.2.3",
+      latestVersion: "1.2.4",
+      availability: "update_available",
+      status: "idle",
+      lastCheckedAt: 123,
+      errorSummary: null,
+      releaseNotes: "Bug fixes",
+    })),
+    check: vi.fn(async () => ({
+      supported: true,
+      currentVersion: "1.2.3",
+      latestVersion: "1.2.4",
+      availability: "update_available",
+      status: "idle",
+      lastCheckedAt: 123,
+      errorSummary: null,
+      releaseNotes: "Bug fixes",
+    })),
+    install: vi.fn(async () => ({
+      supported: true,
+      currentVersion: "1.2.3",
+      latestVersion: "1.2.4",
+      availability: "downloaded",
+      status: "ready_to_restart",
+      lastCheckedAt: 123,
+      errorSummary: null,
+      releaseNotes: "Bug fixes",
+    })),
+    restartToApply: vi.fn(async () => {}),
+    subscribe: vi.fn((listener: (state: unknown) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }),
+  };
+
+  return {
+    api,
+    emit(state: unknown) {
+      for (const listener of listeners) {
+        listener(state);
+      }
+    },
+  };
+}
+
 function renderAboutSettings({
   dispatch = vi.fn(),
   updateState,
@@ -32,6 +98,8 @@ function renderAboutSettings({
   store.set(wsClientAtom, { sendCommand: dispatch } as never);
   store.set(serverInfoAtom, {
     version: "0.4.0",
+    appVersion: "1.2.3",
+    runtimeVersion: "0.4.0",
     serverInstanceId: "server-123",
   });
   store.set(
@@ -74,13 +142,15 @@ function renderAboutSettings({
 describe("AboutSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete window.coderStudioDesktop;
   });
 
-  it("renders current and latest version info", () => {
+  it("renders app, runtime, and latest version info", () => {
     renderAboutSettings();
 
     expect(screen.getByTestId("about-settings")).toBeInTheDocument();
     expect(screen.getByText("Coder Studio")).toBeInTheDocument();
+    expect(screen.getByText("v1.2.3")).toBeInTheDocument();
     expect(screen.getByText("v0.4.0")).toBeInTheDocument();
     expect(screen.getByText("v0.5.0")).toBeInTheDocument();
   });
@@ -242,5 +312,47 @@ describe("AboutSettings", () => {
     expect(screen.getByRole("switch", { name: "自动检查更新" })).toBeInTheDocument();
     expect(screen.queryByText("产品名称")).not.toBeInTheDocument();
     expect(screen.queryByText("最新版本")).not.toBeInTheDocument();
+  });
+
+  it("shows desktop app update controls when the desktop bridge is available", async () => {
+    window.coderStudioDesktop = {
+      shellUpdate: createDesktopShellUpdateApi().api,
+    };
+
+    renderAboutSettings();
+
+    await waitFor(() => {
+      expect(screen.getByText("桌面应用更新")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "检查应用更新" })).toBeInTheDocument();
+  });
+
+  it("hides desktop app update controls outside desktop mode", () => {
+    renderAboutSettings();
+
+    expect(screen.queryByText("桌面应用更新")).not.toBeInTheDocument();
+  });
+
+  it("runs app update actions through the desktop bridge", async () => {
+    const desktop = createDesktopShellUpdateApi();
+    window.coderStudioDesktop = {
+      shellUpdate: desktop.api,
+    };
+
+    renderAboutSettings();
+
+    await waitFor(() => {
+      expect(screen.getByText("桌面应用更新")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "检查应用更新" }));
+    await waitFor(() => {
+      expect(desktop.api.check).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "下载应用更新" }));
+    await waitFor(() => {
+      expect(desktop.api.install).toHaveBeenCalledTimes(1);
+    });
   });
 });

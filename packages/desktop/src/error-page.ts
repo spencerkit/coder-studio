@@ -3,6 +3,8 @@ export interface DesktopErrorPageModel {
   detail: string;
   canRetry: boolean;
   logExcerpt?: string;
+  diagnosticLabel?: string;
+  diagnosticValue?: string;
 }
 
 function escapeHtml(value: string): string {
@@ -40,6 +42,14 @@ export function renderDesktopErrorPage(model: DesktopErrorPageModel): string {
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
       }
       p { color: rgba(245, 248, 251, 0.78); line-height: 1.5; }
+      .diagnostic {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(126, 231, 135, 0.08);
+        color: rgba(245, 248, 251, 0.88);
+        font: 12px/1.45 "IBM Plex Mono", monospace;
+      }
       pre {
         margin: 20px 0 0;
         padding: 14px;
@@ -65,6 +75,11 @@ export function renderDesktopErrorPage(model: DesktopErrorPageModel): string {
     <main>
       <h1>${escapeHtml(model.title)}</h1>
       <p>${escapeHtml(model.detail)}</p>
+      ${
+        model.diagnosticLabel && model.diagnosticValue
+          ? `<div class="diagnostic">${escapeHtml(model.diagnosticLabel)}: ${escapeHtml(model.diagnosticValue)}</div>`
+          : ""
+      }
       ${model.logExcerpt ? `<pre>${escapeHtml(model.logExcerpt)}</pre>` : ""}
       <div class="actions">
         ${

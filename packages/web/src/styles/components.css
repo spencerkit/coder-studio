@@ -5476,7 +5476,7 @@ body.is-dragging-pane {
   border: 0;
   border-radius: 2px;
   background: var(--component-mix-status-info-fg-16pct-transparent);
-  font-size: 7px;
+  font-size: var(--type-body-6-size);
   line-height: 1;
   font-weight: 600;
   letter-spacing: 0.12em;

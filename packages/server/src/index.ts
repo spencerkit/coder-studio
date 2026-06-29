@@ -7,4 +7,5 @@ export type { Server } from "./server.js";
 export { createServer } from "./server.js";
 export * from "./storage/index.js";
 export * from "./terminal/index.js";
+export * from "./update/desktop-update-adapter.js";
 export { type Broadcaster, WsHub } from "./ws/hub.js";

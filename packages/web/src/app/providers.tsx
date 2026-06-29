@@ -1231,12 +1231,16 @@ function storeServerMetadata(
   store: Store
 ): payload is {
   version: string;
+  appVersion?: string;
+  runtimeVersion?: string;
   serverInstanceId: string;
   authEnabled?: boolean;
   isWriter?: boolean;
 } {
   const data = payload as {
     version?: unknown;
+    appVersion?: unknown;
+    runtimeVersion?: unknown;
     serverInstanceId?: unknown;
     authEnabled?: unknown;
     isWriter?: unknown;
@@ -1248,6 +1252,8 @@ function storeServerMetadata(
 
   store.set(serverInfoAtom, {
     version: data.version,
+    appVersion: typeof data.appVersion === "string" ? data.appVersion : data.version,
+    runtimeVersion: typeof data.runtimeVersion === "string" ? data.runtimeVersion : data.version,
     serverInstanceId: data.serverInstanceId,
     authEnabled: typeof data.authEnabled === "boolean" ? data.authEnabled : undefined,
   });
@@ -1279,6 +1285,8 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
       message?: string;
       authEnabled?: boolean;
       version?: string;
+      appVersion?: string;
+      runtimeVersion?: string;
       serverInstanceId?: string;
       isWriter?: boolean;
     };

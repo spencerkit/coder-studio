@@ -49,6 +49,7 @@ describe("server-runner", () => {
 
     expect(buildServerConfig()).toMatchObject({
       appVersion: getCliVersion(import.meta.url),
+      runtimeVersion: getCliVersion(import.meta.url),
       update: getUpdateRuntimeInfo(import.meta.url),
       webRoot: "/tmp/web",
     });
@@ -66,6 +67,7 @@ describe("server-runner", () => {
 
     expect(buildServerConfig()).toEqual({
       appVersion: getCliVersion(import.meta.url),
+      runtimeVersion: getCliVersion(import.meta.url),
       update: getUpdateRuntimeInfo(import.meta.url),
       host: "127.0.0.1",
       stateDir: "/tmp/cs-data",
@@ -95,6 +97,7 @@ describe("server-runner", () => {
 
     expect(createServer).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
+      runtimeVersion: getCliVersion(import.meta.url),
       update: getUpdateRuntimeInfo(import.meta.url),
       host: "127.0.0.1",
       port: 4173,
@@ -136,6 +139,7 @@ describe("server-runner", () => {
 
     expect(createServer).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
+      runtimeVersion: getCliVersion(import.meta.url),
       update: getUpdateRuntimeInfo(import.meta.url),
       host: "0.0.0.0",
       port: 0,
@@ -160,6 +164,7 @@ describe("server-runner", () => {
 
     expect(parseServerConfig).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
+      runtimeVersion: getCliVersion(import.meta.url),
       update: getUpdateRuntimeInfo(import.meta.url),
       stateDir: "/tmp/cs-data",
       webRoot: "/tmp/web",

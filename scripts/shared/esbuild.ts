@@ -10,6 +10,7 @@ import {
   CORE_DIR,
   PACKAGES_DIR,
   PROVIDERS_DIR,
+  RUNTIME_DIR,
   SERVER_DIR,
   UTILS_DIR,
 } from "./paths.js";
@@ -94,6 +95,7 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
 }
 
 export async function createWslRuntimeEntryBuildOptions(): Promise<BuildOptions> {
+  const runtimeExternal = await getExternalDeps(RUNTIME_DIR);
   const baseOptions = await createCliBuildOptions("esm");
   return {
     ...baseOptions,
@@ -107,6 +109,16 @@ export async function createWslRuntimeEntryBuildOptions(): Promise<BuildOptions>
     banner: {
       js: "// @spencer-kit/coder-studio - WSL runtime entry",
     },
+    alias: {
+      ...baseOptions.alias,
+      "@coder-studio/runtime": resolve(RUNTIME_DIR, "src/index.ts"),
+    },
+    external: Array.from(
+      new Set([
+        ...(Array.isArray(baseOptions.external) ? baseOptions.external : []),
+        ...runtimeExternal.filter((dep) => !dep.startsWith("@coder-studio/")),
+      ])
+    ),
   };
 }
 

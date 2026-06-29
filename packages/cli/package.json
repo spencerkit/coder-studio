@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@coder-studio/core": "workspace:*",
+    "@coder-studio/runtime": "workspace:*",
     "@coder-studio/server": "workspace:*",
     "@types/node": "^25.6.0",
     "@types/ws": "^8.18.1",

@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn as spawnChild } from "node:child_process";
+import { type Serializable, spawn as spawnChild } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -13,7 +13,9 @@ export { resolveEmbeddedRuntimePaths } from "./runtime-paths.js";
 
 export interface SidecarPaths {
   nodeExecutable: string;
-  desktopServerEntry: string;
+  runtimeEntry: string;
+  runtimeVersion?: string;
+  webRoot: string;
   runtimeJsonPath: string;
 }
 
@@ -28,19 +30,41 @@ export interface StartDesktopSidecarInput {
   hostOverride?: string;
   portOverride?: number;
   password?: string;
+  appVersion?: string;
 }
 
 export interface StartedDesktopSidecar extends EventEmitter {
-  child: ChildProcess;
+  child: ChildProcessLike;
   browserUrl: string;
   runtime: RuntimeConfig;
   getLogExcerpt(): string;
+  send(message: unknown): void;
   stop(timeoutMs?: number): Promise<void>;
 }
 
 interface SidecarStartupError extends Error {
   logExcerpt?: string;
 }
+
+interface ChildProcessLike extends EventEmitter {
+  pid?: number;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  stdout?: EventEmitter | null;
+  stderr?: EventEmitter | null;
+  kill(signal?: NodeJS.Signals | number): boolean;
+  send?(message: Serializable): boolean;
+}
+
+type SpawnSidecarProcess = (
+  command: string,
+  args: string[],
+  options: {
+    env: NodeJS.ProcessEnv;
+    stdio: ["ignore", "pipe", "pipe", "ipc"];
+    windowsHide: boolean;
+  }
+) => ChildProcessLike;
 
 function toBrowserUrl(runtime: RuntimeConfig): string {
   const host =
@@ -58,16 +82,27 @@ export async function waitForHealthyRuntime(input: {
   now?: () => number;
 }): Promise<HealthyRuntime> {
   const now = input.now ?? (() => Date.now());
+  let lastHealthCheckError: Error | null = null;
 
   while (now() - input.startedAt <= input.timeoutMs) {
     const runtime = input.readRuntimeConfig();
     if (runtime && (input.expectedPid === undefined || runtime.pid === input.expectedPid)) {
       const browserUrl = toBrowserUrl(runtime);
-      await input.checkUrl(browserUrl);
-      return { browserUrl, runtime };
+      try {
+        await input.checkUrl(browserUrl);
+        return { browserUrl, runtime };
+      } catch (error) {
+        lastHealthCheckError = error instanceof Error ? error : new Error(String(error));
+      }
     }
 
     await input.sleep(100);
+  }
+
+  if (lastHealthCheckError) {
+    throw new Error(
+      `Timed out waiting for the desktop sidecar runtime: ${lastHealthCheckError.message}`
+    );
   }
 
   throw new Error("Timed out waiting for the desktop sidecar runtime");
@@ -76,7 +111,7 @@ export async function waitForHealthyRuntime(input: {
 export async function startDesktopSidecar(
   input: StartDesktopSidecarInput,
   deps: {
-    spawn?: typeof spawnChild;
+    spawn?: SpawnSidecarProcess;
     waitForHealthyRuntime?: typeof waitForHealthyRuntime;
   } = {}
 ): Promise<StartedDesktopSidecar> {
@@ -98,17 +133,22 @@ export async function startDesktopSidecar(
   };
   const getLogExcerpt = (): string => logChunks.join("\n");
 
-  const spawn = deps.spawn ?? spawnChild;
-  const child = spawn(input.paths.nodeExecutable, [input.paths.desktopServerEntry], {
+  const spawn = deps.spawn ?? (spawnChild as unknown as SpawnSidecarProcess);
+  const child = spawn(input.paths.nodeExecutable, [input.paths.runtimeEntry], {
     env: {
       ...process.env,
       CODER_STUDIO_DESKTOP_PORT: String(input.portOverride ?? 0),
       CODER_STUDIO_DESKTOP_STATE_DIR: input.stateDir,
       CODER_STUDIO_DESKTOP_RUNTIME_JSON_PATH: input.paths.runtimeJsonPath,
+      CODER_STUDIO_DESKTOP_WEB_ROOT: input.paths.webRoot,
       ...(input.hostOverride ? { CODER_STUDIO_DESKTOP_HOST: input.hostOverride } : {}),
       ...(input.password ? { CODER_STUDIO_DESKTOP_PASSWORD: input.password } : {}),
+      ...(input.appVersion ? { CODER_STUDIO_DESKTOP_APP_VERSION: input.appVersion } : {}),
+      ...(input.paths.runtimeVersion
+        ? { CODER_STUDIO_DESKTOP_RUNTIME_VERSION: input.paths.runtimeVersion }
+        : {}),
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
     windowsHide: true,
   });
 
@@ -152,8 +192,12 @@ export async function startDesktopSidecar(
     ]);
   } catch (error) {
     const failure =
-      error instanceof Error ? (error as SidecarStartupError) : new Error(String(error));
-    failure.logExcerpt ??= getLogExcerpt();
+      error instanceof Error
+        ? (error as SidecarStartupError)
+        : (new Error(String(error)) as SidecarStartupError);
+    if (!failure.logExcerpt) {
+      failure.logExcerpt = getLogExcerpt();
+    }
     throw failure;
   }
 
@@ -162,6 +206,9 @@ export async function startDesktopSidecar(
   handle.browserUrl = healthy.browserUrl;
   handle.runtime = healthy.runtime;
   handle.getLogExcerpt = getLogExcerpt;
+  handle.send = (message: unknown) => {
+    child.send?.(message as Serializable);
+  };
   handle.stop = async (timeoutMs = 10_000) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       return;
@@ -184,6 +231,9 @@ export async function startDesktopSidecar(
 
   child.once("exit", (code, signal) => {
     handle.emit("exit", { code, signal });
+  });
+  child.on("message", (message) => {
+    handle.emit("message", message);
   });
 
   return handle;

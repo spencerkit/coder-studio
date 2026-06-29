@@ -16,6 +16,7 @@ export const PACKAGES_DIR = resolve(ROOT_DIR, "packages");
 export const CORE_DIR = resolve(PACKAGES_DIR, "core");
 export const PROVIDERS_DIR = resolve(PACKAGES_DIR, "providers");
 export const SERVER_DIR = resolve(PACKAGES_DIR, "server");
+export const RUNTIME_DIR = resolve(PACKAGES_DIR, "runtime");
 export const UTILS_DIR = resolve(PACKAGES_DIR, "utils");
 export const WEB_DIR = resolve(PACKAGES_DIR, "web");
 export const CLI_DIR = resolve(PACKAGES_DIR, "cli");

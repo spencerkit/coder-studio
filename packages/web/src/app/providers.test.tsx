@@ -74,6 +74,8 @@ describe("routeEventToAtom", () => {
 
     expect(store.get(serverInfoAtom)).toEqual({
       version: "0.3.0",
+      appVersion: "0.3.0",
+      runtimeVersion: "0.3.0",
       serverInstanceId: "server-123",
       authEnabled: false,
     });

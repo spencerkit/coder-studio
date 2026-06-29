@@ -120,6 +120,8 @@ export class WsHub implements Broadcaster {
       authEnabled: this.deps.config.auth.enabled,
       binaryTerminalTransport: true,
       version: this.deps.config.appVersion ?? "0.0.0",
+      appVersion: this.deps.config.appVersion ?? this.deps.config.runtimeVersion ?? "0.0.0",
+      runtimeVersion: this.deps.config.runtimeVersion ?? this.deps.config.appVersion ?? "0.0.0",
       serverInstanceId: `server-${process.pid}`,
       isWriter: false,
     });

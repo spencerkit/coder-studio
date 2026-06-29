@@ -1,3 +1,3 @@
-import { runWslRuntimeEntrypoint } from "@coder-studio/server";
+import { runWslRuntimeEntrypoint } from "@coder-studio/runtime";
 
 void runWslRuntimeEntrypoint();

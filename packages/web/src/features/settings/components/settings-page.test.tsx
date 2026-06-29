@@ -588,6 +588,8 @@ describe("SettingsPage", () => {
     const store = createConnectedStore(vi.fn().mockResolvedValue({}));
     store.set(serverInfoAtom, {
       version: "0.3.0",
+      appVersion: "1.2.3",
+      runtimeVersion: "0.3.0",
       serverInstanceId: "server-123",
     });
 

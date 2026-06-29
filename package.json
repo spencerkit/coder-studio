@@ -6,6 +6,7 @@
     "dev:web": "tsx scripts/dev-web.ts",
     "dev:server": "tsx scripts/dev-server.ts",
     "build": "tsx scripts/build.ts",
+    "build:runtime": "tsx scripts/build-runtime.ts",
     "build:web": "tsx scripts/build-web.ts",
     "build:cli": "tsx scripts/build-cli.ts",
     "build:desktop": "tsx scripts/build-desktop.ts",

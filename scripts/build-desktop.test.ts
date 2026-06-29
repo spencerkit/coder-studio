@@ -5,76 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildDesktopPackage,
   createDesktopBuildOptions,
-  prepareDesktopDeployWorkspace,
+  createDesktopRuntimeSeedDir,
   prepareDesktopOutputDirs,
   resolveEmbeddedNodeOutputName,
   shouldPackageDesktop,
-  stageCliRuntimeBundle,
 } from "./build-desktop.js";
 import { CORE_DIR, DESKTOP_DIR } from "./shared/index.js";
-
-async function createCliDeployFixture(): Promise<{ rootDir: string; cliDir: string }> {
-  const rootDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-fixture-"));
-  const cliDir = join(rootDir, "packages", "cli");
-
-  await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
-  await writeFile(
-    join(rootDir, "package.json"),
-    JSON.stringify({ name: "fixture-root", private: true, packageManager: "pnpm@10.17.1" }, null, 2)
-  );
-  await writeFile(join(rootDir, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
-  await writeFile(
-    join(cliDir, "package.json"),
-    JSON.stringify(
-      {
-        name: "@spencer-kit/coder-studio",
-        version: "0.5.4",
-        private: true,
-        type: "module",
-        main: "./src/index.ts",
-        bin: {
-          "coder-studio": "./src/bin.ts",
-        },
-        exports: {
-          ".": {
-            import: "./src/index.ts",
-          },
-        },
-        files: ["dist", "src", "README.md", "CHANGELOG.md", "package.json"],
-        publishConfig: {
-          main: "./dist/esm/index.mjs",
-          bin: {
-            "coder-studio": "./dist/bin.js",
-          },
-          exports: {
-            ".": {
-              import: "./dist/esm/index.mjs",
-            },
-          },
-        },
-        scripts: {
-          build: "tsx ../../scripts/build-cli.ts",
-        },
-        dependencies: {
-          zod: "^4.4.2",
-        },
-        devDependencies: {
-          "@coder-studio/core": "workspace:*",
-        },
-      },
-      null,
-      2
-    )
-  );
-  await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
-  await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export const runtime = true;\n");
-  await writeFile(
-    join(cliDir, "dist", "esm", "desktop-server.mjs"),
-    "export const desktop = true;\n"
-  );
-
-  return { rootDir, cliDir };
-}
 
 describe("build-desktop", () => {
   it("cleans stale desktop output before packaging", async () => {
@@ -112,7 +48,7 @@ describe("build-desktop", () => {
     });
   });
 
-  it("invokes electron-builder with publish disabled", async () => {
+  it("invokes electron-builder using the desktop package publish config", async () => {
     const run = vi.fn(async () => {});
 
     await buildDesktopPackage({
@@ -122,130 +58,31 @@ describe("build-desktop", () => {
 
     expect(run).toHaveBeenCalledWith(
       "pnpm",
-      ["exec", "electron-builder", "--projectDir", "/repo/packages/desktop", "--publish", "never"],
+      ["exec", "electron-builder", "--projectDir", "/repo/packages/desktop"],
       expect.objectContaining({ cwd: "/repo/packages/desktop" })
     );
   });
 
-  it("prepares a minimal deploy workspace with built CLI runtime assets", async () => {
-    const { rootDir, cliDir } = await createCliDeployFixture();
-    const tempWorkspaceDir = join(rootDir, "desktop-runtime-workspace");
+  it("creates a local desktop runtime seed directory when provided a built runtime bundle", async () => {
+    const runtimeSourceDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-source-"));
+    const runtimeSeedDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-seed-"));
+    await writeFile(join(runtimeSourceDir, "runtime-manifest.json"), "{}\n");
+    await mkdir(join(runtimeSourceDir, "dist", "web"), { recursive: true });
+    await writeFile(join(runtimeSourceDir, "dist", "web", "index.html"), "<html></html>\n");
 
-    await prepareDesktopDeployWorkspace({
-      rootDir,
-      cliDir,
-      tempWorkspaceDir,
+    await createDesktopRuntimeSeedDir({
+      runtimeSourceDir,
+      runtimeSeedDir,
     });
 
-    await expect(readFile(join(tempWorkspaceDir, "pnpm-workspace.yaml"), "utf-8")).resolves.toBe(
-      "packages:\n  - packages/cli\n"
+    await expect(readFile(join(runtimeSeedDir, "runtime-manifest.json"), "utf-8")).resolves.toBe(
+      "{}\n"
     );
-
-    await expect(readFile(join(tempWorkspaceDir, "package.json"), "utf-8")).resolves.toBe(
-      `${JSON.stringify(
-        {
-          name: "coder-studio-desktop-runtime-workspace",
-          private: true,
-          packageManager: "pnpm@10.17.1",
-        },
-        null,
-        2
-      )}\n`
-    );
-
     await expect(
-      readFile(
-        join(tempWorkspaceDir, "packages", "cli", "dist", "esm", "desktop-server.mjs"),
-        "utf-8"
-      )
-    ).resolves.toBe("export const desktop = true;\n");
-
-    await expect(
-      readFile(join(tempWorkspaceDir, "packages", "cli", "package.json"), "utf-8").then(
-        (value) =>
-          JSON.parse(value) as {
-            main?: string;
-            bin?: Record<string, string>;
-            exports?: Record<string, { import?: string }>;
-            files?: string[];
-            publishConfig?: unknown;
-            scripts?: unknown;
-            devDependencies?: unknown;
-          }
-      )
-    ).resolves.toEqual({
-      name: "@spencer-kit/coder-studio",
-      version: "0.5.4",
-      private: true,
-      type: "module",
-      main: "./dist/esm/index.mjs",
-      bin: {
-        "coder-studio": "./dist/bin.js",
-      },
-      exports: {
-        ".": {
-          import: "./dist/esm/index.mjs",
-        },
-      },
-      files: ["dist", "package.json"],
-      dependencies: {
-        zod: "^4.4.2",
-      },
-    });
-  });
-
-  it("deploys the CLI runtime from a temporary offline workspace", async () => {
-    const run = vi.fn(async () => {});
-    const { rootDir, cliDir } = await createCliDeployFixture();
-    const tempWorkspaceDir = join(rootDir, "desktop-runtime-workspace");
-
-    await stageCliRuntimeBundle({
-      exec: run,
-      rootDir,
-      cliDir,
-      runtimeCliDir: "/repo/packages/desktop/dist/runtime/cli",
-      tempWorkspaceDir,
-    });
-
-    expect(run).toHaveBeenCalledWith(
-      "pnpm",
-      [
-        "--filter",
-        "@spencer-kit/coder-studio",
-        "deploy",
-        "--legacy",
-        "--prod",
-        "--offline",
-        "/repo/packages/desktop/dist/runtime/cli",
-      ],
-      expect.objectContaining({ cwd: tempWorkspaceDir })
-    );
-  });
-
-  it("removes the temporary deploy workspace after staging completes", async () => {
-    const { rootDir, cliDir } = await createCliDeployFixture();
-    const tempWorkspaceDir = join(rootDir, "desktop-runtime-workspace");
-    const runtimeCliDir = join(rootDir, "desktop-runtime");
-
-    const run = vi.fn(async (_command: string, _args: string[], options?: { cwd?: string }) => {
-      if (options?.cwd !== tempWorkspaceDir) {
-        throw new Error(`unexpected cwd: ${options?.cwd}`);
-      }
-
-      await mkdir(runtimeCliDir, { recursive: true });
-      await writeFile(join(runtimeCliDir, "package.json"), "{}\n");
-    });
-
-    await stageCliRuntimeBundle({
-      exec: run,
-      rootDir,
-      cliDir,
-      runtimeCliDir,
-      tempWorkspaceDir,
-    });
-
-    await expect(access(tempWorkspaceDir)).rejects.toThrow();
-    await rm(rootDir, { recursive: true, force: true });
+      readFile(join(runtimeSeedDir, "dist", "web", "index.html"), "utf-8")
+    ).resolves.toBe("<html></html>\n");
+    await rm(runtimeSourceDir, { recursive: true, force: true });
+    await rm(runtimeSeedDir, { recursive: true, force: true });
   });
 
   it("skips installer packaging on unsupported host platforms", () => {

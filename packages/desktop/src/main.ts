@@ -1,39 +1,42 @@
-import { fileURLToPath } from "node:url";
-import { app, ipcMain } from "electron";
-import { DesktopAppController, showDesktopErrorPage } from "./app-controller.js";
-import { resolveDesktopLaunchConfig } from "./desktop-config.js";
-import { createSidecarPaths, startDesktopSidecar } from "./sidecar-manager.js";
-import { createMainWindow, loadDesktopUrl } from "./window.js";
+import { app, BrowserWindow, ipcMain } from "electron";
+import { autoUpdater } from "electron-updater";
+import type { DesktopAppController } from "./app-controller.js";
+import { createDesktopAppController } from "./desktop-startup.js";
+import { registerShellUpdateIpc } from "./shell-update-ipc.js";
+import { ShellUpdateService } from "./shell-update-service.js";
 
 let controller: DesktopAppController | null = null;
 let quitting = false;
+let shellUpdateInstallInProgress = false;
 
 async function bootstrap(): Promise<void> {
-  const preloadPath = fileURLToPath(new URL("./preload.mjs", import.meta.url));
-  const desktopConfig = resolveDesktopLaunchConfig({
-    userDataDir: app.getPath("userData"),
+  const shellUpdateService = new ShellUpdateService({
+    appVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    updater: autoUpdater,
   });
 
-  controller = new DesktopAppController({
-    createWindow: () => createMainWindow(preloadPath),
-    startSidecar: async () => {
-      const paths = createSidecarPaths({
-        isPackaged: app.isPackaged,
-        resourcesPath: process.resourcesPath,
-        appPath: app.getAppPath(),
-        userDataDir: app.getPath("userData"),
-      });
-
-      return startDesktopSidecar({
-        paths,
-        stateDir: desktopConfig.stateDir,
-        hostOverride: desktopConfig.hostOverride,
-        portOverride: desktopConfig.portOverride,
-        password: desktopConfig.password,
-      });
+  registerShellUpdateIpc({
+    ipcMain,
+    getWindows: () => BrowserWindow.getAllWindows(),
+    shellUpdateService,
+    beforeRestartToApply: async () => {
+      await controller?.shutdown();
+      shellUpdateInstallInProgress = true;
+      quitting = true;
     },
-    loadDesktopUrl,
-    showErrorPage: showDesktopErrorPage,
+  });
+
+  controller = await createDesktopAppController({
+    app: {
+      isPackaged: app.isPackaged,
+      getAppPath: () => app.getAppPath(),
+      getPath: (name) => app.getPath(name as Parameters<typeof app.getPath>[0]),
+      getVersion: () => app.getVersion(),
+    },
+    importMetaUrl: import.meta.url,
+    resourcesPath: process.resourcesPath,
   });
 
   await controller.launch();
@@ -56,6 +59,9 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("before-quit", (event) => {
+    if (shellUpdateInstallInProgress) {
+      return;
+    }
     if (quitting) {
       return;
     }

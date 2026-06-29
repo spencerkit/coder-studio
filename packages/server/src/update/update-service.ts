@@ -12,6 +12,11 @@ import {
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { UpdateStateRepo } from "../storage/repositories/update-state-repo.js";
 import type { Broadcaster } from "../ws/hub.js";
+import type {
+  DesktopUpdateAdapter,
+  DesktopUpdateCheckForUpdatesResult,
+  DesktopUpdateStatePatch,
+} from "./desktop-update-adapter.js";
 
 export interface UpdateRuntimeConfig {
   supported: boolean;
@@ -37,6 +42,7 @@ export interface UpdateServiceDeps {
   countActiveSupervisors: () => number;
   runLatestVersionLookup?: (packageName: string) => Promise<string>;
   now?: () => number;
+  desktopUpdateAdapter?: DesktopUpdateAdapter;
   spawnDetachedWorker?: (input: {
     workerEntryPath: string;
     stateFilePath: string;
@@ -102,6 +108,7 @@ export class UpdateService {
   private readonly updateWorkerLogFilePath: string;
   private readonly runLatestVersionLookup: (packageName: string) => Promise<string>;
   private readonly spawnDetachedWorkerImpl: UpdateServiceDeps["spawnDetachedWorker"];
+  private readonly desktopUpdateAdapter?: DesktopUpdateAdapter;
   private scheduleTimer: NodeJS.Timeout | null = null;
   private inFlightCheck: Promise<UpdateStateView> | null = null;
 
@@ -125,6 +132,12 @@ export class UpdateService {
         return data.latest.trim();
       });
     this.spawnDetachedWorkerImpl = deps.spawnDetachedWorker;
+    this.desktopUpdateAdapter = deps.desktopUpdateAdapter;
+    this.desktopUpdateAdapter?.bindStateController?.({
+      applyPatch: (patch) => {
+        this.applyDesktopStatePatch(patch);
+      },
+    });
   }
 
   start(): void {
@@ -233,7 +246,7 @@ export class UpdateService {
       );
     }
     if (this.runtime.installKind === "desktop_managed") {
-      return this.persistAndBroadcast({
+      const installingState = this.persistAndBroadcast({
         latestVersion: targetVersion,
         targetVersion,
         updateStatus: "installing",
@@ -243,6 +256,29 @@ export class UpdateService {
         manualCommand: null,
         errorSummary: null,
       });
+
+      if (!this.desktopUpdateAdapter) {
+        return this.persistAndBroadcast({
+          updateStatus: "failed",
+          finishedAt: this.now(),
+          errorSummary: "Desktop update bridge is unavailable",
+        });
+      }
+
+      try {
+        await this.desktopUpdateAdapter.startInstall({
+          targetVersion,
+          currentVersion: this.runtime.currentVersion,
+        });
+        return installingState;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return this.persistAndBroadcast({
+          updateStatus: "failed",
+          finishedAt: this.now(),
+          errorSummary: message,
+        });
+      }
     }
     if (!this.runtime.workerEntryPath) {
       const manualState = this.persistAndBroadcast({
@@ -430,11 +466,9 @@ export class UpdateService {
 
   private async runCheckForUpdates(): Promise<UpdateStateView> {
     try {
-      const latestVersion = await this.withCheckTimeout(
-        this.runLatestVersionLookup(this.runtime.packageName)
-      );
+      const latestVersion = await this.resolveLatestVersion();
       const availability =
-        compareVersions(latestVersion, this.runtime.currentVersion) > 0
+        latestVersion && compareVersions(latestVersion, this.runtime.currentVersion) > 0
           ? "update_available"
           : "up_to_date";
 
@@ -496,5 +530,37 @@ export class UpdateService {
     const view = this.composeStateView(snapshot, { includeInFlightCheck });
     this.deps.broadcaster.broadcast("update.state.changed", view);
     return view;
+  }
+
+  private applyDesktopStatePatch(patch: DesktopUpdateStatePatch): UpdateStateView {
+    return this.persistAndBroadcast(patch);
+  }
+
+  private async resolveLatestVersion(): Promise<string | null> {
+    if (this.runtime.installKind !== "desktop_managed") {
+      return this.withCheckTimeout(this.runLatestVersionLookup(this.runtime.packageName));
+    }
+
+    if (!this.desktopUpdateAdapter?.checkForUpdates) {
+      throw new Error("Desktop update bridge is unavailable");
+    }
+
+    const result = await this.withCheckTimeout(
+      this.desktopUpdateAdapter.checkForUpdates({
+        currentVersion: this.runtime.currentVersion,
+      })
+    );
+    return this.normalizeDesktopCheckResult(result).latestVersion;
+  }
+
+  private normalizeDesktopCheckResult(
+    result: DesktopUpdateCheckForUpdatesResult
+  ): DesktopUpdateCheckForUpdatesResult {
+    return {
+      latestVersion:
+        typeof result.latestVersion === "string" && result.latestVersion.trim().length > 0
+          ? result.latestVersion.trim()
+          : null,
+    };
   }
 }

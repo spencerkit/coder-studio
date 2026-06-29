@@ -54,6 +54,8 @@ export const reconnectAttemptCountAtom = atom<number>(0);
  */
 export interface ServerInfo {
   version: string;
+  appVersion: string;
+  runtimeVersion: string;
   serverInstanceId: string;
   authEnabled?: boolean;
 }

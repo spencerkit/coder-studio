@@ -25,6 +25,7 @@ export interface ServerConfig {
   logLevel: "trace" | "debug" | "info" | "warn" | "error";
   webRoot?: string;
   appVersion?: string;
+  runtimeVersion?: string;
   auth: {
     enabled: boolean;
     password?: string;
@@ -204,8 +205,16 @@ export function parseServerConfig(overrides?: ServerConfigInput): ServerConfig {
     uploadsDir,
     logLevel: overrides?.logLevel ?? parseLogLevel(process.env.LOG_LEVEL) ?? "info",
     webRoot: overrides?.webRoot,
+    runtimeVersion:
+      overrides?.runtimeVersion ??
+      process.env.CODER_STUDIO_RUNTIME_VERSION ??
+      resolveDefaultAppVersion(),
     appVersion:
-      overrides?.appVersion ?? process.env.CODER_STUDIO_APP_VERSION ?? resolveDefaultAppVersion(),
+      overrides?.appVersion ??
+      process.env.CODER_STUDIO_APP_VERSION ??
+      overrides?.runtimeVersion ??
+      process.env.CODER_STUDIO_RUNTIME_VERSION ??
+      resolveDefaultAppVersion(),
     auth: overrides?.auth || {
       enabled: !noAuth && !!password,
       password,

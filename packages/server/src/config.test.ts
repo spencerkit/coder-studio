@@ -38,10 +38,12 @@ describe("parseServerConfig", () => {
 
   it("defaults appVersion to the CLI package version", () => {
     delete process.env.CODER_STUDIO_APP_VERSION;
+    delete process.env.CODER_STUDIO_RUNTIME_VERSION;
 
     const config = parseServerConfig();
 
     expect(config.appVersion).toBe(readCliPackageVersion());
+    expect(config.runtimeVersion).toBe(readCliPackageVersion());
   });
 
   it("can resolve the CLI package version when imported via native ESM", () => {
@@ -69,6 +71,14 @@ describe("parseServerConfig", () => {
     const config = parseServerConfig({ appVersion: "9.9.9" });
 
     expect(config.appVersion).toBe("9.9.9");
+    expect(config.runtimeVersion).toBe(readCliPackageVersion());
+  });
+
+  it("prefers explicit runtimeVersion override independently", () => {
+    const config = parseServerConfig({ appVersion: "9.9.9-app", runtimeVersion: "9.9.9-runtime" });
+
+    expect(config.appVersion).toBe("9.9.9-app");
+    expect(config.runtimeVersion).toBe("9.9.9-runtime");
   });
 
   it("provides unsupported update runtime defaults", () => {

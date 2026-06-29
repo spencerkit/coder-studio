@@ -40,9 +40,10 @@ type PongHandler = (() => void) | undefined;
 
 type ResultMessage = Extract<ServerToClient, { kind: "result" }>;
 
-const TEST_CONFIG: Pick<ServerConfig, "auth" | "appVersion"> = {
+const TEST_CONFIG: Pick<ServerConfig, "auth" | "appVersion" | "runtimeVersion"> = {
   auth: { enabled: false },
-  appVersion: "0.3.0",
+  appVersion: "1.2.3",
+  runtimeVersion: "0.3.0",
 };
 
 const createMockSocket = (): MockSocket => ({
@@ -176,7 +177,7 @@ describe("WsHub", () => {
     expect(mockCommandContext.autoFetch.unregisterViewer).toHaveBeenCalledWith(clientId);
   });
 
-  it("sends connection metadata including the CLI version on connect", () => {
+  it("sends connection metadata including app and runtime versions on connect", () => {
     const socket = createMockSocket();
     hub.handleConnection(socket as never, createMockRequest());
 
@@ -186,7 +187,9 @@ describe("WsHub", () => {
       topic: "connection.status",
       data: expect.objectContaining({
         status: "connected",
-        version: "0.3.0",
+        version: "1.2.3",
+        appVersion: "1.2.3",
+        runtimeVersion: "0.3.0",
         serverInstanceId: expect.stringMatching(/^server-\d+$/),
         isWriter: false,
       }),

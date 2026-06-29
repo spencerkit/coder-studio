@@ -43,12 +43,34 @@ export function run(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, createSpawnOptions({ command, options }));
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+
+    if (options.stdio === "pipe") {
+      child.stdout?.setEncoding("utf8");
+      child.stdout?.on("data", (chunk) => {
+        stdoutChunks.push(chunk);
+      });
+      child.stderr?.setEncoding("utf8");
+      child.stderr?.on("data", (chunk) => {
+        stderrChunks.push(chunk);
+      });
+    }
 
     child.on("close", (code) => {
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`Process exited with code ${code}`));
+        const stdout = stdoutChunks.join("").trim();
+        const stderr = stderrChunks.join("").trim();
+        const detail = [stderr, stdout].filter((part) => part.length > 0).join("\n");
+        reject(
+          new Error(
+            detail.length > 0
+              ? `Process exited with code ${code}: ${detail}`
+              : `Process exited with code ${code}`
+          )
+        );
       }
     });
 

@@ -60,6 +60,7 @@ import { MemoryRepo } from "./storage/repositories/memory-repo.js";
 import { SettingsRepo } from "./storage/repositories/settings-repo.js";
 import { UpdateStateRepo } from "./storage/repositories/update-state-repo.js";
 import { WorkspaceRepo } from "./storage/repositories/workspace-repo.js";
+import type { DesktopUpdateAdapter } from "./update/desktop-update-adapter.js";
 import { UpdateService } from "./update/update-service.js";
 import { deleteWorkspaceUploads, runStartupGc } from "./uploads/cleanup.js";
 import { STARTUP_GC_DELAY_MS } from "./uploads/constants.js";
@@ -127,6 +128,7 @@ export interface Server {
 export interface ServerRuntimeOptions {
   writeRuntimeConfig?: boolean;
   runtimeJsonPath?: string;
+  desktopUpdateAdapter?: DesktopUpdateAdapter;
 }
 
 export async function createServer(
@@ -180,7 +182,10 @@ export async function createServer(
     });
     const updateStateRepo = new UpdateStateRepo({
       filePath: join(stateRoot, "state", "update-state.json"),
-      currentVersion: config.appVersion ?? "0.0.0",
+      currentVersion:
+        config.update.installKind === "desktop_managed"
+          ? (config.runtimeVersion ?? config.appVersion ?? "0.0.0")
+          : (config.runtimeVersion ?? config.appVersion ?? "0.0.0"),
     });
     const autoFetch = new AutoFetchScheduler({
       workspaceMgr: { get: (workspaceId) => workspaceMgr.get(workspaceId) },
@@ -579,7 +584,7 @@ export async function createServer(
       broadcaster: wsHub,
       runtime: {
         ...config.update,
-        currentVersion: config.appVersion ?? "0.0.0",
+        currentVersion: config.runtimeVersion ?? config.appVersion ?? "0.0.0",
       },
       updateWorkerLogFilePath: join(stateRoot, "logs", "update-worker.log"),
       countRunningTerminals: () => terminalMgr.getAll().filter((terminal) => terminal.alive).length,
@@ -588,6 +593,7 @@ export async function createServer(
           .getAll()
           .filter((session) => session.state === "starting" || session.state === "running").length,
       countActiveSupervisors: () => supervisorMgr?.countActive() ?? 0,
+      desktopUpdateAdapter: configOverrides?.desktopUpdateAdapter,
     });
     monitoringService = new MonitoringService({
       broadcaster: wsHub,
