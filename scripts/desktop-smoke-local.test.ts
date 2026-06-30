@@ -1,12 +1,25 @@
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  launchDesktopSmokeLocal,
+  parseDesktopSmokeLocalArgs,
   prepareDesktopLocalSmokeUserData,
   runDesktopSmokeLocal,
   type SmokeScriptRunner,
 } from "./desktop-smoke-local.js";
+
+function createChildProcess(): ChildProcess {
+  const child = new EventEmitter() as ChildProcess;
+  child.pid = 4242;
+  child.exitCode = null;
+  child.signalCode = null;
+  child.kill = vi.fn(() => true) as unknown as ChildProcess["kill"];
+  return child;
+}
 
 describe("desktop-smoke-local", () => {
   const tempDirs: string[] = [];
@@ -117,5 +130,126 @@ describe("desktop-smoke-local", () => {
         },
       }
     );
+  });
+
+  it("waits for the desktop runtime to become healthy and removes isolated userData by default", async () => {
+    const child = createChildProcess();
+    const runBackground = vi.fn(() => child);
+    const waitForDesktopHealthy = vi.fn(async () => ({
+      browserUrl: "http://127.0.0.1:43123",
+      runtime: {
+        host: "127.0.0.1",
+        port: 43123,
+        pid: 4242,
+        token: "server-4242",
+        serverInstanceId: "server-4242",
+        startedAt: 1700000001234,
+      },
+    }));
+    const removeDir = vi.fn(async () => {});
+
+    const launch = await launchDesktopSmokeLocal({
+      repoRoot: "/repo",
+      userDataDir: "/repo/.tmp/desktop-local-smoke/user-data",
+      env: {
+        PATH: "/usr/bin",
+      },
+      runBackground,
+      waitForDesktopHealthy,
+      removeDir,
+    });
+
+    expect(runBackground).toHaveBeenCalledWith(
+      "pnpm",
+      ["--filter", "@coder-studio/desktop", "exec", "electron", "dist/electron/main.mjs"],
+      {
+        cwd: "/repo",
+        env: {
+          PATH: "/usr/bin",
+          CODER_STUDIO_DESKTOP_USER_DATA_DIR: "/repo/.tmp/desktop-local-smoke/user-data",
+        },
+        stdio: "inherit",
+      }
+    );
+    expect(waitForDesktopHealthy).toHaveBeenCalledWith({
+      userDataDir: "/repo/.tmp/desktop-local-smoke/user-data",
+      expectedPid: 4242,
+    });
+    expect(launch.browserUrl).toBe("http://127.0.0.1:43123");
+
+    child.emit("close", 0, null);
+    await launch.completed;
+
+    expect(removeDir).toHaveBeenCalledWith("/repo/.tmp/desktop-local-smoke/user-data");
+  });
+
+  it("keeps isolated userData when requested", async () => {
+    const child = createChildProcess();
+    const runBackground = vi.fn(() => child);
+    const waitForDesktopHealthy = vi.fn(async () => ({
+      browserUrl: "http://127.0.0.1:43123",
+      runtime: {
+        host: "127.0.0.1",
+        port: 43123,
+        pid: 4242,
+        token: "server-4242",
+        serverInstanceId: "server-4242",
+        startedAt: 1700000001234,
+      },
+    }));
+    const removeDir = vi.fn(async () => {});
+
+    const launch = await launchDesktopSmokeLocal({
+      repoRoot: "/repo",
+      userDataDir: "/repo/.tmp/desktop-local-smoke/user-data",
+      keepUserData: true,
+      runBackground,
+      waitForDesktopHealthy,
+      removeDir,
+    });
+
+    child.emit("close", 0, null);
+    await launch.completed;
+
+    expect(removeDir).not.toHaveBeenCalled();
+  });
+
+  it("fails fast when Electron exits before the desktop runtime becomes healthy", async () => {
+    const child = createChildProcess();
+    const runBackground = vi.fn(() => child);
+    const waitForDesktopHealthy = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(
+            () => resolve({ browserUrl: "http://127.0.0.1:43123", runtime: {} as never }),
+            50
+          );
+        })
+    );
+    const removeDir = vi.fn(async () => {});
+
+    const launchPromise = launchDesktopSmokeLocal({
+      repoRoot: "/repo",
+      userDataDir: "/repo/.tmp/desktop-local-smoke/user-data",
+      runBackground,
+      waitForDesktopHealthy,
+      removeDir,
+    });
+
+    child.emit("close", 1, null);
+
+    await expect(launchPromise).rejects.toThrow(
+      "Desktop smoke Electron exited before becoming healthy (code 1)"
+    );
+    expect(removeDir).toHaveBeenCalledWith("/repo/.tmp/desktop-local-smoke/user-data");
+  });
+
+  it("parses the keep-user-data CLI flag", () => {
+    expect(parseDesktopSmokeLocalArgs([])).toEqual({
+      keepUserData: false,
+    });
+    expect(parseDesktopSmokeLocalArgs(["--keep-user-data"])).toEqual({
+      keepUserData: true,
+    });
   });
 });
