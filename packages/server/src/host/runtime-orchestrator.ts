@@ -1,5 +1,6 @@
 import type { Workspace } from "@coder-studio/core";
 import type { RuntimeHandle } from "../runtime/contract.js";
+import { getWslDistroBridgeRuntimeId } from "../runtime/runtime-state.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import type { WorkspaceRuntimeBindingStore } from "./workspace-runtime-binding.js";
 
@@ -12,10 +13,14 @@ export interface RuntimeOrchestrator {
 }
 
 export function getRuntimeIdForWorkspace(
-  workspace: Pick<Workspace, "id" | "targetRuntime">,
+  workspace: Pick<Workspace, "id" | "targetRuntime" | "wslDistro">,
   nativeRuntimeId = "native-default"
 ): string {
-  return workspace.targetRuntime === "wsl" ? `wsl:${workspace.id}` : nativeRuntimeId;
+  if (workspace.targetRuntime !== "wsl") {
+    return nativeRuntimeId;
+  }
+
+  return getWslDistroBridgeRuntimeId(workspace.wslDistro ?? "");
 }
 
 export function createRuntimeOrchestrator(input: {
@@ -76,6 +81,7 @@ export function createRuntimeOrchestrator(input: {
       }
 
       input.bindings.bindWorkspace(workspace.id, runtimeId);
+      await runtime.attachWorkspace?.(workspace.id);
       await bindHydratedRuntimeState(workspace.id, runtime);
 
       if (previousRuntimeId && previousRuntimeId !== runtimeId) {
@@ -121,7 +127,6 @@ export function createRuntimeOrchestrator(input: {
           await runtime.stop?.();
         } catch (error) {
           stopError ??= error;
-          break;
         }
       }
 

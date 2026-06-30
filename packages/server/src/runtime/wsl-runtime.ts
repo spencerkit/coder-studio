@@ -24,6 +24,7 @@ import {
   resolveWslRuntimeLaunchSpec,
   resolveWslSessionHostApiUrl,
 } from "./wsl-bootstrap.js";
+import type { TrackedWslBridge, WslBridgeManager } from "./wsl-bridge-manager.js";
 import type { RelayHostCommandInput } from "./wsl-host-api-proxy.js";
 
 function serializeProviderSnapshot(providers: ProviderDefinition[]): RemoteProviderSnapshot {
@@ -169,7 +170,19 @@ type WorkspaceWslRuntimeInput = {
   revokeRuntimeTokens?(runtimeId: string): void;
   runtimeBindings?: WorkspaceRuntimeBindingStore;
   relayHostCommand?: (input: RelayHostCommandInput) => Promise<Result>;
+  hostRuntimeVersion?: string;
+  managedNodeVersion?: string;
+  nodePath?: string;
 };
+
+export interface CreateBrokeredWslRuntimeInput {
+  bridgeManager: WslBridgeManager;
+  runtimeId: string;
+  workspace: Pick<
+    Workspace,
+    "id" | "path" | "targetRuntime" | "wslDistro" | "openedAt" | "lastActiveAt" | "uiState"
+  >;
+}
 
 const WSL_RUNTIME_HOST_ENV_BLOCKLIST = new Set([
   "FNM_MULTISHELL_PATH",
@@ -257,6 +270,15 @@ function isReadySignal(value: unknown): value is WslRuntimeReadySignal {
     typeof (value as { host?: unknown }).host === "string" &&
     typeof (value as { port?: unknown }).port === "number"
   );
+}
+
+function normalizeWslDistro(distro: string | undefined): string {
+  const normalized = distro?.trim() ?? "";
+  if (normalized.length === 0) {
+    throw new Error("WSL workspace is missing its distro");
+  }
+
+  return normalized;
 }
 
 async function waitForWslRuntimeReady(
@@ -406,6 +428,39 @@ function bindRuntimeResourceResult(
   }
 }
 
+function resolveWorkspaceIdFromArgs(
+  runtimeBindings: WorkspaceRuntimeBindingStore | undefined,
+  fallbackWorkspaceId: string,
+  args: unknown,
+  meta?: RuntimeExecuteMeta
+): string {
+  if (typeof meta?.workspaceId === "string" && meta.workspaceId.length > 0) {
+    return meta.workspaceId;
+  }
+
+  if (!!args && typeof args === "object") {
+    if (typeof (args as { workspaceId?: unknown }).workspaceId === "string") {
+      return (args as { workspaceId: string }).workspaceId;
+    }
+
+    if (typeof (args as { sessionId?: unknown }).sessionId === "string") {
+      return (
+        runtimeBindings?.findWorkspaceIdBySessionId((args as { sessionId: string }).sessionId) ??
+        fallbackWorkspaceId
+      );
+    }
+
+    if (typeof (args as { terminalId?: unknown }).terminalId === "string") {
+      return (
+        runtimeBindings?.findWorkspaceIdByTerminalId((args as { terminalId: string }).terminalId) ??
+        fallbackWorkspaceId
+      );
+    }
+  }
+
+  return fallbackWorkspaceId;
+}
+
 function shouldInjectSessionBootstrap(
   op: string,
   args: unknown
@@ -465,6 +520,7 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
     workspaceSnapshot: cloneWorkspaceSnapshots(input.workspaceLookup.list()),
     customProviderConfigs: cloneCustomProviderConfigs(input.customProviderConfigs),
     hostApiUrl: resolveWslSessionHostApiUrl(),
+    nodePath: input.nodePath,
   });
 
   const child = spawn(launchSpec.command, launchSpec.args, {
@@ -495,6 +551,31 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
     throw new Error(`WSL runtime ${input.runtimeId} failed health check`);
   }
 
+  const distro = normalizeWslDistro(input.workspace.wslDistro);
+  const activeWorkspaceIds = new Set([input.workspace.id]);
+  const startedAt = Date.now();
+  const summary = {
+    scope: "distro-bridge" as const,
+    targetRuntime: "wsl" as const,
+    wslDistro: distro,
+    runtimeVersion: input.hostRuntimeVersion ?? "0.0.0",
+    nodeVersion: input.managedNodeVersion ?? process.version.replace(/^v/, ""),
+    pid: child.pid ?? 0,
+    uptimeMs: 0,
+    activeWorkspaceIds: [input.workspace.id],
+  };
+
+  const refreshSummary = () => {
+    summary.uptimeMs = Math.max(0, Date.now() - startedAt);
+    summary.activeWorkspaceIds = Array.from(activeWorkspaceIds.values()).sort();
+  };
+
+  const buildCurrentSnapshot = () => ({
+    settings: cloneSettingsSnapshot(input.settingsSnapshot),
+    workspaces: cloneWorkspaceSnapshots(input.workspaceLookup.list()),
+    customProviders: cloneCustomProviderConfigs(input.customProviderConfigs),
+  });
+
   let stopped = false;
 
   const stopRuntime = async (): Promise<void> => {
@@ -511,32 +592,48 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
     }
   };
 
+  const attachWorkspace = async (workspaceId: string): Promise<void> => {
+    if (!input.workspaceLookup.get(workspaceId)) {
+      throw {
+        code: "workspace_not_found",
+        message: `Workspace not found: ${workspaceId}`,
+      };
+    }
+
+    activeWorkspaceIds.add(workspaceId);
+    refreshSummary();
+    await rpc.notify("updateSnapshot", buildCurrentSnapshot());
+  };
+
+  refreshSummary();
+
   return {
     id: input.runtimeId,
     kind: "wsl",
-    summary: {
-      scope: "workspace",
-      workspaceId: input.workspace.id,
-      targetRuntime: "wsl",
-      wslDistro: input.workspace.wslDistro,
-    },
+    summary,
     async execute(op, args, meta) {
       const nextMeta = await augmentExecuteMeta(input, op, args, meta);
+      const workspaceId = resolveWorkspaceIdFromArgs(
+        input.runtimeBindings,
+        input.workspace.id,
+        args,
+        nextMeta
+      );
       const result = await rpc.request("execute", {
         op,
         args,
         ...(nextMeta ? { meta: nextMeta } : {}),
       } satisfies RemoteExecuteRequest);
-      bindRuntimeResourceResult(input.runtimeBindings, input.workspace.id, op, result);
+      bindRuntimeResourceResult(input.runtimeBindings, workspaceId, op, result);
       return result;
     },
+    attachWorkspace,
     async disposeWorkspace(workspaceId) {
       await rpc.request("disposeWorkspace", {
         workspaceId,
       } satisfies RemoteDisposeWorkspaceRequest);
-      if (workspaceId === input.workspace.id) {
-        input.revokeRuntimeTokens?.(input.runtimeId);
-      }
+      activeWorkspaceIds.delete(workspaceId);
+      refreshSummary();
     },
     async setProviderRegistry(providers) {
       await rpc.notify("updateProviders", serializeProviderSnapshot(providers));
@@ -545,8 +642,35 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
       await rpc.notify("updateSnapshot", snapshot);
     },
     async health() {
+      refreshSummary();
       return (await rpc.request("health", {})) as { ok: true };
     },
     stop: stopRuntime,
   };
+}
+
+export async function createBrokeredWslRuntime(
+  input: CreateBrokeredWslRuntimeInput
+): Promise<RuntimeHandle> {
+  const distro = normalizeWslDistro(input.workspace.wslDistro);
+  const bridge = await input.bridgeManager.ensureBridgeForDistro(distro);
+  const runtime = resolveTrackedBridgeRuntimeHandle(bridge);
+
+  if (bridge.id !== input.runtimeId) {
+    throw new Error(
+      `WSL bridge id mismatch for distro ${distro}: expected ${input.runtimeId}, got ${bridge.id}`
+    );
+  }
+
+  await runtime.attachWorkspace?.(input.workspace.id);
+  return runtime;
+}
+
+function resolveTrackedBridgeRuntimeHandle(bridge: TrackedWslBridge): RuntimeHandle {
+  const runtimeHandle = bridge.runtimeHandle;
+  if (!runtimeHandle) {
+    throw new Error(`Tracked WSL bridge ${bridge.id} did not expose a runtime handle`);
+  }
+
+  return runtimeHandle;
 }

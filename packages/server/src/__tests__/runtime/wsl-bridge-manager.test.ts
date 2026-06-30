@@ -59,7 +59,7 @@ describe("wsl bridge manager", () => {
     expect(createBridge).toHaveBeenCalledTimes(2);
     expect(replacement).not.toBe(initial);
     expect(replacement.runtimeVersion).toBe("0.5.6");
-    expect(replacement.stop).toBe(replacementStop);
+    expect(replacement.stop).toBeTypeOf("function");
   });
 
   it("deduplicates overlapping reconcile calls for the same stale bridge", async () => {

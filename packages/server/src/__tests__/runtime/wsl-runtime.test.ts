@@ -22,6 +22,7 @@ function mockWslLaunchArgs(distro: string, entryPath = "/tmp/wsl-runtime-entry.m
 }
 
 interface MockChildProcess extends Partial<ChildProcessWithoutNullStreams> {
+  pid?: number;
   stdout: PassThrough;
   stdin: PassThrough;
   stderr: PassThrough;
@@ -34,6 +35,7 @@ interface MockChildProcess extends Partial<ChildProcessWithoutNullStreams> {
 function createMockChildProcess(): MockChildProcess {
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   const child: MockChildProcess = {
+    pid: 4242,
     stdout: new PassThrough(),
     stdin: new PassThrough(),
     stderr: new PassThrough(),
@@ -259,6 +261,8 @@ describe("WslRuntimeHandle", () => {
       settingsSnapshot: {
         "lsp.mode": "off",
       },
+      hostRuntimeVersion: "0.5.6",
+      managedNodeVersion: "20.11.1",
       customProviderConfigs: [
         {
           id: "custom-review",
@@ -301,12 +305,17 @@ describe("WslRuntimeHandle", () => {
       })
     );
     expect(runtime.kind).toBe("wsl");
-    expect(runtime.summary).toEqual({
-      scope: "workspace",
-      workspaceId: "ws-1",
-      targetRuntime: "wsl",
-      wslDistro: "Ubuntu-24.04",
-    });
+    expect(runtime.summary).toEqual(
+      expect.objectContaining({
+        scope: "distro-bridge",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        runtimeVersion: "0.5.6",
+        nodeVersion: "20.11.1",
+        pid: 4242,
+        activeWorkspaceIds: ["ws-1"],
+      })
+    );
     expect(runtime.syncSnapshot).toBeTypeOf("function");
 
     await runtime.execute(
@@ -367,7 +376,7 @@ describe("WslRuntimeHandle", () => {
     expect(rpcClient.request).toHaveBeenCalledWith("disposeWorkspace", {
       workspaceId: "ws-1",
     });
-    expect(revokeRuntimeTokens).toHaveBeenCalledWith("wsl:ws-1");
+    expect(revokeRuntimeTokens).not.toHaveBeenCalled();
 
     await runtime.setProviderRegistry?.([
       {
@@ -432,6 +441,111 @@ describe("WslRuntimeHandle", () => {
     expect(rpcClient.request).toHaveBeenCalledWith("stop", {});
     expect(rpcClient.dispose).toHaveBeenCalled();
     expect(revokeRuntimeTokens).toHaveBeenCalledWith("wsl:ws-1");
+  });
+
+  it("binds created session terminals to the workspace resolved from the execute request", async () => {
+    const child = createMockChildProcess();
+    emitReady(child);
+    const spawn = vi.fn(() => child);
+    const rpcClient = {
+      request: vi.fn(async (method: string) => {
+        if (method === "execute") {
+          return {
+            id: "sess-2",
+            workspaceId: "ws-2",
+            terminalId: "term-2",
+            providerId: "codex",
+            state: "running",
+            startedAt: 10,
+            title: "Codex",
+          };
+        }
+        if (method === "health") {
+          return { ok: true as const };
+        }
+        return { ok: true as const };
+      }),
+      notify: vi.fn(async () => undefined),
+      dispose: vi.fn(async () => undefined),
+    };
+    const createSocketJsonRpcClient = vi.fn(async () => rpcClient);
+
+    vi.doMock("node:child_process", () => ({
+      spawn,
+    }));
+    vi.doMock("../../runtime/remote/socket-json-rpc.js", () => ({
+      createSocketJsonRpcClient,
+    }));
+
+    const { createWslRuntime } = await import("../../runtime/wsl-runtime.js");
+    const bindings = new WorkspaceRuntimeBindingStore();
+    bindings.bindWorkspace("ws-1", "wsl:distro:Ubuntu-24.04");
+    bindings.bindWorkspace("ws-2", "wsl:distro:Ubuntu-24.04");
+
+    const runtime = await createWslRuntime({
+      runtimeId: "wsl:distro:Ubuntu-24.04",
+      workspace: {
+        id: "ws-1",
+        path: "/home/me/app",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 250,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      stateRoot: "/tmp/state-root",
+      hostBridge: {
+        issueSessionToken: vi.fn(() => ({ token: "token" })),
+        revokeSessionTokensBySessionId: vi.fn(),
+        getHostApiUrl: vi.fn(() => "http://127.0.0.1:4173"),
+        emitDomainEvent: vi.fn(),
+        broadcast: vi.fn(),
+        recordWorkspaceFetch: vi.fn(),
+        sendToClient: vi.fn(() => true),
+        sendBinaryToClient: vi.fn(() => true),
+      },
+      providerRegistry: [],
+      workspaceLookup: {
+        get: (workspaceId) =>
+          workspaceId === "ws-1" || workspaceId === "ws-2"
+            ? {
+                id: workspaceId,
+                path: `/home/me/${workspaceId}`,
+                targetRuntime: "wsl",
+                wslDistro: "Ubuntu-24.04",
+              }
+            : undefined,
+        list: () => [
+          {
+            id: "ws-1",
+            path: "/home/me/ws-1",
+            targetRuntime: "wsl" as const,
+            wslDistro: "Ubuntu-24.04",
+          },
+          {
+            id: "ws-2",
+            path: "/home/me/ws-2",
+            targetRuntime: "wsl" as const,
+            wslDistro: "Ubuntu-24.04",
+          },
+        ],
+      },
+      settingsSnapshot: {},
+      customProviderConfigs: [],
+      runtimeBindings: bindings,
+    });
+
+    await runtime.execute("session.create", {
+      workspaceId: "ws-2",
+      providerId: "codex",
+    });
+
+    expect(bindings.findWorkspaceIdBySessionId("sess-2")).toBe("ws-2");
+    expect(bindings.findWorkspaceIdByTerminalId("term-2")).toBe("ws-2");
   });
 
   it("sanitizes the WSL launch environment so Linux-side node tooling does not resolve to Windows shims", async () => {

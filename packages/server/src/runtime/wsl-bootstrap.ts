@@ -27,6 +27,15 @@ export const WSL_RUNTIME_NODE_LAUNCH_SCRIPT = [
   'if [ -z "$NODE" ]; then exit 127; fi',
   'exec "$NODE" "$ENTRY"',
 ].join("; ");
+
+export function buildWslRuntimeNodeLaunchScript(nodePath?: string): string {
+  const normalizedNodePath = nodePath?.trim();
+  if (normalizedNodePath) {
+    return ['ENTRY="${1-}"', `exec "${normalizedNodePath}" "$ENTRY"`].join("; ");
+  }
+
+  return WSL_RUNTIME_NODE_LAUNCH_SCRIPT;
+}
 export const REMOTE_RUNTIME_SESSION_TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_WSL_STATE_ROOT_BASE = "~/.coder-studio/runtimes";
 
@@ -59,6 +68,7 @@ export interface ResolveWslRuntimeLaunchSpecInput {
   workspaceSnapshot: RuntimeWorkspaceSnapshot[];
   customProviderConfigs: CustomProviderConfig[];
   hostApiUrl?: string;
+  nodePath?: string;
   runtimeEntryPathResolver?: () => string;
 }
 
@@ -362,7 +372,7 @@ export async function resolveWslRuntimeLaunchSpec(
       "-e",
       "sh",
       "-c",
-      WSL_RUNTIME_NODE_LAUNCH_SCRIPT,
+      buildWslRuntimeNodeLaunchScript(input.nodePath),
       "sh",
       toExecutableWslPath(entryPath),
     ],

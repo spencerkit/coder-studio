@@ -1,3 +1,5 @@
+import type { RuntimeHandle } from "./contract.js";
+
 export interface EnsureWslBridgePrerequisitesInput {
   distro: string;
   hostRuntimeVersion: string;
@@ -21,6 +23,7 @@ export interface TrackedWslBridge {
   id: string;
   runtimeVersion: string;
   nodeVersion?: string;
+  runtimeHandle?: RuntimeHandle;
   stop?(input?: StopTrackedWslBridgeInput): Promise<void>;
 }
 
@@ -138,6 +141,22 @@ export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslB
       throw new Error(
         `WSL bridge runtime version mismatch for distro ${distro}: expected ${hostRuntimeVersion}, got ${bridge.runtimeVersion}`
       );
+    }
+
+    if (bridge.stop) {
+      const originalStop = bridge.stop;
+      const wrappedStop = async (stopInput?: StopTrackedWslBridgeInput) => {
+        await originalStop(stopInput);
+        if (trackedBridges.get(distro) === bridge) {
+          trackedBridges.delete(distro);
+        }
+      };
+
+      bridge.stop = wrappedStop;
+
+      if (bridge.runtimeHandle?.stop === originalStop) {
+        bridge.runtimeHandle.stop = wrappedStop;
+      }
     }
 
     trackedBridges.set(distro, bridge);

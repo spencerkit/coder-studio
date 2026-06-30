@@ -22,7 +22,7 @@ describe("server workspace runtime orchestration", () => {
     rmSync(stateDir, { recursive: true, force: true });
   });
 
-  it("rehydrates persisted WSL workspaces with per-workspace runtime ids and preserves them on meta changes", async () => {
+  it("rehydrates persisted WSL workspaces with distro bridge runtime ids and preserves them on meta changes", async () => {
     const workspaceRepo = new WorkspaceRepo({
       filePath: join(stateDir, "state", "workspaces.json"),
     });
@@ -61,39 +61,34 @@ describe("server workspace runtime orchestration", () => {
     });
 
     const syncSnapshot = vi.fn(async () => {});
+    const attachWorkspace = vi.fn(async () => {});
 
-    const createWslRuntime = vi.fn(
-      async ({
-        workspace,
-        settingsSnapshot,
-        customProviderConfigs,
-      }: {
-        workspace: Workspace;
-        settingsSnapshot: Record<string, unknown>;
-        customProviderConfigs: Array<{ id: string }>;
-      }) => ({
-        id: `wsl:${workspace.id}`,
+    const createBrokeredWslRuntime = vi.fn(
+      async ({ workspace, runtimeId }: { workspace: Workspace; runtimeId: string }) => ({
+        id: runtimeId,
         kind: "wsl" as const,
         summary: {
-          scope: "workspace" as const,
-          workspaceId: workspace.id,
+          scope: "distro-bridge" as const,
           targetRuntime: "wsl" as const,
-          wslDistro: workspace.wslDistro,
+          wslDistro: workspace.wslDistro ?? "Ubuntu-24.04",
+          runtimeVersion: "0.5.6",
+          nodeVersion: "20.11.1",
+          pid: 4242,
+          uptimeMs: 10,
+          activeWorkspaceIds: [workspace.id],
         },
         execute: vi.fn(async () => ({})),
+        attachWorkspace,
         disposeWorkspace: vi.fn(async () => {}),
         syncSnapshot,
         health: async () => ({ ok: true as const }),
         stop: vi.fn(async () => {}),
-        __snapshot: {
-          settingsSnapshot,
-          customProviderConfigs,
-        },
       })
     );
 
     vi.doMock("../runtime/wsl-runtime.js", () => ({
-      createWslRuntime,
+      createWslRuntime: vi.fn(),
+      createBrokeredWslRuntime,
     }));
 
     const { createServer } = await import("../server.js");
@@ -105,22 +100,15 @@ describe("server workspace runtime orchestration", () => {
 
     try {
       const bindings = server.__test__!.hostContext.runtimeBindings;
-      expect(bindings.getRuntimeIdForWorkspace("ws-wsl")).toBe("wsl:ws-wsl");
-      expect(createWslRuntime).toHaveBeenCalledWith(
+      expect(bindings.getRuntimeIdForWorkspace("ws-wsl")).toBe("wsl:distro:Ubuntu-24.04");
+      expect(createBrokeredWslRuntime).toHaveBeenCalledWith(
         expect.objectContaining({
+          runtimeId: "wsl:distro:Ubuntu-24.04",
           workspace: expect.objectContaining({
             id: "ws-wsl",
             targetRuntime: "wsl",
             wslDistro: "Ubuntu-24.04",
           }),
-          settingsSnapshot: expect.objectContaining({
-            "lsp.mode": "off",
-          }),
-          customProviderConfigs: [
-            expect.objectContaining({
-              id: "custom-review",
-            }),
-          ],
         })
       );
 
@@ -130,7 +118,7 @@ describe("server workspace runtime orchestration", () => {
         focusMode: true,
       });
 
-      expect(bindings.getRuntimeIdForWorkspace("ws-wsl")).toBe("wsl:ws-wsl");
+      expect(bindings.getRuntimeIdForWorkspace("ws-wsl")).toBe("wsl:distro:Ubuntu-24.04");
       await expect
         .poll(() => syncSnapshot.mock.calls.length, { timeout: 5_000 })
         .toBeGreaterThanOrEqual(1);

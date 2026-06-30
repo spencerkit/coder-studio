@@ -16,6 +16,7 @@ export interface RuntimeExecuteMeta {
   clientOwnerId?: string;
   authContext?: RequestAuthContext;
   sessionBootstrap?: RuntimeSessionBootstrap;
+  workspaceId?: string;
 }
 
 export interface RuntimeSessionBootstrap {
@@ -76,6 +77,7 @@ export interface RuntimeHandle {
   kind: "native" | "wsl";
   summary?: RuntimeSummary;
   execute(op: string, args: unknown, meta?: RuntimeExecuteMeta): Promise<unknown>;
+  attachWorkspace?(workspaceId: string): Promise<void>;
   disposeWorkspace(workspaceId: string): Promise<void>;
   setProviderRegistry?(providers: ProviderDefinition[]): void | Promise<void>;
   syncSnapshot?(snapshot: RemoteStateSnapshot): void | Promise<void>;

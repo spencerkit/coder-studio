@@ -12,13 +12,20 @@ export class RuntimeRouter {
     }
   ) {}
 
-  private resolveRuntimeId(target: RuntimeRouteTarget): string {
+  private resolveRoute(target: RuntimeRouteTarget): {
+    runtimeId: string;
+    workspaceId?: string;
+  } {
     if (target.kind === "default") {
-      return this.deps.defaultRuntimeId;
+      return {
+        runtimeId: this.deps.defaultRuntimeId,
+      };
     }
 
     if (target.kind === "runtime") {
-      return target.runtimeId;
+      return {
+        runtimeId: target.runtimeId,
+      };
     }
 
     const workspaceId =
@@ -40,7 +47,10 @@ export class RuntimeRouter {
       };
     }
 
-    return runtimeId;
+    return {
+      runtimeId,
+      workspaceId,
+    };
   }
 
   async executeOnTarget(
@@ -49,13 +59,17 @@ export class RuntimeRouter {
     args: unknown,
     meta?: RuntimeExecuteMeta
   ): Promise<unknown> {
-    const runtimeId = this.resolveRuntimeId(target);
+    const route = this.resolveRoute(target);
+    const runtimeId = route.runtimeId;
     const runtime = this.deps.runtimeRegistry.get(runtimeId);
     if (!runtime) {
       throw { code: "runtime_not_found", message: `Runtime not found: ${runtimeId}` };
     }
 
-    return runtime.execute(op, args, meta);
+    return runtime.execute(op, args, {
+      ...meta,
+      ...(route.workspaceId ? { workspaceId: route.workspaceId } : {}),
+    });
   }
 
   getAuthContextForClient(_clientId?: string): RequestAuthContext | undefined {

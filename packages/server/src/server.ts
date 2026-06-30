@@ -44,13 +44,14 @@ import { type RuntimeStatusDeps } from "./provider-runtime/runtime-status.js";
 import type { RuntimeHandle, RuntimeRouteTarget } from "./runtime/contract.js";
 import { createNativeRuntime } from "./runtime/native-runtime.js";
 import { buildRemoteStateSnapshot } from "./runtime/remote/state-snapshot.js";
+import { getWslDistroBridgeRuntimeId } from "./runtime/runtime-state.js";
 import {
   issueRemoteSessionBootstrap,
   resolveWslSessionHostApiUrl,
 } from "./runtime/wsl-bootstrap.js";
 import { createWslBridgeManager } from "./runtime/wsl-bridge-manager.js";
 import type { RelayHostCommandInput } from "./runtime/wsl-host-api-proxy.js";
-import { createWslRuntime } from "./runtime/wsl-runtime.js";
+import { createBrokeredWslRuntime, createWslRuntime } from "./runtime/wsl-runtime.js";
 import { SessionManager } from "./session/manager.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
@@ -383,22 +384,21 @@ export async function createServer(
     runtimeRegistry.register(nativeRuntime);
     const wslBridgeManager = createWslBridgeManager({
       getHostRuntimeVersion: () => config.runtimeVersion ?? config.appVersion ?? "0.0.0",
-      createBridge: async ({ distro, hostRuntimeVersion }) => {
-        throw new Error(
-          `WSL bridge manager is not wired yet for distro ${distro} at runtime version ${hostRuntimeVersion}`
-        );
-      },
-    });
-    runtimeOrchestrator = createRuntimeOrchestrator({
-      runtimeRegistry,
-      bindings: runtimeBindings,
-      workspaceLookup: {
-        get: (workspaceId) => workspaceMgr.get(workspaceId),
-      },
-      nativeRuntimeId: "native-default",
-      stopManagedWslBridges: () => wslBridgeManager.stopAllTrackedBridges(),
-      createWslRuntime: async (workspace, runtimeId) => {
-        return createWslRuntime({
+      createBridge: async ({ distro, hostRuntimeVersion, managedNode }) => {
+        const workspace = workspaceMgr
+          .list()
+          .find(
+            (candidate) =>
+              candidate.targetRuntime === "wsl" && candidate.wslDistro?.trim() === distro
+          );
+        if (!workspace) {
+          throw new Error(
+            `Unable to bootstrap WSL bridge for distro ${distro}: workspace not found`
+          );
+        }
+
+        const runtimeId = getWslDistroBridgeRuntimeId(distro);
+        const runtimeHandle = await createWslRuntime({
           runtimeId,
           workspace,
           stateRoot,
@@ -446,6 +446,33 @@ export async function createServer(
             sessionTokenRepo.revokeByRuntimeId(runtimeIdToRevoke);
           },
           runtimeBindings,
+          hostRuntimeVersion,
+          managedNodeVersion: managedNode?.nodeVersion,
+          nodePath: managedNode?.nodePath,
+        });
+
+        return {
+          id: runtimeId,
+          runtimeVersion: hostRuntimeVersion,
+          nodeVersion: managedNode?.nodeVersion,
+          runtimeHandle,
+          stop: runtimeHandle.stop,
+        };
+      },
+    });
+    runtimeOrchestrator = createRuntimeOrchestrator({
+      runtimeRegistry,
+      bindings: runtimeBindings,
+      workspaceLookup: {
+        get: (workspaceId) => workspaceMgr.get(workspaceId),
+      },
+      nativeRuntimeId: "native-default",
+      stopManagedWslBridges: () => wslBridgeManager.stopAllTrackedBridges(),
+      createWslRuntime: async (workspace, runtimeId) => {
+        return createBrokeredWslRuntime({
+          bridgeManager: wslBridgeManager,
+          workspace,
+          runtimeId,
         });
       },
     });
