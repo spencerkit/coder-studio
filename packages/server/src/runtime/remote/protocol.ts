@@ -5,6 +5,11 @@ import type {
   Workspace,
 } from "@coder-studio/core";
 import type { RuntimeExecuteMeta } from "../contract.js";
+import type {
+  WslBridgeReadySignal,
+  WslBridgeRequestPayloadByType,
+  WslBridgeRpcType,
+} from "../wsl-bridge-contract.js";
 
 export interface RuntimeWorkspaceSnapshot
   extends Pick<Workspace, "id" | "path" | "targetRuntime" | "wslDistro" | "uiState"> {}
@@ -24,6 +29,8 @@ export interface WslRuntimeReadySignal {
   host: string;
   port: number;
 }
+
+export type WslRemoteReadySignal = WslRuntimeReadySignal | WslBridgeReadySignal;
 
 export interface RemoteProviderSnapshot {
   providers: ProviderListItem[];
@@ -141,6 +148,15 @@ export type JsonRpcInboundMessage =
   | JsonRpcNotificationMessage
   | JsonRpcSuccessMessage
   | JsonRpcErrorMessage;
+
+export type WslBridgeJsonRpcRequestMessage = {
+  [TMethod in WslBridgeRpcType]: {
+    jsonrpc: "2.0";
+    id: number;
+    method: TMethod;
+    params: WslBridgeRequestPayloadByType[TMethod];
+  };
+}[WslBridgeRpcType];
 
 export function normalizeRemoteError(error: unknown): JsonRpcErrorObject {
   if (

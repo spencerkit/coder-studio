@@ -24,11 +24,18 @@ export interface RuntimeSessionBootstrap {
   apiUrl?: string;
 }
 
+export type RuntimeSummaryScope = "shared" | "workspace" | "distro-bridge";
+
 export interface RuntimeSummary {
-  scope: "shared" | "workspace";
+  scope: RuntimeSummaryScope;
   targetRuntime: "native" | "wsl";
   workspaceId?: string;
   wslDistro?: string;
+  runtimeVersion?: string;
+  nodeVersion?: string;
+  pid?: number;
+  uptimeMs?: number;
+  activeWorkspaceIds?: string[];
 }
 
 export interface RuntimeHostBridge {
