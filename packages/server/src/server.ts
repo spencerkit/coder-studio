@@ -48,6 +48,7 @@ import {
   issueRemoteSessionBootstrap,
   resolveWslSessionHostApiUrl,
 } from "./runtime/wsl-bootstrap.js";
+import { createWslBridgeManager } from "./runtime/wsl-bridge-manager.js";
 import type { RelayHostCommandInput } from "./runtime/wsl-host-api-proxy.js";
 import { createWslRuntime } from "./runtime/wsl-runtime.js";
 import { SessionManager } from "./session/manager.js";
@@ -380,6 +381,14 @@ export async function createServer(
     });
     teardownNativeRuntime = nativeRuntime;
     runtimeRegistry.register(nativeRuntime);
+    const wslBridgeManager = createWslBridgeManager({
+      getHostRuntimeVersion: () => config.runtimeVersion ?? config.appVersion ?? "0.0.0",
+      createBridge: async ({ distro, hostRuntimeVersion }) => {
+        throw new Error(
+          `WSL bridge manager is not wired yet for distro ${distro} at runtime version ${hostRuntimeVersion}`
+        );
+      },
+    });
     runtimeOrchestrator = createRuntimeOrchestrator({
       runtimeRegistry,
       bindings: runtimeBindings,
@@ -387,6 +396,7 @@ export async function createServer(
         get: (workspaceId) => workspaceMgr.get(workspaceId),
       },
       nativeRuntimeId: "native-default",
+      stopManagedWslBridges: () => wslBridgeManager.stopAllTrackedBridges(),
       createWslRuntime: async (workspace, runtimeId) => {
         return createWslRuntime({
           runtimeId,

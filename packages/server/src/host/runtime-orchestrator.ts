@@ -26,6 +26,7 @@ export function createRuntimeOrchestrator(input: {
   };
   nativeRuntimeId: string;
   createWslRuntime(workspace: Workspace, runtimeId: string): Promise<RuntimeHandle>;
+  stopManagedWslBridges?(): Promise<void>;
 }): RuntimeOrchestrator {
   async function bindHydratedRuntimeState(
     workspaceId: string,
@@ -113,8 +114,25 @@ export function createRuntimeOrchestrator(input: {
     },
 
     async stopAllRuntimes() {
+      let stopError: unknown;
+
       for (const runtime of input.runtimeRegistry.list()) {
-        await runtime.stop?.();
+        try {
+          await runtime.stop?.();
+        } catch (error) {
+          stopError ??= error;
+          break;
+        }
+      }
+
+      try {
+        await input.stopManagedWslBridges?.();
+      } catch (error) {
+        stopError ??= error;
+      }
+
+      if (stopError) {
+        throw stopError;
       }
     },
   };
