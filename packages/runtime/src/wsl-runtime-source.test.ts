@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { buildWslRuntimeSource } from "./wsl-runtime-source.js";
@@ -12,7 +14,20 @@ describe("buildWslRuntimeSource", () => {
     ).toEqual({
       runtimeVersion: "0.5.4",
       packageRoot: "/opt/coder-studio/runtime",
-      entryPath: "/opt/coder-studio/runtime/dist/wsl-runtime-entry.mjs",
+      entryPath: resolve("/opt/coder-studio/runtime", "dist/wsl-runtime-entry.mjs"),
+    });
+  });
+
+  it("returns trimmed runtime version and package root", () => {
+    expect(
+      buildWslRuntimeSource({
+        runtimeVersion: " 0.5.4 ",
+        packageRoot: " /opt/coder-studio/runtime ",
+      })
+    ).toEqual({
+      runtimeVersion: "0.5.4",
+      packageRoot: "/opt/coder-studio/runtime",
+      entryPath: resolve("/opt/coder-studio/runtime", "dist/wsl-runtime-entry.mjs"),
     });
   });
 
