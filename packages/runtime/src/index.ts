@@ -8,3 +8,4 @@ export * from "./runtime-release-github.js";
 export * from "./runtime-release-provider.js";
 export * from "./runtime-store.js";
 export * from "./wsl-runtime-entry.js";
+export * from "./wsl-runtime-source.js";
