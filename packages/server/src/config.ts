@@ -16,7 +16,12 @@ import {
   normalizeLegacyStateDir,
   normalizeStateDir,
 } from "@coder-studio/core/state-paths";
-import type { WslRuntimeSource } from "@coder-studio/runtime";
+
+export interface ServerWslRuntimeSource {
+  runtimeVersion: string;
+  packageRoot: string;
+  entryPath: string;
+}
 
 export interface ServerConfig {
   host: string;
@@ -53,7 +58,7 @@ export interface ServerConfig {
     unsupportedReason: string | null;
   };
   wslRuntime?: {
-    source: WslRuntimeSource;
+    source: ServerWslRuntimeSource;
   };
 }
 

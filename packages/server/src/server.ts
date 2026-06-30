@@ -3,9 +3,9 @@
  *
  * Creates and assembles all server components.
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { AutomationPermission, DomainEvent } from "@coder-studio/core";
 import {
   deleteRuntimeConfig,
@@ -47,7 +47,6 @@ import { buildRemoteStateSnapshot } from "./runtime/remote/state-snapshot.js";
 import { getWslDistroBridgeRuntimeId } from "./runtime/runtime-state.js";
 import {
   issueRemoteSessionBootstrap,
-  resolveWslRuntimeEntryPath,
   resolveWslSessionHostApiUrl,
 } from "./runtime/wsl-bootstrap.js";
 import { createWslBridgeManager } from "./runtime/wsl-bridge-manager.js";
@@ -138,13 +137,43 @@ function resolveInstalledWslRuntimePointer(input: {
     );
   }
 
-  const entryPath = runtimeSource?.entryPath ?? resolveWslRuntimeEntryPath();
   return {
     runtimeVersion: input.hostRuntimeVersion,
-    installDir: runtimeSource?.packageRoot ?? dirname(entryPath),
-    entryPath,
+    installDir: runtimeSource?.packageRoot ?? "",
+    entryPath: runtimeSource?.entryPath ?? "",
     installedAt: Date.now(),
   };
+}
+
+function isStoredInstalledWslRuntimeReusable(input: {
+  pointer: {
+    runtimeVersion: string;
+    installDir: string;
+    entryPath: string;
+    nodePath?: string;
+  };
+  hostRuntimeVersion: string;
+  source?: {
+    runtimeVersion: string;
+    packageRoot: string;
+    entryPath: string;
+  };
+}): boolean {
+  if (input.pointer.runtimeVersion !== input.hostRuntimeVersion) {
+    return false;
+  }
+
+  const runtimeSource = input.source;
+  if (runtimeSource) {
+    return (
+      input.pointer.installDir === runtimeSource.packageRoot &&
+      input.pointer.entryPath === runtimeSource.entryPath &&
+      existsSync(runtimeSource.entryPath) &&
+      (!input.pointer.nodePath || existsSync(input.pointer.nodePath))
+    );
+  }
+
+  return true;
 }
 
 export interface Server {
@@ -421,6 +450,12 @@ export async function createServer(
     const wslRuntimeInstallManager = createWslRuntimeInstallManager({
       hostRuntimeVersion,
       store: wslDistroRuntimeStore,
+      isStoredRuntimeReusable: (pointer, { hostRuntimeVersion }) =>
+        isStoredInstalledWslRuntimeReusable({
+          pointer,
+          hostRuntimeVersion,
+          source: config.wslRuntime?.source,
+        }),
       installRuntime: async ({ runtimeVersion }) =>
         resolveInstalledWslRuntimePointer({
           hostRuntimeVersion: runtimeVersion,

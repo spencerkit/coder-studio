@@ -77,4 +77,36 @@ describe("wsl runtime install manager", () => {
     });
     expect(store.writeActiveRuntime).toHaveBeenCalledWith("Ubuntu-24.04", installedPointer);
   });
+
+  it("reinstalls when a same-version pointer is no longer reusable", async () => {
+    const storedPointer = createPointer("0.5.6");
+    const installedPointer = {
+      ...createPointer("0.5.6"),
+      entryPath: "/updated/runtime/wsl-runtime-entry.mjs",
+    };
+    const store = {
+      readActiveRuntime: vi.fn(async () => storedPointer),
+      writeActiveRuntime: vi.fn(async () => {}),
+      clearActiveRuntime: vi.fn(async () => {}),
+    };
+    const installRuntime = vi.fn(async () => installedPointer);
+    const isStoredRuntimeReusable = vi.fn(async () => false);
+    const manager = createWslRuntimeInstallManager({
+      hostRuntimeVersion: "0.5.6",
+      store,
+      installRuntime,
+      isStoredRuntimeReusable,
+    });
+
+    await expect(manager.ensureInstalled("Ubuntu-24.04")).resolves.toEqual(installedPointer);
+    expect(isStoredRuntimeReusable).toHaveBeenCalledWith(storedPointer, {
+      distro: "Ubuntu-24.04",
+      hostRuntimeVersion: "0.5.6",
+    });
+    expect(installRuntime).toHaveBeenCalledWith({
+      distro: "Ubuntu-24.04",
+      runtimeVersion: "0.5.6",
+    });
+    expect(store.writeActiveRuntime).toHaveBeenCalledWith("Ubuntu-24.04", installedPointer);
+  });
 });

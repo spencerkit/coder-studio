@@ -498,6 +498,56 @@ describe("WSL runtime bootstrap", () => {
     expect(existsSync("/tmp/missing-wsl-entry.mjs")).toBe(false);
   });
 
+  it("falls back to the launch-time resolver when a provided runtime entry path is missing", async () => {
+    const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-fallback-entry-test");
+    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
+    const fallbackEntryPath = join(
+      tempRoot,
+      "packages",
+      "cli",
+      "dist",
+      "esm",
+      "wsl-runtime-entry.mjs"
+    );
+    writeFileSync(fallbackEntryPath, "export {};\n");
+
+    const spec = await resolveWslRuntimeLaunchSpec({
+      runtimeId: "wsl:ws-1",
+      stateRoot: join(tempRoot, "state-root"),
+      workspace: {
+        id: "ws-1",
+        path: "/home/me/app",
+        targetRuntime: "wsl",
+        wslDistro: "Ubuntu-24.04",
+        openedAt: 1,
+        lastActiveAt: 1,
+        uiState: {
+          leftPanelWidth: 250,
+          bottomPanelHeight: 200,
+          focusMode: false,
+        },
+      },
+      settingsSnapshot: {},
+      workspaceSnapshot: [],
+      customProviderConfigs: [],
+      runtimeEntryPath: "/tmp/missing-provided-entry.mjs",
+      runtimeEntryPathResolver: () => fallbackEntryPath,
+    });
+
+    expect(spec.args).toEqual([
+      "-d",
+      "Ubuntu-24.04",
+      "--cd",
+      "/home/me/app",
+      "-e",
+      "sh",
+      "-c",
+      expect.stringContaining('exec "$NODE" "$ENTRY"'),
+      "sh",
+      expect.stringContaining("wsl-runtime-entry.mjs"),
+    ]);
+  });
+
   it("does not treat TypeScript source entries as launchable runtime entrypoints", () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-source-entry-test");
     mkdirSync(join(tempRoot, "packages", "cli", "src"), { recursive: true });

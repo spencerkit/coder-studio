@@ -321,8 +321,9 @@ async function resolveWslRuntimeEntryPathForLaunch(
 export async function resolveWslRuntimeLaunchSpec(
   input: ResolveWslRuntimeLaunchSpecInput
 ): Promise<WslRuntimeLaunchSpec> {
+  const preferredEntryPath = input.runtimeEntryPath?.trim();
   const entryPath =
-    input.runtimeEntryPath?.trim() ||
+    (preferredEntryPath && existsSync(preferredEntryPath) ? preferredEntryPath : undefined) ||
     input.runtimeEntryPathResolver?.() ||
     (await resolveWslRuntimeEntryPathForLaunch());
   if (!existsSync(entryPath)) {

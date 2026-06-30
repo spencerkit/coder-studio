@@ -4,9 +4,18 @@ export interface WslRuntimeInstallManager {
   ensureInstalled(distro: string): Promise<InstalledWslRuntimePointer>;
 }
 
+export interface CheckStoredWslRuntimeReusableInput {
+  distro: string;
+  hostRuntimeVersion: string;
+}
+
 export function createWslRuntimeInstallManager(input: {
   hostRuntimeVersion: string;
   store: WslDistroRuntimeStore;
+  isStoredRuntimeReusable?(
+    pointer: InstalledWslRuntimePointer,
+    input: CheckStoredWslRuntimeReusableInput
+  ): Promise<boolean> | boolean;
   installRuntime(input: {
     distro: string;
     runtimeVersion: string;
@@ -15,7 +24,13 @@ export function createWslRuntimeInstallManager(input: {
   return {
     async ensureInstalled(distro) {
       const storedPointer = await input.store.readActiveRuntime(distro);
-      if (storedPointer?.runtimeVersion === input.hostRuntimeVersion) {
+      if (
+        storedPointer?.runtimeVersion === input.hostRuntimeVersion &&
+        (await input.isStoredRuntimeReusable?.(storedPointer, {
+          distro,
+          hostRuntimeVersion: input.hostRuntimeVersion,
+        })) !== false
+      ) {
         return storedPointer;
       }
 
