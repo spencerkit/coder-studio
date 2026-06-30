@@ -79,6 +79,7 @@ describe("desktop-smoke-local", () => {
   });
 
   it("builds desktop assets before launching Electron with the isolated userData dir", async () => {
+    const buildWebApp = vi.fn(async () => {});
     const buildDesktopApp = vi.fn(async () => {});
     const prepareLocalUserData = vi.fn(async () => ({
       userDataDir: "/repo/.tmp/desktop-local-smoke/user-data",
@@ -88,6 +89,7 @@ describe("desktop-smoke-local", () => {
 
     await runDesktopSmokeLocal({
       repoRoot: "/repo",
+      buildWebApp,
       buildDesktopApp,
       prepareLocalUserData,
       runCommand,
@@ -96,6 +98,10 @@ describe("desktop-smoke-local", () => {
       },
     });
 
+    expect(buildWebApp).toHaveBeenCalledTimes(1);
+    expect(buildDesktopApp.mock.invocationCallOrder[0]).toBeGreaterThan(
+      buildWebApp.mock.invocationCallOrder[0]
+    );
     expect(buildDesktopApp).toHaveBeenCalledTimes(1);
     expect(prepareLocalUserData).toHaveBeenCalledWith({
       repoRoot: "/repo",

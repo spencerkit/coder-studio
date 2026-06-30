@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseRuntimeManifest } from "../packages/desktop/src/runtime-manifest.js";
 import { buildDesktop } from "./build-desktop.js";
+import { buildWeb } from "./build-web.js";
 import { DESKTOP_DIR, error, info, log, ROOT_DIR, run, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
@@ -66,6 +67,7 @@ export async function runDesktopSmokeLocal(
   input: {
     repoRoot?: string;
     env?: NodeJS.ProcessEnv;
+    buildWebApp?: () => Promise<void>;
     buildDesktopApp?: () => Promise<void>;
     prepareLocalUserData?: (input: { repoRoot: string }) => Promise<{
       userDataDir: string;
@@ -75,9 +77,13 @@ export async function runDesktopSmokeLocal(
   } = {}
 ): Promise<void> {
   const repoRoot = input.repoRoot ?? ROOT_DIR;
+  const buildWebApp = input.buildWebApp ?? buildWeb;
   const buildDesktopApp = input.buildDesktopApp ?? buildDesktop;
   const prepareLocalUserData = input.prepareLocalUserData ?? prepareDesktopLocalSmokeUserData;
   const runCommand = input.runCommand ?? ((command, args, options) => run(command, args, options));
+
+  info("Building web assets for local smoke test...");
+  await buildWebApp();
 
   info("Building desktop artifacts for local smoke test...");
   await buildDesktopApp();
