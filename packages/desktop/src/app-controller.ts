@@ -23,6 +23,10 @@ interface DesktopUpdateBridgeLike {
   handleSidecarMessage(message: unknown): Promise<void>;
 }
 
+interface SidecarRestartError extends Error {
+  logExcerpt?: string;
+}
+
 export class DesktopAppController {
   private window: WindowLike | null = null;
   private sidecar: StartedSidecarLike | null = null;
@@ -128,7 +132,22 @@ export class DesktopAppController {
       });
     });
     sidecar.on("message", (message) => {
-      void this.updateBridge?.handleSidecarMessage(message);
+      void this.updateBridge?.handleSidecarMessage(message).catch(async (error) => {
+        if (!this.window) {
+          return;
+        }
+
+        const failure =
+          error instanceof Error
+            ? (error as SidecarRestartError)
+            : (new Error(String(error)) as SidecarRestartError);
+        await this.deps.showErrorPage(this.window, {
+          title: "Coder Studio runtime failed to start",
+          detail: failure.message,
+          canRetry: true,
+          ...(failure.logExcerpt ? { logExcerpt: failure.logExcerpt } : {}),
+        });
+      });
     });
   }
 

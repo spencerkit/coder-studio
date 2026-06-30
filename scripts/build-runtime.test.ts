@@ -17,6 +17,14 @@ describe("build-runtime plumbing", () => {
     expect(pkg.scripts?.["build:runtime"]).toBe("tsx scripts/build-runtime.ts");
   });
 
+  it("includes the runtime package in ci:typecheck", async () => {
+    const pkg = JSON.parse(await readFile(join(ROOT_DIR, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(pkg.scripts?.["ci:typecheck"]).toContain("pnpm --filter @coder-studio/runtime exec tsc");
+  });
+
   it("adds the runtime package manifest to the workspace", async () => {
     const pkg = JSON.parse(
       await readFile(join(ROOT_DIR, "packages/runtime/package.json"), "utf8")

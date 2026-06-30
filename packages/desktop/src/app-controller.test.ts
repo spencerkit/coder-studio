@@ -135,4 +135,64 @@ describe("DesktopAppController", () => {
 
     expect(showErrorPage).not.toHaveBeenCalled();
   });
+
+  it("shows an error page when sidecar restart fails during a desktop update", async () => {
+    let onMessage: ((message: unknown) => void) | null = null;
+    const send = vi.fn();
+    const stop = vi.fn(async () => {});
+    const showErrorPage = vi.fn();
+    const controller = new DesktopAppController({
+      createWindow: () => ({ loadURL: vi.fn(), focus: vi.fn(), show: vi.fn() }),
+      startSidecar: vi
+        .fn()
+        .mockResolvedValueOnce({
+          browserUrl: "http://127.0.0.1:4173",
+          getLogExcerpt: vi.fn(() => ""),
+          send,
+          stop,
+          on: vi.fn((event, listener) => {
+            if (event === "message") {
+              onMessage = listener;
+            }
+          }),
+        })
+        .mockRejectedValueOnce(new Error("new runtime failed to boot")),
+      loadDesktopUrl: vi.fn(),
+      showErrorPage,
+      createUpdateBridge: ({ restartSidecar }) => ({
+        handleSidecarMessage: async (message: unknown) => {
+          if (
+            typeof message === "object" &&
+            message !== null &&
+            (message as { kind?: unknown }).kind === "desktop-update"
+          ) {
+            await restartSidecar();
+          }
+        },
+      }),
+    });
+
+    await controller.launch();
+    expect(onMessage).not.toBeNull();
+    if (!onMessage) {
+      throw new Error("Expected the desktop app controller to register a sidecar message handler");
+    }
+
+    const handleMessage: (message: unknown) => void = onMessage;
+    handleMessage({
+      kind: "desktop-update",
+      action: "start-install",
+      payload: { targetVersion: "0.5.5" },
+    });
+
+    await vi.waitFor(() => {
+      expect(showErrorPage).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          title: "Coder Studio runtime failed to start",
+          detail: "new runtime failed to boot",
+        })
+      );
+    });
+  });
 });
