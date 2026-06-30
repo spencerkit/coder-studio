@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { posix } from "node:path";
 
 export interface WslDistroRuntimeStoreLayout {
   coderStudioHomeDir: string;
@@ -9,14 +9,14 @@ export interface WslDistroRuntimeStoreLayout {
 }
 
 export function resolveWslDistroRuntimeStoreLayout(homeDir: string): WslDistroRuntimeStoreLayout {
-  const coderStudioHomeDir = join(homeDir, ".coder-studio");
-  const runtimeStoreDir = join(coderStudioHomeDir, "runtime-store");
+  const coderStudioHomeDir = posix.join(homeDir, ".coder-studio");
+  const runtimeStoreDir = posix.join(coderStudioHomeDir, "runtime-store");
 
   return {
     coderStudioHomeDir,
     runtimeStoreDir,
-    runtimeVersionsDir: join(runtimeStoreDir, "versions"),
-    runtimeCurrentPointerPath: join(runtimeStoreDir, "current.json"),
-    bridgeRunDir: join(coderStudioHomeDir, "run"),
+    runtimeVersionsDir: posix.join(runtimeStoreDir, "versions"),
+    runtimeCurrentPointerPath: posix.join(runtimeStoreDir, "current.json"),
+    bridgeRunDir: posix.join(coderStudioHomeDir, "run"),
   };
 }

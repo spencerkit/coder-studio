@@ -1,12 +1,12 @@
-import { join } from "node:path";
+import { posix } from "node:path";
 import { satisfies, valid } from "semver";
 
 export function resolveManagedWslNodeRoot(homeDir: string): string {
-  return join(homeDir, ".coder-studio", "node");
+  return posix.join(homeDir, ".coder-studio", "node");
 }
 
 export function resolveManagedWslNodePath(homeDir: string, nodeVersion: string): string {
-  return join(resolveManagedWslNodeRoot(homeDir), nodeVersion, "bin", "node");
+  return posix.join(resolveManagedWslNodeRoot(homeDir), nodeVersion, "bin", "node");
 }
 
 export function isCompatibleManagedNodeVersion(
