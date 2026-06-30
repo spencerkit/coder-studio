@@ -4,10 +4,22 @@ const { createServer } = vi.hoisted(() => ({
   createServer: vi.fn(),
 }));
 
+const { buildWslRuntimeSource } = vi.hoisted(() => ({
+  buildWslRuntimeSource: vi.fn(({ runtimeVersion, packageRoot, entryRelativePath }) => ({
+    runtimeVersion,
+    packageRoot,
+    entryPath: `${packageRoot}/${entryRelativePath ?? "dist/wsl-runtime-entry.mjs"}`,
+  })),
+}));
+
 vi.mock("@coder-studio/server", () => ({
   createServer,
   normalizeDesktopUpdateStatePatch: (value: unknown) => value,
   type: {},
+}));
+
+vi.mock("@coder-studio/runtime", () => ({
+  buildWslRuntimeSource,
 }));
 
 const { existsSync, readFileSync } = vi.hoisted(() => ({
@@ -75,6 +87,12 @@ describe("runtime-launch-entry", () => {
         port: 43123,
         appVersion: "0.5.4",
         runtimeVersion: "0.5.4",
+        wslRuntime: {
+          source: expect.objectContaining({
+            runtimeVersion: "0.5.4",
+            entryPath: expect.stringContaining("wsl-runtime-entry"),
+          }),
+        },
         webRoot: "/tmp/web",
         update: {
           supported: true,
@@ -109,6 +127,12 @@ describe("runtime-launch-entry", () => {
         port: 0,
         appVersion: "0.5.4",
         runtimeVersion: "0.5.4",
+        wslRuntime: {
+          source: expect.objectContaining({
+            runtimeVersion: "0.5.4",
+            entryPath: expect.stringContaining("wsl-runtime-entry"),
+          }),
+        },
         webRoot: "/tmp/web",
         update: {
           supported: true,

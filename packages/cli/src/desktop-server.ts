@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
-import { startServer } from "./server-runner.js";
+import { buildWslRuntimeSource } from "@coder-studio/runtime";
+import { getCliVersion } from "./package-manifest.js";
+import { resolveCliPackageRoot, startServer } from "./server-runner.js";
 
 export interface DesktopServerEnv {
   host?: string;
@@ -25,9 +27,17 @@ export function parseDesktopServerEnv(env: NodeJS.ProcessEnv): DesktopServerEnv 
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const parsed = parseDesktopServerEnv(env);
+  const cliVersion = getCliVersion(import.meta.url);
   await startServer({
     serverConfig: {
       port: parsed.port,
+      wslRuntime: {
+        source: buildWslRuntimeSource({
+          runtimeVersion: cliVersion,
+          packageRoot: resolveCliPackageRoot(import.meta.url),
+          entryRelativePath: "dist/esm/wsl-runtime-entry.mjs",
+        }),
+      },
       ...(parsed.host ? { host: parsed.host } : {}),
       ...(parsed.stateDir ? { stateDir: parsed.stateDir } : {}),
       ...(parsed.password ? { auth: { enabled: true, password: parsed.password } } : {}),

@@ -1,6 +1,8 @@
+import { buildWslRuntimeSource } from "@coder-studio/runtime";
 import type { Server, ServerConfigInput } from "@coder-studio/server";
 import { parseServerConfig } from "@coder-studio/server";
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
+import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { readCliConfig } from "./config-store.js";
 import { getStaticAssetsDir, hasWebAssets } from "./embed.js";
@@ -9,6 +11,22 @@ import { getCliVersion } from "./package-manifest.js";
 import { getUpdateRuntimeInfo } from "./update-runtime.js";
 
 const MISSING_WEB_ASSETS_WARNING = "Warning: Web assets not found. Frontend will not be available.";
+
+export const resolveCliPackageRoot = (importMetaUrl: string): string => {
+  const currentDir = dirname(fileURLToPath(importMetaUrl));
+  const candidates = [
+    resolve(currentDir, "../package.json"),
+    resolve(currentDir, "../../package.json"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return dirname(candidate);
+    }
+  }
+
+  return dirname(candidates.at(-1) ?? candidates[0]);
+};
 
 export interface StartServerOptions {
   serverConfig?: ServerConfigInput;
@@ -19,9 +37,17 @@ export interface StartServerOptions {
 export const buildServerConfig = (overrides: ServerConfigInput = {}): ServerConfigInput => {
   const savedConfig = readCliConfig();
   const cliVersion = getCliVersion(import.meta.url);
+  const packageRoot = resolveCliPackageRoot(import.meta.url);
   const config: ServerConfigInput = {
     appVersion: cliVersion,
     runtimeVersion: cliVersion,
+    wslRuntime: {
+      source: buildWslRuntimeSource({
+        runtimeVersion: cliVersion,
+        packageRoot,
+        entryRelativePath: "dist/esm/wsl-runtime-entry.mjs",
+      }),
+    },
     update: getUpdateRuntimeInfo(import.meta.url),
     ...(savedConfig?.host !== undefined ? { host: savedConfig.host } : {}),
     ...(savedConfig?.port !== undefined && savedConfig.port > 0 ? { port: savedConfig.port } : {}),

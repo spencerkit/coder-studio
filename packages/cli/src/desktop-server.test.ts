@@ -4,8 +4,32 @@ const { startServer } = vi.hoisted(() => ({
   startServer: vi.fn(),
 }));
 
+const { resolveCliPackageRoot } = vi.hoisted(() => ({
+  resolveCliPackageRoot: vi.fn(() => "/repo/packages/cli"),
+}));
+
+const { buildWslRuntimeSource } = vi.hoisted(() => ({
+  buildWslRuntimeSource: vi.fn(({ runtimeVersion, packageRoot, entryRelativePath }) => ({
+    runtimeVersion,
+    packageRoot,
+    entryPath: `${packageRoot}/${entryRelativePath ?? "dist/wsl-runtime-entry.mjs"}`,
+  })),
+}));
+
+const wslRuntimeSourceMatcher = {
+  source: expect.objectContaining({
+    runtimeVersion: expect.any(String),
+    entryPath: expect.stringContaining("wsl-runtime-entry"),
+  }),
+};
+
+vi.mock("@coder-studio/runtime", () => ({
+  buildWslRuntimeSource,
+}));
+
 vi.mock("./server-runner.js", () => ({
   startServer,
+  resolveCliPackageRoot,
 }));
 
 import { main, parseDesktopServerEnv } from "./desktop-server.js";
@@ -45,6 +69,7 @@ describe("desktop-server", () => {
     expect(startServer).toHaveBeenCalledWith({
       serverConfig: {
         port: 0,
+        wslRuntime: wslRuntimeSourceMatcher,
       },
       writeRuntimeConfig: true,
       runtimeJsonPath: "/tmp/runtime.json",
