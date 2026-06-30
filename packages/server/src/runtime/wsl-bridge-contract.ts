@@ -12,9 +12,11 @@ export const WSL_BRIDGE_RPC_TYPES = [
 
 export type WslBridgeRpcType = (typeof WSL_BRIDGE_RPC_TYPES)[number];
 
-export interface WslBridgeHealthPayload {}
+export type WslBridgeEmptyPayload = Record<string, never>;
 
-export interface WslBridgeInfoRequestPayload {}
+export type WslBridgeHealthPayload = WslBridgeEmptyPayload;
+
+export type WslBridgeInfoRequestPayload = WslBridgeEmptyPayload;
 
 export interface WslBridgeHealth {
   ok: true;
@@ -86,6 +88,18 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isValidPort(value: unknown): value is number {
+  return isPositiveInteger(value) && value <= 65535;
+}
+
 export function isWslBridgeInfo(value: unknown): value is WslBridgeInfo {
   if (!isObjectRecord(value)) {
     return false;
@@ -95,10 +109,9 @@ export function isWslBridgeInfo(value: unknown): value is WslBridgeInfo {
     typeof value.runtimeVersion === "string" &&
     typeof value.nodeVersion === "string" &&
     typeof value.distro === "string" &&
-    typeof value.pid === "number" &&
-    Number.isFinite(value.pid) &&
-    typeof value.uptimeMs === "number" &&
-    Number.isFinite(value.uptimeMs) &&
+    value.distro.trim().length > 0 &&
+    isPositiveInteger(value.pid) &&
+    isNonNegativeFiniteNumber(value.uptimeMs) &&
     isStringArray(value.activeWorkspaceIds)
   );
 }
@@ -111,7 +124,7 @@ export function isWslBridgeReady(value: unknown): value is WslBridgeReadySignal 
   return (
     value.type === "wslBridge.ready" &&
     typeof value.host === "string" &&
-    typeof value.port === "number" &&
-    Number.isInteger(value.port)
+    value.host.trim().length > 0 &&
+    isValidPort(value.port)
   );
 }

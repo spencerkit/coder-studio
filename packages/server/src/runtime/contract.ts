@@ -24,19 +24,35 @@ export interface RuntimeSessionBootstrap {
   apiUrl?: string;
 }
 
-export type RuntimeSummaryScope = "shared" | "workspace" | "distro-bridge";
-
-export interface RuntimeSummary {
-  scope: RuntimeSummaryScope;
-  targetRuntime: "native" | "wsl";
-  workspaceId?: string;
-  wslDistro?: string;
-  runtimeVersion?: string;
-  nodeVersion?: string;
-  pid?: number;
-  uptimeMs?: number;
-  activeWorkspaceIds?: string[];
+export interface SharedRuntimeSummary {
+  scope: "shared";
+  targetRuntime: "native";
 }
+
+export interface WorkspaceRuntimeSummary {
+  scope: "workspace";
+  targetRuntime: "wsl";
+  workspaceId: string;
+  wslDistro?: string;
+}
+
+export interface WslDistroBridgeRuntimeSummary {
+  scope: "distro-bridge";
+  targetRuntime: "wsl";
+  wslDistro: string;
+  runtimeVersion: string;
+  nodeVersion: string;
+  pid: number;
+  uptimeMs: number;
+  activeWorkspaceIds: string[];
+}
+
+export type RuntimeSummary =
+  | SharedRuntimeSummary
+  | WorkspaceRuntimeSummary
+  | WslDistroBridgeRuntimeSummary;
+
+export type RuntimeSummaryScope = RuntimeSummary["scope"];
 
 export interface RuntimeHostBridge {
   issueSessionToken(input: {
