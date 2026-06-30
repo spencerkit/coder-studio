@@ -4,12 +4,17 @@ import type { DesktopAppController } from "./app-controller.js";
 import { createDesktopAppController } from "./desktop-startup.js";
 import { registerShellUpdateIpc } from "./shell-update-ipc.js";
 import { ShellUpdateService } from "./shell-update-service.js";
+import { applyDesktopUserDataDirOverride } from "./user-data-env.js";
 
 let controller: DesktopAppController | null = null;
 let quitting = false;
 let shellUpdateInstallInProgress = false;
 
 async function bootstrap(): Promise<void> {
+  applyDesktopUserDataDirOverride({
+    app,
+  });
+
   const shellUpdateService = new ShellUpdateService({
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,

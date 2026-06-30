@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildDesktopControllerDeps } from "./desktop-startup.js";
+import {
+  buildDesktopControllerDeps,
+  resolveDesktopRuntimeReleaseIndexUrl,
+} from "./desktop-startup.js";
 
 describe("desktop-startup", () => {
   const app = {
@@ -287,5 +290,34 @@ describe("desktop-startup", () => {
       password: "sekrit",
       appVersion: "1.2.3",
     });
+  });
+
+  it("prefers the runtime release index URL from the environment over persisted config", () => {
+    vi.stubEnv(
+      "CODER_STUDIO_DESKTOP_RUNTIME_RELEASE_INDEX_URL",
+      "https://env.example/runtime.json"
+    );
+
+    expect(
+      resolveDesktopRuntimeReleaseIndexUrl({
+        desktopConfig: {
+          stateDir: "/tmp/state",
+          runtimeReleaseIndexUrl: "https://config.example/runtime.json",
+        },
+      })
+    ).toBe("https://env.example/runtime.json");
+  });
+
+  it("falls back to the persisted runtime release index URL when no environment override exists", () => {
+    vi.stubEnv("CODER_STUDIO_DESKTOP_RUNTIME_RELEASE_INDEX_URL", "");
+
+    expect(
+      resolveDesktopRuntimeReleaseIndexUrl({
+        desktopConfig: {
+          stateDir: "/tmp/state",
+          runtimeReleaseIndexUrl: "https://config.example/runtime.json",
+        },
+      })
+    ).toBe("https://config.example/runtime.json");
   });
 });

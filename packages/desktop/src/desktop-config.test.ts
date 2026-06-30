@@ -10,6 +10,7 @@ describe("desktop-config", () => {
           port: 43123,
           stateDir: "/tmp/shared-state",
           password: "sekrit",
+          desktopRuntimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
         }),
         userDataDir: "/Users/test/Library/Application Support/Coder Studio",
       })
@@ -18,6 +19,7 @@ describe("desktop-config", () => {
       portOverride: 43123,
       stateDir: "/tmp/shared-state",
       password: "sekrit",
+      runtimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
     });
   });
 

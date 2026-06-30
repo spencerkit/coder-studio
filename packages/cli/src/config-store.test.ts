@@ -49,6 +49,7 @@ describe("config-store", () => {
       port: 4186,
       stateDir: "/tmp/cs-data",
       password: "sekrit",
+      desktopRuntimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
     };
 
     writeCliConfig(config as CliConfig);
@@ -113,17 +114,20 @@ describe("config-store", () => {
       port: 0,
       stateDir: "/tmp/cs-data",
       password: "sekrit",
+      desktopRuntimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
     } as CliConfig);
 
     expect(JSON.parse(readFileSync(getCliConfigPath(), "utf-8"))).toEqual({
       host: "127.0.0.1",
       stateDir: "/tmp/cs-data",
       password: "sekrit",
+      desktopRuntimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
     });
     expect(readCliConfig()).toEqual({
       host: "127.0.0.1",
       stateDir: "/tmp/cs-data",
       password: "sekrit",
+      desktopRuntimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
     });
   });
 });

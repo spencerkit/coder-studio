@@ -8,6 +8,7 @@ export interface DesktopLaunchConfig {
   portOverride?: number;
   stateDir: string;
   password?: string;
+  runtimeReleaseIndexUrl?: string;
 }
 
 interface PersistedDesktopConfig {
@@ -16,6 +17,7 @@ interface PersistedDesktopConfig {
   stateDir?: string;
   dataDir?: string;
   password?: string;
+  desktopRuntimeReleaseIndexUrl?: string;
 }
 
 function readPersistedDesktopConfig(): PersistedDesktopConfig | null {
@@ -49,5 +51,8 @@ export function resolveDesktopLaunchConfig(input: {
     ...(typeof config?.port === "number" ? { portOverride: config.port } : {}),
     stateDir: resolvedStateDir,
     ...(config?.password ? { password: config.password } : {}),
+    ...(config?.desktopRuntimeReleaseIndexUrl
+      ? { runtimeReleaseIndexUrl: config.desktopRuntimeReleaseIndexUrl }
+      : {}),
   };
 }

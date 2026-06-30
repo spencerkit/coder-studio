@@ -77,7 +77,9 @@ interface StartupInput {
 interface StartupDeps {
   resolveDesktopLaunchConfig?: (input: { userDataDir: string }) => DesktopLaunchConfig;
   createRuntimeStore?: (input: { userDataDir: string }) => RuntimeStoreLike;
-  createRuntimeReleaseProvider?: () => RuntimeReleaseProvider;
+  createRuntimeReleaseProvider?: (input: {
+    desktopConfig: DesktopLaunchConfig;
+  }) => RuntimeReleaseProvider;
   createRuntimeInstaller?: (input: { userDataDir: string }) => RuntimeInstallerLike;
   validateActiveRuntime?: (
     runtime: ActiveRuntimePointer,
@@ -104,10 +106,20 @@ async function fetchRuntimeReleaseIndex(url: string): Promise<unknown> {
   return response.json();
 }
 
-function createDefaultRuntimeReleaseProvider(): RuntimeReleaseProvider {
-  const releaseIndexUrl =
+export function resolveDesktopRuntimeReleaseIndexUrl(input: {
+  desktopConfig: DesktopLaunchConfig;
+}): string {
+  return (
     process.env.CODER_STUDIO_DESKTOP_RUNTIME_RELEASE_INDEX_URL?.trim() ||
-    DEFAULT_RUNTIME_RELEASE_INDEX_URL;
+    input.desktopConfig.runtimeReleaseIndexUrl?.trim() ||
+    DEFAULT_RUNTIME_RELEASE_INDEX_URL
+  );
+}
+
+function createDefaultRuntimeReleaseProvider(input: {
+  desktopConfig: DesktopLaunchConfig;
+}): RuntimeReleaseProvider {
+  const releaseIndexUrl = resolveDesktopRuntimeReleaseIndexUrl(input);
 
   return new GitHubRuntimeReleaseProvider({
     fetchReleaseIndex: () => fetchRuntimeReleaseIndex(releaseIndexUrl),
@@ -191,7 +203,8 @@ export async function buildDesktopControllerDeps(input: StartupInput, deps: Star
       userDataDir,
     });
   const runtimeReleaseProvider =
-    deps.createRuntimeReleaseProvider?.() ?? createDefaultRuntimeReleaseProvider();
+    deps.createRuntimeReleaseProvider?.({ desktopConfig }) ??
+    createDefaultRuntimeReleaseProvider({ desktopConfig });
   const runtimeInstaller =
     deps.createRuntimeInstaller?.({ userDataDir }) ??
     createDefaultRuntimeInstaller({ userDataDir });

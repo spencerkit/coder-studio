@@ -10,6 +10,7 @@
     "build:web": "tsx scripts/build-web.ts",
     "build:cli": "tsx scripts/build-cli.ts",
     "build:desktop": "tsx scripts/build-desktop.ts",
+    "desktop:smoke-local": "tsx scripts/desktop-smoke-local.ts",
     "changeset": "changeset",
     "changeset:validate": "tsx scripts/validate-changesets.ts",
     "version-packages": "changeset version",

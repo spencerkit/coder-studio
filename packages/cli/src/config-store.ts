@@ -8,6 +8,7 @@ export interface CliConfig {
   port?: number;
   stateDir?: string;
   password?: string;
+  desktopRuntimeReleaseIndexUrl?: string;
 }
 
 export function getCliConfigPath(): string {
@@ -31,13 +32,16 @@ export function readCliConfig(): CliConfig | null {
       stateDir?: unknown;
       dataDir?: unknown;
       password?: unknown;
+      desktopRuntimeReleaseIndexUrl?: unknown;
     };
     if (
       (parsed.host !== undefined && typeof parsed.host !== "string") ||
       (parsed.port !== undefined && typeof parsed.port !== "number") ||
       (parsed.stateDir !== undefined && typeof parsed.stateDir !== "string") ||
       (parsed.dataDir !== undefined && typeof parsed.dataDir !== "string") ||
-      (parsed.password !== undefined && typeof parsed.password !== "string")
+      (parsed.password !== undefined && typeof parsed.password !== "string") ||
+      (parsed.desktopRuntimeReleaseIndexUrl !== undefined &&
+        typeof parsed.desktopRuntimeReleaseIndexUrl !== "string")
     ) {
       return null;
     }
@@ -51,6 +55,9 @@ export function readCliConfig(): CliConfig | null {
           ? { stateDir: normalizeLegacyDataDir(parsed.dataDir) }
           : {}),
       ...(parsed.password !== undefined ? { password: parsed.password } : {}),
+      ...(parsed.desktopRuntimeReleaseIndexUrl !== undefined
+        ? { desktopRuntimeReleaseIndexUrl: parsed.desktopRuntimeReleaseIndexUrl }
+        : {}),
     };
   } catch {
     return null;
@@ -65,6 +72,9 @@ export function writeCliConfig(config: CliConfig): void {
     ...(config.port !== undefined && config.port > 0 ? { port: config.port } : {}),
     ...(config.stateDir !== undefined ? { stateDir: normalizeStateDir(config.stateDir) } : {}),
     ...(config.password !== undefined ? { password: config.password } : {}),
+    ...(config.desktopRuntimeReleaseIndexUrl !== undefined
+      ? { desktopRuntimeReleaseIndexUrl: config.desktopRuntimeReleaseIndexUrl }
+      : {}),
   };
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
