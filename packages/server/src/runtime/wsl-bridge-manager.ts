@@ -57,6 +57,9 @@ function resolveHostRuntimeVersion(getHostRuntimeVersion?: () => string): string
 export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslBridgeManager {
   const trackedBridges = new Map<string, TrackedWslBridge>();
   const inFlightEnsures = new Map<string, Promise<TrackedWslBridge>>();
+  const inFlightStops = new Map<string, Promise<void>>();
+  let reconcilePromise: Promise<void> | undefined;
+  let shutdownRequested = false;
   let shutdownPromise: Promise<void> | undefined;
 
   async function stopTrackedBridge(
@@ -64,14 +67,32 @@ export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslB
     bridge: TrackedWslBridge,
     stopInput: StopTrackedWslBridgeInput
   ): Promise<void> {
-    trackedBridges.delete(distro);
-
-    if (input.stopBridge) {
-      await input.stopBridge(bridge, stopInput);
-      return;
+    const inFlightStop = inFlightStops.get(distro);
+    if (inFlightStop) {
+      return inFlightStop;
     }
 
-    await bridge.stop?.(stopInput);
+    const stopPromise = (async () => {
+      if (input.stopBridge) {
+        await input.stopBridge(bridge, stopInput);
+      } else {
+        await bridge.stop?.(stopInput);
+      }
+
+      if (trackedBridges.get(distro) === bridge) {
+        trackedBridges.delete(distro);
+      }
+    })();
+
+    inFlightStops.set(distro, stopPromise);
+
+    try {
+      await stopPromise;
+    } finally {
+      if (inFlightStops.get(distro) === stopPromise) {
+        inFlightStops.delete(distro);
+      }
+    }
   }
 
   async function waitForInFlightEnsures(): Promise<void> {
@@ -124,7 +145,7 @@ export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslB
   }
 
   async function ensureBridgeForDistro(distro: string): Promise<TrackedWslBridge> {
-    if (shutdownPromise) {
+    if (shutdownRequested) {
       throw new Error("WSL bridge manager is shutting down");
     }
 
@@ -147,38 +168,55 @@ export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslB
     },
 
     async reconcileOnHostRuntimeUpdate() {
-      if (shutdownPromise) {
+      if (shutdownRequested) {
         await shutdownPromise;
         return;
       }
 
-      await waitForInFlightEnsures();
+      if (reconcilePromise) {
+        return reconcilePromise;
+      }
 
-      const hostRuntimeVersion = resolveHostRuntimeVersion(input.getHostRuntimeVersion);
-      for (const [distro, bridge] of Array.from(trackedBridges.entries())) {
-        if (bridge.runtimeVersion === hostRuntimeVersion) {
-          continue;
+      const currentReconcile = (async () => {
+        await waitForInFlightEnsures();
+
+        const hostRuntimeVersion = resolveHostRuntimeVersion(input.getHostRuntimeVersion);
+        for (const [distro, bridge] of Array.from(trackedBridges.entries())) {
+          if (bridge.runtimeVersion === hostRuntimeVersion) {
+            continue;
+          }
+
+          await stopTrackedBridge(distro, bridge, {
+            reason: "host-runtime-updated",
+            nextRuntimeVersion: hostRuntimeVersion,
+          });
+          await ensureBridgeForDistro(distro);
         }
+      })();
 
-        await stopTrackedBridge(distro, bridge, {
-          reason: "host-runtime-updated",
-          nextRuntimeVersion: hostRuntimeVersion,
-        });
-        await ensureBridgeForDistro(distro);
+      reconcilePromise = currentReconcile;
+
+      try {
+        await currentReconcile;
+      } finally {
+        if (reconcilePromise === currentReconcile) {
+          reconcilePromise = undefined;
+        }
       }
     },
 
     async stopAllTrackedBridges() {
+      shutdownRequested = true;
+
       if (shutdownPromise) {
         return shutdownPromise;
       }
 
-      shutdownPromise = (async () => {
+      const currentShutdown = (async () => {
         await waitForInFlightEnsures();
 
         let stopError: unknown;
         const trackedEntries = Array.from(trackedBridges.entries());
-        trackedBridges.clear();
 
         await Promise.all(
           trackedEntries.map(async ([distro, bridge]) => {
@@ -197,7 +235,15 @@ export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslB
         }
       })();
 
-      return shutdownPromise;
+      shutdownPromise = currentShutdown;
+
+      try {
+        await currentShutdown;
+      } finally {
+        if (shutdownPromise === currentShutdown) {
+          shutdownPromise = undefined;
+        }
+      }
     },
 
     getTrackedBridge(distro) {
