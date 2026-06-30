@@ -1,4 +1,5 @@
 import type { RuntimeHandle } from "./contract.js";
+import type { InstalledWslRuntimePointer } from "./wsl-distro-store.js";
 
 export interface EnsureWslBridgePrerequisitesInput {
   distro: string;
@@ -11,6 +12,7 @@ export interface ManagedWslNodeReadyState {
 }
 
 export interface CreateWslBridgeInput extends EnsureWslBridgePrerequisitesInput {
+  installedRuntime: InstalledWslRuntimePointer;
   managedNode?: ManagedWslNodeReadyState;
 }
 
@@ -36,6 +38,7 @@ export interface WslBridgeManager {
 
 export interface CreateWslBridgeManagerInput {
   createBridge(input: CreateWslBridgeInput): Promise<TrackedWslBridge>;
+  ensureInstalled(distro: string): Promise<InstalledWslRuntimePointer>;
   getHostRuntimeVersion?(): string;
   ensureRuntimeVersion?(input: EnsureWslBridgePrerequisitesInput): Promise<void>;
   ensureManagedNode?(
@@ -125,11 +128,13 @@ export function createWslBridgeManager(input: CreateWslBridgeManagerInput): WslB
       distro,
       hostRuntimeVersion,
     };
+    const installedRuntime = await input.ensureInstalled(distro);
     await input.ensureRuntimeVersion?.(readinessInput);
     const managedNodeReadyState = await input.ensureManagedNode?.(readinessInput);
     const managedNode = managedNodeReadyState ?? undefined;
     const bridge = await input.createBridge({
       ...readinessInput,
+      installedRuntime,
       managedNode,
     });
 

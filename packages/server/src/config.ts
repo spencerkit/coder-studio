@@ -16,6 +16,7 @@ import {
   normalizeLegacyStateDir,
   normalizeStateDir,
 } from "@coder-studio/core/state-paths";
+import type { WslRuntimeSource } from "@coder-studio/runtime";
 
 export interface ServerConfig {
   host: string;
@@ -50,6 +51,9 @@ export interface ServerConfig {
     restartArgs: string[];
     installArgsPrefix: string[];
     unsupportedReason: string | null;
+  };
+  wslRuntime?: {
+    source: WslRuntimeSource;
   };
 }
 
@@ -240,6 +244,7 @@ export function parseServerConfig(overrides?: ServerConfigInput): ServerConfig {
       installArgsPrefix: ["install", "-g"],
       unsupportedReason: "In-app update is only supported for global npm installs",
     },
+    wslRuntime: overrides?.wslRuntime,
   };
 }
 

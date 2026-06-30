@@ -25,6 +25,7 @@ import {
   resolveWslSessionHostApiUrl,
 } from "./wsl-bootstrap.js";
 import type { TrackedWslBridge, WslBridgeManager } from "./wsl-bridge-manager.js";
+import type { InstalledWslRuntimePointer } from "./wsl-distro-store.js";
 import type { RelayHostCommandInput } from "./wsl-host-api-proxy.js";
 
 function serializeProviderSnapshot(providers: ProviderDefinition[]): RemoteProviderSnapshot {
@@ -172,6 +173,7 @@ type WorkspaceWslRuntimeInput = {
   relayHostCommand?: (input: RelayHostCommandInput) => Promise<Result>;
   hostRuntimeVersion?: string;
   managedNodeVersion?: string;
+  installedRuntime?: InstalledWslRuntimePointer;
   nodePath?: string;
 };
 
@@ -520,6 +522,7 @@ export async function createWslRuntime(input: WorkspaceWslRuntimeInput): Promise
     workspaceSnapshot: cloneWorkspaceSnapshots(input.workspaceLookup.list()),
     customProviderConfigs: cloneCustomProviderConfigs(input.customProviderConfigs),
     hostApiUrl: resolveWslSessionHostApiUrl(),
+    runtimeEntryPath: input.installedRuntime?.entryPath,
     nodePath: input.nodePath,
   });
 

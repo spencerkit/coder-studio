@@ -69,6 +69,7 @@ export interface ResolveWslRuntimeLaunchSpecInput {
   customProviderConfigs: CustomProviderConfig[];
   hostApiUrl?: string;
   nodePath?: string;
+  runtimeEntryPath?: string;
   runtimeEntryPathResolver?: () => string;
 }
 
@@ -321,7 +322,9 @@ export async function resolveWslRuntimeLaunchSpec(
   input: ResolveWslRuntimeLaunchSpecInput
 ): Promise<WslRuntimeLaunchSpec> {
   const entryPath =
-    input.runtimeEntryPathResolver?.() ?? (await resolveWslRuntimeEntryPathForLaunch());
+    input.runtimeEntryPath?.trim() ||
+    input.runtimeEntryPathResolver?.() ||
+    (await resolveWslRuntimeEntryPathForLaunch());
   if (!existsSync(entryPath)) {
     throw new Error(`Unable to resolve Coder Studio WSL runtime entry. Missing ${entryPath}.`);
   }

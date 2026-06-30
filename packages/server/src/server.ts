@@ -5,7 +5,7 @@
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { AutomationPermission, DomainEvent } from "@coder-studio/core";
 import {
   deleteRuntimeConfig,
@@ -47,11 +47,14 @@ import { buildRemoteStateSnapshot } from "./runtime/remote/state-snapshot.js";
 import { getWslDistroBridgeRuntimeId } from "./runtime/runtime-state.js";
 import {
   issueRemoteSessionBootstrap,
+  resolveWslRuntimeEntryPath,
   resolveWslSessionHostApiUrl,
 } from "./runtime/wsl-bootstrap.js";
 import { createWslBridgeManager } from "./runtime/wsl-bridge-manager.js";
+import { createWslDistroRuntimeStore } from "./runtime/wsl-distro-store.js";
 import type { RelayHostCommandInput } from "./runtime/wsl-host-api-proxy.js";
 import { createBrokeredWslRuntime, createWslRuntime } from "./runtime/wsl-runtime.js";
+import { createWslRuntimeInstallManager } from "./runtime/wsl-runtime-install-manager.js";
 import { SessionManager } from "./session/manager.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
@@ -113,6 +116,35 @@ function getErrorCode(error: unknown): string | undefined {
 
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" ? code : undefined;
+}
+
+function resolveInstalledWslRuntimePointer(input: {
+  hostRuntimeVersion: string;
+  source?: {
+    runtimeVersion: string;
+    packageRoot: string;
+    entryPath: string;
+  };
+}): {
+  runtimeVersion: string;
+  installDir: string;
+  entryPath: string;
+  installedAt: number;
+} {
+  const runtimeSource = input.source;
+  if (runtimeSource && runtimeSource.runtimeVersion !== input.hostRuntimeVersion) {
+    throw new Error(
+      `Configured WSL runtime source version mismatch: expected ${input.hostRuntimeVersion}, got ${runtimeSource.runtimeVersion}`
+    );
+  }
+
+  const entryPath = runtimeSource?.entryPath ?? resolveWslRuntimeEntryPath();
+  return {
+    runtimeVersion: input.hostRuntimeVersion,
+    installDir: runtimeSource?.packageRoot ?? dirname(entryPath),
+    entryPath,
+    installedAt: Date.now(),
+  };
 }
 
 export interface Server {
@@ -382,9 +414,23 @@ export async function createServer(
     });
     teardownNativeRuntime = nativeRuntime;
     runtimeRegistry.register(nativeRuntime);
+    const hostRuntimeVersion = config.runtimeVersion ?? config.appVersion ?? "0.0.0";
+    const wslDistroRuntimeStore = createWslDistroRuntimeStore({
+      rootDir: join(stateRoot, "state", "wsl-distro-runtime-store"),
+    });
+    const wslRuntimeInstallManager = createWslRuntimeInstallManager({
+      hostRuntimeVersion,
+      store: wslDistroRuntimeStore,
+      installRuntime: async ({ runtimeVersion }) =>
+        resolveInstalledWslRuntimePointer({
+          hostRuntimeVersion: runtimeVersion,
+          source: config.wslRuntime?.source,
+        }),
+    });
     const wslBridgeManager = createWslBridgeManager({
-      getHostRuntimeVersion: () => config.runtimeVersion ?? config.appVersion ?? "0.0.0",
-      createBridge: async ({ distro, hostRuntimeVersion, managedNode }) => {
+      ensureInstalled: (distro) => wslRuntimeInstallManager.ensureInstalled(distro),
+      getHostRuntimeVersion: () => hostRuntimeVersion,
+      createBridge: async ({ distro, hostRuntimeVersion, installedRuntime, managedNode }) => {
         const workspace = workspaceMgr
           .list()
           .find(
@@ -448,7 +494,8 @@ export async function createServer(
           runtimeBindings,
           hostRuntimeVersion,
           managedNodeVersion: managedNode?.nodeVersion,
-          nodePath: managedNode?.nodePath,
+          installedRuntime,
+          nodePath: managedNode?.nodePath ?? installedRuntime.nodePath,
         });
 
         return {
