@@ -1,5 +1,6 @@
-import { cp, mkdir, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import * as esbuild from "esbuild";
 import { buildDesktopRuntimeBundle } from "./build-desktop-runtime.js";
 import {
@@ -23,6 +24,10 @@ export function resolveEmbeddedNodeOutputName(
   return platform === "win32" ? "node.exe" : "node";
 }
 
+export function resolveDesktopReleaseDir(desktopDistDir: string = DESKTOP_DIST_DIR): string {
+  return join(desktopDistDir, "release");
+}
+
 export function shouldPackageDesktop(platform: NodeJS.Platform = process.platform): boolean {
   return platform === "darwin" || platform === "win32";
 }
@@ -38,14 +43,70 @@ export async function prepareDesktopOutputDirs(input: {
 }
 
 export async function buildDesktopPackage(
-  input: { exec?: typeof run; desktopDir?: string } = {}
+  input: { exec?: typeof run; desktopDir?: string; outputDir?: string } = {}
 ): Promise<void> {
   const exec = input.exec ?? run;
   const desktopDir = input.desktopDir ?? DESKTOP_DIR;
+  const args = ["exec", "electron-builder", "--projectDir", desktopDir];
 
-  await exec("pnpm", ["exec", "electron-builder", "--projectDir", desktopDir], {
+  if (input.outputDir) {
+    args.push(`--config.directories.output=${input.outputDir}`);
+  }
+
+  await exec("pnpm", args, {
     cwd: desktopDir,
   });
+}
+
+export async function createDesktopPackageStageDir(): Promise<string> {
+  return mkdtemp(join(tmpdir(), "coder-studio-desktop-release-"));
+}
+
+export async function materializeDesktopReleaseDir(input: {
+  stagedReleaseDir: string;
+  releaseDir: string;
+}): Promise<void> {
+  await rm(input.releaseDir, { recursive: true, force: true });
+  await mkdir(dirname(input.releaseDir), { recursive: true });
+  await cp(input.stagedReleaseDir, input.releaseDir, { recursive: true, force: true });
+}
+
+export async function packageDesktopInstallers(
+  input: {
+    exec?: typeof run;
+    desktopDir?: string;
+    desktopDistDir?: string;
+    createStageDir?: () => Promise<string>;
+    materializeReleaseDir?: (input: {
+      stagedReleaseDir: string;
+      releaseDir: string;
+    }) => Promise<void>;
+    removeDir?: typeof rm;
+  } = {}
+): Promise<string> {
+  const exec = input.exec ?? run;
+  const desktopDir = input.desktopDir ?? DESKTOP_DIR;
+  const desktopDistDir = input.desktopDistDir ?? DESKTOP_DIST_DIR;
+  const createStageDir = input.createStageDir ?? createDesktopPackageStageDir;
+  const materializeReleaseDir = input.materializeReleaseDir ?? materializeDesktopReleaseDir;
+  const removeDir = input.removeDir ?? rm;
+  const releaseDir = resolveDesktopReleaseDir(desktopDistDir);
+  const stagedReleaseDir = await createStageDir();
+
+  try {
+    await buildDesktopPackage({
+      exec,
+      desktopDir,
+      outputDir: stagedReleaseDir,
+    });
+    await materializeReleaseDir({
+      stagedReleaseDir,
+      releaseDir,
+    });
+    return releaseDir;
+  } finally {
+    await removeDir(stagedReleaseDir, { recursive: true, force: true });
+  }
 }
 
 export function createDesktopBuildOptions(): esbuild.BuildOptions {
@@ -89,8 +150,8 @@ export async function buildDesktop(): Promise<void> {
   });
 
   if (shouldPackageDesktop()) {
-    await buildDesktopPackage();
-    success(`Desktop installers built in ${join(DESKTOP_DIST_DIR, "release")}`);
+    const releaseDir = await packageDesktopInstallers();
+    success(`Desktop installers built in ${releaseDir}`);
   } else {
     info(
       "Desktop embedded runtime assembled. Installer packaging is skipped on this host platform."
