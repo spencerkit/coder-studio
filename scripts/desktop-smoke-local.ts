@@ -9,7 +9,6 @@ import { buildWeb } from "./build-web.js";
 import { error, info, log, ROOT_DIR, run, success } from "./shared/index.js";
 import { isDirectExecution, runBackground } from "./shared/process.js";
 
-const SMOKE_USER_DATA_RELATIVE_DIR = join(".tmp", "desktop-local-smoke", "user-data");
 const DESKTOP_ELECTRON_ENTRY = "dist/electron/main.mjs";
 const LOCAL_SEED_SOURCE = "local-desktop-seed";
 const DESKTOP_SMOKE_IGNORE_PERSISTED_CONFIG_ENV = "CODER_STUDIO_DESKTOP_IGNORE_PERSISTED_CONFIG";
