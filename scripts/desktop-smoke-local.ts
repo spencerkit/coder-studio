@@ -12,6 +12,8 @@ import { isDirectExecution, runBackground } from "./shared/process.js";
 const SMOKE_USER_DATA_RELATIVE_DIR = join(".tmp", "desktop-local-smoke", "user-data");
 const DESKTOP_ELECTRON_ENTRY = "dist/electron/main.mjs";
 const LOCAL_SEED_SOURCE = "local-desktop-seed";
+const SMOKE_CLEANUP_RETRY_DELAY_MS = 50;
+const SMOKE_CLEANUP_MAX_ATTEMPTS = 5;
 
 export type SmokeScriptRunner = (
   command: string,
@@ -135,7 +137,25 @@ export async function launchDesktopSmokeLocal(input: {
     }
 
     cleanedUserData = true;
-    await removeDir(input.userDataDir);
+    for (let attempt = 1; attempt <= SMOKE_CLEANUP_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        await removeDir(input.userDataDir);
+        return;
+      } catch (error) {
+        const code = error instanceof Error ? (error as { code?: string }).code : undefined;
+        const message = error instanceof Error ? error.message : String(error);
+        const locked =
+          code === "EBUSY" ||
+          code === "EPERM" ||
+          code === "ENOTEMPTY" ||
+          /resource busy or locked/i.test(message);
+        if (!locked || attempt === SMOKE_CLEANUP_MAX_ATTEMPTS) {
+          throw error;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, SMOKE_CLEANUP_RETRY_DELAY_MS));
+      }
+    }
   };
 
   const child = spawn(

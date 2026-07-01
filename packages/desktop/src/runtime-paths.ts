@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { posix, win32 } from "node:path";
 import type { ActiveRuntimePointer } from "./runtime-store.js";
 
 export interface EmbeddedRuntimePathInput {
@@ -60,22 +60,26 @@ function readActiveRuntimePointerSync(currentPointerPath: string): ActiveRuntime
 
 export function resolveEmbeddedRuntimePaths(input: EmbeddedRuntimePathInput): EmbeddedRuntimePaths {
   const platform = input.platform ?? process.platform;
+  const path = platform === "win32" ? win32 : posix;
+  const appPath = input.appPath.replaceAll("\\", path.sep);
   const runtimeRoot = input.isPackaged
-    ? join(input.resourcesPath, "runtime")
-    : join(input.appPath, "dist", "runtime");
+    ? path.join(input.resourcesPath, "runtime")
+    : appPath.endsWith(`${path.sep}dist${path.sep}electron`)
+      ? path.join(path.dirname(appPath), "runtime")
+      : path.join(appPath, "dist", "runtime");
   const activeRuntimePointer = readActiveRuntimePointerSync(
-    join(input.userDataDir, "runtime-store", "current.json")
+    path.join(input.userDataDir, "runtime-store", "current.json")
   );
 
   return {
-    nodeExecutable: join(runtimeRoot, "node", platform === "win32" ? "node.exe" : "node"),
+    nodeExecutable: path.join(runtimeRoot, "node", platform === "win32" ? "node.exe" : "node"),
     runtimeEntry: activeRuntimePointer
-      ? resolve(activeRuntimePointer.path, activeRuntimePointer.entry)
-      : join(runtimeRoot, "embedded", "dist", "esm", "runtime-launch-entry.mjs"),
+      ? path.resolve(activeRuntimePointer.path, activeRuntimePointer.entry)
+      : path.join(runtimeRoot, "embedded", "dist", "esm", "runtime-launch-entry.mjs"),
     ...(activeRuntimePointer ? { runtimeVersion: activeRuntimePointer.version } : {}),
     webRoot: activeRuntimePointer
-      ? resolve(activeRuntimePointer.path, activeRuntimePointer.webRoot)
-      : join(runtimeRoot, "embedded", "dist", "web"),
-    runtimeJsonPath: join(input.userDataDir, "runtime", "runtime.json"),
+      ? path.resolve(activeRuntimePointer.path, activeRuntimePointer.webRoot)
+      : path.join(runtimeRoot, "embedded", "dist", "web"),
+    runtimeJsonPath: path.join(input.userDataDir, "runtime", "runtime.json"),
   };
 }

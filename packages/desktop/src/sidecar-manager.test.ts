@@ -78,6 +78,25 @@ describe("sidecar-manager", () => {
     });
   });
 
+  it("resolves unpackaged runtime paths from the built desktop dist root", () => {
+    expect(
+      resolveEmbeddedRuntimePaths({
+        isPackaged: false,
+        resourcesPath: "C:\\Users\\test\\AppData\\Local\\Programs\\Coder Studio\\resources",
+        appPath: "C:\\repo\\packages\\desktop\\dist\\electron",
+        userDataDir: "C:\\Users\\test\\AppData\\Roaming\\Coder Studio",
+        platform: "win32",
+      })
+    ).toEqual({
+      nodeExecutable: "C:\\repo\\packages\\desktop\\dist\\runtime\\node\\node.exe",
+      runtimeEntry:
+        "C:\\repo\\packages\\desktop\\dist\\runtime\\embedded\\dist\\esm\\runtime-launch-entry.mjs",
+      runtimeVersion: undefined,
+      webRoot: "C:\\repo\\packages\\desktop\\dist\\runtime\\embedded\\dist\\web",
+      runtimeJsonPath: "C:\\Users\\test\\AppData\\Roaming\\Coder Studio\\runtime\\runtime.json",
+    });
+  });
+
   it("ignores stale runtime metadata from a different pid", async () => {
     const staleRuntime: RuntimeConfig = {
       host: "localhost",

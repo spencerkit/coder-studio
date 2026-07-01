@@ -214,6 +214,42 @@ describe("desktop-smoke-local", () => {
     expect(removeDir).not.toHaveBeenCalled();
   });
 
+  it("retries cleanup when Windows temporarily locks the smoke userData dir", async () => {
+    const child = createChildProcess();
+    const runBackground = vi.fn(() => child);
+    const waitForDesktopHealthy = vi.fn(async () => ({
+      browserUrl: "http://127.0.0.1:43123",
+      runtime: {
+        host: "127.0.0.1",
+        port: 43123,
+        pid: 4242,
+        token: "server-4242",
+        serverInstanceId: "server-4242",
+        startedAt: 1700000001234,
+      },
+    }));
+    const removeDir = vi.fn(async () => {
+      if (removeDir.mock.calls.length === 1) {
+        const error = new Error("EBUSY") as Error & { code?: string };
+        error.code = "EBUSY";
+        throw error;
+      }
+    });
+
+    const launch = await launchDesktopSmokeLocal({
+      repoRoot: "/repo",
+      userDataDir: "/repo/.tmp/desktop-local-smoke/user-data",
+      runBackground,
+      waitForDesktopHealthy,
+      removeDir,
+    });
+
+    child.emit("close", 0, null);
+    await launch.completed;
+
+    expect(removeDir.mock.calls.length).toBeGreaterThan(1);
+  });
+
   it("fails fast when Electron exits before the desktop runtime becomes healthy", async () => {
     const child = createChildProcess();
     const runBackground = vi.fn(() => child);
