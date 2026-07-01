@@ -113,6 +113,9 @@ importers:
       pm2:
         specifier: ^7.0.1
         version: 7.0.1
+      semver:
+        specifier: ^7.7.4
+        version: 7.7.4
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -177,9 +180,6 @@ importers:
       '@coder-studio/core':
         specifier: workspace:*
         version: link:../core
-      '@coder-studio/server':
-        specifier: workspace:*
-        version: link:../server
       electron-updater:
         specifier: ^6.8.9
         version: 6.8.9
