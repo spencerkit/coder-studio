@@ -25,10 +25,14 @@ export const DESKTOP_DIR = resolve(PACKAGES_DIR, "desktop");
 // Build output directories
 export const WEB_DIST_DIR = resolve(WEB_DIR, "dist");
 export const SERVER_DIST_DIR = resolve(SERVER_DIR, "dist");
+export const RUNTIME_DIST_DIR = resolve(RUNTIME_DIR, "dist");
 export const CLI_DIST_DIR = resolve(CLI_DIR, "dist");
 export const DESKTOP_DIST_DIR = resolve(DESKTOP_DIR, "dist");
 export const DESKTOP_ELECTRON_DIR = resolve(DESKTOP_DIST_DIR, "electron");
 export const DESKTOP_RUNTIME_DIR = resolve(DESKTOP_DIST_DIR, "runtime");
+
+// Runtime subdirectories
+export const RUNTIME_ESM_DIR = resolve(RUNTIME_DIST_DIR, "esm");
 
 // CLI subdirectories
 export const CLI_ESM_DIR = resolve(CLI_DIST_DIR, "esm");

@@ -4,9 +4,11 @@
 > Date: 2026-06-30
 > Scope: `packages/server`, `packages/desktop`, `packages/cli`, `packages/runtime`, `scripts`
 
+> **2026-07-01 scope update:** the npm CLI remains host-only. Only the desktop app owns WSL bridge/runtime lifecycle. References below to shared desktop/CLI WSL ownership should be read as superseded by that decision.
+
 ## Summary
 
-Replace the current per-workspace WSL runtime launch model with a host-managed, per-distro bridge runtime model shared by Windows desktop and Windows CLI.
+Replace the current per-workspace WSL runtime launch model with a host-managed, per-distro bridge runtime model owned by the Windows desktop app.
 
 The Windows host remains the control plane. Each WSL distro gets one managed bridge daemon, one managed runtime store, and one managed Node installation. All WSL workspaces in the same distro reuse that bridge. Runtime version must always match the active host runtime version exactly. Node is version-managed independently, but must satisfy the runtime manifest requirement before the bridge can start.
 
@@ -16,14 +18,14 @@ The current WSL flow has three architectural gaps:
 
 - WSL runtime launch is per workspace rather than per distro.
 - WSL runtime activation does not use a managed WSL runtime store aligned with the host runtime store.
-- Windows desktop and Windows CLI do not yet converge on one WSL runtime management architecture.
+- Desktop-owned WSL lifecycle is still entangled with CLI-oriented packaging and launcher assumptions.
 
 This creates avoidable process churn, blurred lifecycle ownership, and an update model that is weaker than the desktop managed runtime design.
 
 ## Goals
 
 - Use one WSL bridge daemon per distro, not per workspace.
-- Make Windows desktop and Windows CLI use the same WSL runtime architecture.
+- Keep WSL bridge/runtime lifecycle under the desktop app only.
 - Keep runtime version strictly equal between host and WSL bridge runtime.
 - Let the Windows host manage WSL runtime install, activation, upgrade, start, stop, and health checks.
 - Reuse one managed Node installation per distro across all workspaces in that distro.
@@ -39,7 +41,7 @@ This creates avoidable process churn, blurred lifecycle ownership, and an update
 
 ## Constraints Confirmed For This Design
 
-- Windows desktop and Windows CLI must use the same WSL runtime architecture.
+- The npm CLI remains single-environment and does not own WSL bridge lifecycle.
 - Only distros that have actually been used need to be managed.
 - Runtime version equality is strict. WSL bridge startup must verify that the active distro runtime version matches the host runtime version before serving requests.
 - Managed Node is versioned independently from runtime version. Runtime manifest compatibility gates bridge startup.
@@ -77,11 +79,16 @@ The broker is the only install and lifecycle authority. The bridge is only a run
 
 ### Host-Side Components
 
-`packages/desktop` and `packages/cli`
+`packages/desktop`
 
-- Launch the host runtime.
+- Launch the desktop host runtime.
 - Detect WSL workspace target distro.
-- Route all WSL runtime actions through a shared broker layer.
+- Route all WSL runtime actions through the broker layer.
+
+`packages/cli`
+
+- Launch the host-native runtime only.
+- Reuse shared server/runtime code where appropriate, but do not own WSL bridge lifecycle.
 
 `packages/runtime` or shared runtime management module
 
@@ -159,7 +166,7 @@ The broker owns:
 - routing workspace requests to the right distro bridge
 - draining and restarting bridges during runtime upgrades
 
-Neither desktop nor CLI should implement their own WSL-specific lifecycle logic outside the broker contract.
+No layer outside the desktop broker should implement WSL-specific lifecycle logic.
 
 ## Bridge Responsibilities
 
@@ -233,7 +240,7 @@ This design uses immediate stop-and-upgrade semantics for running bridges. Old-v
 
 ## Host Exit Flow
 
-When desktop or CLI host exits:
+When the desktop host exits:
 
 1. Enumerate all bridges started or tracked by the broker.
 2. Send `stop`.
@@ -278,20 +285,19 @@ to:
 
 This keeps workspace identity stable while changing the execution topology.
 
-## CLI and Desktop Convergence
+## Desktop-Owned Broker Reuse
 
-Windows desktop and Windows CLI must call the same broker and store-management code paths.
+The desktop host is the only caller that owns WSL broker lifecycle.
 
-Required shared behaviors:
+Reusable building blocks may still be shared across packages when they are host-runtime-neutral:
 
 - runtime version lookup
-- distro runtime install and activation
-- managed Node install and compatibility checks
-- bridge start and stop
+- distro runtime install and activation primitives
+- managed Node compatibility checks
 - bridge health and runtime-info probing
-- request routing contract
+- request routing contracts
 
-Only launcher-specific UX and process wiring should remain different between desktop and CLI.
+The npm CLI must remain host-only and must not directly start, stop, or route WSL bridge processes.
 
 ## Migration Plan
 
@@ -304,7 +310,7 @@ Only launcher-specific UX and process wiring should remain different between des
 
 ### Phase 2
 
-- Move desktop and CLI WSL launch paths onto the same shared broker implementation.
+- Move all desktop-owned WSL launch paths onto the same shared broker implementation.
 - Add runtime upgrade flow that immediately stops and reconciles running bridges.
 - Add host-exit bridge shutdown guarantees.
 
@@ -325,7 +331,7 @@ Add coverage for:
 - bridge restart on runtime version drift
 - host runtime update stopping and reconciling running bridges
 - host exit stopping all bridges
-- shared broker behavior working the same for desktop and CLI entry paths
+- shared broker behavior working the same across desktop launch surfaces
 
 ## Open Questions Intentionally Deferred
 

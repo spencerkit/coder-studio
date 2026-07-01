@@ -13,7 +13,6 @@ import {
   copyDir,
   createCliBuildOptions,
   ensureDir,
-  ensureWslRuntimeEntryBuilt,
   error,
   exists,
   info,
@@ -57,10 +56,6 @@ async function buildCli(): Promise<void> {
   await esbuild.build(esmOptions);
   success(`ESM bundle: ${resolve(CLI_DIR, "dist/esm/bin.mjs")}`);
 
-  info("Building WSL runtime entry...");
-  const wslRuntimeEntryPath = await ensureWslRuntimeEntryBuilt();
-  success(`WSL runtime entry: ${wslRuntimeEntryPath}`);
-
   // Create bin.js wrapper (for ESM)
   info("Creating bin.js entry point...");
   const binPath = resolve(CLI_DIR, "dist/bin.js");
@@ -74,18 +69,6 @@ import('./esm/bin.mjs').catch((err) => {
   await writeFile(binPath, binContent, { mode: 0o755 });
   success(`bin.js: ${binPath}`);
 
-  info("Creating bin-legacy.js entry point...");
-  const legacyBinPath = resolve(CLI_DIR, "dist/bin-legacy.js");
-  const legacyBinContent = `#!/usr/bin/env node
-// @spencer-kit/coder-studio - Legacy entry point wrapper
-import('./esm/bin-legacy.mjs').catch((err) => {
-  console.error('Failed to start CLI:', err);
-  process.exit(1);
-});
-`;
-  await writeFile(legacyBinPath, legacyBinContent, { mode: 0o755 });
-  success(`bin-legacy.js: ${legacyBinPath}`);
-
   // Copy web assets
   info("Copying web assets...");
   if (await exists(WEB_DIST_DIR)) {
@@ -97,7 +80,6 @@ import('./esm/bin-legacy.mjs').catch((err) => {
 
   log("\n✓ CLI build complete.");
   log(`  Entry:    ${binPath}`);
-  log(`  Legacy:   ${legacyBinPath}`);
   log(`  ESM:      ${resolve(CLI_DIR, "dist/esm/bin.mjs")}`);
   log(`  Web:      ${CLI_WEB_DIR}`);
 }

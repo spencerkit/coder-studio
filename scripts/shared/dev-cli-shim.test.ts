@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe("dev cli shim", () => {
-  it("writes unix and windows coder-studio shims that forward to the workspace cli", () => {
+  it("writes unix and windows coder-studio-cli shims that forward to the workspace cli", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "coder-studio-dev-shim-root-"));
     tempDirs.push(rootDir);
     const cliDir = join(rootDir, "packages", "cli");
@@ -135,11 +135,11 @@ describe("dev cli shim", () => {
       Path: `${join(rootDir, ".tmp", "dev-bin")}:/usr/bin`,
       HOME: "/tmp/dev-home",
     });
-    expect(statSync(join(rootDir, ".tmp", "dev-bin", "coder-studio")).mode & 0o111).not.toBe(0);
+    expect(statSync(join(rootDir, ".tmp", "dev-bin", "coder-studio-cli")).mode & 0o111).not.toBe(0);
   });
 
   it.runIf(process.platform !== "win32")(
-    "executes the generated coder-studio shim without depending on a preinstalled coder-studio command",
+    "executes the generated coder-studio-cli shim without depending on a preinstalled global command",
     () => {
       const result = ensureDevCliShim({
         rootDir: REPO_ROOT,

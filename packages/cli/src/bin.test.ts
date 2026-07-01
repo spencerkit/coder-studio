@@ -119,16 +119,6 @@ describe("main", () => {
     expect(output).not.toContain("USAGE:\n  coder-studio [COMMAND]");
   });
 
-  it("warns when the legacy coder-studio npm alias is used", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    await main(["status"], { entrypointName: "coder-studio" });
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      "The npm `coder-studio` command is deprecated and will be removed in a future release. Use `coder-studio-cli` instead."
-    );
-  });
-
   it("prints coder-studio-cli in config help output", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -138,16 +128,6 @@ describe("main", () => {
     expect(output).toContain("coder-studio-cli config [OPTIONS]");
     expect(output).toContain("coder-studio-cli config --host 0.0.0.0");
     expect(output).not.toContain("coder-studio config [OPTIONS]");
-  });
-
-  it("prints legacy coder-studio in config help output when invoked via legacy alias", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-    await main(["config", "help"], { entrypointName: "coder-studio" });
-
-    const output = String(logSpy.mock.calls[0]?.[0] ?? "");
-    expect(output).toContain("coder-studio config [OPTIONS]");
-    expect(output).toContain("coder-studio config --host 0.0.0.0");
   });
 
   it("runs the foreground runner when serve --foreground is provided", async () => {

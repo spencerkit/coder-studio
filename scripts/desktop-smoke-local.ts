@@ -12,6 +12,7 @@ import { isDirectExecution, runBackground } from "./shared/process.js";
 const SMOKE_USER_DATA_RELATIVE_DIR = join(".tmp", "desktop-local-smoke", "user-data");
 const DESKTOP_ELECTRON_ENTRY = "dist/electron/main.mjs";
 const LOCAL_SEED_SOURCE = "local-desktop-seed";
+const DESKTOP_SMOKE_IGNORE_PERSISTED_CONFIG_ENV = "CODER_STUDIO_DESKTOP_IGNORE_PERSISTED_CONFIG";
 const SMOKE_CLEANUP_RETRY_DELAY_MS = 50;
 const SMOKE_CLEANUP_MAX_ATTEMPTS = 5;
 type RemoveDir = (target: string) => Promise<void>;
@@ -177,15 +178,18 @@ export async function launchDesktopSmokeLocal(input: {
     }
   };
 
+  const electronEnv: NodeJS.ProcessEnv = {
+    ...(input.env ?? process.env),
+    CODER_STUDIO_DESKTOP_USER_DATA_DIR: input.userDataDir,
+    [DESKTOP_SMOKE_IGNORE_PERSISTED_CONFIG_ENV]: "1",
+  };
+
   const child = spawn(
     "pnpm",
     ["--filter", "@coder-studio/desktop", "exec", "electron", DESKTOP_ELECTRON_ENTRY],
     {
       cwd: repoRoot,
-      env: {
-        ...(input.env ?? process.env),
-        CODER_STUDIO_DESKTOP_USER_DATA_DIR: input.userDataDir,
-      },
+      env: electronEnv,
       stdio: "inherit",
     }
   );
@@ -295,15 +299,17 @@ export async function runDesktopSmokeLocal(
   info("Launching Electron against local desktop assets...");
 
   if (input.runCommand) {
+    const electronEnv: NodeJS.ProcessEnv = {
+      ...(input.env ?? process.env),
+      CODER_STUDIO_DESKTOP_USER_DATA_DIR: prepared.userDataDir,
+      [DESKTOP_SMOKE_IGNORE_PERSISTED_CONFIG_ENV]: "1",
+    };
     await runCommand(
       "pnpm",
       ["--filter", "@coder-studio/desktop", "exec", "electron", DESKTOP_ELECTRON_ENTRY],
       {
         cwd: repoRoot,
-        env: {
-          ...(input.env ?? process.env),
-          CODER_STUDIO_DESKTOP_USER_DATA_DIR: prepared.userDataDir,
-        },
+        env: electronEnv,
       }
     );
     return;

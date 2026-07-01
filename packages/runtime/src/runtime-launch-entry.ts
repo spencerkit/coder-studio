@@ -278,7 +278,9 @@ const createShutdownHandler = (server: Server) => async () => {
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<Server> {
   const options = buildDesktopRuntimeServerConfig(env, import.meta.url);
   const server = await createServer({
-    ...options,
+    ...options.serverConfig,
+    runtimeJsonPath: options.runtimeJsonPath,
+    writeRuntimeConfig: options.writeRuntimeConfig,
     desktopUpdateAdapter: createDesktopUpdateAdapter(),
   });
   const shutdown = createShutdownHandler(server);

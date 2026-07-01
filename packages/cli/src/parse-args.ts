@@ -751,7 +751,6 @@ export function parseArgs(argv: string[]): CliArgs {
         args.terminalCommand = arg;
         break;
 
-      case "status":
       case "diff":
         if (getActiveCommand(args) !== "git") {
           throwUnknownArgument(arg);

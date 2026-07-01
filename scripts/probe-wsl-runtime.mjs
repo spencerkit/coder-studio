@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-const entry = resolve("packages/cli/dist/esm/wsl-runtime-entry.mjs");
+const entry = resolve("packages/runtime/dist/esm/wsl-runtime-entry.mjs");
 if (!existsSync(entry)) {
   console.error("Missing", entry);
   process.exit(1);

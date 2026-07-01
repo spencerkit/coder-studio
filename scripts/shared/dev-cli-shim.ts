@@ -36,8 +36,8 @@ function resolveDevCliRuntime() {
 
 export function ensureDevCliShim(input: DevCliShimInput): DevCliShimResult {
   const binDir = join(input.rootDir, ".tmp", "dev-bin");
-  const unixShimPath = join(binDir, "coder-studio");
-  const windowsShimPath = join(binDir, "coder-studio.cmd");
+  const unixShimPath = join(binDir, "coder-studio-cli");
+  const windowsShimPath = join(binDir, "coder-studio-cli.cmd");
   const repoCliEntry = join(input.cliDir, "src", "bin.ts");
   const { nodeExecPath, tsxLoaderPath } = resolveDevCliRuntime();
   const unixNodeExec = quotePosixShellArg(nodeExecPath);

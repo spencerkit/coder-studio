@@ -19,25 +19,6 @@ import { getBrowserUrl, getListenIp, getListenUrl } from "./server-url.js";
 const MANAGED_SERVER_WAIT_MS = 15000;
 const DEFAULT_LOG_TAIL_LINES = 40;
 const PRIMARY_CLI_COMMAND = "coder-studio-cli";
-const LEGACY_CLI_COMMAND = "coder-studio";
-
-export interface CliMainOptions {
-  entrypointName?: string;
-}
-
-function resolveCommandName(entrypointName?: string): string {
-  return entrypointName?.trim() || PRIMARY_CLI_COMMAND;
-}
-
-function warnLegacyCommand(entrypointName?: string): void {
-  if (resolveCommandName(entrypointName) !== LEGACY_CLI_COMMAND) {
-    return;
-  }
-
-  console.warn(
-    "The npm `coder-studio` command is deprecated and will be removed in a future release. Use `coder-studio-cli` instead."
-  );
-}
 
 function formatConfig(config: CliConfig | null): string {
   return JSON.stringify(config ?? {}, null, 2);
@@ -389,13 +370,9 @@ async function openManagedServerInBrowser(existingStatus?: ServerStatus | null):
   await openBrowser(browserUrl);
 }
 
-export async function main(
-  argv = process.argv.slice(2),
-  options: CliMainOptions = {}
-): Promise<void> {
+export async function main(argv = process.argv.slice(2)): Promise<void> {
   assertSupportedNodeVersion();
-  const commandName = resolveCommandName(options.entrypointName);
-  warnLegacyCommand(options.entrypointName);
+  const commandName = PRIMARY_CLI_COMMAND;
   const args = parseArgs(argv);
 
   if (args.command === "config") {

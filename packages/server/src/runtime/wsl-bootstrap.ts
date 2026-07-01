@@ -247,7 +247,7 @@ export function serializeWslRuntimeBootstrap(bootstrap: WslRuntimeBootstrapPaylo
 export function resolveWslRuntimeEntryPath(runtimeModuleUrl: string = import.meta.url): string {
   const modulePath = fileURLToPath(runtimeModuleUrl);
   const moduleDir = dirname(modulePath);
-  const repoDistEntryPath = resolve(moduleDir, "../../../cli/dist/esm/wsl-runtime-entry.mjs");
+  const repoDistEntryPath = resolve(moduleDir, "../../../runtime/dist/esm/wsl-runtime-entry.mjs");
   const packagedDistEntryPath = resolve(moduleDir, "wsl-runtime-entry.mjs");
   const candidates = isPackagedDistRuntime(modulePath)
     ? [packagedDistEntryPath, repoDistEntryPath]
@@ -273,7 +273,7 @@ function runDevWslRuntimeEntryBuild(repoRoot: string): Promise<void> {
   if (!existsSync(ensureScript)) {
     return Promise.reject(
       new Error(
-        `Missing ${ensureScript}. Run "pnpm build:cli" or restart the dev server to build wsl-runtime-entry.mjs.`
+        `Missing ${ensureScript}. Run "pnpm build:runtime" or restart the dev server to build wsl-runtime-entry.mjs.`
       )
     );
   }
@@ -296,7 +296,7 @@ function runDevWslRuntimeEntryBuild(repoRoot: string): Promise<void> {
 
       reject(
         new Error(
-          `Unable to build WSL runtime entry (exit code ${code ?? "unknown"}). Run "pnpm build:cli" and retry.`
+          `Unable to build WSL runtime entry (exit code ${code ?? "unknown"}). Run "pnpm build:runtime" and retry.`
         )
       );
     });
@@ -331,7 +331,7 @@ export async function resolveWslRuntimeLaunchSpec(
   }
   if (!isExecutableEntryPath(entryPath)) {
     throw new Error(
-      `Unable to launch Coder Studio WSL runtime from ${entryPath}. Build the CLI bundle first so wsl-runtime-entry.mjs exists.`
+      `Unable to launch Coder Studio WSL runtime from ${entryPath}. Build the runtime bundle first so wsl-runtime-entry.mjs exists.`
     );
   }
 

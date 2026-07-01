@@ -152,11 +152,6 @@ export async function assertCliPublishArtifacts(
       'CLI package.json publish bin must point "coder-studio-cli" to "./dist/bin.js"'
     );
   }
-  if (!hasRecordValue(publishBin, "coder-studio", "./dist/bin-legacy.js")) {
-    throw new Error(
-      'CLI package.json publish bin must point "coder-studio" to "./dist/bin-legacy.js"'
-    );
-  }
   if (!hasNestedRecordValue(publishExports, ".", "import", "./dist/esm/index.mjs")) {
     throw new Error(
       'CLI package.json publish exports must point "." import to "./dist/esm/index.mjs"'
@@ -165,21 +160,16 @@ export async function assertCliPublishArtifacts(
   assertPublishDependenciesResolvable(pkg.dependencies, packageJsonPath);
 
   await assertFile(resolve(cliDir, "dist/bin.js"));
-  await assertFile(resolve(cliDir, "dist/bin-legacy.js"));
   await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
-  await assertFile(resolve(cliDir, "dist/esm/bin-legacy.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
-  await assertFile(resolve(cliDir, "dist/esm/wsl-runtime-entry.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
   assertBundleRuntimeDependenciesDeclared(
     pkg.dependencies,
     await collectBareImports(resolve(cliDir, "dist/esm"), [
       "bin.mjs",
-      "bin-legacy.mjs",
       "index.mjs",
       "server-runner.mjs",
-      "wsl-runtime-entry.mjs",
     ]),
     packageJsonPath
   );

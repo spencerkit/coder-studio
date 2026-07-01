@@ -11,6 +11,7 @@ import {
   PACKAGES_DIR,
   PROVIDERS_DIR,
   RUNTIME_DIR,
+  RUNTIME_ESM_DIR,
   SERVER_DIR,
   UTILS_DIR,
 } from "./paths.js";
@@ -67,7 +68,6 @@ export async function createCliBuildOptions(format: "esm" | "cjs"): Promise<Buil
     entryPoints: [
       resolve(CLI_DIR, "src/automation-entry.ts"),
       resolve(CLI_DIR, "src/bin.ts"),
-      resolve(CLI_DIR, "src/bin-legacy.ts"),
       resolve(CLI_DIR, "src/index.ts"),
       resolve(CLI_DIR, "src/server-runner.ts"),
       resolve(CLI_DIR, "src/update-worker.ts"),
@@ -99,7 +99,8 @@ export async function createWslRuntimeEntryBuildOptions(): Promise<BuildOptions>
   const baseOptions = await createCliBuildOptions("esm");
   return {
     ...baseOptions,
-    entryPoints: [resolve(CLI_DIR, "src/wsl-runtime-entry.ts")],
+    entryPoints: [resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")],
+    outdir: RUNTIME_ESM_DIR,
     // Keep third-party deps external so bundled CJS (pino, mime-types, etc.) is not
     // inlined into ESM. Mixing bundled require shims with top-level await breaks on Node 24.
     packages: "external",
@@ -111,7 +112,6 @@ export async function createWslRuntimeEntryBuildOptions(): Promise<BuildOptions>
     },
     alias: {
       ...baseOptions.alias,
-      "@coder-studio/runtime": resolve(RUNTIME_DIR, "src/index.ts"),
     },
     external: Array.from(
       new Set([

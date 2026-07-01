@@ -4,7 +4,7 @@
 
 **Goal:** Ship a VS Code style WSL remote-runtime flow where Windows keeps one desktop UI and host control plane, while each WSL distro gets one host-managed runtime that all workspaces in that distro share.
 
-**Architecture:** Reuse the current per-distro brokered runtime direction, but make it a real host-managed remote-runtime lifecycle. The server becomes responsible for distro runtime install records, strict version reconciliation, and bridge startup; desktop and CLI become launch surfaces that feed the same runtime source and open-workspace contract into the host.
+**Architecture:** Reuse the current per-distro brokered runtime direction, but make it a real host-managed remote-runtime lifecycle. The server becomes responsible for distro runtime install records, strict version reconciliation, and bridge startup; the desktop app owns WSL launch/integration while the npm CLI remains host-only.
 
 **Tech Stack:** TypeScript, Electron, Fastify/WebSocket, JSON-RPC, Vitest, existing `packages/server` runtime router/orchestrator, `packages/desktop` sidecar bootstrap, `packages/cli`, `packages/runtime`.
 
@@ -16,11 +16,13 @@ This plan implements the architecture approved in:
 
 - `docs/superpowers/specs/2026-06-30-wsl-remote-runtime-architecture-design.md`
 
+> **2026-07-01 scope update:** treat this as a fresh requirement with no legacy migration. The npm CLI is single-environment and host-only. Any steps below that assume CLI-owned WSL launch behavior are superseded; desktop-owned WSL integration is the intended direction.
+
 It covers:
 
 - host-managed per-distro WSL runtime install state
 - strict host/runtime version reconciliation
-- shared runtime source wiring for desktop and CLI hosts
+- desktop-owned WSL runtime source wiring with the npm CLI staying host-only
 - a Windows/WSL `coder-studio` open flow that routes through the desktop host
 - distro runtime diagnostics and lifecycle commands
 
@@ -35,7 +37,7 @@ It does not cover:
 ### Shared runtime source contract
 
 - Create: `packages/runtime/src/wsl-runtime-source.ts`
-  - defines the runtime source descriptor that desktop and CLI hosts both pass into server startup
+  - defines the runtime source descriptor used by desktop-owned WSL launch flows
 - Modify: `packages/runtime/src/index.ts`
   - exports the shared source helper
 - Test: `packages/runtime/src/wsl-runtime-source.test.ts`
@@ -61,12 +63,12 @@ It does not cover:
   - `packages/server/src/__tests__/runtime/wsl-bridge-manager.test.ts`
   - `packages/server/src/__tests__/server-workspace-runtime-orchestration.test.ts`
 
-### Desktop and CLI startup convergence
+### Desktop and host-runtime startup alignment
 
 - Modify: `packages/desktop/src/runtime-launch-entry.ts`
   - passes a real WSL runtime source into `createServer(...)`
 - Modify: `packages/cli/src/server-runner.ts`
-  - passes the same contract for npm CLI host mode
+  - keeps npm CLI host mode explicitly WSL-disabled
 - Modify: `packages/cli/src/desktop-server.ts`
   - keeps desktop-sidecar startup aligned with the same server config shape
 - Tests:
@@ -82,14 +84,9 @@ It does not cover:
   - can open a workspace against the sidecar after startup or after a second-instance request
 - Modify: `packages/desktop/src/main.ts`
   - forwards second-instance argv into open-request handling
-- Modify: `packages/cli/src/parse-args.ts`
-  - recognizes internal desktop-open arguments and WSL open intent
-- Modify: `packages/cli/src/cli.ts`
-  - when invoked from WSL, shells into the Windows desktop entry with explicit `--target-runtime wsl`
 - Tests:
   - `packages/desktop/src/workspace-open-request.test.ts`
   - `packages/desktop/src/app-controller.test.ts`
-  - `packages/cli/src/bin.test.ts`
 
 ### Diagnostics and lifecycle commands
 
@@ -416,7 +413,7 @@ expect(buildServerConfig().wslRuntime).toMatchObject({
 });
 ```
 
-- [ ] **Step 2: Run the desktop and CLI startup tests to verify they fail**
+- [ ] **Step 2: Run the desktop and host-runtime startup tests to verify they fail**
 
 Run: `pnpm --filter @coder-studio/desktop exec vitest run src/runtime-launch-entry.test.ts && pnpm --filter @spencer-kit/coder-studio exec vitest run src/server-runner.test.ts src/desktop-server.test.ts`
 
@@ -471,7 +468,7 @@ In `packages/cli/src/desktop-server.ts`, thread the same config shape through `s
 
 Run: `pnpm --filter @coder-studio/desktop exec vitest run src/runtime-launch-entry.test.ts && pnpm --filter @spencer-kit/coder-studio exec vitest run src/server-runner.test.ts src/desktop-server.test.ts`
 
-Expected: PASS with both desktop and CLI asserting the same WSL runtime source contract.
+Expected: PASS with desktop asserting the WSL runtime source contract and the npm CLI asserting that WSL remains disabled in host-only mode.
 
 - [ ] **Step 5: Commit the converged startup wiring**
 
@@ -482,20 +479,17 @@ git add packages/desktop/src/runtime-launch-entry.ts \
         packages/desktop/src/runtime-launch-entry.test.ts \
         packages/cli/src/server-runner.test.ts \
         packages/cli/src/desktop-server.test.ts
-git commit -m "feat: share WSL runtime source across desktop and CLI"
+git commit -m "feat: align desktop and host runtime startup contracts"
 ```
 
-## Task 4: Add A Desktop Open-Workspace Flow For Windows And WSL CLI Invocations
+## Task 4: Add A Desktop Open-Workspace Flow For Windows And Desktop-Owned WSL Invocations
 
 **Files:**
 - Create: `packages/desktop/src/workspace-open-request.ts`
 - Modify: `packages/desktop/src/app-controller.ts`
 - Modify: `packages/desktop/src/main.ts`
-- Modify: `packages/cli/src/parse-args.ts`
-- Modify: `packages/cli/src/cli.ts`
 - Test: `packages/desktop/src/workspace-open-request.test.ts`
 - Test: `packages/desktop/src/app-controller.test.ts`
-- Test: `packages/cli/src/bin.test.ts`
 
 - [ ] **Step 1: Write the failing argv/open-request tests**
 
@@ -527,36 +521,11 @@ describe("parseWorkspaceOpenRequest", () => {
 });
 ```
 
-Add a CLI integration test in `packages/cli/src/bin.test.ts`:
+- [ ] **Step 2: Run the desktop tests to verify they fail**
 
-```ts
-it("forwards WSL invocations to the desktop open flow", async () => {
-  process.env.WSL_DISTRO_NAME = "Ubuntu-24.04";
-  process.cwd = vi.fn(() => "/home/test/repo");
+Run: `pnpm --filter @coder-studio/desktop exec vitest run src/workspace-open-request.test.ts src/app-controller.test.ts`
 
-  await main(["open"]);
-
-  expect(spawn).toHaveBeenCalledWith(
-    expect.stringContaining("coder-studio"),
-    expect.arrayContaining([
-      "--desktop-open-workspace",
-      "--target-runtime",
-      "wsl",
-      "--wsl-distro",
-      "Ubuntu-24.04",
-      "--path",
-      "/home/test/repo",
-    ]),
-    expect.any(Object)
-  );
-});
-```
-
-- [ ] **Step 2: Run the desktop and CLI tests to verify they fail**
-
-Run: `pnpm --filter @coder-studio/desktop exec vitest run src/workspace-open-request.test.ts src/app-controller.test.ts && pnpm --filter @spencer-kit/coder-studio exec vitest run src/bin.test.ts`
-
-Expected: FAIL because the parser, controller open hook, and WSL forwarding path do not exist yet.
+Expected: FAIL because the parser and controller open hook do not exist yet.
 
 - [ ] **Step 3: Implement the desktop open-request parser and controller hook**
 
@@ -610,13 +579,13 @@ app.on("second-instance", (_event, argv) => {
 });
 ```
 
-Update `packages/cli/src/cli.ts` so WSL `open` or bare invocation shells into the Windows desktop entry with explicit args instead of trying to install or start the runtime itself.
+Wire the desktop-owned WSL launcher to pass explicit args instead of trying to install or start the runtime itself inside the launcher process.
 
-- [ ] **Step 4: Run the desktop and CLI tests to verify they pass**
+- [ ] **Step 4: Run the desktop tests to verify they pass**
 
-Run: `pnpm --filter @coder-studio/desktop exec vitest run src/workspace-open-request.test.ts src/app-controller.test.ts && pnpm --filter @spencer-kit/coder-studio exec vitest run src/bin.test.ts`
+Run: `pnpm --filter @coder-studio/desktop exec vitest run src/workspace-open-request.test.ts src/app-controller.test.ts`
 
-Expected: PASS with argv parsing, second-instance forwarding, and WSL CLI forwarding all covered.
+Expected: PASS with argv parsing, second-instance forwarding, and desktop-owned WSL forwarding all covered.
 
 - [ ] **Step 5: Commit the open-workspace flow**
 
@@ -625,11 +594,8 @@ git add packages/desktop/src/workspace-open-request.ts \
         packages/desktop/src/workspace-open-request.test.ts \
         packages/desktop/src/app-controller.ts \
         packages/desktop/src/app-controller.test.ts \
-        packages/desktop/src/main.ts \
-        packages/cli/src/parse-args.ts \
-        packages/cli/src/cli.ts \
-        packages/cli/src/bin.test.ts
-git commit -m "feat: route WSL CLI opens through desktop host"
+        packages/desktop/src/main.ts
+git commit -m "feat: route desktop-owned WSL opens through desktop host"
 ```
 
 ## Task 5: Expose Distro Runtime Diagnostics And Lifecycle Commands
@@ -777,7 +743,7 @@ When you open a WSL project, Coder Studio:
 `coder-studio .` inside WSL opens the Windows desktop UI. It does not start a second Linux UI.
 ```
 
-- [ ] **Step 2: Update the desktop and CLI docs**
+- [ ] **Step 2: Update the desktop and installer docs**
 
 Add this note to `docs/help/desktop-guide.md`:
 
@@ -793,8 +759,7 @@ Add this note to `packages/cli/README.md`:
 ```md
 ### WSL
 
-You can run `coder-studio .` inside WSL. The CLI forwards the request to the Windows desktop host,
-which manages the WSL runtime installation and opens the workspace in the same desktop UI.
+The npm CLI remains host-only. To open WSL workspaces in the Windows desktop UI, install the desktop app and use its `coder-studio` launcher integration instead of the npm CLI package.
 ```
 
 - [ ] **Step 3: Run the final targeted verification matrix**
@@ -848,7 +813,7 @@ git commit -m "docs: explain WSL remote runtime flow"
 
 - host-managed per-distro runtime lifecycle: Task 2
 - strict host/runtime version equality: Tasks 2 and 5
-- shared desktop/CLI host architecture: Tasks 1 and 3
+- desktop/runtime ownership split: Tasks 1 and 3
 - Windows/WSL `coder-studio` open flow: Task 4
 - distro diagnostics and lifecycle actions: Task 5
 - user-facing documentation: Task 6

@@ -33,11 +33,20 @@ function readPersistedDesktopConfig(): PersistedDesktopConfig | null {
   }
 }
 
+function shouldIgnorePersistedDesktopConfig(env: NodeJS.ProcessEnv): boolean {
+  const value = env.CODER_STUDIO_DESKTOP_IGNORE_PERSISTED_CONFIG?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+
 export function resolveDesktopLaunchConfig(input: {
   readCliConfig?: () => PersistedDesktopConfig | null;
   userDataDir: string;
+  env?: NodeJS.ProcessEnv;
 }): DesktopLaunchConfig {
-  const config = (input.readCliConfig ?? readPersistedDesktopConfig)();
+  const env = input.env ?? process.env;
+  const config = shouldIgnorePersistedDesktopConfig(env)
+    ? null
+    : (input.readCliConfig ?? readPersistedDesktopConfig)();
   const fallbackStateDir = join(input.userDataDir, "state");
   const resolvedStateDir =
     config?.stateDir !== undefined

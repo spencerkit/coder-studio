@@ -133,17 +133,17 @@ describe("server runtime config", () => {
     expect(restoredCreateServer).toBeDefined();
   });
 
-  it("resolves the packaged WSL runtime entry alongside the CLI server bundle", async () => {
-    const cliDistDir = join(testHomeDir, "dist", "esm");
-    mkdirSync(cliDistDir, { recursive: true });
-    writeFileSync(join(cliDistDir, "server-runner.mjs"), "export {};\n");
-    writeFileSync(join(cliDistDir, "wsl-runtime-entry.mjs"), "export {};\n");
+  it("resolves the packaged WSL runtime entry alongside the runtime bundle", async () => {
+    const runtimeDistDir = join(testHomeDir, "dist", "esm");
+    mkdirSync(runtimeDistDir, { recursive: true });
+    writeFileSync(join(runtimeDistDir, "server.js"), "export {};\n");
+    writeFileSync(join(runtimeDistDir, "wsl-runtime-entry.mjs"), "export {};\n");
 
     const { resolveWslRuntimeEntryPath } = await import("../runtime/wsl-bootstrap.js");
     const resolved = resolveWslRuntimeEntryPath(
-      pathToFileURL(join(cliDistDir, "server-runner.mjs")).href
+      pathToFileURL(join(runtimeDistDir, "server.js")).href
     );
 
-    expect(resolved).toBe(join(cliDistDir, "wsl-runtime-entry.mjs"));
+    expect(resolved).toBe(join(runtimeDistDir, "wsl-runtime-entry.mjs"));
   });
 });

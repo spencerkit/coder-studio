@@ -15,7 +15,7 @@ Coder Studio requires Node.js 24 or newer.
 ## Quick Start
 
 ```bash
-coder-studio open
+coder-studio-cli open
 ```
 
 Then:
@@ -25,6 +25,12 @@ Then:
 3. Ask the agent for a small change.
 4. Review the changed files and Git diff beside the session.
 5. Reopen the same workspace from another device when you want to monitor progress.
+
+## WSL
+
+The npm CLI is host-only.
+
+If you need a mixed Windows/WSL desktop flow, install the desktop app and use its `coder-studio` launcher integration instead of the npm CLI package.
 
 ## Provider CLIs
 

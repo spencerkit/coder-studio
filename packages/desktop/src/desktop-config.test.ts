@@ -33,4 +33,24 @@ describe("desktop-config", () => {
       stateDir: "/Users/test/Library/Application Support/Coder Studio/state",
     });
   });
+
+  it("ignores persisted CLI settings when desktop smoke isolation is enabled", () => {
+    expect(
+      resolveDesktopLaunchConfig({
+        readCliConfig: () => ({
+          host: "0.0.0.0",
+          port: 43123,
+          stateDir: "/tmp/shared-state",
+          password: "sekrit",
+          desktopRuntimeReleaseIndexUrl: "http://127.0.0.1:8787/runtime-release-index.json",
+        }),
+        userDataDir: "/Users/test/Library/Application Support/Coder Studio",
+        env: {
+          CODER_STUDIO_DESKTOP_IGNORE_PERSISTED_CONFIG: "1",
+        },
+      })
+    ).toEqual({
+      stateDir: "/Users/test/Library/Application Support/Coder Studio/state",
+    });
+  });
 });

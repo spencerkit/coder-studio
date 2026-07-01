@@ -178,6 +178,7 @@ describe("desktop-smoke-local", () => {
         cwd: "/repo",
         env: {
           PATH: "/usr/bin",
+          CODER_STUDIO_DESKTOP_IGNORE_PERSISTED_CONFIG: "1",
           CODER_STUDIO_DESKTOP_USER_DATA_DIR: "/repo/.tmp/desktop-local-smoke/user-data",
         },
       }
@@ -218,6 +219,7 @@ describe("desktop-smoke-local", () => {
         cwd: "/repo",
         env: {
           PATH: "/usr/bin",
+          CODER_STUDIO_DESKTOP_IGNORE_PERSISTED_CONFIG: "1",
           CODER_STUDIO_DESKTOP_USER_DATA_DIR: "/repo/.tmp/desktop-local-smoke/user-data",
         },
         stdio: "inherit",

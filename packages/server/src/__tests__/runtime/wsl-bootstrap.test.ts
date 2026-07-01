@@ -236,8 +236,8 @@ describe("WSL runtime bootstrap", () => {
 
   it("builds a WSL launch spec for the bundled runtime entry", async () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
-    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    mkdirSync(join(tempRoot, "packages", "runtime", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "runtime", "dist", "esm", "wsl-runtime-entry.mjs");
     writeFileSync(entryPath, "export {};\n");
 
     const spec = await resolveWslRuntimeLaunchSpec({
@@ -293,8 +293,8 @@ describe("WSL runtime bootstrap", () => {
 
   it("uses the managed node path when the broker provides one", async () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-managed-node-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
-    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    mkdirSync(join(tempRoot, "packages", "runtime", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "runtime", "dist", "esm", "wsl-runtime-entry.mjs");
     writeFileSync(entryPath, "export {};\n");
 
     const spec = await resolveWslRuntimeLaunchSpec({
@@ -336,8 +336,8 @@ describe("WSL runtime bootstrap", () => {
 
   it("passes WSL-local node-pty staging hints to the child runtime", async () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-native-deps-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
-    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    mkdirSync(join(tempRoot, "packages", "runtime", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "runtime", "dist", "esm", "wsl-runtime-entry.mjs");
     writeFileSync(entryPath, "export {};\n");
 
     const spec = await resolveWslRuntimeLaunchSpec({
@@ -378,8 +378,8 @@ describe("WSL runtime bootstrap", () => {
 
   it("launches wsl.exe from a safe Windows cwd instead of inheriting the workspace path", async () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-safe-cwd-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
-    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    mkdirSync(join(tempRoot, "packages", "runtime", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "runtime", "dist", "esm", "wsl-runtime-entry.mjs");
     writeFileSync(entryPath, "export {};\n");
 
     const spec = await resolveWslRuntimeLaunchSpec({
@@ -423,8 +423,8 @@ describe("WSL runtime bootstrap", () => {
   it("falls back to a host-safe cwd when the server is started from a WSL path", async () => {
     const originalCwd = process.cwd;
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-host-cwd-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
-    const entryPath = join(tempRoot, "packages", "cli", "dist", "esm", "wsl-runtime-entry.mjs");
+    mkdirSync(join(tempRoot, "packages", "runtime", "dist", "esm"), { recursive: true });
+    const entryPath = join(tempRoot, "packages", "runtime", "dist", "esm", "wsl-runtime-entry.mjs");
     writeFileSync(entryPath, "export {};\n");
     vi.stubEnv("LOCALAPPDATA", "C:\\Users\\spencer\\AppData\\Local");
     process.cwd = () => "\\\\wsl$\\Ubuntu-24.04\\home\\spencer\\workspace\\coder-studio";
@@ -500,11 +500,11 @@ describe("WSL runtime bootstrap", () => {
 
   it("falls back to the launch-time resolver when a provided runtime entry path is missing", async () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-fallback-entry-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "dist", "esm"), { recursive: true });
+    mkdirSync(join(tempRoot, "packages", "runtime", "dist", "esm"), { recursive: true });
     const fallbackEntryPath = join(
       tempRoot,
       "packages",
-      "cli",
+      "runtime",
       "dist",
       "esm",
       "wsl-runtime-entry.mjs"
@@ -550,8 +550,8 @@ describe("WSL runtime bootstrap", () => {
 
   it("does not treat TypeScript source entries as launchable runtime entrypoints", () => {
     const tempRoot = join(process.cwd(), ".tmp-wsl-bootstrap-source-entry-test");
-    mkdirSync(join(tempRoot, "packages", "cli", "src"), { recursive: true });
-    const sourceEntryPath = join(tempRoot, "packages", "cli", "src", "wsl-runtime-entry.ts");
+    mkdirSync(join(tempRoot, "packages", "runtime", "src"), { recursive: true });
+    const sourceEntryPath = join(tempRoot, "packages", "runtime", "src", "wsl-runtime-entry.ts");
     writeFileSync(sourceEntryPath, "export {};\n");
 
     expect(() =>

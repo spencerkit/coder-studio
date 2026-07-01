@@ -124,27 +124,25 @@ describe("runtime-launch-entry", () => {
     });
 
     expect(createServer).toHaveBeenCalledWith({
-      serverConfig: {
-        port: 0,
-        appVersion: "0.5.4",
-        runtimeVersion: "0.5.4",
-        wslRuntime: {
-          enabled: true,
-          source: expect.objectContaining({
-            runtimeVersion: "0.5.4",
-          }),
-        },
-        webRoot: "/tmp/web",
-        update: {
-          supported: true,
-          installKind: "desktop_managed",
-          packageName: "@spencer-kit/coder-studio",
-          cliCommand: "coder-studio",
-          npmCommand: "npm",
-          restartArgs: [],
-          installArgsPrefix: [],
-          unsupportedReason: null,
-        },
+      port: 0,
+      appVersion: "0.5.4",
+      runtimeVersion: "0.5.4",
+      wslRuntime: {
+        enabled: true,
+        source: expect.objectContaining({
+          runtimeVersion: "0.5.4",
+        }),
+      },
+      webRoot: "/tmp/web",
+      update: {
+        supported: true,
+        installKind: "desktop_managed",
+        packageName: "@spencer-kit/coder-studio",
+        cliCommand: "coder-studio",
+        npmCommand: "npm",
+        restartArgs: [],
+        installArgsPrefix: [],
+        unsupportedReason: null,
       },
       runtimeJsonPath: "/tmp/runtime.json",
       writeRuntimeConfig: true,

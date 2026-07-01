@@ -9,6 +9,7 @@ import {
   createCliBuildOptions,
   createWslRuntimeEntryBuildOptions,
   getProductionDeps,
+  RUNTIME_DIR,
 } from "./shared/index.js";
 
 describe("build-cli", () => {
@@ -67,17 +68,17 @@ describe("build-cli", () => {
     expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/automation-entry.ts"));
   });
 
-  it("does not emit the retired desktop server entry in the npm CLI bundle", async () => {
+  it("does not emit retired desktop or legacy command entries in the npm CLI bundle", async () => {
     const buildOptions = await createCliBuildOptions("esm");
 
     expect(buildOptions.entryPoints).not.toContain(resolve(CLI_DIR, "src/desktop-server.ts"));
-    expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/bin-legacy.ts"));
+    expect(buildOptions.entryPoints).not.toContain(resolve(CLI_DIR, "src/bin-legacy.ts"));
   });
 
-  it("emits the WSL runtime entry with third-party packages externalized", async () => {
+  it("builds the WSL runtime entry from the runtime package", async () => {
     const buildOptions = await createWslRuntimeEntryBuildOptions();
 
-    expect(buildOptions.entryPoints).toEqual([resolve(CLI_DIR, "src/wsl-runtime-entry.ts")]);
+    expect(buildOptions.entryPoints).toEqual([resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")]);
     expect(buildOptions.format).toBe("esm");
     expect(buildOptions.packages).toBe("external");
     expect(buildOptions.define).toEqual({

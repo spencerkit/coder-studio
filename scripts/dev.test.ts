@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const buildDevServerEnv = vi.fn(() => ({ PATH: "/tmp/dev-bin" }));
 const ensureWslRuntimeEntryBuilt = vi.fn(
-  async () => "/repo/packages/cli/dist/esm/wsl-runtime-entry.mjs"
+  async () => "/repo/packages/runtime/dist/esm/wsl-runtime-entry.mjs"
 );
 const runBackground = vi.fn();
 const waitForProcesses = vi.fn(() => Promise.resolve());

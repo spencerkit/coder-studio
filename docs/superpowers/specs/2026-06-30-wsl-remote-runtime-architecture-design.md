@@ -4,6 +4,8 @@
 > **Date:** 2026-06-30  
 > **Scope:** `packages/server`, future `packages/desktop`, `packages/cli`, `packages/core`, tests, packaging/install flow
 
+> **2026-07-01 scope update:** treat this as a fresh requirement with no legacy migration. The npm CLI remains host-only and does not participate in WSL/host mixed-runtime product flows. Only the desktop app owns WSL remote-workspace lifecycle.
+
 ## Goal
 
 Adopt a VS Code Remote WSL style architecture for Coder Studio:
@@ -24,8 +26,8 @@ This design replaces the ambiguous model of "Windows runtime somehow also covers
 - Host and WSL runtime versions must match exactly before startup completes.
 - Host owns WSL runtime install, upgrade, startup, stop, and health checks.
 - Host and WSL runtime continue communicating over RPC.
-- The user-facing `coder-studio` command should work from both Windows and WSL.
-- The WSL-side `coder-studio` command is a thin launcher or shim, not the owner of runtime installation or upgrade logic.
+- The npm CLI stays single-environment and host-only.
+- Desktop-owned launch surfaces may open WSL workspaces, but that is a desktop integration concern rather than an npm CLI contract.
 - Runtime-owned config does not live-sync with host config.
 
 ## Non-goals
@@ -35,7 +37,7 @@ This design replaces the ambiguous model of "Windows runtime somehow also covers
 - Do not treat WSL workspaces as Windows workspaces with path translation layered on top.
 - Do not allow host and WSL runtime versions to drift in a degraded mode.
 - Do not preinstall full remote runtime payloads into every distro during desktop app installation.
-- Do not make the WSL CLI shim responsible for downloading, upgrading, or selecting runtime bundles.
+- Do not make any WSL-facing launcher responsible for downloading, upgrading, or selecting runtime bundles.
 
 ## Problem
 
@@ -71,7 +73,7 @@ The key win is not "having two runtimes." The key win is that state ownership be
 
 ```text
 User
-  -> coder-studio (Windows CLI or WSL shim)
+  -> Windows desktop app / desktop-owned launcher
     -> Windows Desktop Host
        - window + UI shell
        - browser/control plane
@@ -189,47 +191,13 @@ If later product work wants "import from host defaults" or "copy settings to dis
 
 ## CLI Model
 
-The user-facing command remains:
+The npm CLI remains a single-environment launcher:
 
-```text
-coder-studio
-```
+- `coder-studio-cli` starts and manages the local host runtime only.
+- It does not route WSL workspaces through the desktop host.
+- It does not participate in mixed host/WSL window semantics.
 
-But the command has two different roles depending on where it is invoked.
-
-### Windows CLI
-
-When invoked on Windows, the CLI:
-
-- detects native Windows context
-- resolves the requested path
-- asks the desktop host to open the workspace as `native`
-- starts or focuses the desktop app if needed
-
-The Windows CLI is an entrypoint, not a separate runtime manager.
-
-### WSL CLI
-
-When invoked inside WSL, the CLI should be a thin shim or launcher.
-
-It should:
-
-- detect that it is running inside WSL
-- read the current distro name
-- resolve the Linux workspace path
-- send an open request to the Windows desktop host with:
-  - `targetRuntime = "wsl"`
-  - `wslDistro = <current distro>`
-  - `path = <linux path>`
-
-It should not:
-
-- download runtime bundles
-- decide runtime versions
-- perform upgrades
-- start long-lived remote runtime processes directly
-
-That logic belongs to the Windows host runtime manager.
+Desktop-specific launchers may still expose `coder-studio` entrypoints on the host system, but those are product-owned shell integrations rather than part of the npm CLI package contract.
 
 ## Installation Model
 
@@ -239,11 +207,9 @@ Desktop installation on Windows should:
 
 - install the desktop application
 - register the Windows-side `coder-studio` command
-- make a WSL-callable entry available, either through:
-  - a dedicated WSL shim written on first use, or
-  - a Windows executable path that WSL can invoke
+- own any future WSL-facing launch surface directly if the product chooses to support one
 
-The preferred long-term model is a dedicated WSL shim because it gives Coder Studio a stable contract independent of shell quirks or direct `.exe` invocation behavior.
+Any WSL-facing launcher is a desktop concern. It is not part of the npm CLI package and does not change the CLI's single-environment semantics.
 
 ### WSL remote runtime installation
 
@@ -301,10 +267,10 @@ All workspaces in that distro bind to the same runtime id.
 ### WSL workspace open from WSL shell
 
 1. User runs `coder-studio .` inside WSL.
-2. WSL shim resolves:
+2. A desktop-owned WSL launcher resolves:
    - current distro
    - current Linux path
-3. WSL shim sends an open request to the Windows host.
+3. The launcher sends an open request to the Windows host.
 4. Host checks the target distro runtime install state.
 5. Host checks version equality with the current desktop/runtime version.
 6. Host installs or upgrades the target distro runtime if required.
@@ -405,7 +371,7 @@ The remaining architectural shift is to make the product model match the runtime
 - keep the shared per-distro runtime binding
 - move more runtime-owned state and config expectations to the WSL side
 - add a host-managed install and version lifecycle for distro runtimes
-- add a dedicated WSL CLI shim contract
+- add a dedicated desktop-owned WSL launcher contract
 - expose distro runtime diagnostics as first-class host-managed state
 
 ## Phased Implementation Direction
@@ -419,14 +385,14 @@ The remaining architectural shift is to make the product model match the runtime
 ### Phase 2
 
 - add host-managed distro runtime install records
-- add a real WSL CLI shim contract
+- add a real desktop-owned WSL launcher contract
 - add host-driven install, repair, restart, and removal flows
 
 ### Phase 3
 
 - expose distro runtime management and diagnostics in UI
 - separate host settings from distro runtime settings in user-facing surfaces
-- align desktop and npm CLI entry behavior behind the same runtime manager
+- keep npm CLI host-only while aligning desktop launch surfaces behind the same runtime manager
 
 ## Acceptance Criteria
 
@@ -441,6 +407,6 @@ The remaining architectural shift is to make the product model match the runtime
 ## Risks
 
 - If host-versus-runtime configuration boundaries are left vague in the UI, users will still be confused even if the backend is correct.
-- If the WSL shim becomes too smart, lifecycle logic will split between CLI and host and become hard to maintain.
+- If the desktop-owned WSL launcher becomes too smart, lifecycle logic will split between the launcher and host and become hard to maintain.
 - If runtime version checks happen after workspace bind instead of before startup, failure handling will remain messy.
 - If install paths are not stable per distro, repair and diagnostics behavior will be unreliable.
