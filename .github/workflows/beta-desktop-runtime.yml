@@ -134,7 +134,23 @@ jobs:
             }
           )
 
-          $index | ConvertTo-Json -Depth 5 | Set-Content -Path $runtimeIndexPath -Encoding UTF8
+          ConvertTo-Json -InputObject $index -Depth 5 | Set-Content -Path $runtimeIndexPath -Encoding UTF8
+
+          $env:RUNTIME_INDEX_PATH = $runtimeIndexPath
+          $validateScript = @'
+          import { readFileSync } from "node:fs";
+
+          const indexPath = process.env.RUNTIME_INDEX_PATH;
+          if (!indexPath) {
+            throw new Error("RUNTIME_INDEX_PATH is required");
+          }
+
+          const value = JSON.parse(readFileSync(indexPath, "utf8"));
+          if (!Array.isArray(value) || value.length !== 1) {
+            throw new Error("runtime-release-index.json must contain exactly one release entry array");
+          }
+          '@
+          node --input-type=module -e $validateScript
 
           "runtime_zip_path=$runtimeZipPath" >> $env:GITHUB_OUTPUT
           "runtime_index_path=$runtimeIndexPath" >> $env:GITHUB_OUTPUT
