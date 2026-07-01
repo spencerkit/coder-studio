@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import * as esbuild from "esbuild";
 import {
@@ -287,6 +287,7 @@ export async function buildDesktopRuntimeBundle(input?: {
   tempWorkspaceDir?: string;
 }): Promise<void> {
   const runtimeDir = input?.runtimeDir ?? resolve(DESKTOP_DIR, "dist/runtime/embedded");
+  const stagedRuntimeDir = `${runtimeDir}.staged`;
   const runtimeVersion = input?.runtimeVersion ?? (await readRootVersion());
   const esbuildBuild = input?.esbuildBuild ?? esbuild.build;
   const webSourceDir = input?.webSourceDir ?? WEB_DIST_DIR;
@@ -304,6 +305,7 @@ export async function buildDesktopRuntimeBundle(input?: {
     input?.tempWorkspaceDir ?? resolve(DESKTOP_DIR, "dist/.desktop-runtime-workspace");
 
   await rm(runtimeDir, { recursive: true, force: true });
+  await rm(stagedRuntimeDir, { recursive: true, force: true });
 
   await createDesktopRuntimeWorkspace({
     tempWorkspaceDir,
@@ -316,11 +318,15 @@ export async function buildDesktopRuntimeBundle(input?: {
   try {
     await deployDesktopRuntimeBundle({
       exec,
-      runtimeDir,
+      runtimeDir: stagedRuntimeDir,
       tempWorkspaceDir,
     });
-    await materializePortableRuntimeDir(runtimeDir);
+    await materializePortableRuntimeDir({
+      sourceDir: stagedRuntimeDir,
+      targetDir: runtimeDir,
+    });
   } finally {
+    await rm(stagedRuntimeDir, { recursive: true, force: true });
     await rm(tempWorkspaceDir, { recursive: true, force: true });
   }
 }
@@ -338,14 +344,14 @@ if (isDirectExecution(import.meta.url)) {
     });
 }
 
-export async function materializePortableRuntimeDir(runtimeDir: string): Promise<void> {
-  const materializedDir = `${runtimeDir}.materialized`;
-  await rm(materializedDir, { recursive: true, force: true });
-  await cp(runtimeDir, materializedDir, {
+export async function materializePortableRuntimeDir(input: {
+  sourceDir: string;
+  targetDir: string;
+}): Promise<void> {
+  await rm(input.targetDir, { recursive: true, force: true });
+  await cp(input.sourceDir, input.targetDir, {
     recursive: true,
     force: true,
     dereference: true,
   });
-  await rm(runtimeDir, { recursive: true, force: true });
-  await rename(materializedDir, runtimeDir);
 }

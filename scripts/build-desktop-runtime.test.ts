@@ -151,6 +151,7 @@ describe("build-desktop-runtime", () => {
 
   it("builds a desktop runtime bundle with server output, web assets, and manifest", async () => {
     const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-"));
+    const stagedRuntimeDir = `${runtimeDir}.staged`;
     const webSourceDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-web-"));
     const tempWorkspaceDir = await mkdtemp(
       join(tmpdir(), "coder-studio-desktop-runtime-workspace-")
@@ -177,34 +178,34 @@ describe("build-desktop-runtime", () => {
         "--legacy",
         "--prod",
         "--offline",
-        runtimeDir,
+        stagedRuntimeDir,
       ]);
       const runtimePackageDir = join(tempWorkspaceDir, "packages", "runtime");
-      await mkdir(runtimeDir, { recursive: true });
+      await mkdir(stagedRuntimeDir, { recursive: true });
       await writeFile(
-        join(runtimeDir, "package.json"),
+        join(stagedRuntimeDir, "package.json"),
         await readFile(join(runtimePackageDir, "package.json"), "utf-8")
       );
       await writeFile(
-        join(runtimeDir, "runtime-manifest.json"),
+        join(stagedRuntimeDir, "runtime-manifest.json"),
         await readFile(join(runtimePackageDir, "runtime-manifest.json"), "utf-8")
       );
-      await mkdir(join(runtimeDir, "dist", "esm"), { recursive: true });
-      await mkdir(join(runtimeDir, "dist", "web", "assets"), { recursive: true });
+      await mkdir(join(stagedRuntimeDir, "dist", "esm"), { recursive: true });
+      await mkdir(join(stagedRuntimeDir, "dist", "web", "assets"), { recursive: true });
       await writeFile(
-        join(runtimeDir, "dist", "esm", "runtime-launch-entry.mjs"),
+        join(stagedRuntimeDir, "dist", "esm", "runtime-launch-entry.mjs"),
         await readFile(join(runtimePackageDir, "dist", "esm", "runtime-launch-entry.mjs"), "utf-8")
       );
       await writeFile(
-        join(runtimeDir, "dist", "esm", "wsl-runtime-entry.mjs"),
+        join(stagedRuntimeDir, "dist", "esm", "wsl-runtime-entry.mjs"),
         await readFile(join(runtimePackageDir, "dist", "esm", "wsl-runtime-entry.mjs"), "utf-8")
       );
       await writeFile(
-        join(runtimeDir, "dist", "web", "index.html"),
+        join(stagedRuntimeDir, "dist", "web", "index.html"),
         await readFile(join(runtimePackageDir, "dist", "web", "index.html"), "utf-8")
       );
       await writeFile(
-        join(runtimeDir, "dist", "web", "assets", "app.js"),
+        join(stagedRuntimeDir, "dist", "web", "assets", "app.js"),
         await readFile(join(runtimePackageDir, "dist", "web", "assets", "app.js"), "utf-8")
       );
     });
@@ -279,10 +280,12 @@ describe("build-desktop-runtime", () => {
         fastify: "^5.8.5",
       },
     });
+    await expect(readdir(stagedRuntimeDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("cleans an existing runtime bundle output directory before deploy", async () => {
     const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-"));
+    const stagedRuntimeDir = `${runtimeDir}.staged`;
     const webSourceDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-web-"));
     const tempWorkspaceDir = await mkdtemp(
       join(tmpdir(), "coder-studio-desktop-runtime-workspace-")
@@ -290,6 +293,8 @@ describe("build-desktop-runtime", () => {
     tempDirs.push(runtimeDir, webSourceDir);
 
     await writeFile(join(runtimeDir, "stale.txt"), "stale\n");
+    await mkdir(stagedRuntimeDir, { recursive: true });
+    await writeFile(join(stagedRuntimeDir, "stale.txt"), "stale\n");
     await writeFile(join(webSourceDir, "index.html"), "<html>runtime</html>\n");
 
     const esbuildBuild = vi.fn(async (options) => {
@@ -302,7 +307,8 @@ describe("build-desktop-runtime", () => {
     });
     const exec = vi.fn(async () => {
       await expect(readdir(runtimeDir)).rejects.toMatchObject({ code: "ENOENT" });
-      await mkdir(runtimeDir, { recursive: true });
+      await expect(readdir(stagedRuntimeDir)).rejects.toMatchObject({ code: "ENOENT" });
+      await mkdir(stagedRuntimeDir, { recursive: true });
     });
 
     await buildDesktopRuntimeBundle({
@@ -320,6 +326,7 @@ describe("build-desktop-runtime", () => {
 
   it("retries deploy without offline mode when offline metadata is unavailable", async () => {
     const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-"));
+    const stagedRuntimeDir = `${runtimeDir}.staged`;
     const webSourceDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-web-"));
     const tempWorkspaceDir = await mkdtemp(
       join(tmpdir(), "coder-studio-desktop-runtime-workspace-")
@@ -346,9 +353,9 @@ describe("build-desktop-runtime", () => {
           "deploy",
           "--legacy",
           "--prod",
-          runtimeDir,
+          stagedRuntimeDir,
         ]);
-        await mkdir(runtimeDir, { recursive: true });
+        await mkdir(stagedRuntimeDir, { recursive: true });
       });
 
     await buildDesktopRuntimeBundle({
@@ -374,31 +381,37 @@ describe("build-desktop-runtime", () => {
         "--legacy",
         "--prod",
         "--offline",
-        runtimeDir,
+        stagedRuntimeDir,
       ],
       { cwd: tempWorkspaceDir, stdio: "pipe" }
     );
   });
 
   it("materializes symlinked dependencies into a portable embedded runtime directory", async () => {
-    const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-runtime-embedded-"));
-    tempDirs.push(runtimeDir);
+    const sourceDir = await mkdtemp(join(tmpdir(), "coder-studio-runtime-embedded-source-"));
+    const targetDir = await mkdtemp(join(tmpdir(), "coder-studio-runtime-embedded-target-"));
+    tempDirs.push(sourceDir, targetDir);
 
-    const packageStoreDir = join(runtimeDir, "node_modules", ".pnpm", "dep@1.0.0", "node_modules");
+    const packageStoreDir = join(sourceDir, "node_modules", ".pnpm", "dep@1.0.0", "node_modules");
     const realPackageDir = join(packageStoreDir, "dep");
-    const linkedPackageDir = join(runtimeDir, "node_modules", "dep");
+    const linkedPackageDir = join(sourceDir, "node_modules", "dep");
 
     await mkdir(realPackageDir, { recursive: true });
     await writeFile(join(realPackageDir, "index.js"), "export const dep = true;\n");
     await symlink(realPackageDir, linkedPackageDir, "dir");
+    await writeFile(join(targetDir, "stale.txt"), "stale\n");
 
-    await materializePortableRuntimeDir(runtimeDir);
+    await materializePortableRuntimeDir({ sourceDir, targetDir });
 
     await expect(
-      lstat(join(runtimeDir, "node_modules", "dep")).then((stats) => stats.isSymbolicLink())
+      lstat(join(targetDir, "node_modules", "dep")).then((stats) => stats.isSymbolicLink())
     ).resolves.toBe(false);
     await expect(
-      readFile(join(runtimeDir, "node_modules", "dep", "index.js"), "utf-8")
+      readFile(join(targetDir, "node_modules", "dep", "index.js"), "utf-8")
     ).resolves.toBe("export const dep = true;\n");
+    await expect(
+      readFile(join(sourceDir, "node_modules", "dep", "index.js"), "utf-8")
+    ).resolves.toBe("export const dep = true;\n");
+    await expect(readdir(targetDir)).resolves.not.toContain("stale.txt");
   });
 });
