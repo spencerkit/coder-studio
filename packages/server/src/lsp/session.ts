@@ -1,5 +1,4 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import {
   LSP_SEMANTIC_TOKEN_MODIFIERS,
@@ -14,15 +13,17 @@ import {
   type LspSessionSummary,
 } from "@coder-studio/core";
 import { shouldUseShellForCommand } from "@coder-studio/utils";
-import { type MessageConnection, NotificationType, RequestType } from "vscode-jsonrpc";
+import {
+  type MessageConnection,
+  NotificationType,
+  RequestType,
+  StreamMessageReader,
+  StreamMessageWriter,
+  createMessageConnection,
+} from "vscode-jsonrpc/node.js";
 import { DocumentStore } from "./document-store.js";
 import type { LspServerSpec } from "./server-factory.js";
 import { type BridgeHandle, bridgeTsserverRequests } from "./tsserver-bridge.js";
-
-const require = createRequire(import.meta.url);
-type VscodeJsonrpcNode = typeof import("vscode-jsonrpc/node");
-const { createMessageConnection, StreamMessageReader, StreamMessageWriter } =
-  require("vscode-jsonrpc/node.js") as VscodeJsonrpcNode;
 
 const PublishDiagnosticsNotification = new NotificationType<PublishDiagnosticsParams>(
   "textDocument/publishDiagnostics"

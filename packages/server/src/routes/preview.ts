@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { posix } from "node:path";
+import { dirname, posix, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { markdownUsesMermaid } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -33,13 +35,27 @@ interface PreviewSessionUpdateBody {
 type WorkspaceLookup = { path: string; targetRuntime?: "native" | "wsl" } | null | undefined;
 
 const require = createRequire(import.meta.url);
-const MERMAID_RUNTIME_PATH = require.resolve("mermaid/dist/mermaid.min.js");
 const MARKDOWN_MERMAID_INIT_SCRIPT = [
   "if (typeof window.mermaid !== 'undefined') {",
   "  window.mermaid.initialize({ startOnLoad: true, securityLevel: 'strict' });",
   "}",
 ].join("\n");
 let mermaidRuntimePromise: Promise<Buffer> | null = null;
+
+function resolveEmbeddedMermaidRuntimePath(importMetaUrl: string): string | null {
+  const currentDir = dirname(fileURLToPath(importMetaUrl));
+  const candidates = [
+    resolve(currentDir, "../../assets/preview/mermaid.min.js"),
+    resolve(currentDir, "../assets/preview/mermaid.min.js"),
+    resolve(currentDir, "../../../desktop/dist/runtime/embedded/dist/assets/preview/mermaid.min.js"),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function resolveMermaidRuntimePath(importMetaUrl: string): string {
+  return resolveEmbeddedMermaidRuntimePath(importMetaUrl) ?? require.resolve("mermaid/dist/mermaid.min.js");
+}
 
 function getPreviewContentSecurityPolicy(scriptPolicy: PreviewScriptPolicy): string {
   const resolvedScriptPolicy =
@@ -71,7 +87,7 @@ function resolvePreviewAssetWorkspacePath(entryPath: string, rawPath: string): s
 }
 
 async function loadMermaidRuntime(): Promise<Buffer> {
-  mermaidRuntimePromise ??= readFile(MERMAID_RUNTIME_PATH);
+  mermaidRuntimePromise ??= readFile(resolveMermaidRuntimePath(import.meta.url));
   return mermaidRuntimePromise;
 }
 

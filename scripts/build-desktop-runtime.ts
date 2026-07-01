@@ -1,8 +1,11 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import * as esbuild from "esbuild";
 import {
   CORE_DIR,
+  copy,
   copyDir,
   DESKTOP_DIR,
   error,
@@ -18,37 +21,20 @@ import {
 } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
+const DESKTOP_RUNTIME_NATIVE_EXTERNALS = ["node-pty"] as const;
+const DESKTOP_RUNTIME_INSTALLED_DEPENDENCIES = [
+  "node-pty",
+  "typescript-language-server",
+  "typescript",
+] as const;
+const DESKTOP_RUNTIME_ASSETS_DIR = "dist/assets";
+const MERMAID_ASSET_RELATIVE_PATH = `${DESKTOP_RUNTIME_ASSETS_DIR}/preview/mermaid.min.js`;
+
 export interface DesktopRuntimeManifest {
   schemaVersion: 1;
   version: string;
   entry: "dist/esm/runtime-launch-entry.mjs";
   webRoot: "dist/web";
-}
-
-export function createDesktopRuntimeWslEntryBuildOptions(input: {
-  runtimeDir: string;
-  external: string[];
-}): esbuild.BuildOptions {
-  return {
-    entryPoints: [resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")],
-    bundle: true,
-    platform: "node",
-    target: "node24",
-    format: "esm",
-    outfile: resolve(input.runtimeDir, "dist/esm/wsl-runtime-entry.mjs"),
-    outExtension: { ".js": ".mjs" },
-    external: input.external,
-    sourcemap: true,
-    alias: {
-      "@coder-studio/runtime": resolve(RUNTIME_DIR, "src/index.ts"),
-      "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
-      "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
-      "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
-      "@coder-studio/core": resolve(CORE_DIR, "src/index.ts"),
-      "@coder-studio/providers": resolve(PROVIDERS_DIR, "src/index.ts"),
-      "@coder-studio/utils": resolve(UTILS_DIR, "src/index.ts"),
-    },
-  };
 }
 
 export interface PrepareDesktopRuntimeOutputDirsInput {
@@ -57,11 +43,60 @@ export interface PrepareDesktopRuntimeOutputDirsInput {
   webDir: string;
 }
 
+export interface InstallDesktopRuntimeDependenciesInput {
+  runtimeDir: string;
+  exec?: typeof run;
+}
+
+export interface CleanupDesktopRuntimeInstallArtifactsInput {
+  runtimeDir: string;
+}
+
+function createDesktopRuntimeInstallArgs(input: { offline: boolean }): string[] {
+  return [
+    "install",
+    "--prod",
+    ...(input.offline ? ["--offline"] : []),
+    "--ignore-workspace",
+    "--config.node-linker=hoisted",
+    "--config.package-import-method=copy",
+    "--config.confirmModulesPurge=false",
+  ];
+}
+
+function isOfflineMetadataError(rawError: unknown): boolean {
+  return rawError instanceof Error && rawError.message.includes("ERR_PNPM_NO_OFFLINE_META");
+}
+
 function filterDeployableRuntimeDependencies(
   dependencies: Record<string, string>
 ): Record<string, string> {
   return Object.fromEntries(
     Object.entries(dependencies).filter(([, version]) => !version.startsWith("workspace:"))
+  );
+}
+
+export function createDesktopRuntimeExternalDependencies(
+  dependencies: Record<string, string>
+): Record<string, string> {
+  const deployable = filterDeployableRuntimeDependencies(dependencies);
+
+  return Object.fromEntries(
+    DESKTOP_RUNTIME_NATIVE_EXTERNALS.flatMap((dependency) =>
+      typeof deployable[dependency] === "string" ? [[dependency, deployable[dependency]]] : []
+    )
+  );
+}
+
+export function createDesktopRuntimeInstalledDependencies(
+  dependencies: Record<string, string>
+): Record<string, string> {
+  const deployable = filterDeployableRuntimeDependencies(dependencies);
+
+  return Object.fromEntries(
+    DESKTOP_RUNTIME_INSTALLED_DEPENDENCIES.flatMap((dependency) =>
+      typeof deployable[dependency] === "string" ? [[dependency, deployable[dependency]]] : []
+    )
   );
 }
 
@@ -93,6 +128,32 @@ export function createDesktopRuntimeServerBuildOptions(input: {
     target: "node24",
     format: "esm",
     outfile: resolve(input.runtimeDir, "dist/esm/runtime-launch-entry.mjs"),
+    outExtension: { ".js": ".mjs" },
+    external: input.external,
+    sourcemap: true,
+    alias: {
+      "@coder-studio/runtime": resolve(RUNTIME_DIR, "src/index.ts"),
+      "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
+      "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
+      "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
+      "@coder-studio/core": resolve(CORE_DIR, "src/index.ts"),
+      "@coder-studio/providers": resolve(PROVIDERS_DIR, "src/index.ts"),
+      "@coder-studio/utils": resolve(UTILS_DIR, "src/index.ts"),
+    },
+  };
+}
+
+export function createDesktopRuntimeWslEntryBuildOptions(input: {
+  runtimeDir: string;
+  external: string[];
+}): esbuild.BuildOptions {
+  return {
+    entryPoints: [resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "esm",
+    outfile: resolve(input.runtimeDir, "dist/esm/wsl-runtime-entry.mjs"),
     outExtension: { ".js": ".mjs" },
     external: input.external,
     sourcemap: true,
@@ -157,112 +218,42 @@ export async function readDesktopRuntimeVersion(input: {
   return "0.0.0";
 }
 
-async function readRootPackageManager(): Promise<string | null> {
-  const rootPackageJson = JSON.parse(
-    await readFile(resolve(ROOT_DIR, "package.json"), "utf-8")
-  ) as { packageManager?: string };
-  return typeof rootPackageJson.packageManager === "string" && rootPackageJson.packageManager.trim()
-    ? rootPackageJson.packageManager.trim()
-    : null;
-}
-
-async function createDesktopRuntimeWorkspace(input: {
-  tempWorkspaceDir: string;
-  runtimeVersion: string;
-  dependencyVersions: Record<string, string>;
-  esbuildBuild: typeof esbuild.build;
-  webSourceDir: string;
-}): Promise<string> {
-  const runtimePackageDir = join(input.tempWorkspaceDir, "packages", "runtime");
-  const runtimeDistDir = join(runtimePackageDir, "dist");
-  const runtimeEsmDir = join(runtimeDistDir, "esm");
-  const runtimeWebDir = join(runtimeDistDir, "web");
-  const packageManager = await readRootPackageManager();
-
-  await rm(input.tempWorkspaceDir, { recursive: true, force: true });
-  await mkdir(runtimeEsmDir, { recursive: true });
-  await mkdir(runtimeWebDir, { recursive: true });
-
-  await writeFile(
-    join(input.tempWorkspaceDir, "package.json"),
-    `${JSON.stringify(
-      {
-        name: "coder-studio-desktop-runtime-workspace",
-        private: true,
-        ...(packageManager ? { packageManager } : {}),
-      },
-      null,
-      2
-    )}\n`
-  );
-  await writeFile(
-    join(input.tempWorkspaceDir, "pnpm-workspace.yaml"),
-    "packages:\n  - packages/runtime\n"
-  );
-  await cp(join(ROOT_DIR, "pnpm-lock.yaml"), join(input.tempWorkspaceDir, "pnpm-lock.yaml"), {
-    force: true,
-  });
-
-  await input.esbuildBuild(
-    createDesktopRuntimeServerBuildOptions({
-      runtimeDir: runtimePackageDir,
-      external: Object.keys(input.dependencyVersions),
-    })
-  );
-  await input.esbuildBuild(
-    createDesktopRuntimeWslEntryBuildOptions({
-      runtimeDir: runtimePackageDir,
-      external: Object.keys(input.dependencyVersions),
-    })
-  );
-  await copyDir(input.webSourceDir, runtimeWebDir);
-  await writeFile(
-    join(runtimePackageDir, "runtime-manifest.json"),
-    `${JSON.stringify(createDesktopRuntimeManifest({ version: input.runtimeVersion }), null, 2)}\n`
-  );
-  await writeFile(
-    join(runtimePackageDir, "package.json"),
-    `${JSON.stringify(
-      createDesktopRuntimePackageJson({
-        version: input.runtimeVersion,
-        dependencies: input.dependencyVersions,
-      }),
-      null,
-      2
-    )}\n`
-  );
-
-  return runtimePackageDir;
-}
-
-function createDeployArgs(input: { runtimeDir: string; offline: boolean }): string[] {
-  return [
-    "--filter",
-    "@coder-studio/desktop-runtime",
-    "deploy",
-    "--legacy",
-    "--prod",
-    ...(input.offline ? ["--offline"] : []),
-    input.runtimeDir,
+function resolveMermaidAssetSourcePath(): string {
+  const require = createRequire(import.meta.url);
+  const candidates = [
+    (() => {
+      try {
+        return require.resolve("mermaid/dist/mermaid.min.js");
+      } catch {
+        return null;
+      }
+    })(),
+    resolve(ROOT_DIR, "node_modules", "mermaid", "dist", "mermaid.min.js"),
+    resolve(ROOT_DIR, "node_modules", ".pnpm", "node_modules", "mermaid", "dist", "mermaid.min.js"),
   ];
-}
 
-function isOfflineMetadataError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
+  const resolved = candidates.find((candidate): candidate is string =>
+    typeof candidate === "string" && existsSync(candidate)
+  );
+  if (!resolved) {
+    throw new Error("Unable to resolve mermaid runtime asset for desktop runtime packaging.");
   }
 
-  return error.message.includes("ERR_PNPM_NO_OFFLINE_META");
+  return resolved;
 }
 
-async function deployDesktopRuntimeBundle(input: {
-  exec: typeof run;
-  runtimeDir: string;
-  tempWorkspaceDir: string;
-}): Promise<void> {
+async function copyDesktopRuntimeStaticAssets(input: { runtimeDir: string }): Promise<void> {
+  const targetPath = join(input.runtimeDir, MERMAID_ASSET_RELATIVE_PATH);
+  await copy(resolveMermaidAssetSourcePath(), targetPath);
+}
+
+export async function installDesktopRuntimeDependencies(
+  input: InstallDesktopRuntimeDependenciesInput
+): Promise<void> {
+  const exec = input.exec ?? run;
   try {
-    await input.exec("pnpm", createDeployArgs({ runtimeDir: input.runtimeDir, offline: true }), {
-      cwd: input.tempWorkspaceDir,
+    await exec("pnpm", createDesktopRuntimeInstallArgs({ offline: true }), {
+      cwd: input.runtimeDir,
       stdio: "pipe",
     });
   } catch (error) {
@@ -270,11 +261,69 @@ async function deployDesktopRuntimeBundle(input: {
       throw error;
     }
 
-    await rm(input.runtimeDir, { recursive: true, force: true });
-    await input.exec("pnpm", createDeployArgs({ runtimeDir: input.runtimeDir, offline: false }), {
-      cwd: input.tempWorkspaceDir,
+    await exec("pnpm", createDesktopRuntimeInstallArgs({ offline: false }), {
+      cwd: input.runtimeDir,
+      stdio: "pipe",
     });
   }
+}
+
+async function removePathIfExists(targetPath: string): Promise<void> {
+  await rm(targetPath, { recursive: true, force: true });
+}
+
+export async function cleanupDesktopRuntimeInstallArtifacts(
+  input: CleanupDesktopRuntimeInstallArtifactsInput
+): Promise<void> {
+  await Promise.all([
+    removePathIfExists(join(input.runtimeDir, "node_modules", ".bin")),
+    removePathIfExists(join(input.runtimeDir, "node_modules", ".modules.yaml")),
+    removePathIfExists(join(input.runtimeDir, "node_modules", ".pnpm-workspace-state-v1.json")),
+  ]);
+}
+
+async function removeEmptyDirectories(rootDir: string): Promise<void> {
+  let entries: Array<{ name: string; isDirectory: boolean; fullPath: string }> = [];
+  try {
+    const dirEntries = await readdir(rootDir, { withFileTypes: true });
+    entries = dirEntries.map((entry) => ({
+      name: entry.name,
+      isDirectory: entry.isDirectory(),
+      fullPath: join(rootDir, entry.name),
+    }));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory) {
+      continue;
+    }
+
+    await removeEmptyDirectories(entry.fullPath);
+  }
+
+  const remaining = await readdir(rootDir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      return [] as string[];
+    }
+    throw error;
+  });
+
+  if (remaining.length === 0) {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+}
+
+export async function cleanupDesktopRuntimeDependencyMetadata(input: {
+  runtimeDir: string;
+}): Promise<void> {
+  const pnpmDir = join(input.runtimeDir, "node_modules", ".pnpm");
+  await removePathIfExists(pnpmDir);
+  await removeEmptyDirectories(join(input.runtimeDir, "node_modules"));
 }
 
 export async function buildDesktopRuntimeBundle(input?: {
@@ -283,51 +332,71 @@ export async function buildDesktopRuntimeBundle(input?: {
   webSourceDir?: string;
   dependencyVersions?: Record<string, string>;
   esbuildBuild?: typeof esbuild.build;
-  exec?: typeof run;
-  tempWorkspaceDir?: string;
+  installDependencies?: (input: InstallDesktopRuntimeDependenciesInput) => Promise<void>;
+  cleanupInstallArtifacts?: (input: CleanupDesktopRuntimeInstallArtifactsInput) => Promise<void>;
+  cleanupDependencyMetadata?: (input: { runtimeDir: string }) => Promise<void>;
+  copyStaticAssets?: (input: { runtimeDir: string }) => Promise<void>;
 }): Promise<void> {
   const runtimeDir = input?.runtimeDir ?? resolve(DESKTOP_DIR, "dist/runtime/embedded");
-  const stagedRuntimeDir = `${runtimeDir}.staged`;
   const runtimeVersion = input?.runtimeVersion ?? (await readRootVersion());
   const esbuildBuild = input?.esbuildBuild ?? esbuild.build;
   const webSourceDir = input?.webSourceDir ?? WEB_DIST_DIR;
-  const exec = input?.exec ?? run;
   const dependencyVersions = filterDeployableRuntimeDependencies(
-    input?.dependencyVersions ?? {
-      ...((
-        JSON.parse(await readFile(resolve(SERVER_DIR, "package.json"), "utf-8")) as {
-          dependencies?: Record<string, string>;
-        }
-      ).dependencies ?? {}),
-    }
+    input?.dependencyVersions ??
+      ((JSON.parse(await readFile(resolve(SERVER_DIR, "package.json"), "utf-8")) as {
+        dependencies?: Record<string, string>;
+      }).dependencies ?? {})
   );
-  const tempWorkspaceDir =
-    input?.tempWorkspaceDir ?? resolve(DESKTOP_DIR, "dist/.desktop-runtime-workspace");
+  const externalDependencies = createDesktopRuntimeExternalDependencies(dependencyVersions);
+  const installedDependencies = createDesktopRuntimeInstalledDependencies(dependencyVersions);
+  const installDependencies =
+    input?.installDependencies ?? installDesktopRuntimeDependencies;
+  const cleanupInstallArtifacts =
+    input?.cleanupInstallArtifacts ?? cleanupDesktopRuntimeInstallArtifacts;
+  const cleanupDependencyMetadata =
+    input?.cleanupDependencyMetadata ?? cleanupDesktopRuntimeDependencyMetadata;
+  const copyStaticAssets = input?.copyStaticAssets ?? copyDesktopRuntimeStaticAssets;
 
-  await rm(runtimeDir, { recursive: true, force: true });
-  await rm(stagedRuntimeDir, { recursive: true, force: true });
-
-  await createDesktopRuntimeWorkspace({
-    tempWorkspaceDir,
-    runtimeVersion,
-    dependencyVersions,
-    esbuildBuild,
-    webSourceDir,
+  await prepareDesktopRuntimeOutputDirs({
+    runtimeDir,
+    esmDir: join(runtimeDir, "dist", "esm"),
+    webDir: join(runtimeDir, "dist", "web"),
   });
 
-  try {
-    await deployDesktopRuntimeBundle({
-      exec,
-      runtimeDir: stagedRuntimeDir,
-      tempWorkspaceDir,
-    });
-    await materializePortableRuntimeDir({
-      sourceDir: stagedRuntimeDir,
-      targetDir: runtimeDir,
-    });
-  } finally {
-    await rm(stagedRuntimeDir, { recursive: true, force: true });
-    await rm(tempWorkspaceDir, { recursive: true, force: true });
+  await esbuildBuild(
+    createDesktopRuntimeServerBuildOptions({
+      runtimeDir,
+      external: Object.keys(externalDependencies),
+    })
+  );
+  await esbuildBuild(
+    createDesktopRuntimeWslEntryBuildOptions({
+      runtimeDir,
+      external: Object.keys(externalDependencies),
+    })
+  );
+  await copyDir(webSourceDir, join(runtimeDir, "dist", "web"));
+  await copyStaticAssets({ runtimeDir });
+  await writeFile(
+    join(runtimeDir, "runtime-manifest.json"),
+    `${JSON.stringify(createDesktopRuntimeManifest({ version: runtimeVersion }), null, 2)}\n`
+  );
+  await writeFile(
+    join(runtimeDir, "package.json"),
+    `${JSON.stringify(
+      createDesktopRuntimePackageJson({
+        version: runtimeVersion,
+        dependencies: installedDependencies,
+      }),
+      null,
+      2
+    )}\n`
+  );
+
+  if (Object.keys(installedDependencies).length > 0) {
+    await installDependencies({ runtimeDir });
+    await cleanupInstallArtifacts({ runtimeDir });
+    await cleanupDependencyMetadata({ runtimeDir });
   }
 }
 
@@ -342,16 +411,4 @@ if (isDirectExecution(import.meta.url)) {
       error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     });
-}
-
-export async function materializePortableRuntimeDir(input: {
-  sourceDir: string;
-  targetDir: string;
-}): Promise<void> {
-  await rm(input.targetDir, { recursive: true, force: true });
-  await cp(input.sourceDir, input.targetDir, {
-    recursive: true,
-    force: true,
-    dereference: true,
-  });
 }
