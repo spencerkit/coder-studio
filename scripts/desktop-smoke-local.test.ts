@@ -60,7 +60,11 @@ describe("desktop-smoke-local", () => {
       now: () => 1700000001234,
     });
 
-    expect(prepared.userDataDir).toBe(join(repoRoot, ".tmp", "desktop-local-smoke", "user-data"));
+    expect(prepared.userDataDir).toMatch(
+      new RegExp(
+        `^${join(repoRoot, ".tmp", "desktop-local-smoke", "user-data-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+      )
+    );
     expect(prepared.runtimeVersion).toBe("0.5.5");
     expect(
       JSON.parse(
@@ -89,6 +93,54 @@ describe("desktop-smoke-local", () => {
         "utf-8"
       )
     ).resolves.toBe("<html></html>\n");
+  });
+
+  it("creates a fresh isolated smoke userData dir on each prepare call", async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), "coder-studio-desktop-smoke-"));
+    tempDirs.push(repoRoot);
+
+    const runtimeEmbeddedDir = join(repoRoot, "packages", "desktop", "dist", "runtime", "embedded");
+    await mkdir(join(runtimeEmbeddedDir, "dist", "esm"), { recursive: true });
+    await mkdir(join(runtimeEmbeddedDir, "dist", "web"), { recursive: true });
+    await writeFile(
+      join(runtimeEmbeddedDir, "runtime-manifest.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          version: "0.5.5",
+          entry: "dist/esm/runtime-launch-entry.mjs",
+          webRoot: "dist/web",
+        },
+        null,
+        2
+      )}\n`
+    );
+    await writeFile(
+      join(runtimeEmbeddedDir, "dist", "esm", "runtime-launch-entry.mjs"),
+      "export {};\n"
+    );
+    await writeFile(join(runtimeEmbeddedDir, "dist", "web", "index.html"), "<html></html>\n");
+
+    const first = await prepareDesktopLocalSmokeUserData({
+      repoRoot,
+      now: () => 1700000001234,
+    });
+    const second = await prepareDesktopLocalSmokeUserData({
+      repoRoot,
+      now: () => 1700000005678,
+    });
+
+    expect(first.userDataDir).not.toBe(second.userDataDir);
+    expect(first.userDataDir).toMatch(
+      new RegExp(
+        `^${join(repoRoot, ".tmp", "desktop-local-smoke", "user-data-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+      )
+    );
+    expect(second.userDataDir).toMatch(
+      new RegExp(
+        `^${join(repoRoot, ".tmp", "desktop-local-smoke", "user-data-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+      )
+    );
   });
 
   it("builds desktop assets before launching Electron with the isolated userData dir", async () => {
@@ -247,6 +299,39 @@ describe("desktop-smoke-local", () => {
     child.emit("close", 0, null);
     await launch.completed;
 
+    expect(removeDir.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("treats locked cleanup as non-fatal after the desktop smoke exits cleanly", async () => {
+    const child = createChildProcess();
+    const runBackground = vi.fn(() => child);
+    const waitForDesktopHealthy = vi.fn(async () => ({
+      browserUrl: "http://127.0.0.1:43123",
+      runtime: {
+        host: "127.0.0.1",
+        port: 43123,
+        pid: 4242,
+        token: "server-4242",
+        serverInstanceId: "server-4242",
+        startedAt: 1700000001234,
+      },
+    }));
+    const removeDir = vi.fn(async () => {
+      const error = new Error("EBUSY") as Error & { code?: string };
+      error.code = "EBUSY";
+      throw error;
+    });
+
+    const launch = await launchDesktopSmokeLocal({
+      repoRoot: "/repo",
+      userDataDir: "/repo/.tmp/desktop-local-smoke/user-data-abc",
+      runBackground,
+      waitForDesktopHealthy,
+      removeDir,
+    });
+
+    child.emit("close", 0, null);
+    await expect(launch.completed).resolves.toBeUndefined();
     expect(removeDir.mock.calls.length).toBeGreaterThan(1);
   });
 

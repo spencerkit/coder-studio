@@ -57,6 +57,7 @@ describe("build-desktop-runtime", () => {
     expect(buildOptions.outfile).toBe(
       "/repo/packages/desktop/dist/runtime/embedded/dist/esm/runtime-launch-entry.mjs"
     );
+    expect(buildOptions.packages).toBe("external");
     expect(buildOptions.external).toEqual(["node-pty"]);
   });
 
@@ -70,17 +71,25 @@ describe("build-desktop-runtime", () => {
     expect(buildOptions.outfile).toBe(
       "/repo/packages/desktop/dist/runtime/embedded/dist/esm/wsl-runtime-entry.mjs"
     );
+    expect(buildOptions.packages).toBe("external");
     expect(buildOptions.external).toEqual(["node-pty"]);
   });
 
-  it("creates a desktop runtime package manifest with only minimally installed runtime dependencies", () => {
+  it("creates a desktop runtime package manifest with deployable third-party runtime dependencies", () => {
     expect(
       createDesktopRuntimePackageJson({
         version: "0.5.4",
         dependencies: {
+          "@coder-studio/core": "workspace:*",
+          "@coder-studio/providers": "workspace:*",
+          "@coder-studio/utils": "workspace:*",
+          "@fastify/compress": "^8.3.1",
+          fastify: "^5.8.5",
+          "mime-types": "^2.1.35",
           "node-pty": "^1.1.0",
           "typescript-language-server": "^5.2.0",
           typescript: "^6.0.3",
+          zod: "^4.4.2",
         },
       })
     ).toEqual({
@@ -96,9 +105,13 @@ describe("build-desktop-runtime", () => {
       },
       files: ["dist", "runtime-manifest.json", "package.json"],
       dependencies: {
+        "@fastify/compress": "^8.3.1",
+        fastify: "^5.8.5",
+        "mime-types": "^2.1.35",
         "node-pty": "^1.1.0",
         "typescript-language-server": "^5.2.0",
         typescript: "^6.0.3",
+        zod: "^4.4.2",
       },
     });
   });
@@ -119,12 +132,13 @@ describe("build-desktop-runtime", () => {
     });
   });
 
-  it("keeps only package-form runtime tools in the embedded runtime install dependency list", () => {
+  it("keeps deployable third-party runtime packages in the embedded runtime install dependency list", () => {
     expect(
       createDesktopRuntimeInstalledDependencies({
         "@coder-studio/core": "workspace:*",
         "@coder-studio/providers": "workspace:*",
         fastify: "^5.8.5",
+        "mime-types": "^2.1.35",
         "node-pty": "^1.1.0",
         "typescript-language-server": "^5.2.0",
         typescript: "^6.0.3",
@@ -132,9 +146,13 @@ describe("build-desktop-runtime", () => {
         zod: "^4.4.2",
       })
     ).toEqual({
+      fastify: "^5.8.5",
+      "mime-types": "^2.1.35",
       "node-pty": "^1.1.0",
       "typescript-language-server": "^5.2.0",
       typescript: "^6.0.3",
+      "vscode-jsonrpc": "^8.2.1",
+      zod: "^4.4.2",
     });
   });
 
@@ -171,13 +189,15 @@ describe("build-desktop-runtime", () => {
     const installDependencies = vi.fn(async () => {});
     const cleanupInstallArtifacts = vi.fn(async () => {});
     const cleanupDependencyMetadata = vi.fn(async () => {});
-    const copyStaticAssets = vi.fn(async ({ runtimeDir: targetRuntimeDir }: { runtimeDir: string }) => {
-      await mkdir(join(targetRuntimeDir, "dist", "assets", "preview"), { recursive: true });
-      await writeFile(
-        join(targetRuntimeDir, "dist", "assets", "preview", "mermaid.min.js"),
-        "window.mermaid = {};\n"
-      );
-    });
+    const copyStaticAssets = vi.fn(
+      async ({ runtimeDir: targetRuntimeDir }: { runtimeDir: string }) => {
+        await mkdir(join(targetRuntimeDir, "dist", "assets", "preview"), { recursive: true });
+        await writeFile(
+          join(targetRuntimeDir, "dist", "assets", "preview", "mermaid.min.js"),
+          "window.mermaid = {};\n"
+        );
+      }
+    );
     const esbuildBuild = vi.fn(async (options) => {
       const outfile = options.outfile;
       if (typeof outfile !== "string") {
@@ -192,6 +212,7 @@ describe("build-desktop-runtime", () => {
       webSourceDir,
       dependencyVersions: {
         fastify: "^5.8.5",
+        "mime-types": "^2.1.35",
         "node-pty": "^1.1.0",
         "typescript-language-server": "^5.2.0",
         typescript: "^6.0.3",
@@ -257,6 +278,8 @@ describe("build-desktop-runtime", () => {
       name: "@coder-studio/desktop-runtime",
       version: "0.5.4",
       dependencies: {
+        fastify: "^5.8.5",
+        "mime-types": "^2.1.35",
         "node-pty": "^1.1.0",
         "typescript-language-server": "^5.2.0",
         typescript: "^6.0.3",
@@ -266,8 +289,67 @@ describe("build-desktop-runtime", () => {
 
   it("retries dependency install without offline mode when pnpm metadata is unavailable", async () => {
     const exec = vi
-      .fn<(command: string, args: string[], options?: { cwd?: string; stdio?: "pipe" }) => Promise<void>>()
+      .fn<
+        (
+          command: string,
+          args: string[],
+          options?: { cwd?: string; stdio?: "pipe" }
+        ) => Promise<void>
+      >()
       .mockRejectedValueOnce(new Error("ERR_PNPM_NO_OFFLINE_META"))
+      .mockResolvedValueOnce();
+
+    await installDesktopRuntimeDependencies({
+      runtimeDir: "/repo/packages/desktop/dist/runtime/embedded",
+      exec,
+    });
+
+    expect(exec).toHaveBeenCalledTimes(2);
+    expect(exec).toHaveBeenNthCalledWith(
+      1,
+      "pnpm",
+      [
+        "install",
+        "--prod",
+        "--offline",
+        "--ignore-workspace",
+        "--config.node-linker=hoisted",
+        "--config.package-import-method=copy",
+        "--config.confirmModulesPurge=false",
+      ],
+      {
+        cwd: "/repo/packages/desktop/dist/runtime/embedded",
+        stdio: "pipe",
+      }
+    );
+    expect(exec).toHaveBeenNthCalledWith(
+      2,
+      "pnpm",
+      [
+        "install",
+        "--prod",
+        "--ignore-workspace",
+        "--config.node-linker=hoisted",
+        "--config.package-import-method=copy",
+        "--config.confirmModulesPurge=false",
+      ],
+      {
+        cwd: "/repo/packages/desktop/dist/runtime/embedded",
+        stdio: "pipe",
+      }
+    );
+  });
+
+  it("retries dependency install without offline mode when pnpm tarballs are unavailable offline", async () => {
+    const exec = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+          options?: { cwd?: string; stdio?: "pipe" }
+        ) => Promise<void>
+      >()
+      .mockRejectedValueOnce(new Error("ERR_PNPM_NO_OFFLINE_TARBALL"))
       .mockResolvedValueOnce();
 
     await installDesktopRuntimeDependencies({

@@ -22,11 +22,6 @@ import {
 import { isDirectExecution } from "./shared/process.js";
 
 const DESKTOP_RUNTIME_NATIVE_EXTERNALS = ["node-pty"] as const;
-const DESKTOP_RUNTIME_INSTALLED_DEPENDENCIES = [
-  "node-pty",
-  "typescript-language-server",
-  "typescript",
-] as const;
 const DESKTOP_RUNTIME_ASSETS_DIR = "dist/assets";
 const MERMAID_ASSET_RELATIVE_PATH = `${DESKTOP_RUNTIME_ASSETS_DIR}/preview/mermaid.min.js`;
 
@@ -64,8 +59,12 @@ function createDesktopRuntimeInstallArgs(input: { offline: boolean }): string[] 
   ];
 }
 
-function isOfflineMetadataError(rawError: unknown): boolean {
-  return rawError instanceof Error && rawError.message.includes("ERR_PNPM_NO_OFFLINE_META");
+function isOfflineInstallFallbackError(rawError: unknown): boolean {
+  return (
+    rawError instanceof Error &&
+    (rawError.message.includes("ERR_PNPM_NO_OFFLINE_META") ||
+      rawError.message.includes("ERR_PNPM_NO_OFFLINE_TARBALL"))
+  );
 }
 
 function filterDeployableRuntimeDependencies(
@@ -91,13 +90,7 @@ export function createDesktopRuntimeExternalDependencies(
 export function createDesktopRuntimeInstalledDependencies(
   dependencies: Record<string, string>
 ): Record<string, string> {
-  const deployable = filterDeployableRuntimeDependencies(dependencies);
-
-  return Object.fromEntries(
-    DESKTOP_RUNTIME_INSTALLED_DEPENDENCIES.flatMap((dependency) =>
-      typeof deployable[dependency] === "string" ? [[dependency, deployable[dependency]]] : []
-    )
-  );
+  return filterDeployableRuntimeDependencies(dependencies);
 }
 
 export async function prepareDesktopRuntimeOutputDirs(
@@ -127,6 +120,7 @@ export function createDesktopRuntimeServerBuildOptions(input: {
     platform: "node",
     target: "node24",
     format: "esm",
+    packages: "external",
     outfile: resolve(input.runtimeDir, "dist/esm/runtime-launch-entry.mjs"),
     outExtension: { ".js": ".mjs" },
     external: input.external,
@@ -153,6 +147,7 @@ export function createDesktopRuntimeWslEntryBuildOptions(input: {
     platform: "node",
     target: "node24",
     format: "esm",
+    packages: "external",
     outfile: resolve(input.runtimeDir, "dist/esm/wsl-runtime-entry.mjs"),
     outExtension: { ".js": ".mjs" },
     external: input.external,
@@ -232,8 +227,8 @@ function resolveMermaidAssetSourcePath(): string {
     resolve(ROOT_DIR, "node_modules", ".pnpm", "node_modules", "mermaid", "dist", "mermaid.min.js"),
   ];
 
-  const resolved = candidates.find((candidate): candidate is string =>
-    typeof candidate === "string" && existsSync(candidate)
+  const resolved = candidates.find(
+    (candidate): candidate is string => typeof candidate === "string" && existsSync(candidate)
   );
   if (!resolved) {
     throw new Error("Unable to resolve mermaid runtime asset for desktop runtime packaging.");
@@ -257,7 +252,7 @@ export async function installDesktopRuntimeDependencies(
       stdio: "pipe",
     });
   } catch (error) {
-    if (!isOfflineMetadataError(error)) {
+    if (!isOfflineInstallFallbackError(error)) {
       throw error;
     }
 
@@ -343,14 +338,16 @@ export async function buildDesktopRuntimeBundle(input?: {
   const webSourceDir = input?.webSourceDir ?? WEB_DIST_DIR;
   const dependencyVersions = filterDeployableRuntimeDependencies(
     input?.dependencyVersions ??
-      ((JSON.parse(await readFile(resolve(SERVER_DIR, "package.json"), "utf-8")) as {
-        dependencies?: Record<string, string>;
-      }).dependencies ?? {})
+      (
+        JSON.parse(await readFile(resolve(SERVER_DIR, "package.json"), "utf-8")) as {
+          dependencies?: Record<string, string>;
+        }
+      ).dependencies ??
+      {}
   );
   const externalDependencies = createDesktopRuntimeExternalDependencies(dependencyVersions);
   const installedDependencies = createDesktopRuntimeInstalledDependencies(dependencyVersions);
-  const installDependencies =
-    input?.installDependencies ?? installDesktopRuntimeDependencies;
+  const installDependencies = input?.installDependencies ?? installDesktopRuntimeDependencies;
   const cleanupInstallArtifacts =
     input?.cleanupInstallArtifacts ?? cleanupDesktopRuntimeInstallArtifacts;
   const cleanupDependencyMetadata =

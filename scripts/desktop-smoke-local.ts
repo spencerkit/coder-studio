@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type RuntimeConfig, readRuntimeConfig } from "../packages/core/src/runtime.js";
 import { parseRuntimeManifest } from "../packages/desktop/src/runtime-manifest.js";
@@ -14,6 +14,39 @@ const DESKTOP_ELECTRON_ENTRY = "dist/electron/main.mjs";
 const LOCAL_SEED_SOURCE = "local-desktop-seed";
 const SMOKE_CLEANUP_RETRY_DELAY_MS = 50;
 const SMOKE_CLEANUP_MAX_ATTEMPTS = 5;
+type RemoveDir = (target: string) => Promise<void>;
+
+function isLikelyWindowsLockedDirError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const code = (error as { code?: string }).code;
+    if (code === "EBUSY" || code === "EPERM" || code === "ENOTEMPTY") {
+      return true;
+    }
+
+    return /resource busy or locked/i.test(error.message);
+  }
+
+  return false;
+}
+
+async function removeDirWithRetry(target: string, removeDir: RemoveDir): Promise<boolean> {
+  for (let attempt = 1; attempt <= SMOKE_CLEANUP_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await removeDir(target);
+      return true;
+    } catch (error) {
+      if (!isLikelyWindowsLockedDirError(error) && attempt === 1) {
+        throw error;
+      }
+
+      if (attempt < SMOKE_CLEANUP_MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, SMOKE_CLEANUP_RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  return false;
+}
 
 export type SmokeScriptRunner = (
   command: string,
@@ -52,7 +85,9 @@ export async function prepareDesktopLocalSmokeUserData(input: {
   runtimeVersion: string;
 }> {
   const repoRoot = input.repoRoot ?? ROOT_DIR;
-  const userDataDir = join(repoRoot, SMOKE_USER_DATA_RELATIVE_DIR);
+  const smokeRootDir = join(repoRoot, ".tmp", "desktop-local-smoke");
+  await mkdir(smokeRootDir, { recursive: true });
+  const userDataDir = await mkdtemp(join(smokeRootDir, "user-data-"));
   const runtimeEmbeddedDir = join(repoRoot, "packages", "desktop", "dist", "runtime", "embedded");
   const runtimeStoreDir = join(userDataDir, "runtime-store");
   const currentPointerPath = join(runtimeStoreDir, "current.json");
@@ -62,7 +97,6 @@ export async function prepareDesktopLocalSmokeUserData(input: {
   );
   const versionDir = join(runtimeStoreDir, "versions", manifest.version);
 
-  await rm(userDataDir, { recursive: true, force: true });
   await mkdir(join(runtimeStoreDir, "versions"), { recursive: true });
   await cp(runtimeEmbeddedDir, versionDir, { recursive: true, force: true });
   await writeFile(
@@ -117,7 +151,7 @@ export async function launchDesktopSmokeLocal(input: {
     userDataDir: string;
     expectedPid?: number;
   }) => Promise<HealthyDesktopRuntime>;
-  removeDir?: (target: string) => Promise<void>;
+  removeDir?: RemoveDir;
 }): Promise<{
   browserUrl: string;
   runtime: RuntimeConfig;
@@ -137,24 +171,9 @@ export async function launchDesktopSmokeLocal(input: {
     }
 
     cleanedUserData = true;
-    for (let attempt = 1; attempt <= SMOKE_CLEANUP_MAX_ATTEMPTS; attempt += 1) {
-      try {
-        await removeDir(input.userDataDir);
-        return;
-      } catch (error) {
-        const code = error instanceof Error ? (error as { code?: string }).code : undefined;
-        const message = error instanceof Error ? error.message : String(error);
-        const locked =
-          code === "EBUSY" ||
-          code === "EPERM" ||
-          code === "ENOTEMPTY" ||
-          /resource busy or locked/i.test(message);
-        if (!locked || attempt === SMOKE_CLEANUP_MAX_ATTEMPTS) {
-          throw error;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, SMOKE_CLEANUP_RETRY_DELAY_MS));
-      }
+    const removed = await removeDirWithRetry(input.userDataDir, removeDir);
+    if (!removed) {
+      return;
     }
   };
 
