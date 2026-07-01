@@ -65,7 +65,7 @@ export async function buildDesktopPackage(
 ): Promise<void> {
   const exec = input.exec ?? run;
   const desktopDir = input.desktopDir ?? DESKTOP_DIR;
-  const args = ["exec", "electron-builder", "--projectDir", desktopDir];
+  const args = ["exec", "electron-builder", "--projectDir", desktopDir, "--publish", "never"];
 
   if (input.outputDir) {
     args.push(`--config.directories.output=${input.outputDir}`);

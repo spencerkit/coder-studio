@@ -67,7 +67,7 @@ describe("build-desktop", () => {
     );
   });
 
-  it("invokes electron-builder using the desktop package publish config", async () => {
+  it("invokes electron-builder without auto-publishing release artifacts", async () => {
     const run = vi.fn(async () => {});
 
     await buildDesktopPackage({
@@ -77,7 +77,7 @@ describe("build-desktop", () => {
 
     expect(run).toHaveBeenCalledWith(
       "pnpm",
-      ["exec", "electron-builder", "--projectDir", "/repo/packages/desktop"],
+      ["exec", "electron-builder", "--projectDir", "/repo/packages/desktop", "--publish", "never"],
       expect.objectContaining({ cwd: "/repo/packages/desktop" })
     );
   });
@@ -98,6 +98,8 @@ describe("build-desktop", () => {
         "electron-builder",
         "--projectDir",
         "/repo/packages/desktop",
+        "--publish",
+        "never",
         "--config.directories.output=/tmp/coder-studio-desktop-release-stage",
       ],
       expect.objectContaining({ cwd: "/repo/packages/desktop" })
