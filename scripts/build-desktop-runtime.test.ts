@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import {
   createDesktopRuntimePackageJson,
   createDesktopRuntimeServerBuildOptions,
   createDesktopRuntimeWslEntryBuildOptions,
+  materializePortableRuntimeDir,
   prepareDesktopRuntimeOutputDirs,
   readDesktopRuntimeVersion,
 } from "./build-desktop-runtime.js";
@@ -21,7 +22,7 @@ describe("build-desktop-runtime", () => {
     tempDirs.length = 0;
   });
 
-  it("cleans stale desktop runtime bundle output before rebuilding", async () => {
+  it("cleans stale desktop embedded runtime output before rebuilding", async () => {
     const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-"));
     tempDirs.push(runtimeDir);
     const esmDir = join(runtimeDir, "dist", "esm");
@@ -44,26 +45,26 @@ describe("build-desktop-runtime", () => {
 
   it("creates a desktop runtime server bundle config", () => {
     const buildOptions = createDesktopRuntimeServerBuildOptions({
-      runtimeDir: "/repo/packages/desktop/dist/runtime/runtime-bundle",
+      runtimeDir: "/repo/packages/desktop/dist/runtime/embedded",
       external: ["fastify", "zod"],
     });
 
     expect(buildOptions.entryPoints).toEqual([resolve(RUNTIME_DIR, "src/runtime-launch-entry.ts")]);
     expect(buildOptions.outfile).toBe(
-      "/repo/packages/desktop/dist/runtime/runtime-bundle/dist/esm/runtime-launch-entry.mjs"
+      "/repo/packages/desktop/dist/runtime/embedded/dist/esm/runtime-launch-entry.mjs"
     );
     expect(buildOptions.external).toEqual(["fastify", "zod"]);
   });
 
   it("creates a desktop runtime WSL entry bundle config", () => {
     const buildOptions = createDesktopRuntimeWslEntryBuildOptions({
-      runtimeDir: "/repo/packages/desktop/dist/runtime/runtime-bundle",
+      runtimeDir: "/repo/packages/desktop/dist/runtime/embedded",
       external: ["fastify", "zod"],
     });
 
     expect(buildOptions.entryPoints).toEqual([resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")]);
     expect(buildOptions.outfile).toBe(
-      "/repo/packages/desktop/dist/runtime/runtime-bundle/dist/esm/wsl-runtime-entry.mjs"
+      "/repo/packages/desktop/dist/runtime/embedded/dist/esm/wsl-runtime-entry.mjs"
     );
     expect(buildOptions.external).toEqual(["fastify", "zod"]);
   });
@@ -377,5 +378,27 @@ describe("build-desktop-runtime", () => {
       ],
       { cwd: tempWorkspaceDir, stdio: "pipe" }
     );
+  });
+
+  it("materializes symlinked dependencies into a portable embedded runtime directory", async () => {
+    const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-runtime-embedded-"));
+    tempDirs.push(runtimeDir);
+
+    const packageStoreDir = join(runtimeDir, "node_modules", ".pnpm", "dep@1.0.0", "node_modules");
+    const realPackageDir = join(packageStoreDir, "dep");
+    const linkedPackageDir = join(runtimeDir, "node_modules", "dep");
+
+    await mkdir(realPackageDir, { recursive: true });
+    await writeFile(join(realPackageDir, "index.js"), "export const dep = true;\n");
+    await symlink(realPackageDir, linkedPackageDir, "dir");
+
+    await materializePortableRuntimeDir(runtimeDir);
+
+    await expect(
+      lstat(join(runtimeDir, "node_modules", "dep")).then((stats) => stats.isSymbolicLink())
+    ).resolves.toBe(false);
+    await expect(
+      readFile(join(runtimeDir, "node_modules", "dep", "index.js"), "utf-8")
+    ).resolves.toBe("export const dep = true;\n");
   });
 });

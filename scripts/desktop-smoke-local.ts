@@ -51,18 +51,18 @@ export async function prepareDesktopLocalSmokeUserData(input: {
 }> {
   const repoRoot = input.repoRoot ?? ROOT_DIR;
   const userDataDir = join(repoRoot, SMOKE_USER_DATA_RELATIVE_DIR);
-  const runtimeSeedDir = join(repoRoot, "packages", "desktop", "dist", "runtime", "seed");
+  const runtimeEmbeddedDir = join(repoRoot, "packages", "desktop", "dist", "runtime", "embedded");
   const runtimeStoreDir = join(userDataDir, "runtime-store");
   const currentPointerPath = join(runtimeStoreDir, "current.json");
 
   const manifest = parseRuntimeManifest(
-    JSON.parse(await readFile(join(runtimeSeedDir, "runtime-manifest.json"), "utf-8"))
+    JSON.parse(await readFile(join(runtimeEmbeddedDir, "runtime-manifest.json"), "utf-8"))
   );
   const versionDir = join(runtimeStoreDir, "versions", manifest.version);
 
   await rm(userDataDir, { recursive: true, force: true });
   await mkdir(join(runtimeStoreDir, "versions"), { recursive: true });
-  await cp(runtimeSeedDir, versionDir, { recursive: true, force: true });
+  await cp(runtimeEmbeddedDir, versionDir, { recursive: true, force: true });
   await writeFile(
     currentPointerPath,
     `${JSON.stringify(

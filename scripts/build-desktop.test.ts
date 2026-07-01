@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildDesktopPackage,
   createDesktopBuildOptions,
-  createDesktopRuntimeSeedDir,
   prepareDesktopOutputDirs,
   resolveEmbeddedNodeOutputName,
   shouldPackageDesktop,
@@ -61,28 +60,6 @@ describe("build-desktop", () => {
       ["exec", "electron-builder", "--projectDir", "/repo/packages/desktop"],
       expect.objectContaining({ cwd: "/repo/packages/desktop" })
     );
-  });
-
-  it("creates a local desktop runtime seed directory when provided a built runtime bundle", async () => {
-    const runtimeSourceDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-source-"));
-    const runtimeSeedDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-seed-"));
-    await writeFile(join(runtimeSourceDir, "runtime-manifest.json"), "{}\n");
-    await mkdir(join(runtimeSourceDir, "dist", "web"), { recursive: true });
-    await writeFile(join(runtimeSourceDir, "dist", "web", "index.html"), "<html></html>\n");
-
-    await createDesktopRuntimeSeedDir({
-      runtimeSourceDir,
-      runtimeSeedDir,
-    });
-
-    await expect(readFile(join(runtimeSeedDir, "runtime-manifest.json"), "utf-8")).resolves.toBe(
-      "{}\n"
-    );
-    await expect(
-      readFile(join(runtimeSeedDir, "dist", "web", "index.html"), "utf-8")
-    ).resolves.toBe("<html></html>\n");
-    await rm(runtimeSourceDir, { recursive: true, force: true });
-    await rm(runtimeSeedDir, { recursive: true, force: true });
   });
 
   it("skips installer packaging on unsupported host platforms", () => {

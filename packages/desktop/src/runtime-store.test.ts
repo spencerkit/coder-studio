@@ -23,12 +23,12 @@ describe("runtime-store", () => {
     return dir;
   }
 
-  async function createStagedRuntimeBundle(rootDir: string, version: string): Promise<string> {
-    const bundleDir = join(rootDir, "bundle");
-    await mkdir(join(bundleDir, "dist", "esm"), { recursive: true });
-    await mkdir(join(bundleDir, "dist", "web"), { recursive: true });
+  async function createStagedRuntimeArtifact(rootDir: string, version: string): Promise<string> {
+    const artifactDir = join(rootDir, "artifact");
+    await mkdir(join(artifactDir, "dist", "esm"), { recursive: true });
+    await mkdir(join(artifactDir, "dist", "web"), { recursive: true });
     await writeFile(
-      join(bundleDir, RUNTIME_MANIFEST_FILE_NAME),
+      join(artifactDir, RUNTIME_MANIFEST_FILE_NAME),
       JSON.stringify(
         {
           schemaVersion: 1,
@@ -41,11 +41,11 @@ describe("runtime-store", () => {
       )
     );
     await writeFile(
-      join(bundleDir, "dist", "esm", "runtime-launch-entry.mjs"),
+      join(artifactDir, "dist", "esm", "runtime-launch-entry.mjs"),
       "export const runtime = true;\n"
     );
-    await writeFile(join(bundleDir, "dist", "web", "index.html"), "<html></html>\n");
-    return bundleDir;
+    await writeFile(join(artifactDir, "dist", "web", "index.html"), "<html></html>\n");
+    return artifactDir;
   }
 
   it("reads the active runtime pointer from current.json", async () => {
@@ -87,12 +87,12 @@ describe("runtime-store", () => {
       now: () => 1700000000123,
     });
 
-    const firstBundleRoot = await createStagedRuntimeBundle(
-      await mkdtemp(join(tmpdir(), "coder-studio-runtime-bundle-")),
+    const firstArtifactRoot = await createStagedRuntimeArtifact(
+      await mkdtemp(join(tmpdir(), "coder-studio-runtime-artifact-")),
       "0.5.4"
     );
     const first = await store.activateStagedRuntime({
-      stagingDir: firstBundleRoot,
+      stagingDir: firstArtifactRoot,
       checksumSha256: "sha-first",
       source: "github-release",
     });
@@ -107,12 +107,12 @@ describe("runtime-store", () => {
       source: "github-release",
     });
 
-    const secondBundleRoot = await createStagedRuntimeBundle(
-      await mkdtemp(join(tmpdir(), "coder-studio-runtime-bundle-")),
+    const secondArtifactRoot = await createStagedRuntimeArtifact(
+      await mkdtemp(join(tmpdir(), "coder-studio-runtime-artifact-")),
       "0.5.5"
     );
     const second = await store.activateStagedRuntime({
-      stagingDir: secondBundleRoot,
+      stagingDir: secondArtifactRoot,
       checksumSha256: "sha-second",
       source: "github-release",
     });
@@ -131,12 +131,12 @@ describe("runtime-store", () => {
     await expect(store.readActiveRuntime()).resolves.toEqual(second);
   });
 
-  it("rejects bundles with invalid runtime manifests", async () => {
+  it("rejects staged runtime artifacts with invalid runtime manifests", async () => {
     const userDataDir = await createTempUserDataDir();
     const store = new RuntimeStore({ userDataDir });
-    const bundleRoot = await mkdtemp(join(tmpdir(), "coder-studio-runtime-bundle-invalid-"));
+    const artifactRoot = await mkdtemp(join(tmpdir(), "coder-studio-runtime-artifact-invalid-"));
     await writeFile(
-      join(bundleRoot, RUNTIME_MANIFEST_FILE_NAME),
+      join(artifactRoot, RUNTIME_MANIFEST_FILE_NAME),
       JSON.stringify(
         {
           schemaVersion: 1,
@@ -151,7 +151,7 @@ describe("runtime-store", () => {
 
     await expect(
       store.activateStagedRuntime({
-        stagingDir: bundleRoot,
+        stagingDir: artifactRoot,
         checksumSha256: "sha-invalid",
         source: "github-release",
       })

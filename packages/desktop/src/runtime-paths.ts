@@ -71,11 +71,11 @@ export function resolveEmbeddedRuntimePaths(input: EmbeddedRuntimePathInput): Em
     nodeExecutable: join(runtimeRoot, "node", platform === "win32" ? "node.exe" : "node"),
     runtimeEntry: activeRuntimePointer
       ? resolve(activeRuntimePointer.path, activeRuntimePointer.entry)
-      : join(runtimeRoot, "seed", "dist", "esm", "runtime-launch-entry.mjs"),
+      : join(runtimeRoot, "embedded", "dist", "esm", "runtime-launch-entry.mjs"),
     ...(activeRuntimePointer ? { runtimeVersion: activeRuntimePointer.version } : {}),
     webRoot: activeRuntimePointer
       ? resolve(activeRuntimePointer.path, activeRuntimePointer.webRoot)
-      : join(runtimeRoot, "seed", "dist", "web"),
+      : join(runtimeRoot, "embedded", "dist", "web"),
     runtimeJsonPath: join(input.userDataDir, "runtime", "runtime.json"),
   };
 }

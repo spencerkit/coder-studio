@@ -29,15 +29,15 @@ describe("desktop-smoke-local", () => {
     tempDirs.length = 0;
   });
 
-  it("seeds the isolated runtime-store from the bundled desktop runtime", async () => {
+  it("seeds the isolated runtime-store from the embedded desktop runtime", async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), "coder-studio-desktop-smoke-"));
     tempDirs.push(repoRoot);
 
-    const runtimeSeedDir = join(repoRoot, "packages", "desktop", "dist", "runtime", "seed");
-    await mkdir(join(runtimeSeedDir, "dist", "esm"), { recursive: true });
-    await mkdir(join(runtimeSeedDir, "dist", "web"), { recursive: true });
+    const runtimeEmbeddedDir = join(repoRoot, "packages", "desktop", "dist", "runtime", "embedded");
+    await mkdir(join(runtimeEmbeddedDir, "dist", "esm"), { recursive: true });
+    await mkdir(join(runtimeEmbeddedDir, "dist", "web"), { recursive: true });
     await writeFile(
-      join(runtimeSeedDir, "runtime-manifest.json"),
+      join(runtimeEmbeddedDir, "runtime-manifest.json"),
       `${JSON.stringify(
         {
           schemaVersion: 1,
@@ -50,10 +50,10 @@ describe("desktop-smoke-local", () => {
       )}\n`
     );
     await writeFile(
-      join(runtimeSeedDir, "dist", "esm", "runtime-launch-entry.mjs"),
+      join(runtimeEmbeddedDir, "dist", "esm", "runtime-launch-entry.mjs"),
       "export {};\n"
     );
-    await writeFile(join(runtimeSeedDir, "dist", "web", "index.html"), "<html></html>\n");
+    await writeFile(join(runtimeEmbeddedDir, "dist", "web", "index.html"), "<html></html>\n");
 
     const prepared = await prepareDesktopLocalSmokeUserData({
       repoRoot,

@@ -1,7 +1,7 @@
 import { cp, mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import * as esbuild from "esbuild";
-import { buildDesktopRuntimeBundle, copyDesktopRuntimeSeed } from "./build-desktop-runtime.js";
+import { buildDesktopRuntimeBundle } from "./build-desktop-runtime.js";
 import {
   CORE_DIR,
   DESKTOP_DIR,
@@ -69,13 +69,6 @@ export function createDesktopBuildOptions(): esbuild.BuildOptions {
   };
 }
 
-export async function createDesktopRuntimeSeedDir(input: {
-  runtimeSourceDir: string;
-  runtimeSeedDir: string;
-}): Promise<void> {
-  await copyDesktopRuntimeSeed(input);
-}
-
 export async function buildDesktop(): Promise<void> {
   step("BUILD DESKTOP", "Bundling Electron shell and packaging installers...\n");
 
@@ -87,13 +80,8 @@ export async function buildDesktop(): Promise<void> {
 
   await esbuild.build(createDesktopBuildOptions());
 
-  const runtimeBundleDir = join(DESKTOP_DIST_DIR, "runtime-bundle");
   await buildDesktopRuntimeBundle({
-    runtimeDir: runtimeBundleDir,
-  });
-  await createDesktopRuntimeSeedDir({
-    runtimeSourceDir: runtimeBundleDir,
-    runtimeSeedDir: join(DESKTOP_RUNTIME_DIR, "seed"),
+    runtimeDir: join(DESKTOP_RUNTIME_DIR, "embedded"),
   });
   await mkdir(join(DESKTOP_RUNTIME_DIR, "node"), { recursive: true });
   await cp(process.execPath, join(DESKTOP_RUNTIME_DIR, "node", resolveEmbeddedNodeOutputName()), {
@@ -104,7 +92,9 @@ export async function buildDesktop(): Promise<void> {
     await buildDesktopPackage();
     success(`Desktop installers built in ${join(DESKTOP_DIST_DIR, "release")}`);
   } else {
-    info("Desktop runtime bundle assembled. Installer packaging is skipped on this host platform.");
+    info(
+      "Desktop embedded runtime assembled. Installer packaging is skipped on this host platform."
+    );
   }
 }
 

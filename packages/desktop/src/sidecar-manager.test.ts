@@ -32,9 +32,9 @@ describe("sidecar-manager", () => {
     ).toEqual({
       nodeExecutable: "/Applications/Coder Studio.app/Contents/Resources/runtime/node/node",
       runtimeEntry:
-        "/Applications/Coder Studio.app/Contents/Resources/runtime/seed/dist/esm/runtime-launch-entry.mjs",
+        "/Applications/Coder Studio.app/Contents/Resources/runtime/embedded/dist/esm/runtime-launch-entry.mjs",
       runtimeVersion: undefined,
-      webRoot: "/Applications/Coder Studio.app/Contents/Resources/runtime/seed/dist/web",
+      webRoot: "/Applications/Coder Studio.app/Contents/Resources/runtime/embedded/dist/web",
       runtimeJsonPath: "/Users/test/Library/Application Support/Coder Studio/runtime/runtime.json",
     });
   });
