@@ -1,0 +1,216 @@
+name: Beta Desktop Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      beta_version:
+        description: "Beta version to stamp into the desktop app and runtime"
+        required: true
+        default: "0.5.6-beta.0"
+        type: string
+      retention_days:
+        description: "Days to keep downloadable Actions artifacts"
+        required: true
+        default: "14"
+        type: string
+  push:
+    branches:
+      - codex/wsl-runtime-followup
+
+concurrency:
+  group: beta-desktop-runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DEFAULT_BETA_VERSION: "0.5.6-beta.0"
+  RUNTIME_ARTIFACT_BRANCH: beta-artifacts
+
+jobs:
+  build-windows:
+    name: Build Windows desktop beta
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve beta metadata
+        id: beta
+        shell: pwsh
+        env:
+          INPUT_BETA_VERSION: ${{ github.event.inputs.beta_version }}
+        run: |
+          $version = $env:INPUT_BETA_VERSION
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = $env:DEFAULT_BETA_VERSION
+          }
+          $branchSlug = $env:GITHUB_REF_NAME -replace '[^A-Za-z0-9._-]', '-'
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "branch_slug=$branchSlug" >> $env:GITHUB_OUTPUT
+
+      - name: Stamp beta package versions
+        shell: pwsh
+        env:
+          BETA_VERSION: ${{ steps.beta.outputs.version }}
+        run: |
+          $script = @'
+          import { readFile, writeFile } from "node:fs/promises";
+
+          const version = process.env.BETA_VERSION;
+          if (!version) {
+            throw new Error("BETA_VERSION is required");
+          }
+
+          for (const file of ["packages/cli/package.json", "packages/desktop/package.json"]) {
+            const manifest = JSON.parse(await readFile(file, "utf8"));
+            manifest.version = version;
+            await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
+          }
+          '@
+          node --input-type=module -e $script
+
+      - name: Build web assets
+        run: pnpm build:web
+
+      - name: Build desktop app and embedded runtime
+        run: pnpm build:desktop
+
+      - name: Package beta runtime artifacts
+        id: package_runtime
+        shell: pwsh
+        env:
+          BETA_VERSION: ${{ steps.beta.outputs.version }}
+          BRANCH_SLUG: ${{ steps.beta.outputs.branch_slug }}
+        run: |
+          $platform = node -p "process.platform"
+          $arch = node -p "process.arch"
+          $outDir = "packages/desktop/dist/beta"
+          $runtimeDir = "packages/desktop/dist/runtime/embedded"
+          $runtimeZipName = "coder-studio-runtime-$env:BETA_VERSION-$platform-$arch.zip"
+          $runtimeZipPath = Join-Path $outDir $runtimeZipName
+          $runtimeIndexPath = Join-Path $outDir "runtime-release-index.json"
+
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Compress-Archive -Path (Join-Path $runtimeDir "*") -DestinationPath $runtimeZipPath -Force
+
+          $runtimeZip = Get-Item $runtimeZipPath
+          $checksum = (Get-FileHash $runtimeZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $publishedAt = (Get-Date).ToUniversalTime().ToString("o")
+          $runtimeArtifactPath = "desktop-runtime/$env:BRANCH_SLUG/$env:BETA_VERSION/$runtimeZipName"
+          $runtimeArtifactUrl = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:RUNTIME_ARTIFACT_BRANCH/$runtimeArtifactPath"
+          $runtimeIndexUrl = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:RUNTIME_ARTIFACT_BRANCH/desktop-runtime/$env:BRANCH_SLUG/runtime-release-index.json"
+
+          $index = @(
+            [ordered]@{
+              version = $env:BETA_VERSION
+              platform = $platform
+              arch = $arch
+              artifactUrl = $runtimeArtifactUrl
+              checksumSha256 = $checksum
+              artifactSize = $runtimeZip.Length
+              publishedAt = $publishedAt
+              minAppVersion = $env:BETA_VERSION
+              notes = "Beta runtime built from $env:GITHUB_SHA on $env:GITHUB_REF_NAME"
+            }
+          )
+
+          $index | ConvertTo-Json -Depth 5 | Set-Content -Path $runtimeIndexPath -Encoding UTF8
+
+          "runtime_zip_path=$runtimeZipPath" >> $env:GITHUB_OUTPUT
+          "runtime_index_path=$runtimeIndexPath" >> $env:GITHUB_OUTPUT
+          "runtime_index_url=$runtimeIndexUrl" >> $env:GITHUB_OUTPUT
+
+      - name: Publish beta runtime index
+        shell: pwsh
+        env:
+          BETA_VERSION: ${{ steps.beta.outputs.version }}
+          BRANCH_SLUG: ${{ steps.beta.outputs.branch_slug }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUNTIME_ZIP_PATH: ${{ steps.package_runtime.outputs.runtime_zip_path }}
+          RUNTIME_INDEX_PATH: ${{ steps.package_runtime.outputs.runtime_index_path }}
+        run: |
+          $stageDir = Join-Path $env:RUNNER_TEMP "coder-studio-beta-artifacts"
+          $repoUrl = "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+
+          Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
+          git clone --depth 1 --branch $env:RUNTIME_ARTIFACT_BRANCH $repoUrl $stageDir
+          if ($LASTEXITCODE -ne 0) {
+            Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+            git -C $stageDir init
+            git -C $stageDir checkout --orphan $env:RUNTIME_ARTIFACT_BRANCH
+            git -C $stageDir remote add origin $repoUrl
+          }
+
+          git -C $stageDir config user.name "github-actions[bot]"
+          git -C $stageDir config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          $runtimeTargetDir = Join-Path $stageDir "desktop-runtime/$env:BRANCH_SLUG/$env:BETA_VERSION"
+          $indexTargetDir = Join-Path $stageDir "desktop-runtime/$env:BRANCH_SLUG"
+          New-Item -ItemType Directory -Force -Path $runtimeTargetDir | Out-Null
+          New-Item -ItemType Directory -Force -Path $indexTargetDir | Out-Null
+
+          Copy-Item -Force $env:RUNTIME_ZIP_PATH $runtimeTargetDir
+          Copy-Item -Force $env:RUNTIME_INDEX_PATH (Join-Path $indexTargetDir "runtime-release-index.json")
+
+          $metadata = [ordered]@{
+            version = $env:BETA_VERSION
+            sourceRef = $env:GITHUB_REF_NAME
+            sourceSha = $env:GITHUB_SHA
+            runId = $env:GITHUB_RUN_ID
+            publishedAt = (Get-Date).ToUniversalTime().ToString("o")
+          }
+          $metadata | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $indexTargetDir "build.json") -Encoding UTF8
+
+          git -C $stageDir add "desktop-runtime/$env:BRANCH_SLUG"
+          $changes = git -C $stageDir status --porcelain
+          if ([string]::IsNullOrWhiteSpace($changes)) {
+            Write-Host "No runtime artifact changes to publish."
+          } else {
+            git -C $stageDir commit -m "publish beta runtime $env:BETA_VERSION from $($env:GITHUB_SHA.Substring(0, 7))"
+            git -C $stageDir push origin "HEAD:$env:RUNTIME_ARTIFACT_BRANCH"
+          }
+
+      - name: Upload desktop installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coder-studio-desktop-${{ steps.beta.outputs.version }}-win32-x64
+          path: packages/desktop/dist/release/**
+          retention-days: ${{ github.event.inputs.retention_days || '14' }}
+          if-no-files-found: error
+
+      - name: Upload runtime artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: coder-studio-runtime-${{ steps.beta.outputs.version }}-win32-x64
+          path: |
+            ${{ steps.package_runtime.outputs.runtime_zip_path }}
+            ${{ steps.package_runtime.outputs.runtime_index_path }}
+          retention-days: ${{ github.event.inputs.retention_days || '14' }}
+          if-no-files-found: error
+
+      - name: Print beta runtime config
+        shell: pwsh
+        run: |
+          Write-Host "Runtime release index URL:"
+          Write-Host "${{ steps.package_runtime.outputs.runtime_index_url }}"
