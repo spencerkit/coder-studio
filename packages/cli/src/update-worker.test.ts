@@ -27,7 +27,7 @@ describe("update-worker", () => {
       logFilePath: join(dir, "update-worker.log"),
       packageName: "@spencer-kit/coder-studio",
       targetVersion: "0.5.0",
-      cliCommand: "coder-studio",
+      cliCommand: "coder-studio-cli",
       currentVersion: "0.4.0",
       npmCommand: "npm",
       restartArgs: ["serve", "--restart"],
@@ -106,7 +106,7 @@ describe("update-worker", () => {
       errorSummary: string;
     };
     expect(state.updateStatus).toBe("failed");
-    expect(state.manualCommand).toBe("coder-studio serve --restart");
+    expect(state.manualCommand).toBe("coder-studio-cli serve --restart");
     expect(state.errorSummary).toContain("restart failed");
     expect(waitForProcessExit).toHaveBeenCalledWith(999);
   });
@@ -205,7 +205,7 @@ describe("update-worker", () => {
 
     expect(waitForProcessExit).toHaveBeenCalledWith(777);
     expect(runCommand).toHaveBeenCalledWith(
-      "coder-studio",
+      "coder-studio-cli",
       ["serve", "--restart"],
       expect.any(Object)
     );

@@ -25,6 +25,32 @@ export interface DesktopRuntimeManifest {
   webRoot: "dist/web";
 }
 
+export function createDesktopRuntimeWslEntryBuildOptions(input: {
+  runtimeDir: string;
+  external: string[];
+}): esbuild.BuildOptions {
+  return {
+    entryPoints: [resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")],
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "esm",
+    outfile: resolve(input.runtimeDir, "dist/esm/wsl-runtime-entry.mjs"),
+    outExtension: { ".js": ".mjs" },
+    external: input.external,
+    sourcemap: true,
+    alias: {
+      "@coder-studio/runtime": resolve(RUNTIME_DIR, "src/index.ts"),
+      "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
+      "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
+      "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
+      "@coder-studio/core": resolve(CORE_DIR, "src/index.ts"),
+      "@coder-studio/providers": resolve(PROVIDERS_DIR, "src/index.ts"),
+      "@coder-studio/utils": resolve(UTILS_DIR, "src/index.ts"),
+    },
+  };
+}
+
 export interface PrepareDesktopRuntimeOutputDirsInput {
   runtimeDir: string;
   esmDir: string;
@@ -179,6 +205,12 @@ async function createDesktopRuntimeWorkspace(input: {
 
   await input.esbuildBuild(
     createDesktopRuntimeServerBuildOptions({
+      runtimeDir: runtimePackageDir,
+      external: Object.keys(input.dependencyVersions),
+    })
+  );
+  await input.esbuildBuild(
+    createDesktopRuntimeWslEntryBuildOptions({
       runtimeDir: runtimePackageDir,
       external: Object.keys(input.dependencyVersions),
     })

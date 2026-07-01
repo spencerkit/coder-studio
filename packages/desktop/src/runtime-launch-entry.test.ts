@@ -88,6 +88,7 @@ describe("runtime-launch-entry", () => {
         appVersion: "0.5.4",
         runtimeVersion: "0.5.4",
         wslRuntime: {
+          enabled: true,
           source: expect.objectContaining({
             runtimeVersion: "0.5.4",
             entryPath: expect.stringContaining("wsl-runtime-entry"),
@@ -128,9 +129,9 @@ describe("runtime-launch-entry", () => {
         appVersion: "0.5.4",
         runtimeVersion: "0.5.4",
         wslRuntime: {
+          enabled: true,
           source: expect.objectContaining({
             runtimeVersion: "0.5.4",
-            entryPath: expect.stringContaining("wsl-runtime-entry"),
           }),
         },
         webRoot: "/tmp/web",

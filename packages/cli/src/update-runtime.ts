@@ -34,7 +34,7 @@ export function getUpdateRuntimeInfo(importMetaUrl: string): UpdateRuntimeInfo {
     supported: workerEntryPath !== undefined,
     installKind: workerEntryPath !== undefined ? "global_npm" : "unsupported",
     packageName,
-    cliCommand: "coder-studio",
+    cliCommand: "coder-studio-cli",
     workerEntryPath,
     npmCommand: "npm",
     restartArgs: ["serve", "--restart"],

@@ -9,6 +9,7 @@ import {
   type Server,
   type ServerConfigInput,
 } from "@coder-studio/server";
+import { buildWslRuntimeSource } from "./wsl-runtime-source.js";
 
 export interface DesktopRuntimeEnv {
   host?: string;
@@ -28,6 +29,11 @@ interface RuntimePackageManifest {
 const MISSING_WEB_ASSETS_WARNING =
   "Warning: Desktop web assets not found. Frontend will not be available.";
 const DESKTOP_UPDATE_REQUEST_TIMEOUT_MS = 15_000;
+
+function resolveDesktopRuntimePackageRoot(importMetaUrl: string): string {
+  const currentDir = dirname(fileURLToPath(importMetaUrl));
+  return resolve(currentDir, "../..");
+}
 
 export function parseDesktopRuntimeEnv(env: NodeJS.ProcessEnv): DesktopRuntimeEnv {
   return {
@@ -103,6 +109,14 @@ export function buildDesktopRuntimeServerConfig(
     port: parsed.port,
     appVersion: parsed.appVersion ?? runtimeVersion,
     runtimeVersion,
+    wslRuntime: {
+      enabled: true,
+      source: buildWslRuntimeSource({
+        runtimeVersion,
+        packageRoot: resolveDesktopRuntimePackageRoot(importMetaUrl),
+        entryRelativePath: "dist/esm/wsl-runtime-entry.mjs",
+      }),
+    },
     update: {
       supported: true,
       installKind: "desktop_managed",

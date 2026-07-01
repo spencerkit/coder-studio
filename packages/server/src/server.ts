@@ -447,6 +447,7 @@ export async function createServer(
     const wslDistroRuntimeStore = createWslDistroRuntimeStore({
       rootDir: join(stateRoot, "state", "wsl-distro-runtime-store"),
     });
+    const wslRuntimeConfig = config.wslRuntime ?? { enabled: false };
     const wslRuntimeInstallManager = createWslRuntimeInstallManager({
       hostRuntimeVersion,
       store: wslDistroRuntimeStore,
@@ -454,12 +455,12 @@ export async function createServer(
         isStoredInstalledWslRuntimeReusable({
           pointer,
           hostRuntimeVersion,
-          source: config.wslRuntime?.source,
+          source: wslRuntimeConfig.source,
         }),
       installRuntime: async ({ runtimeVersion }) =>
         resolveInstalledWslRuntimePointer({
           hostRuntimeVersion: runtimeVersion,
-          source: config.wslRuntime?.source,
+          source: wslRuntimeConfig.source,
         }),
     });
     const wslBridgeManager = createWslBridgeManager({
@@ -551,6 +552,13 @@ export async function createServer(
       nativeRuntimeId: "native-default",
       stopManagedWslBridges: () => wslBridgeManager.stopAllTrackedBridges(),
       createWslRuntime: async (workspace, runtimeId) => {
+        if (!wslRuntimeConfig.enabled) {
+          throw {
+            code: "wsl_runtime_unavailable",
+            message: "WSL workspaces are not supported by this runtime host",
+          };
+        }
+
         return createBrokeredWslRuntime({
           bridgeManager: wslBridgeManager,
           workspace,

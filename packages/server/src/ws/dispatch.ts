@@ -85,7 +85,7 @@ export interface CommandContext extends HostCommandContext {
   agentInstructionPublisher?: AgentInstructionsPublisher;
   canvasService?: CanvasService;
   activationMgr: ActivationManager;
-  config?: Pick<ServerConfig, "auth" | "host">;
+  config?: Pick<ServerConfig, "auth" | "host" | "wslRuntime">;
   lspMgr: LspManager;
   lspToolMgr?: LspToolManager;
   lspToolInstallMgr?: LspToolInstallManager;

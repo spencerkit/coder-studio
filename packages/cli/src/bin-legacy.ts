@@ -1,7 +1,7 @@
 import { main } from "./cli.js";
 
 void main(process.argv.slice(2), {
-  entrypointName: "coder-studio-cli",
+  entrypointName: "coder-studio",
 }).catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error("CLI error:", message);

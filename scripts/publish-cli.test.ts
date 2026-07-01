@@ -89,8 +89,9 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "bin-legacy.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
-    await writeFile(join(cliDir, "dist", "esm", "desktop-server.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin-legacy.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "wsl-runtime-entry.mjs"), "export {};\n");
@@ -100,10 +101,16 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./src/bin.ts" },
+        bin: {
+          "coder-studio-cli": "./src/bin.ts",
+          "coder-studio": "./src/bin.ts",
+        },
         files: ["dist"],
         publishConfig: {
-          bin: { "coder-studio": "./dist/bin.js" },
+          bin: {
+            "coder-studio-cli": "./dist/bin.js",
+            "coder-studio": "./dist/bin-legacy.js",
+          },
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",
@@ -127,14 +134,16 @@ describe("publish-cli", () => {
     });
   });
 
-  it("requires the built desktop server artifact that is included in the package", async () => {
+  it("requires the built WSL runtime entry artifact that is included in the package", async () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-publish-"));
     const cliDir = join(dir, "packages", "cli");
 
     await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "bin-legacy.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin-legacy.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
@@ -143,10 +152,16 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./src/bin.ts" },
+        bin: {
+          "coder-studio-cli": "./src/bin.ts",
+          "coder-studio": "./src/bin.ts",
+        },
         files: ["dist"],
         publishConfig: {
-          bin: { "coder-studio": "./dist/bin.js" },
+          bin: {
+            "coder-studio-cli": "./dist/bin.js",
+            "coder-studio": "./dist/bin-legacy.js",
+          },
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",
@@ -164,7 +179,7 @@ describe("publish-cli", () => {
       })
     );
 
-    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow("desktop-server.mjs");
+    await expect(assertCliPublishArtifacts(cliDir)).rejects.toThrow("wsl-runtime-entry.mjs");
   });
 
   it("rejects built runtime imports that are not declared in the CLI package dependencies", async () => {
@@ -174,11 +189,12 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "bin-legacy.js"), "#!/usr/bin/env node\n");
     await writeFile(
       join(cliDir, "dist", "esm", "bin.mjs"),
       'import { SerializeAddon } from "@xterm/addon-serialize";\nvoid SerializeAddon;\n'
     );
-    await writeFile(join(cliDir, "dist", "esm", "desktop-server.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin-legacy.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "wsl-runtime-entry.mjs"), "export {};\n");
@@ -188,10 +204,16 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./src/bin.ts" },
+        bin: {
+          "coder-studio-cli": "./src/bin.ts",
+          "coder-studio": "./src/bin.ts",
+        },
         files: ["dist"],
         publishConfig: {
-          bin: { "coder-studio": "./dist/bin.js" },
+          bin: {
+            "coder-studio-cli": "./dist/bin.js",
+            "coder-studio": "./dist/bin-legacy.js",
+          },
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",
@@ -217,8 +239,9 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
+    await writeFile(join(cliDir, "dist", "bin-legacy.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
-    await writeFile(join(cliDir, "dist", "esm", "desktop-server.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "bin-legacy.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "wsl-runtime-entry.mjs"), "export {};\n");
@@ -228,10 +251,16 @@ describe("publish-cli", () => {
       JSON.stringify({
         name: "@spencer-kit/coder-studio",
         version: "1.2.3",
-        bin: { "coder-studio": "./src/bin.ts" },
+        bin: {
+          "coder-studio-cli": "./src/bin.ts",
+          "coder-studio": "./src/bin.ts",
+        },
         files: ["dist"],
         publishConfig: {
-          bin: { "coder-studio": "./dist/bin.js" },
+          bin: {
+            "coder-studio-cli": "./dist/bin.js",
+            "coder-studio": "./dist/bin-legacy.js",
+          },
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",

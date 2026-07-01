@@ -322,7 +322,7 @@ describe("pm2-control", () => {
         waitMs: 1,
       })
     ).rejects.toThrow(
-      "Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging."
+      "Run `coder-studio-cli logs` for details or `coder-studio-cli serve --foreground` for interactive debugging."
     );
   });
 

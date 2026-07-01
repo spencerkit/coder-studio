@@ -67,10 +67,11 @@ describe("build-cli", () => {
     expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/automation-entry.ts"));
   });
 
-  it("emits the desktop server entry as an ESM build output", async () => {
+  it("does not emit the retired desktop server entry in the npm CLI bundle", async () => {
     const buildOptions = await createCliBuildOptions("esm");
 
-    expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/desktop-server.ts"));
+    expect(buildOptions.entryPoints).not.toContain(resolve(CLI_DIR, "src/desktop-server.ts"));
+    expect(buildOptions.entryPoints).toContain(resolve(CLI_DIR, "src/bin-legacy.ts"));
   });
 
   it("emits the WSL runtime entry with third-party packages externalized", async () => {

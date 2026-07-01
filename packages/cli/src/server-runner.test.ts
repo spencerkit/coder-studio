@@ -51,10 +51,7 @@ describe("server-runner", () => {
       appVersion: getCliVersion(import.meta.url),
       runtimeVersion: getCliVersion(import.meta.url),
       wslRuntime: {
-        source: expect.objectContaining({
-          runtimeVersion: expect.any(String),
-          entryPath: expect.stringContaining("wsl-runtime-entry"),
-        }),
+        enabled: false,
       },
       update: getUpdateRuntimeInfo(import.meta.url),
       webRoot: "/tmp/web",
@@ -74,12 +71,6 @@ describe("server-runner", () => {
     expect(buildServerConfig()).toEqual({
       appVersion: getCliVersion(import.meta.url),
       runtimeVersion: getCliVersion(import.meta.url),
-      wslRuntime: {
-        source: expect.objectContaining({
-          runtimeVersion: expect.any(String),
-          entryPath: expect.stringContaining("wsl-runtime-entry"),
-        }),
-      },
       update: getUpdateRuntimeInfo(import.meta.url),
       host: "127.0.0.1",
       stateDir: "/tmp/cs-data",
@@ -88,6 +79,9 @@ describe("server-runner", () => {
         password: "sekrit",
       },
       webRoot: "/tmp/web",
+      wslRuntime: {
+        enabled: false,
+      },
     });
   });
 
@@ -110,16 +104,13 @@ describe("server-runner", () => {
     expect(createServer).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
       runtimeVersion: getCliVersion(import.meta.url),
-      wslRuntime: {
-        source: expect.objectContaining({
-          runtimeVersion: expect.any(String),
-          entryPath: expect.stringContaining("wsl-runtime-entry"),
-        }),
-      },
       update: getUpdateRuntimeInfo(import.meta.url),
       host: "127.0.0.1",
       port: 4173,
       webRoot: "/tmp/web",
+      wslRuntime: {
+        enabled: false,
+      },
     });
     expect(runningServer).toEqual({ stop: expect.any(Function) });
     expect(processOnSpy).toHaveBeenCalledTimes(2);
@@ -158,17 +149,14 @@ describe("server-runner", () => {
     expect(createServer).toHaveBeenCalledWith({
       appVersion: getCliVersion(import.meta.url),
       runtimeVersion: getCliVersion(import.meta.url),
-      wslRuntime: {
-        source: expect.objectContaining({
-          runtimeVersion: expect.any(String),
-          entryPath: expect.stringContaining("wsl-runtime-entry"),
-        }),
-      },
       update: getUpdateRuntimeInfo(import.meta.url),
       host: "0.0.0.0",
       port: 0,
       stateDir: "/tmp/desktop-state",
       webRoot: "/tmp/web",
+      wslRuntime: {
+        enabled: false,
+      },
       writeRuntimeConfig: true,
       runtimeJsonPath: "/tmp/runtime.json",
     });
@@ -190,10 +178,7 @@ describe("server-runner", () => {
       appVersion: getCliVersion(import.meta.url),
       runtimeVersion: getCliVersion(import.meta.url),
       wslRuntime: {
-        source: expect.objectContaining({
-          runtimeVersion: expect.any(String),
-          entryPath: expect.stringContaining("wsl-runtime-entry"),
-        }),
+        enabled: false,
       },
       update: getUpdateRuntimeInfo(import.meta.url),
       stateDir: "/tmp/cs-data",

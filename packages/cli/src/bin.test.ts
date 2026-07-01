@@ -108,6 +108,48 @@ afterEach(() => {
 });
 
 describe("main", () => {
+  it("prints coder-studio-cli as the primary command in help output", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["help"]);
+
+    const output = String(logSpy.mock.calls[0]?.[0] ?? "");
+    expect(output).toContain("coder-studio-cli [COMMAND]");
+    expect(output).toContain("coder-studio-cli status");
+    expect(output).not.toContain("USAGE:\n  coder-studio [COMMAND]");
+  });
+
+  it("warns when the legacy coder-studio npm alias is used", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await main(["status"], { entrypointName: "coder-studio" });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "The npm `coder-studio` command is deprecated and will be removed in a future release. Use `coder-studio-cli` instead."
+    );
+  });
+
+  it("prints coder-studio-cli in config help output", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["config", "help"]);
+
+    const output = String(logSpy.mock.calls[0]?.[0] ?? "");
+    expect(output).toContain("coder-studio-cli config [OPTIONS]");
+    expect(output).toContain("coder-studio-cli config --host 0.0.0.0");
+    expect(output).not.toContain("coder-studio config [OPTIONS]");
+  });
+
+  it("prints legacy coder-studio in config help output when invoked via legacy alias", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["config", "help"], { entrypointName: "coder-studio" });
+
+    const output = String(logSpy.mock.calls[0]?.[0] ?? "");
+    expect(output).toContain("coder-studio config [OPTIONS]");
+    expect(output).toContain("coder-studio config --host 0.0.0.0");
+  });
+
   it("runs the foreground runner when serve --foreground is provided", async () => {
     await main(["serve", "--foreground"]);
 
@@ -173,7 +215,7 @@ describe("main", () => {
       waitMs: 15000,
     });
     expect(logSpy).toHaveBeenCalledWith("Coder Studio server started in background.");
-    expect(logSpy).toHaveBeenCalledWith("Run `coder-studio status` to inspect the server.");
+    expect(logSpy).toHaveBeenCalledWith("Run `coder-studio-cli status` to inspect the server.");
   });
 
   it("prepares local state storage before managed startup", async () => {
@@ -474,7 +516,7 @@ describe("main", () => {
 
   it("rethrows background startup failures for open and does not open the browser", async () => {
     const startupError = new Error(
-      "Coder Studio failed to start in background: the managed process entered the errored state.\n\nRecent error log excerpt (/tmp/server.err.log):\nError: listen EADDRINUSE: address already in use 127.0.0.1:4187\n\nRun `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging."
+      "Coder Studio failed to start in background: the managed process entered the errored state.\n\nRecent error log excerpt (/tmp/server.err.log):\nError: listen EADDRINUSE: address already in use 127.0.0.1:4187\n\nRun `coder-studio-cli logs` for details or `coder-studio-cli serve --foreground` for interactive debugging."
     );
     startManagedServer.mockRejectedValueOnce(startupError);
 
@@ -602,10 +644,10 @@ describe("main", () => {
 
     const output = logSpy.mock.calls[0]?.[0] as string;
     expect(output).toContain(
-      `coder-studio canvas create --workspace ws_123 --kind architecture_canvas --title "Runtime Flow" --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --open --json`
+      `coder-studio-cli canvas create --workspace ws_123 --kind architecture_canvas --title "Runtime Flow" --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --open --json`
     );
     expect(output).toContain(
-      `coder-studio canvas update --workspace ws_123 --canvas canvas_123 --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --json`
+      `coder-studio-cli canvas update --workspace ws_123 --canvas canvas_123 --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --json`
     );
   });
 

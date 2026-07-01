@@ -18,6 +18,26 @@ import { getBrowserUrl, getListenIp, getListenUrl } from "./server-url.js";
 
 const MANAGED_SERVER_WAIT_MS = 15000;
 const DEFAULT_LOG_TAIL_LINES = 40;
+const PRIMARY_CLI_COMMAND = "coder-studio-cli";
+const LEGACY_CLI_COMMAND = "coder-studio";
+
+export interface CliMainOptions {
+  entrypointName?: string;
+}
+
+function resolveCommandName(entrypointName?: string): string {
+  return entrypointName?.trim() || PRIMARY_CLI_COMMAND;
+}
+
+function warnLegacyCommand(entrypointName?: string): void {
+  if (resolveCommandName(entrypointName) !== LEGACY_CLI_COMMAND) {
+    return;
+  }
+
+  console.warn(
+    "The npm `coder-studio` command is deprecated and will be removed in a future release. Use `coder-studio-cli` instead."
+  );
+}
 
 function formatConfig(config: CliConfig | null): string {
   return JSON.stringify(config ?? {}, null, 2);
@@ -61,12 +81,12 @@ function showLogs(
   console.log(contents.length === 0 ? "No logs available." : contents.join("\n"));
 }
 
-function showHelp(): void {
+function showHelp(commandName: string): void {
   console.log(`
 @spencer-kit/coder-studio - Coder Studio CLI
 
 USAGE:
-  coder-studio [COMMAND]
+  ${commandName} [COMMAND]
 
 COMMANDS:
   serve    Start the Coder Studio server in background (default)
@@ -99,49 +119,49 @@ OPTIONS:
   --version, -v            Show version
 
 EXAMPLES:
-  coder-studio
-  coder-studio serve
-  coder-studio server
-  coder-studio auth ban-list
-  coder-studio auth unblock --ip 198.51.100.24
-  coder-studio serve --foreground
-  coder-studio serve --restart
-  coder-studio open
-  coder-studio open --restart
-  coder-studio status
-  coder-studio logs
-  coder-studio identify --json
-  coder-studio capabilities --json
-  coder-studio workspace list --json
-  coder-studio session list --workspace ws_123 --json
-  coder-studio terminal read --terminal term_123 --bytes 4096 --json
-  coder-studio git status --workspace ws_123 --json
-  coder-studio git diff --workspace ws_123 --path src/a.ts --json
-  coder-studio ui open-file --workspace ws_123 --path src/a.ts --line 12 --json
-  coder-studio ui close-file --workspace ws_123 --path src/a.ts --json
-  coder-studio ui open-url --workspace ws_123 --url http://127.0.0.1:5173 --json
-  coder-studio ui close-url --workspace ws_123 --url http://127.0.0.1:5173 --json
-  coder-studio ui show-panel --workspace ws_123 --panel terminal --json
-  coder-studio canvas list --workspace ws_123 --json
-  coder-studio canvas create --workspace ws_123 --kind architecture_canvas --title "Runtime Flow" --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --open --json
-  coder-studio canvas update --workspace ws_123 --canvas canvas_123 --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --json
-  coder-studio canvas render --workspace ws_123 --canvas canvas_123 --json
-  coder-studio memory list --workspace ws_123 --json
-  coder-studio memory search architecture --workspace ws_123 --json
-  coder-studio memory add --workspace ws_123 --type wiki --content "This repo uses pnpm." --json
-  coder-studio memory add --workspace ws_123 --type issue --content "Verify release notes." --status pending_verification --json
-  coder-studio stop
-  coder-studio config --host 0.0.0.0 --port 8080
+  ${commandName}
+  ${commandName} serve
+  ${commandName} server
+  ${commandName} auth ban-list
+  ${commandName} auth unblock --ip 198.51.100.24
+  ${commandName} serve --foreground
+  ${commandName} serve --restart
+  ${commandName} open
+  ${commandName} open --restart
+  ${commandName} status
+  ${commandName} logs
+  ${commandName} identify --json
+  ${commandName} capabilities --json
+  ${commandName} workspace list --json
+  ${commandName} session list --workspace ws_123 --json
+  ${commandName} terminal read --terminal term_123 --bytes 4096 --json
+  ${commandName} git status --workspace ws_123 --json
+  ${commandName} git diff --workspace ws_123 --path src/a.ts --json
+  ${commandName} ui open-file --workspace ws_123 --path src/a.ts --line 12 --json
+  ${commandName} ui close-file --workspace ws_123 --path src/a.ts --json
+  ${commandName} ui open-url --workspace ws_123 --url http://127.0.0.1:5173 --json
+  ${commandName} ui close-url --workspace ws_123 --url http://127.0.0.1:5173 --json
+  ${commandName} ui show-panel --workspace ws_123 --panel terminal --json
+  ${commandName} canvas list --workspace ws_123 --json
+  ${commandName} canvas create --workspace ws_123 --kind architecture_canvas --title "Runtime Flow" --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --open --json
+  ${commandName} canvas update --workspace ws_123 --canvas canvas_123 --document-json '{"summary":"Runtime flow","diagram":{"dsl":"mermaid","source":"flowchart LR\\nWebUI[Web UI] --> Server[Runtime Server]"},"annotations":[]}' --json
+  ${commandName} canvas render --workspace ws_123 --canvas canvas_123 --json
+  ${commandName} memory list --workspace ws_123 --json
+  ${commandName} memory search architecture --workspace ws_123 --json
+  ${commandName} memory add --workspace ws_123 --type wiki --content "This repo uses pnpm." --json
+  ${commandName} memory add --workspace ws_123 --type issue --content "Verify release notes." --status pending_verification --json
+  ${commandName} stop
+  ${commandName} config --host 0.0.0.0 --port 8080
 `);
 }
 
-function showConfigHelp(): void {
+function showConfigHelp(commandName: string): void {
   console.log(`
 @spencer-kit/coder-studio - config
 
 USAGE:
-  coder-studio config [OPTIONS]
-  coder-studio config help
+  ${commandName} config [OPTIONS]
+  ${commandName} config help
 
 BEHAVIOR:
   Without options, prints the current saved config.
@@ -155,12 +175,12 @@ OPTIONS:
   --help                   Show config help
 
 EXAMPLES:
-  coder-studio config
-  coder-studio config --host 0.0.0.0
-  coder-studio config --port 8080
-  coder-studio config --state-dir /tmp/cs-data
-  coder-studio config --password sekrit
-  coder-studio config --host 0.0.0.0 --port 8080
+  ${commandName} config
+  ${commandName} config --host 0.0.0.0
+  ${commandName} config --port 8080
+  ${commandName} config --state-dir /tmp/cs-data
+  ${commandName} config --password sekrit
+  ${commandName} config --host 0.0.0.0 --port 8080
 `);
 }
 
@@ -369,13 +389,18 @@ async function openManagedServerInBrowser(existingStatus?: ServerStatus | null):
   await openBrowser(browserUrl);
 }
 
-export async function main(argv = process.argv.slice(2)): Promise<void> {
+export async function main(
+  argv = process.argv.slice(2),
+  options: CliMainOptions = {}
+): Promise<void> {
   assertSupportedNodeVersion();
+  const commandName = resolveCommandName(options.entrypointName);
+  warnLegacyCommand(options.entrypointName);
   const args = parseArgs(argv);
 
   if (args.command === "config") {
     if (args.configHelp) {
-      showConfigHelp();
+      showConfigHelp(commandName);
       return;
     }
 
@@ -424,7 +449,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   }
 
   if (args.command === "help") {
-    showHelp();
+    showHelp(commandName);
     return;
   }
 
@@ -735,5 +760,5 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   await startManagedServerFlow();
 
   console.log("Coder Studio server started in background.");
-  console.log("Run `coder-studio status` to inspect the server.");
+  console.log(`Run \`${PRIMARY_CLI_COMMAND} status\` to inspect the server.`);
 }

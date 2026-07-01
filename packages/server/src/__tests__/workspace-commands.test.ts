@@ -453,6 +453,37 @@ describe("Workspace Commands", () => {
       });
     });
 
+    it("rejects WSL workspace opens when the host runtime disables WSL support", async () => {
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: "workspace-open-wsl-disabled",
+          op: "workspace.open",
+          args: {
+            path: "/home/spencer/workspace",
+            targetRuntime: "wsl",
+            wslDistro: "Ubuntu-24.04",
+          },
+        },
+        {
+          ...ctx,
+          config: {
+            auth: { enabled: false },
+            host: "localhost",
+            wslRuntime: { enabled: false },
+          },
+        } as CommandContext
+      );
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: "wsl_runtime_unavailable",
+          message: "WSL workspaces are not supported by this runtime host",
+        },
+      });
+    });
+
     it("triggers open-time auto fetch after workspace.open succeeds", async () => {
       const dir = join(tmpdir(), `workspace-open-test-${Date.now()}`);
       await mkdir(dir);

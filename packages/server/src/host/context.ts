@@ -35,7 +35,7 @@ export interface HostCommandContext {
   runtimeRegistry?: RuntimeRegistry;
   runtimeOrchestrator?: RuntimeOrchestrator;
   fencingMgr?: FencingManager;
-  config?: Pick<ServerConfig, "auth" | "host">;
+  config?: Pick<ServerConfig, "auth" | "host" | "wslRuntime">;
   updateService?: UpdateService;
   monitoringService?: MonitoringService;
   customProviderRepo?: CustomProviderRepo;

@@ -6,7 +6,7 @@ describe("update-runtime", () => {
     const runtime = getUpdateRuntimeInfo(import.meta.url);
 
     expect(runtime.packageName).toBe("@spencer-kit/coder-studio");
-    expect(runtime.cliCommand).toBe("coder-studio");
+    expect(runtime.cliCommand).toBe("coder-studio-cli");
     expect(runtime.restartArgs).toEqual(["serve", "--restart"]);
     expect(runtime.installArgsPrefix).toEqual(["install", "-g"]);
   });

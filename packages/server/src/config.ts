@@ -58,7 +58,8 @@ export interface ServerConfig {
     unsupportedReason: string | null;
   };
   wslRuntime?: {
-    source: ServerWslRuntimeSource;
+    enabled: boolean;
+    source?: ServerWslRuntimeSource;
   };
 }
 
@@ -249,7 +250,9 @@ export function parseServerConfig(overrides?: ServerConfigInput): ServerConfig {
       installArgsPrefix: ["install", "-g"],
       unsupportedReason: "In-app update is only supported for global npm installs",
     },
-    wslRuntime: overrides?.wslRuntime,
+    wslRuntime: overrides?.wslRuntime ?? {
+      enabled: false,
+    },
   };
 }
 

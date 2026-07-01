@@ -7,6 +7,7 @@ import {
   createDesktopRuntimeManifest,
   createDesktopRuntimePackageJson,
   createDesktopRuntimeServerBuildOptions,
+  createDesktopRuntimeWslEntryBuildOptions,
   prepareDesktopRuntimeOutputDirs,
   readDesktopRuntimeVersion,
 } from "./build-desktop-runtime.js";
@@ -50,6 +51,19 @@ describe("build-desktop-runtime", () => {
     expect(buildOptions.entryPoints).toEqual([resolve(RUNTIME_DIR, "src/runtime-launch-entry.ts")]);
     expect(buildOptions.outfile).toBe(
       "/repo/packages/desktop/dist/runtime/runtime-bundle/dist/esm/runtime-launch-entry.mjs"
+    );
+    expect(buildOptions.external).toEqual(["fastify", "zod"]);
+  });
+
+  it("creates a desktop runtime WSL entry bundle config", () => {
+    const buildOptions = createDesktopRuntimeWslEntryBuildOptions({
+      runtimeDir: "/repo/packages/desktop/dist/runtime/runtime-bundle",
+      external: ["fastify", "zod"],
+    });
+
+    expect(buildOptions.entryPoints).toEqual([resolve(RUNTIME_DIR, "src/wsl-runtime-entry.ts")]);
+    expect(buildOptions.outfile).toBe(
+      "/repo/packages/desktop/dist/runtime/runtime-bundle/dist/esm/wsl-runtime-entry.mjs"
     );
     expect(buildOptions.external).toEqual(["fastify", "zod"]);
   });
@@ -181,6 +195,10 @@ describe("build-desktop-runtime", () => {
         await readFile(join(runtimePackageDir, "dist", "esm", "runtime-launch-entry.mjs"), "utf-8")
       );
       await writeFile(
+        join(runtimeDir, "dist", "esm", "wsl-runtime-entry.mjs"),
+        await readFile(join(runtimePackageDir, "dist", "esm", "wsl-runtime-entry.mjs"), "utf-8")
+      );
+      await writeFile(
         join(runtimeDir, "dist", "web", "index.html"),
         await readFile(join(runtimePackageDir, "dist", "web", "index.html"), "utf-8")
       );
@@ -202,7 +220,9 @@ describe("build-desktop-runtime", () => {
       tempWorkspaceDir,
     });
 
-    expect(esbuildBuild).toHaveBeenCalledWith(
+    expect(esbuildBuild).toHaveBeenCalledTimes(2);
+    expect(esbuildBuild).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         outfile: join(
           tempWorkspaceDir,
@@ -214,7 +234,23 @@ describe("build-desktop-runtime", () => {
         ),
       })
     );
+    expect(esbuildBuild).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        outfile: join(
+          tempWorkspaceDir,
+          "packages",
+          "runtime",
+          "dist",
+          "esm",
+          "wsl-runtime-entry.mjs"
+        ),
+      })
+    );
     expect(exec).toHaveBeenCalledTimes(1);
+    await expect(
+      readFile(join(runtimeDir, "dist", "esm", "wsl-runtime-entry.mjs"), "utf-8")
+    ).resolves.toBe("export const runtime = true;\n");
     await expect(readFile(join(runtimeDir, "runtime-manifest.json"), "utf-8")).resolves.toBe(
       `${JSON.stringify(
         {

@@ -5,7 +5,8 @@
   "description": "Self-hosted browser workspace for AI coding agents, review, supervision, and cross-device continuation.",
   "main": "./src/index.ts",
   "bin": {
-    "coder-studio": "./src/bin.ts"
+    "coder-studio-cli": "./src/bin.ts",
+    "coder-studio": "./src/bin-legacy.ts"
   },
   "exports": {
     ".": {
@@ -17,7 +18,8 @@
   "publishConfig": {
     "main": "./dist/esm/index.mjs",
     "bin": {
-      "coder-studio": "./dist/bin.js"
+      "coder-studio-cli": "./dist/bin.js",
+      "coder-studio": "./dist/bin-legacy.js"
     },
     "exports": {
       ".": {
@@ -49,6 +51,7 @@
     "node-pty": "^1.1.0",
     "pino-pretty": "^13.1.3",
     "pm2": "^7.0.1",
+    "semver": "^7.7.4",
     "typescript": "^6.0.3",
     "typescript-language-server": "^5.2.0",
     "uuid": "^14.0.0",

@@ -12,7 +12,7 @@ const PM2_DELETE_WAIT_MS = 5000;
 const PM2_DISCONNECT_WAIT_MS = 1000;
 const STARTUP_POLL_INTERVAL_MS = 100;
 const STARTUP_FAILURE_GUIDANCE =
-  "Run `coder-studio logs` for details or `coder-studio serve --foreground` for interactive debugging.";
+  "Run `coder-studio-cli logs` for details or `coder-studio-cli serve --foreground` for interactive debugging.";
 
 export interface ManagedServerStatus {
   status: "running" | "starting" | "stopped" | "errored";

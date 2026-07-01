@@ -143,6 +143,13 @@ registerHostCommand(
     wslDistro: z.string().optional(),
   }),
   async (args, ctx) => {
+    if (args.targetRuntime === "wsl" && ctx.config?.wslRuntime?.enabled === false) {
+      throw {
+        code: "wsl_runtime_unavailable",
+        message: "WSL workspaces are not supported by this runtime host",
+      };
+    }
+
     const workspace = await ctx.workspaceMgr.open({
       path: args.path,
       targetRuntime: args.targetRuntime,

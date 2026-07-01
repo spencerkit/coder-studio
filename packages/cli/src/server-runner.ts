@@ -1,4 +1,3 @@
-import { buildWslRuntimeSource } from "@coder-studio/runtime";
 import type { Server, ServerConfigInput } from "@coder-studio/server";
 import { parseServerConfig } from "@coder-studio/server";
 import { existsSync, mkdirSync } from "fs";
@@ -37,16 +36,11 @@ export interface StartServerOptions {
 export const buildServerConfig = (overrides: ServerConfigInput = {}): ServerConfigInput => {
   const savedConfig = readCliConfig();
   const cliVersion = getCliVersion(import.meta.url);
-  const packageRoot = resolveCliPackageRoot(import.meta.url);
   const config: ServerConfigInput = {
     appVersion: cliVersion,
     runtimeVersion: cliVersion,
     wslRuntime: {
-      source: buildWslRuntimeSource({
-        runtimeVersion: cliVersion,
-        packageRoot,
-        entryRelativePath: "dist/esm/wsl-runtime-entry.mjs",
-      }),
+      enabled: false,
     },
     update: getUpdateRuntimeInfo(import.meta.url),
     ...(savedConfig?.host !== undefined ? { host: savedConfig.host } : {}),
