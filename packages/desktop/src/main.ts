@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import { autoUpdater } from "electron-updater";
+import electronUpdater from "electron-updater";
 import type { DesktopAppController } from "./app-controller.js";
 import { createDesktopAppController } from "./desktop-startup.js";
 import { registerShellUpdateIpc } from "./shell-update-ipc.js";
@@ -9,6 +9,7 @@ import { applyDesktopUserDataDirOverride } from "./user-data-env.js";
 let controller: DesktopAppController | null = null;
 let quitting = false;
 let shellUpdateInstallInProgress = false;
+const { autoUpdater } = electronUpdater;
 
 async function bootstrap(): Promise<void> {
   applyDesktopUserDataDirOverride({

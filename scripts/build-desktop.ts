@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import * as esbuild from "esbuild";
 import { buildDesktopRuntimeBundle } from "./build-desktop-runtime.js";
@@ -29,6 +29,25 @@ export function resolveDesktopReleaseDir(desktopDistDir: string = DESKTOP_DIST_D
 
 export function shouldPackageDesktop(platform: NodeJS.Platform = process.platform): boolean {
   return platform === "darwin" || platform === "win32";
+}
+
+export async function createDesktopExternalDependencies(
+  desktopDir: string = DESKTOP_DIR
+): Promise<string[]> {
+  const packageJson = JSON.parse(await readFile(join(desktopDir, "package.json"), "utf-8")) as {
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
+
+  return Array.from(
+    new Set(
+      [
+        "electron",
+        ...Object.keys(packageJson.dependencies ?? {}),
+        ...Object.keys(packageJson.peerDependencies ?? {}),
+      ].filter((dependency) => !dependency.startsWith("@coder-studio/"))
+    )
+  );
 }
 
 export async function prepareDesktopOutputDirs(input: {
@@ -112,7 +131,7 @@ export async function packageDesktopInstallers(
   }
 }
 
-export function createDesktopBuildOptions(): esbuild.BuildOptions {
+export async function createDesktopBuildOptions(): Promise<esbuild.BuildOptions> {
   return {
     entryPoints: {
       main: resolve(DESKTOP_DIR, "src/main.ts"),
@@ -124,7 +143,7 @@ export function createDesktopBuildOptions(): esbuild.BuildOptions {
     format: "esm",
     outdir: DESKTOP_ELECTRON_DIR,
     outExtension: { ".js": ".mjs" },
-    external: ["electron"],
+    external: await createDesktopExternalDependencies(),
     sourcemap: true,
     alias: {
       "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
@@ -142,7 +161,7 @@ export async function buildDesktop(): Promise<void> {
     runtimeDir: DESKTOP_RUNTIME_DIR,
   });
 
-  await esbuild.build(createDesktopBuildOptions());
+  await esbuild.build(await createDesktopBuildOptions());
 
   await buildDesktopRuntimeBundle({
     runtimeDir: join(DESKTOP_RUNTIME_DIR, "embedded"),

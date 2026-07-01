@@ -7,6 +7,7 @@
   "build": {
     "appId": "kit.spencer.coder-studio.desktop",
     "productName": "Coder Studio",
+    "icon": "../web/public/favicon.png",
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "directories": {
@@ -24,7 +25,8 @@
       "category": "public.app-category.developer-tools"
     },
     "win": {
-      "target": ["nsis"]
+      "target": ["nsis"],
+      "icon": "../web/public/favicon.ico"
     },
     "publish": [
       {

@@ -45,8 +45,8 @@ describe("build-desktop", () => {
     expect(resolveEmbeddedNodeOutputName("darwin")).toBe("node");
   });
 
-  it("maps core subpath exports to source files for the desktop bundle", () => {
-    const buildOptions = createDesktopBuildOptions();
+  it("maps core subpath exports to source files for the desktop bundle", async () => {
+    const buildOptions = await createDesktopBuildOptions();
 
     expect(buildOptions.entryPoints).toEqual({
       main: resolve(DESKTOP_DIR, "src/main.ts"),
@@ -57,6 +57,14 @@ describe("build-desktop", () => {
       "@coder-studio/core/runtime": resolve(CORE_DIR, "src/runtime.ts"),
       "@coder-studio/core/state-paths": resolve(CORE_DIR, "src/state-paths.ts"),
     });
+  });
+
+  it("externalizes desktop package dependencies so CommonJS packages are not bundled into the ESM shell", async () => {
+    const buildOptions = await createDesktopBuildOptions();
+
+    expect(buildOptions.external).toEqual(
+      expect.arrayContaining(["electron", "electron-updater", "fflate", "tar"])
+    );
   });
 
   it("invokes electron-builder using the desktop package publish config", async () => {
