@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDesktopPackage,
   createDesktopBuildOptions,
+  createDesktopPackageStageDir,
   materializeDesktopReleaseDir,
   packageDesktopInstallers,
   prepareDesktopOutputDirs,
@@ -92,6 +93,19 @@ describe("build-desktop", () => {
         "--config.directories.output=/tmp/coder-studio-desktop-release-stage",
       ],
       expect.objectContaining({ cwd: "/repo/packages/desktop" })
+    );
+  });
+
+  it("creates the default desktop package staging dir inside the desktop project tmp directory", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-stage-root-"));
+    tempDirs.push(rootDir);
+    const desktopDir = join(rootDir, "packages", "desktop");
+
+    const stagedDir = await createDesktopPackageStageDir(desktopDir);
+    tempDirs.push(stagedDir);
+
+    expect(stagedDir).toMatch(
+      new RegExp(`^${join(desktopDir, ".tmp", "release-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
     );
   });
 

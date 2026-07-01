@@ -1,5 +1,4 @@
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import * as esbuild from "esbuild";
 import { buildDesktopRuntimeBundle } from "./build-desktop-runtime.js";
@@ -58,8 +57,12 @@ export async function buildDesktopPackage(
   });
 }
 
-export async function createDesktopPackageStageDir(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "coder-studio-desktop-release-"));
+export async function createDesktopPackageStageDir(
+  desktopDir: string = DESKTOP_DIR
+): Promise<string> {
+  const stageRootDir = join(desktopDir, ".tmp");
+  await mkdir(stageRootDir, { recursive: true });
+  return mkdtemp(join(stageRootDir, "release-"));
 }
 
 export async function materializeDesktopReleaseDir(input: {
@@ -87,7 +90,7 @@ export async function packageDesktopInstallers(
   const exec = input.exec ?? run;
   const desktopDir = input.desktopDir ?? DESKTOP_DIR;
   const desktopDistDir = input.desktopDistDir ?? DESKTOP_DIST_DIR;
-  const createStageDir = input.createStageDir ?? createDesktopPackageStageDir;
+  const createStageDir = input.createStageDir ?? (() => createDesktopPackageStageDir(desktopDir));
   const materializeReleaseDir = input.materializeReleaseDir ?? materializeDesktopReleaseDir;
   const removeDir = input.removeDir ?? rm;
   const releaseDir = resolveDesktopReleaseDir(desktopDistDir);
