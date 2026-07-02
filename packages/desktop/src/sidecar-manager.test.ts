@@ -12,6 +12,8 @@ import {
 
 type SpawnDep = NonNullable<Parameters<typeof startDesktopSidecar>[1]>["spawn"];
 
+const noopInstallRuntimeDependencies = vi.fn(async () => {});
+
 describe("sidecar-manager", () => {
   const tempDirs: string[] = [];
 
@@ -30,6 +32,7 @@ describe("sidecar-manager", () => {
         platform: "darwin",
       })
     ).toEqual({
+      runtimeDir: "/Applications/Coder Studio.app/Contents/Resources/runtime",
       nodeExecutable: "/Applications/Coder Studio.app/Contents/Resources/runtime/node/node",
       runtimeEntry:
         "/Applications/Coder Studio.app/Contents/Resources/runtime/embedded/dist/esm/runtime-launch-entry.mjs",
@@ -70,6 +73,7 @@ describe("sidecar-manager", () => {
         platform: "darwin",
       })
     ).toEqual({
+      runtimeDir: "/Applications/Coder Studio.app/Contents/Resources/runtime",
       nodeExecutable: "/Applications/Coder Studio.app/Contents/Resources/runtime/node/node",
       runtimeEntry: join(versionDir, "dist", "esm", "runtime-launch-entry.mjs"),
       runtimeVersion: "0.5.4",
@@ -88,6 +92,7 @@ describe("sidecar-manager", () => {
         platform: "win32",
       })
     ).toEqual({
+      runtimeDir: "C:\\repo\\packages\\desktop\\dist\\runtime",
       nodeExecutable: "C:\\repo\\packages\\desktop\\dist\\runtime\\node\\node.exe",
       runtimeEntry:
         "C:\\repo\\packages\\desktop\\dist\\runtime\\embedded\\dist\\esm\\runtime-launch-entry.mjs",
@@ -190,6 +195,7 @@ describe("sidecar-manager", () => {
     await startDesktopSidecar(
       {
         paths: {
+          runtimeDir: "/bundle/runtime",
           nodeExecutable: "/bundle/runtime/node/node",
           runtimeEntry: "/bundle/runtime/cli/dist/esm/runtime-launch-entry.mjs",
           runtimeVersion: "0.5.4",
@@ -215,6 +221,7 @@ describe("sidecar-manager", () => {
             startedAt: 1,
           },
         }),
+        installRuntimeDependencies: noopInstallRuntimeDependencies,
       }
     );
 
@@ -262,6 +269,7 @@ describe("sidecar-manager", () => {
     const handle = await startDesktopSidecar(
       {
         paths: {
+          runtimeDir: "/bundle/runtime",
           nodeExecutable: "/bundle/runtime/node/node",
           runtimeEntry: "/bundle/runtime/cli/dist/esm/runtime-launch-entry.mjs",
           runtimeVersion: "0.5.4",
@@ -283,6 +291,7 @@ describe("sidecar-manager", () => {
             startedAt: 1,
           },
         }),
+        installRuntimeDependencies: noopInstallRuntimeDependencies,
       }
     );
 
@@ -326,9 +335,20 @@ describe("sidecar-manager", () => {
 
     const spawn = vi.fn(() => child) as unknown as SpawnDep;
 
+    // install must not yield — it must resolve in the same microtask so that
+    // startDesktopSidecar reaches spawn + listener setup before we emit.
+    let resolveInstall: () => void;
+    const installRuntimeDependencies = vi.fn(
+      () =>
+        new Promise<void>((r) => {
+          resolveInstall = r;
+        })
+    );
+
     const startup = startDesktopSidecar(
       {
         paths: {
+          runtimeDir: "/bundle/runtime",
           nodeExecutable: "/bundle/runtime/node/node",
           runtimeEntry: "/bundle/runtime/cli/dist/esm/runtime-launch-entry.mjs",
           runtimeVersion: "0.5.4",
@@ -340,16 +360,25 @@ describe("sidecar-manager", () => {
       {
         spawn,
         waitForHealthyRuntime: () => new Promise<never>(() => {}),
+        installRuntimeDependencies,
       }
     );
 
     child.stderr.emit("data", Buffer.from("boom\n"));
     child.exitCode = 1;
     child.emit("exit", 1, null);
-
-    await expect(startup).rejects.toMatchObject({
-      message: expect.stringMatching(/exited before becoming healthy/i),
-      logExcerpt: "stderr: boom",
+    resolveInstall!();
+    // Let startDesktopSidecar's await continuation run and attach listeners
+    await new Promise<void>((r) => {
+      queueMicrotask(r);
     });
+    child.stderr.emit("data", Buffer.from("boom\n"));
+
+    const error = (await startup.catch((e: unknown) =>
+      e instanceof Error ? e : new Error(String(e))
+    )) as Error;
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toMatch(/exited before becoming healthy/i);
+    expect(error).toHaveProperty("logExcerpt", "stderr: boom");
   });
 });

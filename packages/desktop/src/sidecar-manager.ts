@@ -1,7 +1,11 @@
-import { type Serializable, spawn as spawnChild } from "node:child_process";
+import {
+  execFile as execFileChild,
+  type Serializable,
+  spawn as spawnChild,
+} from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   deleteRuntimeConfig,
   type RuntimeConfig,
@@ -12,6 +16,7 @@ import { type EmbeddedRuntimePathInput, resolveEmbeddedRuntimePaths } from "./ru
 export { resolveEmbeddedRuntimePaths } from "./runtime-paths.js";
 
 export interface SidecarPaths {
+  runtimeDir: string;
   nodeExecutable: string;
   runtimeEntry: string;
   runtimeVersion?: string;
@@ -108,16 +113,59 @@ export async function waitForHealthyRuntime(input: {
   throw new Error("Timed out waiting for the desktop sidecar runtime");
 }
 
+const RUNTIME_NATIVE_EXTERNALS = ["node-pty"] as const;
+
+const execFileAsync = (
+  command: string,
+  args: string[],
+  options: { cwd?: string; stdio?: string }
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    execFileChild(command, args, options, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+
+export async function installRuntimeDependencies(input: {
+  runtimeDir: string;
+  nodeExecutable: string;
+}): Promise<void> {
+  const packages = RUNTIME_NATIVE_EXTERNALS;
+  const nodeModulesDir = join(input.runtimeDir, "node_modules");
+  const allInstalled = packages.every((pkg) => existsSync(join(nodeModulesDir, pkg)));
+  if (allInstalled) {
+    return;
+  }
+
+  const nodeBin = dirname(input.nodeExecutable);
+  const npmBin = join(nodeBin, process.platform === "win32" ? "npm.cmd" : "npm");
+  await execFileAsync(npmBin, ["install", ...packages], {
+    cwd: input.runtimeDir,
+    stdio: "inherit",
+  });
+}
+
 export async function startDesktopSidecar(
   input: StartDesktopSidecarInput,
   deps: {
     spawn?: SpawnSidecarProcess;
     waitForHealthyRuntime?: typeof waitForHealthyRuntime;
+    installRuntimeDependencies?: typeof installRuntimeDependencies;
   } = {}
 ): Promise<StartedDesktopSidecar> {
   mkdirSync(dirname(input.paths.runtimeJsonPath), { recursive: true });
   mkdirSync(input.stateDir, { recursive: true });
   deleteRuntimeConfig(input.paths.runtimeJsonPath);
+
+  const install = deps.installRuntimeDependencies ?? installRuntimeDependencies;
+  await install({
+    runtimeDir: input.paths.runtimeDir,
+    nodeExecutable: input.paths.nodeExecutable,
+  });
 
   const logChunks: string[] = [];
   const appendLogChunk = (source: "stdout" | "stderr", chunk: Buffer | string): void => {
@@ -162,14 +210,24 @@ export async function startDesktopSidecar(
 
   const wait = deps.waitForHealthyRuntime ?? waitForHealthyRuntime;
   const earlyExit = new Promise<never>((_, reject) => {
-    child.once("exit", (code, signal) => {
+    const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
       const suffix = typeof code === "number" ? `code ${code}` : `signal ${signal ?? "unknown"}`;
       const error = new Error(
         `Desktop sidecar exited before becoming healthy (${suffix})`
       ) as SidecarStartupError;
       error.logExcerpt = getLogExcerpt();
       reject(error);
-    });
+    };
+
+    if (child.exitCode !== null || child.signalCode !== null) {
+      const code = child.exitCode;
+      const signal = child.signalCode;
+      queueMicrotask(() => {
+        onExit(code, signal);
+      });
+    } else {
+      child.once("exit", onExit);
+    }
   });
 
   let healthy: HealthyRuntime;

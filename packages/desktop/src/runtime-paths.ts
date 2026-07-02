@@ -11,6 +11,7 @@ export interface EmbeddedRuntimePathInput {
 }
 
 export interface EmbeddedRuntimePaths {
+  runtimeDir: string;
   nodeExecutable: string;
   runtimeEntry: string;
   runtimeVersion?: string;
@@ -72,6 +73,7 @@ export function resolveEmbeddedRuntimePaths(input: EmbeddedRuntimePathInput): Em
   );
 
   return {
+    runtimeDir: runtimeRoot,
     nodeExecutable: path.join(runtimeRoot, "node", platform === "win32" ? "node.exe" : "node"),
     runtimeEntry: activeRuntimePointer
       ? path.resolve(activeRuntimePointer.path, activeRuntimePointer.entry)

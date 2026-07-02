@@ -213,6 +213,7 @@ describe("desktop-startup", () => {
 
   it("passes app and runtime metadata through to sidecar startup", async () => {
     const createSidecarPaths = vi.fn(() => ({
+      runtimeDir: "/Applications/Coder Studio.app/Contents/Resources/runtime",
       nodeExecutable: "/bundle/runtime/node/node",
       runtimeEntry: "/bundle/runtime/versions/0.5.5/dist/esm/runtime-launch-entry.mjs",
       runtimeVersion: "0.5.5",
@@ -278,6 +279,7 @@ describe("desktop-startup", () => {
     expect(startDesktopSidecar).toHaveBeenCalledWith({
       paths: {
         nodeExecutable: "/bundle/runtime/node/node",
+        runtimeDir: "/Applications/Coder Studio.app/Contents/Resources/runtime",
         runtimeEntry: "/bundle/runtime/versions/0.5.5/dist/esm/runtime-launch-entry.mjs",
         runtimeVersion: "0.5.5",
         webRoot: "/bundle/runtime/versions/0.5.5/dist/web",

@@ -521,7 +521,9 @@ export class NodePtyHost implements PtyHost {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`node-pty native module not available. ${message}`);
+      throw new Error(
+        `node-pty native module not available. It will be installed on first terminal use. ${message}`
+      );
     }
 
     if (argv.length === 0) {

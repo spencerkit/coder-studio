@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import * as esbuild from "esbuild";
@@ -13,7 +13,6 @@ import {
   PROVIDERS_DIR,
   ROOT_DIR,
   RUNTIME_DIR,
-  run,
   SERVER_DIR,
   success,
   UTILS_DIR,
@@ -38,35 +37,6 @@ export interface PrepareDesktopRuntimeOutputDirsInput {
   webDir: string;
 }
 
-export interface InstallDesktopRuntimeDependenciesInput {
-  runtimeDir: string;
-  exec?: typeof run;
-}
-
-export interface CleanupDesktopRuntimeInstallArtifactsInput {
-  runtimeDir: string;
-}
-
-function createDesktopRuntimeInstallArgs(input: { offline: boolean }): string[] {
-  return [
-    "install",
-    "--prod",
-    ...(input.offline ? ["--offline"] : []),
-    "--ignore-workspace",
-    "--config.node-linker=hoisted",
-    "--config.package-import-method=copy",
-    "--config.confirmModulesPurge=false",
-  ];
-}
-
-function isOfflineInstallFallbackError(rawError: unknown): boolean {
-  return (
-    rawError instanceof Error &&
-    (rawError.message.includes("ERR_PNPM_NO_OFFLINE_META") ||
-      rawError.message.includes("ERR_PNPM_NO_OFFLINE_TARBALL"))
-  );
-}
-
 function filterDeployableRuntimeDependencies(
   dependencies: Record<string, string>
 ): Record<string, string> {
@@ -78,19 +48,12 @@ function filterDeployableRuntimeDependencies(
 export function createDesktopRuntimeExternalDependencies(
   dependencies: Record<string, string>
 ): Record<string, string> {
-  const deployable = filterDeployableRuntimeDependencies(dependencies);
-
   return Object.fromEntries(
-    DESKTOP_RUNTIME_NATIVE_EXTERNALS.flatMap((dependency) =>
-      typeof deployable[dependency] === "string" ? [[dependency, deployable[dependency]]] : []
-    )
+    DESKTOP_RUNTIME_NATIVE_EXTERNALS.flatMap((nativeDep) => {
+      const version = dependencies[nativeDep];
+      return version ? [[nativeDep, version]] : [];
+    })
   );
-}
-
-export function createDesktopRuntimeInstalledDependencies(
-  dependencies: Record<string, string>
-): Record<string, string> {
-  return filterDeployableRuntimeDependencies(dependencies);
 }
 
 export async function prepareDesktopRuntimeOutputDirs(
@@ -120,7 +83,6 @@ export function createDesktopRuntimeServerBuildOptions(input: {
     platform: "node",
     target: "node24",
     format: "esm",
-    packages: "external",
     outfile: resolve(input.runtimeDir, "dist/esm/runtime-launch-entry.mjs"),
     outExtension: { ".js": ".mjs" },
     external: input.external,
@@ -147,7 +109,6 @@ export function createDesktopRuntimeWslEntryBuildOptions(input: {
     platform: "node",
     target: "node24",
     format: "esm",
-    packages: "external",
     outfile: resolve(input.runtimeDir, "dist/esm/wsl-runtime-entry.mjs"),
     outExtension: { ".js": ".mjs" },
     external: input.external,
@@ -166,7 +127,6 @@ export function createDesktopRuntimeWslEntryBuildOptions(input: {
 
 export function createDesktopRuntimePackageJson(input: {
   version: string;
-  dependencies: Record<string, string>;
 }): Record<string, unknown> {
   return {
     name: "@coder-studio/desktop-runtime",
@@ -180,7 +140,6 @@ export function createDesktopRuntimePackageJson(input: {
       },
     },
     files: ["dist", "runtime-manifest.json", "package.json"],
-    dependencies: filterDeployableRuntimeDependencies(input.dependencies),
   };
 }
 
@@ -242,94 +201,12 @@ async function copyDesktopRuntimeStaticAssets(input: { runtimeDir: string }): Pr
   await copy(resolveMermaidAssetSourcePath(), targetPath);
 }
 
-export async function installDesktopRuntimeDependencies(
-  input: InstallDesktopRuntimeDependenciesInput
-): Promise<void> {
-  const exec = input.exec ?? run;
-  try {
-    await exec("pnpm", createDesktopRuntimeInstallArgs({ offline: true }), {
-      cwd: input.runtimeDir,
-      stdio: "pipe",
-    });
-  } catch (error) {
-    if (!isOfflineInstallFallbackError(error)) {
-      throw error;
-    }
-
-    await exec("pnpm", createDesktopRuntimeInstallArgs({ offline: false }), {
-      cwd: input.runtimeDir,
-      stdio: "pipe",
-    });
-  }
-}
-
-async function removePathIfExists(targetPath: string): Promise<void> {
-  await rm(targetPath, { recursive: true, force: true });
-}
-
-export async function cleanupDesktopRuntimeInstallArtifacts(
-  input: CleanupDesktopRuntimeInstallArtifactsInput
-): Promise<void> {
-  await Promise.all([
-    removePathIfExists(join(input.runtimeDir, "node_modules", ".bin")),
-    removePathIfExists(join(input.runtimeDir, "node_modules", ".modules.yaml")),
-    removePathIfExists(join(input.runtimeDir, "node_modules", ".pnpm-workspace-state-v1.json")),
-  ]);
-}
-
-async function removeEmptyDirectories(rootDir: string): Promise<void> {
-  let entries: Array<{ name: string; isDirectory: boolean; fullPath: string }> = [];
-  try {
-    const dirEntries = await readdir(rootDir, { withFileTypes: true });
-    entries = dirEntries.map((entry) => ({
-      name: entry.name,
-      isDirectory: entry.isDirectory(),
-      fullPath: join(rootDir, entry.name),
-    }));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return;
-    }
-    throw error;
-  }
-
-  for (const entry of entries) {
-    if (!entry.isDirectory) {
-      continue;
-    }
-
-    await removeEmptyDirectories(entry.fullPath);
-  }
-
-  const remaining = await readdir(rootDir).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") {
-      return [] as string[];
-    }
-    throw error;
-  });
-
-  if (remaining.length === 0) {
-    await rm(rootDir, { recursive: true, force: true });
-  }
-}
-
-export async function cleanupDesktopRuntimeDependencyMetadata(input: {
-  runtimeDir: string;
-}): Promise<void> {
-  const pnpmDir = join(input.runtimeDir, "node_modules", ".pnpm");
-  await removePathIfExists(pnpmDir);
-  await removeEmptyDirectories(join(input.runtimeDir, "node_modules"));
-}
-
 export async function buildDesktopRuntimeBundle(input?: {
   runtimeDir?: string;
   runtimeVersion?: string;
   webSourceDir?: string;
   dependencyVersions?: Record<string, string>;
   esbuildBuild?: typeof esbuild.build;
-  installDependencies?: (input: InstallDesktopRuntimeDependenciesInput) => Promise<void>;
-  cleanupInstallArtifacts?: (input: CleanupDesktopRuntimeInstallArtifactsInput) => Promise<void>;
-  cleanupDependencyMetadata?: (input: { runtimeDir: string }) => Promise<void>;
   copyStaticAssets?: (input: { runtimeDir: string }) => Promise<void>;
 }): Promise<void> {
   const runtimeDir = input?.runtimeDir ?? resolve(DESKTOP_DIR, "dist/runtime/embedded");
@@ -346,12 +223,6 @@ export async function buildDesktopRuntimeBundle(input?: {
       {}
   );
   const externalDependencies = createDesktopRuntimeExternalDependencies(dependencyVersions);
-  const installedDependencies = createDesktopRuntimeInstalledDependencies(dependencyVersions);
-  const installDependencies = input?.installDependencies ?? installDesktopRuntimeDependencies;
-  const cleanupInstallArtifacts =
-    input?.cleanupInstallArtifacts ?? cleanupDesktopRuntimeInstallArtifacts;
-  const cleanupDependencyMetadata =
-    input?.cleanupDependencyMetadata ?? cleanupDesktopRuntimeDependencyMetadata;
   const copyStaticAssets = input?.copyStaticAssets ?? copyDesktopRuntimeStaticAssets;
 
   await prepareDesktopRuntimeOutputDirs({
@@ -383,18 +254,11 @@ export async function buildDesktopRuntimeBundle(input?: {
     `${JSON.stringify(
       createDesktopRuntimePackageJson({
         version: runtimeVersion,
-        dependencies: installedDependencies,
       }),
       null,
       2
     )}\n`
   );
-
-  if (Object.keys(installedDependencies).length > 0) {
-    await installDependencies({ runtimeDir });
-    await cleanupInstallArtifacts({ runtimeDir });
-    await cleanupDependencyMetadata({ runtimeDir });
-  }
 }
 
 if (isDirectExecution(import.meta.url)) {

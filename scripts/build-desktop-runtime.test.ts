@@ -4,15 +4,11 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDesktopRuntimeBundle,
-  cleanupDesktopRuntimeDependencyMetadata,
-  cleanupDesktopRuntimeInstallArtifacts,
   createDesktopRuntimeExternalDependencies,
-  createDesktopRuntimeInstalledDependencies,
   createDesktopRuntimeManifest,
   createDesktopRuntimePackageJson,
   createDesktopRuntimeServerBuildOptions,
   createDesktopRuntimeWslEntryBuildOptions,
-  installDesktopRuntimeDependencies,
   prepareDesktopRuntimeOutputDirs,
   readDesktopRuntimeVersion,
 } from "./build-desktop-runtime.js";
@@ -57,8 +53,8 @@ describe("build-desktop-runtime", () => {
     expect(buildOptions.outfile).toBe(
       "/repo/packages/desktop/dist/runtime/embedded/dist/esm/runtime-launch-entry.mjs"
     );
-    expect(buildOptions.packages).toBe("external");
     expect(buildOptions.external).toEqual(["node-pty"]);
+    expect(buildOptions.packages).toBeUndefined();
   });
 
   it("creates a desktop runtime WSL entry bundle config", () => {
@@ -71,26 +67,14 @@ describe("build-desktop-runtime", () => {
     expect(buildOptions.outfile).toBe(
       "/repo/packages/desktop/dist/runtime/embedded/dist/esm/wsl-runtime-entry.mjs"
     );
-    expect(buildOptions.packages).toBe("external");
     expect(buildOptions.external).toEqual(["node-pty"]);
+    expect(buildOptions.packages).toBeUndefined();
   });
 
-  it("creates a desktop runtime package manifest with deployable third-party runtime dependencies", () => {
+  it("creates a desktop runtime package manifest without dependencies", () => {
     expect(
       createDesktopRuntimePackageJson({
         version: "0.5.4",
-        dependencies: {
-          "@coder-studio/core": "workspace:*",
-          "@coder-studio/providers": "workspace:*",
-          "@coder-studio/utils": "workspace:*",
-          "@fastify/compress": "^8.3.1",
-          fastify: "^5.8.5",
-          "mime-types": "^2.1.35",
-          "node-pty": "^1.1.0",
-          "typescript-language-server": "^5.2.0",
-          typescript: "^6.0.3",
-          zod: "^4.4.2",
-        },
       })
     ).toEqual({
       name: "@coder-studio/desktop-runtime",
@@ -104,19 +88,10 @@ describe("build-desktop-runtime", () => {
         },
       },
       files: ["dist", "runtime-manifest.json", "package.json"],
-      dependencies: {
-        "@fastify/compress": "^8.3.1",
-        fastify: "^5.8.5",
-        "mime-types": "^2.1.35",
-        "node-pty": "^1.1.0",
-        "typescript-language-server": "^5.2.0",
-        typescript: "^6.0.3",
-        zod: "^4.4.2",
-      },
     });
   });
 
-  it("keeps only native runtime packages in the embedded runtime external dependency list", () => {
+  it("returns only native runtime packages for esbuild externals", () => {
     expect(
       createDesktopRuntimeExternalDependencies({
         "@coder-studio/core": "workspace:*",
@@ -129,30 +104,6 @@ describe("build-desktop-runtime", () => {
       })
     ).toEqual({
       "node-pty": "^1.1.0",
-    });
-  });
-
-  it("keeps deployable third-party runtime packages in the embedded runtime install dependency list", () => {
-    expect(
-      createDesktopRuntimeInstalledDependencies({
-        "@coder-studio/core": "workspace:*",
-        "@coder-studio/providers": "workspace:*",
-        fastify: "^5.8.5",
-        "mime-types": "^2.1.35",
-        "node-pty": "^1.1.0",
-        "typescript-language-server": "^5.2.0",
-        typescript: "^6.0.3",
-        "vscode-jsonrpc": "^8.2.1",
-        zod: "^4.4.2",
-      })
-    ).toEqual({
-      fastify: "^5.8.5",
-      "mime-types": "^2.1.35",
-      "node-pty": "^1.1.0",
-      "typescript-language-server": "^5.2.0",
-      typescript: "^6.0.3",
-      "vscode-jsonrpc": "^8.2.1",
-      zod: "^4.4.2",
     });
   });
 
@@ -186,9 +137,6 @@ describe("build-desktop-runtime", () => {
     await writeFile(join(webSourceDir, "index.html"), "<html>runtime</html>\n");
     await writeFile(join(webSourceDir, "assets", "app.js"), "console.log('runtime');\n");
 
-    const installDependencies = vi.fn(async () => {});
-    const cleanupInstallArtifacts = vi.fn(async () => {});
-    const cleanupDependencyMetadata = vi.fn(async () => {});
     const copyStaticAssets = vi.fn(
       async ({ runtimeDir: targetRuntimeDir }: { runtimeDir: string }) => {
         await mkdir(join(targetRuntimeDir, "dist", "assets", "preview"), { recursive: true });
@@ -218,9 +166,6 @@ describe("build-desktop-runtime", () => {
         typescript: "^6.0.3",
       },
       esbuildBuild,
-      installDependencies,
-      cleanupInstallArtifacts,
-      cleanupDependencyMetadata,
       copyStaticAssets,
     });
 
@@ -239,15 +184,6 @@ describe("build-desktop-runtime", () => {
         external: ["node-pty"],
       })
     );
-    expect(installDependencies).toHaveBeenCalledWith({
-      runtimeDir,
-    });
-    expect(cleanupInstallArtifacts).toHaveBeenCalledWith({
-      runtimeDir,
-    });
-    expect(cleanupDependencyMetadata).toHaveBeenCalledWith({
-      runtimeDir,
-    });
     await expect(
       readFile(join(runtimeDir, "dist", "esm", "wsl-runtime-entry.mjs"), "utf-8")
     ).resolves.toBe("export const runtime = true;\n");
@@ -277,160 +213,7 @@ describe("build-desktop-runtime", () => {
     ).resolves.toMatchObject({
       name: "@coder-studio/desktop-runtime",
       version: "0.5.4",
-      dependencies: {
-        fastify: "^5.8.5",
-        "mime-types": "^2.1.35",
-        "node-pty": "^1.1.0",
-        "typescript-language-server": "^5.2.0",
-        typescript: "^6.0.3",
-      },
     });
-  });
-
-  it("retries dependency install without offline mode when pnpm metadata is unavailable", async () => {
-    const exec = vi
-      .fn<
-        (
-          command: string,
-          args: string[],
-          options?: { cwd?: string; stdio?: "pipe" }
-        ) => Promise<void>
-      >()
-      .mockRejectedValueOnce(new Error("ERR_PNPM_NO_OFFLINE_META"))
-      .mockResolvedValueOnce();
-
-    await installDesktopRuntimeDependencies({
-      runtimeDir: "/repo/packages/desktop/dist/runtime/embedded",
-      exec,
-    });
-
-    expect(exec).toHaveBeenCalledTimes(2);
-    expect(exec).toHaveBeenNthCalledWith(
-      1,
-      "pnpm",
-      [
-        "install",
-        "--prod",
-        "--offline",
-        "--ignore-workspace",
-        "--config.node-linker=hoisted",
-        "--config.package-import-method=copy",
-        "--config.confirmModulesPurge=false",
-      ],
-      {
-        cwd: "/repo/packages/desktop/dist/runtime/embedded",
-        stdio: "pipe",
-      }
-    );
-    expect(exec).toHaveBeenNthCalledWith(
-      2,
-      "pnpm",
-      [
-        "install",
-        "--prod",
-        "--ignore-workspace",
-        "--config.node-linker=hoisted",
-        "--config.package-import-method=copy",
-        "--config.confirmModulesPurge=false",
-      ],
-      {
-        cwd: "/repo/packages/desktop/dist/runtime/embedded",
-        stdio: "pipe",
-      }
-    );
-  });
-
-  it("retries dependency install without offline mode when pnpm tarballs are unavailable offline", async () => {
-    const exec = vi
-      .fn<
-        (
-          command: string,
-          args: string[],
-          options?: { cwd?: string; stdio?: "pipe" }
-        ) => Promise<void>
-      >()
-      .mockRejectedValueOnce(new Error("ERR_PNPM_NO_OFFLINE_TARBALL"))
-      .mockResolvedValueOnce();
-
-    await installDesktopRuntimeDependencies({
-      runtimeDir: "/repo/packages/desktop/dist/runtime/embedded",
-      exec,
-    });
-
-    expect(exec).toHaveBeenCalledTimes(2);
-    expect(exec).toHaveBeenNthCalledWith(
-      1,
-      "pnpm",
-      [
-        "install",
-        "--prod",
-        "--offline",
-        "--ignore-workspace",
-        "--config.node-linker=hoisted",
-        "--config.package-import-method=copy",
-        "--config.confirmModulesPurge=false",
-      ],
-      {
-        cwd: "/repo/packages/desktop/dist/runtime/embedded",
-        stdio: "pipe",
-      }
-    );
-    expect(exec).toHaveBeenNthCalledWith(
-      2,
-      "pnpm",
-      [
-        "install",
-        "--prod",
-        "--ignore-workspace",
-        "--config.node-linker=hoisted",
-        "--config.package-import-method=copy",
-        "--config.confirmModulesPurge=false",
-      ],
-      {
-        cwd: "/repo/packages/desktop/dist/runtime/embedded",
-        stdio: "pipe",
-      }
-    );
-  });
-
-  it("removes pnpm install artifacts that should not ship inside the embedded runtime", async () => {
-    const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-"));
-    tempDirs.push(runtimeDir);
-    const nodeModulesDir = join(runtimeDir, "node_modules");
-    const packageDir = join(nodeModulesDir, "typescript");
-
-    await mkdir(join(nodeModulesDir, ".bin"), { recursive: true });
-    await mkdir(packageDir, { recursive: true });
-    await writeFile(join(nodeModulesDir, ".modules.yaml"), "layout-version: 5\n");
-    await writeFile(join(nodeModulesDir, ".pnpm-workspace-state-v1.json"), "{}\n");
-    await writeFile(join(packageDir, "package.json"), '{"name":"typescript"}\n');
-
-    await cleanupDesktopRuntimeInstallArtifacts({ runtimeDir });
-
-    await expect(readdir(nodeModulesDir)).resolves.toEqual(["typescript"]);
-    await expect(readFile(join(packageDir, "package.json"), "utf-8")).resolves.toBe(
-      '{"name":"typescript"}\n'
-    );
-  });
-
-  it("removes pnpm metadata while keeping installed package directories intact", async () => {
-    const runtimeDir = await mkdtemp(join(tmpdir(), "coder-studio-desktop-runtime-"));
-    tempDirs.push(runtimeDir);
-    const nodeModulesDir = join(runtimeDir, "node_modules");
-    const pnpmDir = join(nodeModulesDir, ".pnpm", "dep@1.0.0");
-    const packageDir = join(nodeModulesDir, "typescript-language-server");
-
-    await mkdir(pnpmDir, { recursive: true });
-    await mkdir(packageDir, { recursive: true });
-    await writeFile(join(pnpmDir, "state.json"), "{}\n");
-    await writeFile(join(packageDir, "package.json"), '{"name":"typescript-language-server"}\n');
-
-    await cleanupDesktopRuntimeDependencyMetadata({ runtimeDir });
-
-    await expect(readdir(nodeModulesDir)).resolves.toEqual(["typescript-language-server"]);
-    await expect(readFile(join(packageDir, "package.json"), "utf-8")).resolves.toBe(
-      '{"name":"typescript-language-server"}\n'
-    );
   });
 
   it("cleans an existing runtime bundle output directory before rebuilding", async () => {
@@ -460,9 +243,6 @@ describe("build-desktop-runtime", () => {
         fastify: "^5.8.5",
       },
       esbuildBuild,
-      installDependencies: vi.fn(async () => {}),
-      cleanupInstallArtifacts: vi.fn(async () => {}),
-      cleanupDependencyMetadata: vi.fn(async () => {}),
       copyStaticAssets: vi.fn(async () => {}),
     });
   });
