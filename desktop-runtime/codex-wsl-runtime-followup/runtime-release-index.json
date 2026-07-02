@@ -4,10 +4,10 @@
     "platform": "win32",
     "arch": "x64",
     "artifactUrl": "https://raw.githubusercontent.com/spencerkit/coder-studio/beta-artifacts/desktop-runtime/codex-wsl-runtime-followup/0.5.6-beta.0/coder-studio-runtime-0.5.6-beta.0-win32-x64.zip",
-    "checksumSha256": "ae5aac40b03070486e8406284b2fd3e72795aa16fc4ba3e185fa3334da092210",
-    "artifactSize": 97448810,
-    "publishedAt": "2026-07-01T15:45:28.0726712Z",
+    "checksumSha256": "72324a9c56647617defd50cb2f26a0df93ce8809303797a664dc92193c5798f7",
+    "artifactSize": 34867827,
+    "publishedAt": "2026-07-02T04:03:19.4379153Z",
     "minAppVersion": "0.5.6-beta.0",
-    "notes": "Beta runtime built from 4f650d4bc6770e55b30ec567c5e0dc4668f272e1 on codex/wsl-runtime-followup"
+    "notes": "Beta runtime built from 7d2028753bf104c51f2f9877e5cec24174ebc4b4 on codex/wsl-runtime-followup"
   }
 ]
