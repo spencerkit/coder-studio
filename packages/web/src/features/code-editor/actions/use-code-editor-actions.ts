@@ -3,7 +3,7 @@ import type {
   GitCommitFileEntry,
   GitFileDiffPayload,
 } from "@coder-studio/core";
-import { type PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
+import { type PrimitiveAtom, useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchCommandAtom } from "../../../atoms/connection";
 import { activeWorkspaceAtom } from "../../../atoms/workspaces";
@@ -204,6 +204,7 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
   const [openFiles, setOpenFiles] = useAtom(openFilesAtomFamily(workspaceId ?? ""));
   const [openEditorPaths, setOpenEditorPaths] = useAtom(openEditorPathsAtom);
   const [openEditorTabs, setOpenEditorTabs] = useAtom(openEditorTabsAtomFamily(workspaceId ?? ""));
+  const store = useStore();
   const [globalActiveEditorTab, setActiveEditorTab] = useAtom(
     activeEditorTabAtomFamily(workspaceId ?? "")
   );
@@ -1014,32 +1015,38 @@ export function useCodeEditorActions(options: CodeEditorActionsOptions = {}) {
       if (isGlobalEditorState && workspaceId) {
         setEditorViewVisible(true);
       }
-      closePath(path);
-      activationHistoryPathsRef.current = activationHistoryPathsRef.current.filter(
-        (entry) => entry !== path
-      );
+
+      // Update openEditorTabs atom BEFORE closePath so that closePath's
+      // persistUiState call reads the correct (filtered) value from the store.
       if (isGlobalEditorState) {
-        setOpenEditorTabs((current) =>
-          current.filter((tab) => tab.kind !== "file" || tab.path !== path)
-        );
-        setActiveEditorTab((current) =>
-          current?.kind === "file" && current.path === path ? null : current
-        );
+        const _atom = openEditorTabsAtomFamily(workspaceId ?? "");
+        const _current = store.get(_atom);
+        const _next = _current.filter((tab) => tab.kind !== "file" || tab.path !== path);
+        store.set(_atom, _next);
+        const _nextActiveTab =
+          activeEditorTabRef.current?.kind === "file" && activeEditorTabRef.current.path === path
+            ? null
+            : activeEditorTabRef.current;
+        store.set(activeEditorTabAtomFamily(workspaceId ?? ""), _nextActiveTab);
       } else {
         setLocalActiveEditorTab((current) =>
           current?.kind === "file" && current.path === path ? null : current
         );
       }
+
+      closePath(path);
+      activationHistoryPathsRef.current = activationHistoryPathsRef.current.filter(
+        (entry) => entry !== path
+      );
       setSaveError((current) => (current?.path === path ? null : current));
     },
     [
       closePath,
       isGlobalEditorState,
-      setActiveEditorTab,
       setEditorViewVisible,
       setLocalActiveEditorTab,
-      setOpenEditorTabs,
       setSaveError,
+      store,
       workspaceId,
     ]
   );
