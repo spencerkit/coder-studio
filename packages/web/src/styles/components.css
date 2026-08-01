@@ -10341,8 +10341,8 @@ textarea.input {
   align-items: center;
   justify-content: center;
   width: 100%;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--type-body-6-size);
+  font-weight: var(--font-bold);
   line-height: 1;
 }
 
@@ -10386,11 +10386,11 @@ textarea.input {
 .canvas-comment-layer__item {
   position: absolute;
   max-width: 240px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 118, 110, 0.18);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-xl);
+  border: 1px solid color-mix(in srgb, var(--status-info-fg) 18%, var(--border-default));
+  background: var(--surface-overlay-bg);
+  box-shadow: var(--shadow-sm);
   color: var(--text-primary);
 }
 
@@ -10400,8 +10400,9 @@ textarea.input {
 
 .canvas-comment-layer__body {
   margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.45;
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  font-weight: var(--type-body-5-weight);
 }
 
 .canvas-content__scene--export .canvas-overlay-layer__scene {
@@ -10501,7 +10502,7 @@ textarea.input {
 .canvas-overlay-layer__scene {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: var(--z-inline-raised);
   pointer-events: none;
 }
 
