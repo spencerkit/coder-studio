@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.6
+
+### Patch Changes
+
+- [#87](https://github.com/spencerkit/coder-studio/pull/87) [`aca2fc6`](https://github.com/spencerkit/coder-studio/commit/aca2fc6e99b4a70d980151a5560a8ab74313a499) Thanks [@pallyoung](https://github.com/pallyoung)! - Ship the post-0.5.5 canvas and workspace runtime updates, including canvas rendering, embedded routes, PNG export support, terminal/runtime wiring, and release verification fixes.
+
 ## 0.5.5
 
 ### Patch Changes
