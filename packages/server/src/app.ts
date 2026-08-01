@@ -25,6 +25,7 @@ import type { ServerConfig } from "./config.js";
 import { PreviewSessionStore } from "./preview/session-store.js";
 import { registerAppearanceAssetsRoutes } from "./routes/appearance-assets.js";
 import { registerCanvasRoutes } from "./routes/canvas.js";
+import { registerCanvasSnapshotRoutes } from "./routes/canvas-snapshots.js";
 import { registerFileAssetRoutes } from "./routes/file-asset.js";
 import { registerPreviewRoutes } from "./routes/preview.js";
 import { registerSkillFileAssetRoutes } from "./routes/skill-file-asset.js";
@@ -185,6 +186,9 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.canvasService) {
     registerCanvasRoutes(app, {
       workspaceMgr: deps.workspaceMgr,
+      canvasService: deps.canvasService,
+    });
+    registerCanvasSnapshotRoutes(app, {
       canvasService: deps.canvasService,
     });
   }
