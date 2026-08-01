@@ -121,7 +121,15 @@ describe("server built-in skills wiring", () => {
     );
     expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.create");
     expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.update");
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.preset.list");
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.create-from-preset");
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.snapshot.create");
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.clone");
     expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.render");
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain("canvas.inspect");
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain(
+      "If the user says the canvas changed, they added comments, or they annotated the canvas, re-run `canvas.inspect` on the same `.csc` source path."
+    );
     expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain(
       "ui.open-file --path .coder-studio/canvases/<title-slug>.csc"
     );
@@ -133,6 +141,9 @@ describe("server built-in skills wiring", () => {
     );
     expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain(
       "readable `.coder-studio/canvases/<title-slug>.csc` paths"
+    );
+    expect(readFileSync(builtinCanvasSkillPath, "utf8")).toContain(
+      "/embedded/canvas-snapshot/<snapshot-id>"
     );
     expect(readFileSync(builtinCanvasSkillPath, "utf8")).not.toContain(
       ".coder-studio/canvases/<canvas-id>.canvas.json"
@@ -208,7 +219,15 @@ describe("server built-in skills wiring", () => {
     );
     expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.create");
     expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.update");
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.preset.list");
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.create-from-preset");
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.snapshot.create");
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.clone");
     expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.render");
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain("canvas.inspect");
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain(
+      "If the user says the canvas changed, they added comments, or they annotated the canvas, re-run `canvas.inspect` on the same `.csc` source path."
+    );
     expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain(
       "ui.open-file --path .coder-studio/canvases/<title-slug>.csc"
     );
@@ -220,6 +239,9 @@ describe("server built-in skills wiring", () => {
     );
     expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain(
       "readable `.coder-studio/canvases/<title-slug>.csc` paths"
+    );
+    expect(readFileSync(homeCanvasSkillPath, "utf8")).toContain(
+      "/embedded/canvas-snapshot/<snapshot-id>"
     );
     expect(readFileSync(homeCanvasSkillPath, "utf8")).not.toContain(
       ".coder-studio/canvases/<canvas-id>.canvas.json"

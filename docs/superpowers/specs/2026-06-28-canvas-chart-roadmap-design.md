@@ -10,14 +10,9 @@ Coder Studio canvas is already useful for architecture diagrams and structured
 reports, but it stops short of the higher-density, reusable artifact model that
 Cursor-style canvas has moved toward.
 
-The current gap is not "more drawing surface". The gap is:
-
-- data charts inside report canvases
-- reusable canvas presets
-- read-only snapshot delivery
-
-This design keeps the existing canvas model intact and extends
-`report_canvas` first. It does not add a new canvas kind in v1.
+This roadmap keeps the existing canvas model intact and extends
+`report_canvas` first. The 0-30 day scope is now chart support only. Presets,
+immutable snapshots, and clone flows remain explicit 60-90 day follow-up work.
 
 ## Problem
 
@@ -46,8 +41,8 @@ become a durable delivery surface for analysis-heavy artifacts.
 - Keep source file-backed and typed.
 - Keep the chart schema deterministic and validation-friendly.
 - Reuse existing `echarts` in the web app rather than adding a new chart stack.
-- Add a template/preset layer and read-only snapshot path in the 60-90 day
-  phase.
+- Stage presets, snapshots, and clone flows as a separate 60-90 day phase
+  rather than mixing them into the first implementation slice.
 
 ## Non-Goals
 
@@ -77,8 +72,8 @@ Relevant current files:
   teaches the agent how to author canvases today.
 
 Current behavior is enough for text-heavy summaries and static architecture
-flows. It does not yet provide the kind of chart-first report composition that
-Cursor public canvas examples imply.
+flows. Before this work, it did not provide the kind of chart-first report
+composition that Cursor public canvas examples imply.
 
 ## Direction
 
@@ -147,12 +142,9 @@ changing the canvas entry model or adding a new artifact kind.
 3. Add a dedicated chart renderer in the web canvas report path.
 4. Reuse `echarts` for actual chart drawing, but keep the canvas schema
    framework-owned.
-5. Add a small set of opinionated starter templates, focused on:
-   - token consumption trend
-   - workspace activity summary
-   - provider usage comparison
-6. Update the canvas skill instructions so agents know when to use chart blocks.
-7. Add tests for schema validation, compilation, and chart rendering.
+5. Update the canvas skill instructions so agents know when to use chart blocks.
+6. Add tests for schema validation, compilation, chart rendering, and embedded
+   route rendering.
 
 ### File impact
 
@@ -162,6 +154,8 @@ changing the canvas entry model or adding a new artifact kind.
 - `packages/web/src/features/canvas/components/report-canvas-renderer.tsx`
 - `packages/web/src/features/canvas/components/report-canvas-chart-renderer.tsx`
 - `packages/server/src/skills/builtin/definitions/coder-studio-canvas.ts`
+- `packages/web/src/features/canvas/routes/embedded-canvas-route.test.tsx`
+- `packages/web/src/features/canvas/components/report-canvas-chart-renderer.test.tsx`
 
 ### Behavior rules
 
@@ -175,9 +169,29 @@ changing the canvas entry model or adding a new artifact kind.
 ### Exit criteria
 
 - A real report canvas can render at least one line chart without regressions.
+- A real report canvas can also render bar and sparkline variants from the same
+  typed block family.
 - Existing report block types still render unchanged.
 - The embedded canvas route and page route both render chart canvases
   correctly.
+- Tooltip content is escaped before returning HTML to the charting library.
+
+### Phase 1 Status
+
+The 0-30 day slice is implemented in the current worktree:
+
+- `report_canvas` now supports `chart` blocks with `line`, `bar`, and
+  `sparkline` kinds.
+- Core schema validation rejects series/category length mismatches.
+- The web renderer delegates chart blocks to a dedicated ECharts-backed
+  renderer.
+- The built-in `coder-studio-canvas` skill now teaches agents how to author
+  chart blocks.
+- Focused core, web, server, and build verification has already passed for this
+  slice.
+
+Phase 1 does not include presets, snapshots, clone flows, or an interactive
+canvas editor.
 
 ## Phase 2: 60-90 Days
 
@@ -214,6 +228,17 @@ thing as a live editable source file.
 
 ### File and route impact
 
+- `packages/server/src/canvas/presets.ts`
+- `packages/server/src/storage/repositories/canvas-snapshot-repo.ts`
+- `packages/server/src/canvas/service.ts`
+- `packages/server/src/commands/canvas.ts`
+- `packages/server/src/routes/canvas-snapshots.ts`
+- `packages/server/src/app.ts`
+- `packages/server/src/server.ts`
+- `packages/core/src/domain/canvas.ts`
+- `packages/web/src/features/canvas/api.ts`
+- `packages/web/src/features/canvas/components/canvas-content.tsx`
+- `packages/web/src/features/canvas/routes/embedded-canvas-snapshot-route.tsx`
 - new `canvas.snapshot.create` server command
 - new read-only route such as `/embedded/canvas-snapshot/:snapshotId`
 - new `GET /api/canvas-snapshots/:snapshotId` data endpoint
@@ -259,18 +284,26 @@ focuses on the parts that best fit Coder Studio's existing strengths:
 
 ## Testing
 
-Minimum coverage should include:
+0-30 day coverage should include:
 
 - core schema tests for chart validation
 - compiler tests for chart normalization
 - web renderer tests for line, bar, and sparkline output
 - embedded canvas route tests for chart canvases
-- skill text tests or snapshot tests for the updated canvas guidance
+- skill text tests for the updated canvas guidance
+
+60-90 day coverage should additionally include:
+
+- preset list/create tests at the service and command layers
+- snapshot storage and read-only route tests
+- clone behavior tests for editable copies from existing canvases or snapshots
+- web API and route tests for snapshot fetch/render flows
 
 ## Recommendation
 
-Proceed with the 0-30 day chart extension first.
+Keep the current implementation boundary intact:
 
-That gives us the highest visible value with the lowest product risk, and it
-sets up the 60-90 day template/snapshot work without locking us into a larger
-runtime model.
+- ship the 0-30 day chart extension as the first delivered slice
+- do not fold presets, snapshots, clone, or editor work into the same branch
+- use the follow-up 60-90 day plan to stage reusable artifact capabilities on
+  top of the chart-enabled `report_canvas` base

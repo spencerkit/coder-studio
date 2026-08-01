@@ -9,9 +9,14 @@ type SupportedOp =
   | "memory.update"
   | "memory.delete"
   | "canvas.list"
+  | "canvas.preset.list"
   | "canvas.create"
+  | "canvas.create-from-preset"
   | "canvas.update"
+  | "canvas.snapshot.create"
+  | "canvas.clone"
   | "canvas.render"
+  | "canvas.inspect"
   | "ui.open-file"
   | "ui.close-file"
   | "ui.open-url"
@@ -241,6 +246,8 @@ function parseCanvasCommand(
   let json = false;
   let canvasId: string | undefined;
   let sourcePath: string | undefined;
+  let snapshotId: string | undefined;
+  let presetId: string | undefined;
   let kind: CanvasArtifactType | undefined;
   let title: string | undefined;
   let documentJson: string | undefined;
@@ -264,6 +271,14 @@ function parseCanvasCommand(
         break;
       case "--source-path":
         sourcePath = readOptionValue(argv, i + 1, "source-path");
+        i += 1;
+        break;
+      case "--snapshot-id":
+        snapshotId = readOptionValue(argv, i + 1, "snapshot-id");
+        i += 1;
+        break;
+      case "--preset-id":
+        presetId = readOptionValue(argv, i + 1, "preset-id");
         i += 1;
         break;
       case "--kind":
@@ -300,6 +315,14 @@ function parseCanvasCommand(
     };
   }
 
+  if (op === "canvas.preset.list") {
+    return {
+      op,
+      json,
+      args: { workspaceId },
+    };
+  }
+
   if (op === "canvas.create") {
     if (!kind) {
       throw new Error("Missing kind value");
@@ -324,6 +347,26 @@ function parseCanvasCommand(
     };
   }
 
+  if (op === "canvas.create-from-preset") {
+    if (!presetId) {
+      throw new Error("Missing preset-id value");
+    }
+    if (!title) {
+      throw new Error("Missing title value");
+    }
+
+    return {
+      op,
+      json,
+      args: {
+        workspaceId,
+        presetId,
+        title,
+        ...(openInEditor ? { openInEditor: true } : {}),
+      },
+    };
+  }
+
   if (op === "canvas.update") {
     if (!canvasId) {
       throw new Error("Missing canvas value");
@@ -340,6 +383,42 @@ function parseCanvasCommand(
         canvasId,
         ...(title !== undefined ? { title } : {}),
         document: parseJsonOption("document-json", documentJson),
+      },
+    };
+  }
+
+  if (op === "canvas.snapshot.create") {
+    if (!sourcePath) {
+      throw new Error("Missing source-path value");
+    }
+
+    return {
+      op,
+      json,
+      args: {
+        workspaceId,
+        sourcePath,
+      },
+    };
+  }
+
+  if (op === "canvas.clone") {
+    if (!sourcePath && !snapshotId) {
+      throw new Error("Missing source-path or snapshot-id value");
+    }
+    if (!title) {
+      throw new Error("Missing title value");
+    }
+
+    return {
+      op,
+      json,
+      args: {
+        workspaceId,
+        ...(sourcePath !== undefined ? { sourcePath } : {}),
+        ...(snapshotId !== undefined ? { snapshotId } : {}),
+        title,
+        ...(openInEditor ? { openInEditor: true } : {}),
       },
     };
   }
@@ -544,9 +623,14 @@ function parseCommand(
     case "memory.delete":
       return parseMemoryCommand(op, argv, env.workspaceId);
     case "canvas.list":
+    case "canvas.preset.list":
     case "canvas.create":
+    case "canvas.create-from-preset":
     case "canvas.update":
+    case "canvas.snapshot.create":
+    case "canvas.clone":
     case "canvas.render":
+    case "canvas.inspect":
       return parseCanvasCommand(op, argv, env.workspaceId);
     case "ui.open-file":
     case "ui.close-file":

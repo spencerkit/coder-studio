@@ -66,7 +66,10 @@ import { SkillsHubClient } from "./skills/skills-hub-client.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
+import { CanvasAnchorCommentRepo } from "./storage/repositories/canvas-anchor-comment-repo.js";
+import { CanvasOverlayRepo } from "./storage/repositories/canvas-overlay-repo.js";
 import { CanvasRepo } from "./storage/repositories/canvas-repo.js";
+import { CanvasSnapshotRepo } from "./storage/repositories/canvas-snapshot-repo.js";
 import { CustomProviderRepo } from "./storage/repositories/custom-provider-repo.js";
 import { MemoryRepo } from "./storage/repositories/memory-repo.js";
 import { ProviderConfigRepo } from "./storage/repositories/provider-config-repo.js";
@@ -307,8 +310,20 @@ export async function createServer(
   const canvasRepo = new CanvasRepo({
     rootDir: join(stateRoot, "state", "canvases", "workspaces"),
   });
+  const canvasOverlayRepo = new CanvasOverlayRepo({
+    rootDir: join(stateRoot, "state", "canvas-overlays", "workspaces"),
+  });
+  const canvasAnchorCommentRepo = new CanvasAnchorCommentRepo({
+    rootDir: join(stateRoot, "state", "canvas-anchor-comments", "workspaces"),
+  });
+  const canvasSnapshotRepo = new CanvasSnapshotRepo({
+    filePath: join(stateRoot, "state", "canvases", "snapshots.json"),
+  });
   const canvasService = new CanvasService({
     canvasRepo,
+    canvasAnchorCommentRepo,
+    canvasOverlayRepo,
+    canvasSnapshotRepo,
     now: () => Date.now(),
   });
   const builtinSkillSyncMgr = new BuiltinSkillSyncManager({

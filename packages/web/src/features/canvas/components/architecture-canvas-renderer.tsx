@@ -1,8 +1,13 @@
 import type { CompiledCanvas } from "@coder-studio/core";
+import type { RefObject } from "react";
+import { useEffect, useRef } from "react";
+import type { CanvasSceneRegistry } from "./canvas-scene-registry";
 import { MermaidDiagram } from "./mermaid-diagram";
 
 interface ArchitectureCanvasRendererProps {
   canvas: Extract<CompiledCanvas, { kind: "architecture_canvas" }>;
+  sceneRegistry?: CanvasSceneRegistry;
+  sceneRootRef?: RefObject<HTMLElement | null>;
 }
 
 type ArchitectureDiagramSection = Extract<
@@ -119,9 +124,91 @@ function renderDiagramDetails(diagram: ArchitectureDiagramSection) {
   );
 }
 
-export function ArchitectureCanvasRenderer({ canvas }: ArchitectureCanvasRendererProps) {
+function registerMermaidSemanticElements(input: {
+  diagram: ArchitectureDiagramSection;
+  sceneRegistry?: CanvasSceneRegistry;
+  sceneRootRef?: RefObject<HTMLElement | null>;
+  mermaidContainer: HTMLDivElement | null;
+}) {
+  const { diagram, sceneRegistry, sceneRootRef, mermaidContainer } = input;
+  const sceneRoot = sceneRootRef?.current ?? null;
+  if (!sceneRegistry || !sceneRoot || !mermaidContainer) {
+    return;
+  }
+
+  const rootRect = sceneRoot.getBoundingClientRect();
+  const nodes = mermaidContainer.querySelectorAll("[data-node-id]");
+  const edges = mermaidContainer.querySelectorAll("[data-edge-id]");
+
+  nodes.forEach((node) => {
+    const nodeId = node.getAttribute("data-node-id");
+    if (!nodeId) {
+      return;
+    }
+
+    const rect = node.getBoundingClientRect();
+    const nodeMeta = diagram.nodes.find((item) => item.id === nodeId);
+    sceneRegistry.upsertElement({
+      id: `mermaid-node:${nodeId}`,
+      kind: "mermaid-node",
+      rect: {
+        x: rect.left - rootRect.left,
+        y: rect.top - rootRect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+      label: nodeMeta?.label ?? nodeId,
+      payload: {
+        nodeId,
+      },
+    });
+  });
+
+  edges.forEach((edgeElement, index) => {
+    const edgeId = edgeElement.getAttribute("data-edge-id");
+    const rect = edgeElement.getBoundingClientRect();
+    const [from = "", to = ""] = (edgeId ?? "").split(":");
+    const edgeMeta = diagram.edges.find((edge) => edge.from === from && edge.to === to);
+
+    sceneRegistry.upsertElement({
+      id: `mermaid-edge:${from}:${to}:${index}`,
+      kind: "mermaid-edge",
+      rect: {
+        x: rect.left - rootRect.left,
+        y: rect.top - rootRect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+      label: edgeMeta?.label ?? `${from} -> ${to}`,
+      payload: {
+        from,
+        to,
+      },
+    });
+  });
+}
+
+export function ArchitectureCanvasRenderer({
+  canvas,
+  sceneRegistry,
+  sceneRootRef,
+}: ArchitectureCanvasRendererProps) {
   const diagram = canvas.sections.find((section) => section.type === "diagram");
   const annotations = canvas.sections.find((section) => section.type === "annotations");
+  const mermaidContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!diagram?.mermaidSource) {
+      return;
+    }
+
+    registerMermaidSemanticElements({
+      diagram,
+      sceneRegistry,
+      sceneRootRef,
+      mermaidContainer: mermaidContainerRef.current,
+    });
+  }, [diagram, sceneRegistry, sceneRootRef]);
 
   if (!diagram) {
     return (
@@ -154,7 +241,9 @@ export function ArchitectureCanvasRenderer({ canvas }: ArchitectureCanvasRendere
         }}
       >
         {diagram.mermaidSource ? (
-          <MermaidDiagram source={diagram.mermaidSource} />
+          <div ref={mermaidContainerRef}>
+            <MermaidDiagram source={diagram.mermaidSource} />
+          </div>
         ) : (
           renderDiagramDetails(diagram)
         )}

@@ -442,6 +442,137 @@ describe("activation commands", () => {
     expect(result.data).toEqual([{ id: "canvas-1", workspaceId: "workspace-1" }]);
   });
 
+  it("allows token-auth websocket extended canvas commands within the scoped permission set", async () => {
+    const cases = [
+      {
+        op: "canvas.preset.list",
+        args: { workspaceId: "workspace-1" },
+        permissions: ["memory:read"],
+        expected: [{ id: "token-consumption-trend" }],
+      },
+      {
+        op: "canvas.create-from-preset",
+        args: {
+          workspaceId: "workspace-1",
+          presetId: "token-consumption-trend",
+          title: "Token Consumption",
+        },
+        permissions: ["memory:write"],
+        expected: { record: { id: "canvas-preset-1" } },
+      },
+      {
+        op: "canvas.snapshot.create",
+        args: {
+          workspaceId: "workspace-1",
+          sourcePath: ".coder-studio/canvases/token-consumption.csc",
+        },
+        permissions: ["memory:write"],
+        expected: { snapshotId: "snapshot-1" },
+      },
+      {
+        op: "canvas.clone",
+        args: {
+          workspaceId: "workspace-1",
+          sourcePath: ".coder-studio/canvases/token-consumption.csc",
+          title: "Token Consumption Copy",
+        },
+        permissions: ["memory:write"],
+        expected: { record: { id: "canvas-clone-1" } },
+      },
+      {
+        op: "canvas.inspect",
+        args: {
+          workspaceId: "workspace-1",
+          sourcePath: ".coder-studio/canvases/token-consumption.csc",
+        },
+        permissions: ["memory:read"],
+        expected: { sceneManifest: { version: 1, elements: [] } },
+      },
+    ];
+
+    for (const entry of cases) {
+      const request = createMockRequest({
+        mode: "session_token",
+        token: `tok-${entry.op}`,
+        sessionId: "sess-1",
+        workspaceId: "workspace-1",
+        providerId: "codex",
+        permissions: entry.permissions,
+        createdAt: 1,
+      });
+      const broadcaster = {
+        broadcast: vi.fn(),
+        sendToClient: vi.fn(() => true),
+        sendBinaryToClient: vi.fn(() => true),
+        getRequestMetadata: vi.fn(() => request),
+      } satisfies Broadcaster;
+      const ctx = createBaseContext({ broadcaster });
+      ctx.canvasService = {
+        list: vi.fn(),
+        listPresets: vi.fn(async () => [{ id: "token-consumption-trend" }]),
+        createFromPreset: vi.fn(async () => ({ record: { id: "canvas-preset-1" } })),
+        createSnapshot: vi.fn(async () => ({ snapshotId: "snapshot-1" })),
+        cloneCanvas: vi.fn(async () => ({ record: { id: "canvas-clone-1" } })),
+        getCanvasInspectionData: vi.fn(async () => ({
+          sceneManifest: { version: 1, elements: [] },
+        })),
+      } as never;
+
+      const result = await dispatch(
+        {
+          kind: "command",
+          id: `token-${entry.op}`,
+          op: entry.op,
+          args: entry.args,
+        },
+        ctx,
+        "ws-token"
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.data).toEqual(entry.expected);
+    }
+  });
+
+  it("rejects token-auth websocket extended canvas commands that target another workspace", async () => {
+    const request = createMockRequest({
+      mode: "session_token",
+      token: "tok-canvas-cross-workspace",
+      sessionId: "sess-1",
+      workspaceId: "workspace-1",
+      providerId: "codex",
+      permissions: ["memory:read"],
+      createdAt: 1,
+    });
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => request),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "token-canvas-inspect-cross-workspace",
+        op: "canvas.inspect",
+        args: {
+          workspaceId: "workspace-2",
+          sourcePath: ".coder-studio/canvases/token-consumption.csc",
+        },
+      },
+      ctx,
+      "ws-token"
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toEqual({
+      code: "permission_denied",
+      message: "Token is not authorized for the requested workspace",
+    });
+  });
+
   it("rejects token-auth websocket commands that target another workspace", async () => {
     const request = createMockRequest({
       mode: "session_token",

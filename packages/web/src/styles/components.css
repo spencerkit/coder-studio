@@ -10301,15 +10301,56 @@ textarea.input {
   transform-origin: top left;
 }
 
+.canvas-surface__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-compact);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-panel-bg);
+}
+
+.canvas-surface__export-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-compact);
+}
+
+.canvas-surface__annotation-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-compact);
+  min-width: 0;
+}
+
+.canvas-surface__annotation-btn {
+  width: 26px;
+  height: 26px;
+}
+
+.canvas-surface__annotation-btn--active {
+  background: var(--state-selected-bg);
+  color: var(--state-selected-fg, var(--text-primary));
+}
+
+.canvas-surface__tool-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .canvas-surface__zoom-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--gap-compact);
-  flex-shrink: 0;
-  padding: var(--sp-2) var(--sp-3);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--surface-panel-bg);
 }
 
 .canvas-surface__zoom-btn {
@@ -10330,6 +10371,203 @@ textarea.input {
   margin: 0;
   font: inherit;
   color: inherit;
+}
+
+.canvas-content__scene {
+  position: relative;
+}
+
+.canvas-comment-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas-comment-layer__item {
+  position: absolute;
+  max-width: 240px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  color: var(--text-primary);
+}
+
+.canvas-comment-layer__item--resolved {
+  opacity: 0.65;
+}
+
+.canvas-comment-layer__body {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.canvas-content__scene--export .canvas-overlay-layer__scene {
+  cursor: default;
+}
+
+.canvas-content__inspect-composer {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-panel-bg) 90%, white 10%);
+  box-shadow: var(--shadow-sm);
+}
+
+.canvas-content__inspect-composer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.canvas-content__inspect-eyebrow {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.canvas-content__inspect-selection-label {
+  display: block;
+  color: var(--text-primary);
+}
+
+.canvas-content__inspect-meta {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+}
+
+.canvas-content__inspect-dismiss,
+.canvas-content__inspect-primary,
+.canvas-content__inspect-secondary {
+  min-height: 32px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-content__inspect-primary {
+  background: var(--state-info-bg);
+  border-color: var(--state-info-border);
+}
+
+.canvas-content__inspect-secondary,
+.canvas-content__inspect-dismiss {
+  color: var(--text-secondary);
+}
+
+.canvas-content__inspect-dismiss {
+  flex: 0 0 auto;
+}
+
+.canvas-content__inspect-textarea {
+  min-height: 88px;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  resize: vertical;
+}
+
+.canvas-content__inspect-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+.canvas-content__inspect-error {
+  margin: 0;
+  color: var(--status-danger-fg);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+}
+
+.canvas-overlay-layer__scene {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.canvas-overlay-layer__scene--editable {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+.canvas-overlay-layer__scene--selecting {
+  cursor: default;
+}
+
+.canvas-overlay-layer__scene--inspect {
+  cursor: crosshair;
+}
+
+.canvas-overlay-layer__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.canvas-overlay-layer__selection {
+  stroke: color-mix(in srgb, var(--status-info-fg) 72%, white 28%);
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.canvas-overlay-layer__inspect-selection {
+  stroke: color-mix(in srgb, var(--status-warning-fg, #d97706) 78%, white 22%);
+  stroke-width: 2;
+  stroke-dasharray: 6 3;
+  fill: color-mix(in srgb, var(--status-warning-fg, #d97706) 10%, transparent 90%);
+  pointer-events: none;
+}
+
+.canvas-overlay-layer__handle {
+  fill: var(--surface-elevated);
+  stroke: color-mix(in srgb, var(--status-info-fg) 78%, white 22%);
+  stroke-width: 2;
+  pointer-events: auto;
+}
+
+.canvas-overlay-layer__handle--rect-resize {
+  cursor: nwse-resize;
+}
+
+.canvas-overlay-layer__handle--arrow-from,
+.canvas-overlay-layer__handle--arrow-to {
+  cursor: grab;
+}
+
+.canvas-overlay-layer__textarea {
+  position: absolute;
+  min-width: 140px;
+  min-height: 64px;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  font: inherit;
+  resize: both;
+  box-shadow: var(--shadow-md);
 }
 
 .architecture-canvas-mermaid {

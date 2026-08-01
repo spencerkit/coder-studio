@@ -3,6 +3,13 @@ import { z } from "zod";
 export const CanvasArtifactKind = z.enum(["architecture_canvas", "report_canvas"]);
 export type CanvasArtifactKind = z.infer<typeof CanvasArtifactKind>;
 
+export const CanvasPresetIdSchema = z.enum([
+  "token-consumption-trend",
+  "workspace-activity-summary",
+  "provider-usage-comparison",
+]);
+export type CanvasPresetId = z.infer<typeof CanvasPresetIdSchema>;
+
 export const CANVAS_DOCUMENT_VERSION = 1;
 
 export const CanvasRenderStatus = z.enum(["ready", "error", "rendering"]);
@@ -17,6 +24,127 @@ export const CanvasRenderErrorSchema = z.object({
   fieldPath: z.string().optional(),
 });
 export type CanvasRenderError = z.infer<typeof CanvasRenderErrorSchema>;
+
+const CanvasPointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+export type CanvasPoint = z.infer<typeof CanvasPointSchema>;
+
+const CanvasOverlayStrokeSchema = z.object({
+  id: z.string().trim().min(1),
+  type: z.literal("stroke"),
+  color: z.string().trim().min(1),
+  strokeWidth: z.number().positive(),
+  points: z.array(CanvasPointSchema).min(1),
+});
+
+const CanvasOverlayRectSchema = z.object({
+  id: z.string().trim().min(1),
+  type: z.literal("rect"),
+  color: z.string().trim().min(1),
+  strokeWidth: z.number().positive(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().nonnegative(),
+  height: z.number().nonnegative(),
+});
+
+const CanvasOverlayArrowSchema = z.object({
+  id: z.string().trim().min(1),
+  type: z.literal("arrow"),
+  color: z.string().trim().min(1),
+  strokeWidth: z.number().positive(),
+  from: CanvasPointSchema,
+  to: CanvasPointSchema,
+});
+
+const CanvasOverlayTextSchema = z.object({
+  id: z.string().trim().min(1),
+  type: z.literal("text"),
+  color: z.string().trim().min(1),
+  fontSize: z.number().positive(),
+  x: z.number(),
+  y: z.number(),
+  text: z.string().trim().min(1),
+});
+
+export const CanvasOverlayObjectSchema = z.discriminatedUnion("type", [
+  CanvasOverlayStrokeSchema,
+  CanvasOverlayRectSchema,
+  CanvasOverlayArrowSchema,
+  CanvasOverlayTextSchema,
+]);
+export type CanvasOverlayObject = z.infer<typeof CanvasOverlayObjectSchema>;
+
+export const CanvasOverlayDocumentSchema = z.object({
+  version: z.literal(1),
+  objects: z.array(CanvasOverlayObjectSchema),
+});
+export type CanvasOverlayDocument = z.infer<typeof CanvasOverlayDocumentSchema>;
+
+export const CanvasSceneRectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number().nonnegative(),
+  height: z.number().nonnegative(),
+});
+export type CanvasSceneRect = z.infer<typeof CanvasSceneRectSchema>;
+
+export const CanvasSceneElementKindSchema = z.enum([
+  "chart-block",
+  "chart-series",
+  "chart-point",
+  "report-stat",
+  "table-cell",
+  "callout",
+  "markdown-block",
+  "list-block",
+  "mermaid-node",
+  "mermaid-edge",
+  "overlay-object",
+]);
+export type CanvasSceneElementKind = z.infer<typeof CanvasSceneElementKindSchema>;
+
+export const CanvasSceneElementSchema = z.object({
+  id: z.string().trim().min(1),
+  kind: CanvasSceneElementKindSchema,
+  rect: CanvasSceneRectSchema,
+  label: z.string().trim().min(1).optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+});
+export type CanvasSceneElement = z.infer<typeof CanvasSceneElementSchema>;
+
+export const CanvasSceneManifestSchema = z.object({
+  version: z.literal(1),
+  elements: z.array(CanvasSceneElementSchema),
+});
+export type CanvasSceneManifest = z.infer<typeof CanvasSceneManifestSchema>;
+
+export const CanvasAnchorCommentSchema = z.object({
+  id: z.string().trim().min(1),
+  elementIds: z.array(z.string().trim().min(1)),
+  targets: z.array(CanvasSceneElementSchema).optional(),
+  selectionRect: CanvasSceneRectSchema.optional(),
+  body: z.string().trim().min(1),
+  status: z.enum(["open", "resolved"]),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+});
+export type CanvasAnchorComment = z.infer<typeof CanvasAnchorCommentSchema>;
+
+export const CanvasAnchorCommentDocumentSchema = z.object({
+  version: z.literal(1),
+  comments: z.array(CanvasAnchorCommentSchema),
+});
+export type CanvasAnchorCommentDocument = z.infer<typeof CanvasAnchorCommentDocumentSchema>;
+
+export function createEmptyCanvasOverlayDocument(): CanvasOverlayDocument {
+  return {
+    version: 1,
+    objects: [],
+  };
+}
 
 const GraphDiagramSchema = z.object({
   dsl: z.literal("mermaid"),
@@ -41,11 +169,60 @@ const ReportStatSchema = z.object({
   tone: z.enum(["neutral", "info", "success", "warning", "danger"]).optional(),
 });
 
+export const ReportChartKindSchema = z.enum(["line", "bar", "sparkline"]);
+export type ReportChartKind = z.infer<typeof ReportChartKindSchema>;
+
+export const ReportChartSeriesSchema = z.object({
+  name: z.string().trim().min(1),
+  values: z.array(z.number()),
+});
+export type ReportChartSeries = z.infer<typeof ReportChartSeriesSchema>;
+
+export const ReportChartBlockSchema = z.object({
+  type: z.literal("chart"),
+  kind: ReportChartKindSchema,
+  title: z.string().trim().min(1),
+  summary: z.string().trim().min(1).optional(),
+  unit: z.string().trim().min(1).optional(),
+  categories: z.array(z.string().trim().min(1)).min(1),
+  series: z.array(ReportChartSeriesSchema).min(1),
+  showLegend: z.boolean().optional(),
+});
+export type ReportChartBlock = z.infer<typeof ReportChartBlockSchema>;
+
+function validateReportChartSeriesAlignment(
+  sections: Array<{
+    blocks: Array<{ type: string; series?: Array<{ values: unknown[] }>; categories?: unknown[] }>;
+  }>,
+  ctx: z.RefinementCtx
+) {
+  sections.forEach((section, sectionIndex) => {
+    section.blocks.forEach((block, blockIndex) => {
+      if (block.type !== "chart") {
+        return;
+      }
+
+      block.series?.forEach((series, seriesIndex) => {
+        if (series.values.length === block.categories?.length) {
+          return;
+        }
+
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "series", seriesIndex, "values"],
+          message: "series.values length must match categories length",
+        });
+      });
+    });
+  });
+}
+
 const ReportBlockSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("stats"),
     items: z.array(ReportStatSchema).min(1),
   }),
+  ReportChartBlockSchema,
   z.object({
     type: z.literal("markdown"),
     markdown: z.string().trim().min(1),
@@ -67,7 +244,7 @@ const ReportBlockSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const ReportCanvasDocumentSchema = z.object({
+const ReportCanvasDocumentBaseSchema = z.object({
   summary: z.string().trim().min(1),
   stats: z.array(ReportStatSchema),
   sections: z
@@ -79,6 +256,11 @@ const ReportCanvasDocumentSchema = z.object({
     )
     .min(1),
 });
+export const ReportCanvasDocumentSchema = ReportCanvasDocumentBaseSchema.superRefine(
+  (value, ctx) => {
+    validateReportChartSeriesAlignment(value.sections, ctx);
+  }
+);
 export type ReportCanvasDocument = z.infer<typeof ReportCanvasDocumentSchema>;
 
 export const CanvasDocumentEnvelopeSchema = z.discriminatedUnion("kind", [
@@ -168,9 +350,10 @@ const CompiledReportBlockSchema = z.discriminatedUnion("type", [
       })
     ),
   }),
+  ReportChartBlockSchema,
 ]);
 
-const CompiledReportCanvasSchema = z.object({
+const CompiledReportCanvasBaseSchema = z.object({
   kind: z.literal("report_canvas"),
   title: z.string().trim().min(1),
   sections: z.array(
@@ -193,12 +376,45 @@ const CompiledReportCanvasSchema = z.object({
     ])
   ),
 });
+const CompiledReportCanvasSchema = CompiledReportCanvasBaseSchema.superRefine((value, ctx) => {
+  value.sections.forEach((section, sectionIndex) => {
+    if (section.type !== "section") {
+      return;
+    }
+
+    section.blocks.forEach((block, blockIndex) => {
+      if (block.type !== "chart") {
+        return;
+      }
+
+      block.series.forEach((series, seriesIndex) => {
+        if (series.values.length === block.categories.length) {
+          return;
+        }
+
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["sections", sectionIndex, "blocks", blockIndex, "series", seriesIndex, "values"],
+          message: "series.values length must match categories length",
+        });
+      });
+    });
+  });
+});
 
 export const CompiledCanvasSchema = z.discriminatedUnion("kind", [
   CompiledArchitectureCanvasSchema,
   CompiledReportCanvasSchema,
 ]);
 export type CompiledCanvas = z.infer<typeof CompiledCanvasSchema>;
+
+export const CanvasPresetSummarySchema = z.object({
+  id: CanvasPresetIdSchema,
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  kind: z.literal("report_canvas"),
+});
+export type CanvasPresetSummary = z.infer<typeof CanvasPresetSummarySchema>;
 
 export const CanvasDataResponseSchema = z
   .object({
@@ -209,6 +425,7 @@ export const CanvasDataResponseSchema = z
     kind: CanvasArtifactKind,
     renderStatus: z.enum(["ready", "error"]),
     lastError: CanvasRenderErrorSchema.nullable().optional(),
+    overlayDocument: CanvasOverlayDocumentSchema.optional(),
     compiledDocument: CompiledCanvasSchema.optional(),
   })
   .superRefine((value, ctx) => {
@@ -257,6 +474,24 @@ export const CanvasDataResponseSchema = z
     }
   });
 export type CanvasDataResponse = z.infer<typeof CanvasDataResponseSchema>;
+
+export const CanvasInspectionResponseSchema = CanvasDataResponseSchema.extend({
+  sceneManifest: CanvasSceneManifestSchema.optional(),
+  anchorCommentDocument: CanvasAnchorCommentDocumentSchema.optional(),
+  inspectionImageUrl: z.string().trim().min(1).optional(),
+});
+export type CanvasInspectionResponse = z.infer<typeof CanvasInspectionResponseSchema>;
+
+export const CanvasSnapshotDataResponseSchema = z.object({
+  snapshotId: z.string().trim().min(1),
+  workspaceId: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  kind: CanvasArtifactKind,
+  createdAt: z.number().int().nonnegative(),
+  sourceHash: z.string().trim().min(1),
+  compiledDocument: CompiledCanvasSchema,
+});
+export type CanvasSnapshotDataResponse = z.infer<typeof CanvasSnapshotDataResponseSchema>;
 
 export interface CanvasRecord {
   id: string;

@@ -212,7 +212,25 @@ describe("builtin skills", () => {
       `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.update`
     );
     expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.preset.list`
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.create-from-preset`
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.snapshot.create`
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.clone`
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
       `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.render`
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" canvas.inspect`
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      "If the user says the canvas changed, they added comments, or they annotated the canvas, re-run `canvas.inspect` on the same `.csc` source path."
     );
     expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
       `node "${AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN}" ui.open-file --path .coder-studio/canvases/<title-slug>.csc --json`
@@ -230,6 +248,11 @@ describe("builtin skills", () => {
     expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
       "readable `.coder-studio/canvases/<title-slug>.csc` paths"
     );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain('"type": "chart"');
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain(
+      "Chart kinds: `line` for trends, `bar` for comparisons, and `sparkline` for dense inline summaries."
+    );
+    expect(CODER_STUDIO_CANVAS_SKILL.content).toContain("/embedded/canvas-snapshot/<snapshot-id>");
     expect(CODER_STUDIO_CANVAS_SKILL.content).not.toContain("coder-studio canvas create");
     expect(CODER_STUDIO_CANVAS_SKILL.content).not.toContain("coder-studio ui open-file");
     expect(CODER_STUDIO_CANVAS_SKILL.content).not.toContain(
@@ -299,12 +322,19 @@ describe("builtin skills", () => {
     const canvasContent = await readFile(join(canvasEntry!.libraryPath, "SKILL.md"), "utf8");
     expect(canvasContent).toContain(AUTOMATION_CMD_ABSOLUTE_PATH_TOKEN);
     expect(canvasContent).toContain("canvas.create");
+    expect(canvasContent).toContain(
+      "If the user says the canvas changed, they added comments, or they annotated the canvas, re-run `canvas.inspect` on the same `.csc` source path."
+    );
     expect(canvasContent).toContain("ui.open-file --path .coder-studio/canvases/<title-slug>.csc");
     expect(canvasContent).toContain(
       "canvas.render --source-path .coder-studio/canvases/<title-slug>.csc"
     );
     expect(canvasContent).toContain("ui.open-canvas --canvas <canvas-id>");
     expect(canvasContent).toContain("readable `.coder-studio/canvases/<title-slug>.csc` paths");
+    expect(canvasContent).toContain('"type": "chart"');
+    expect(canvasContent).toContain(
+      "Chart kinds: `line` for trends, `bar` for comparisons, and `sparkline` for dense inline summaries."
+    );
     expect(canvasContent).not.toContain(".coder-studio/canvases/<canvas-id>.canvas.json");
     expect(await readFile(join(canvasEntry!.libraryPath, AUTOMATION_CMD_FILE_NAME), "utf8")).toBe(
       `${BUILTIN_AUTOMATION_BRIDGE_SOURCE.trimEnd()}\n`

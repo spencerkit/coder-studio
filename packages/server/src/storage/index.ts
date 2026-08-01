@@ -7,6 +7,9 @@ export {
   AuthSessionRepo,
   type AuthSessionRepoOptions,
 } from "./repositories/auth-session-repo.js";
+export { CanvasAnchorCommentRepo } from "./repositories/canvas-anchor-comment-repo.js";
+export { CanvasOverlayRepo } from "./repositories/canvas-overlay-repo.js";
+export { CanvasSnapshotRepo } from "./repositories/canvas-snapshot-repo.js";
 export {
   CustomProviderRepo,
   type CustomProviderRepoOptions,

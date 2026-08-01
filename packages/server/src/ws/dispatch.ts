@@ -269,8 +269,13 @@ const SESSION_TOKEN_ALLOWLIST = new Set([
   "automation.capabilities",
   "automation.identify",
   "canvas.create",
+  "canvas.create-from-preset",
+  "canvas.clone",
+  "canvas.inspect",
   "canvas.list",
+  "canvas.preset.list",
   "canvas.render",
+  "canvas.snapshot.create",
   "canvas.update",
   "connection.probe",
   "git.diff",
@@ -351,10 +356,15 @@ function getSessionTokenPermission(msg: Command): AutomationPermission | null | 
     case "memory.delete":
       return "memory:write";
     case "canvas.list":
+    case "canvas.preset.list":
     case "canvas.render":
+    case "canvas.inspect":
       return "memory:read";
     case "canvas.create":
+    case "canvas.create-from-preset":
     case "canvas.update":
+    case "canvas.snapshot.create":
+    case "canvas.clone":
       return "memory:write";
     case "uiAction.dispatch":
       return getUiActionPermission(msg.args);
@@ -406,9 +416,14 @@ function validateSessionTokenScope(
     case "memory.update":
     case "memory.delete":
     case "canvas.list":
+    case "canvas.preset.list":
     case "canvas.create":
+    case "canvas.create-from-preset":
     case "canvas.update":
-    case "canvas.render": {
+    case "canvas.snapshot.create":
+    case "canvas.clone":
+    case "canvas.render":
+    case "canvas.inspect": {
       const workspaceId = getWorkspaceIdArg(msg.args);
       if (workspaceId && workspaceId !== authContext.workspaceId) {
         return createPermissionDeniedError("Token is not authorized for the requested workspace");
