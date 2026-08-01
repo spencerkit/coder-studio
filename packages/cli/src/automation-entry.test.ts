@@ -167,6 +167,110 @@ describe("automation entry", () => {
     });
   });
 
+  it("maps canvas.inspect with source-path in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["canvas.inspect", "--source-path", "docs/report.md", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "canvas.inspect",
+      args: {
+        workspaceId: "ws-1",
+        sourcePath: "docs/report.md",
+      },
+    });
+  });
+
+  it("maps canvas.preset.list in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main(["canvas.preset.list", "--json"]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "canvas.preset.list",
+      args: {
+        workspaceId: "ws-1",
+      },
+    });
+  });
+
+  it("maps canvas.create-from-preset with open flag in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "canvas.create-from-preset",
+      "--preset-id",
+      "token-consumption-trend",
+      "--title",
+      "Usage Trend",
+      "--open",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "canvas.create-from-preset",
+      args: {
+        workspaceId: "ws-1",
+        presetId: "token-consumption-trend",
+        title: "Usage Trend",
+        openInEditor: true,
+      },
+    });
+  });
+
+  it("maps canvas.snapshot.create with source-path in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "canvas.snapshot.create",
+      "--source-path",
+      ".coder-studio/canvases/usage-trend.csc",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "canvas.snapshot.create",
+      args: {
+        workspaceId: "ws-1",
+        sourcePath: ".coder-studio/canvases/usage-trend.csc",
+      },
+    });
+  });
+
+  it("maps canvas.clone from a snapshot in session mode", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    await main([
+      "canvas.clone",
+      "--snapshot-id",
+      "snapshot_123",
+      "--title",
+      "Usage Trend Copy",
+      "--open",
+      "--json",
+    ]);
+
+    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+      apiUrl: "http://127.0.0.1:4173",
+      resolveStrategy: "session",
+      op: "canvas.clone",
+      args: {
+        workspaceId: "ws-1",
+        snapshotId: "snapshot_123",
+        title: "Usage Trend Copy",
+        openInEditor: true,
+      },
+    });
+  });
+
   it("rejects unsupported automation ops", async () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
 

@@ -3,17 +3,38 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EmbeddedCanvasRoute } from "./embedded-canvas-route";
 
 const fetchCanvasDataMock = vi.fn();
+const echartsMock = vi.hoisted(() => {
+  const chart = {
+    dispose: vi.fn(),
+    resize: vi.fn(),
+    setOption: vi.fn(),
+  };
+
+  return {
+    chart,
+    init: vi.fn(() => chart),
+  };
+});
 
 vi.mock("../api", () => ({
   fetchCanvasData: (...args: unknown[]) => fetchCanvasDataMock(...args),
 }));
 
+vi.mock("echarts", () => ({
+  init: echartsMock.init,
+}));
+
+const { EmbeddedCanvasRoute } = await import("./embedded-canvas-route");
+
 describe("EmbeddedCanvasRoute", () => {
   beforeEach(() => {
     fetchCanvasDataMock.mockReset();
+    echartsMock.init.mockClear();
+    echartsMock.chart.dispose.mockClear();
+    echartsMock.chart.resize.mockClear();
+    echartsMock.chart.setOption.mockClear();
   });
 
   it("renders a loading state while the request is in flight", async () => {
@@ -122,6 +143,63 @@ describe("EmbeddedCanvasRoute", () => {
     expect(await screen.findByText("Key Findings")).toBeInTheDocument();
     expect(screen.getByText("Packages")).toBeInTheDocument();
     expect(screen.getByText("Server owns rendering.")).toBeInTheDocument();
+  });
+
+  it("renders report canvas charts", async () => {
+    fetchCanvasDataMock.mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      sourcePath: ".coder-studio/canvases/token-consumption.csc",
+      title: "Token Consumption",
+      kind: "report_canvas",
+      renderStatus: "ready",
+      lastError: null,
+      compiledDocument: {
+        kind: "report_canvas",
+        title: "Token Consumption",
+        sections: [
+          {
+            type: "section",
+            title: "Usage",
+            blocks: [
+              {
+                type: "chart",
+                kind: "line",
+                title: "Token Consumption",
+                summary: "Prompt vs completion over the last 3 hours.",
+                unit: "tokens",
+                categories: ["09:00", "10:00", "11:00"],
+                series: [
+                  { name: "Prompt", values: [1200, 1800, 900] },
+                  { name: "Completion", values: [400, 700, 500] },
+                ],
+                showLegend: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/embedded/canvas/ws-1?sourcePath=.coder-studio%2Fcanvases%2Ftoken-consumption.csc",
+        ]}
+      >
+        <Routes>
+          <Route path="/embedded/canvas/:workspaceId" element={<EmbeddedCanvasRoute />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Token Consumption" })
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("report-canvas-chart-line")).toBeInTheDocument();
+    expect(screen.getByLabelText("Token Consumption line chart")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(echartsMock.init).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("renders canvas error state when renderStatus is error", async () => {

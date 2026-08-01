@@ -121,8 +121,14 @@ export function useWorkspaceUiStatePersistence(workspaceId: string) {
           : {}),
         ...(shouldIncludeEditorTabState
           ? {
-              openEditorTabs: currentOpenEditorTabs,
-              activeEditorTab: currentActiveEditorTab,
+              openEditorTabs:
+                "openEditorTabs" in sanitizedPatch
+                  ? sanitizedPatch.openEditorTabs
+                  : currentOpenEditorTabs,
+              activeEditorTab:
+                "activeEditorTab" in sanitizedPatch
+                  ? sanitizedPatch.activeEditorTab
+                  : currentActiveEditorTab,
             }
           : {}),
         ...sanitizedPatch,

@@ -96,6 +96,7 @@ describe("ExplorerPanel", () => {
     expect(screen.queryByRole("heading", { level: 2, name: /Open Files|打开的文件/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "src/alpha.tsx" })).toBeNull();
     expect(sections[0]).toHaveTextContent(/Workspace/);
+    expect(sections[0]).not.toHaveTextContent(/Workspace\s*\d+/);
     expect(screen.queryByTestId("agent-instructions-section")).toBeNull();
     expect(sections).toHaveLength(1);
     expect(stackedBody?.querySelector(".panel-header")).toBeNull();

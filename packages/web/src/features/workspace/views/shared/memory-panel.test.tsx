@@ -121,6 +121,53 @@ describe("MemoryPanel", () => {
     );
   });
 
+  it("shows a tooltip with the full memory content when hovering a truncated entry", async () => {
+    const longEntry: WorkspaceMemoryEntry = {
+      ...baseMemoryEntry,
+      id: "mem-long",
+      content:
+        "This memory entry is intentionally long so the list preview truncates it, while the hover tooltip still reveals the full normalized content for quick reading.",
+    };
+    const shortEntry: WorkspaceMemoryEntry = {
+      ...baseMemoryEntry,
+      id: "mem-short",
+      content: "Short memory.",
+    };
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "memory.list") {
+        return [longEntry, shortEntry];
+      }
+
+      return null;
+    });
+
+    renderMemoryPanel(sendCommand);
+
+    const truncatedPreview = await screen.findByText((content, element) => {
+      return (
+        element?.classList.contains("memory-panel__item-content") === true &&
+        content.startsWith(
+          "This memory entry is intentionally long so the list preview truncates it"
+        ) &&
+        content.endsWith("...")
+      );
+    });
+
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.mouseEnter(truncatedPreview);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent(longEntry.content);
+    expect(truncatedPreview).toHaveAttribute("aria-describedby", tooltip.getAttribute("id") ?? "");
+
+    fireEvent.mouseLeave(truncatedPreview);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByText("Short memory."));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("creates and deletes memory entries without issuing inline update commands", async () => {
     let entries: WorkspaceMemoryEntry[] = [baseMemoryEntry];
     const sendCommand = vi.fn(async (op: string, args: unknown) => {

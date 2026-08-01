@@ -1,5 +1,19 @@
+import { type ReportChartKind, ReportChartKindSchema } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { validateCanvasSource } from "./validation.js";
+
+function createReportChartBlock(kind: ReportChartKind) {
+  return {
+    type: "chart" as const,
+    kind,
+    title: "Package trends",
+    summary: "Packages over time.",
+    unit: "packages",
+    categories: ["Jan", "Feb"],
+    series: [{ name: "Packages", values: [6, 7] }],
+    showLegend: true,
+  };
+}
 
 describe("validateCanvasSource", () => {
   it("accepts a valid architecture canvas envelope", () => {
@@ -54,6 +68,44 @@ describe("validateCanvasSource", () => {
       document: expect.objectContaining({
         kind: "report_canvas",
         title: "Audit",
+      }),
+    });
+  });
+
+  it.each(
+    ReportChartKindSchema.options
+  )("accepts a valid report canvas chart block with kind %s", (kind) => {
+    const chartBlock = createReportChartBlock(kind);
+    const result = validateCanvasSource(
+      JSON.stringify({
+        version: 1,
+        kind: "report_canvas",
+        title: "Audit",
+        document: {
+          summary: "Workspace audit.",
+          stats: [{ label: "Packages", value: 6 }],
+          sections: [
+            {
+              title: "Findings",
+              blocks: [chartBlock],
+            },
+          ],
+        },
+      })
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      document: expect.objectContaining({
+        kind: "report_canvas",
+        title: "Audit",
+        document: expect.objectContaining({
+          sections: [
+            expect.objectContaining({
+              blocks: [expect.objectContaining(chartBlock)],
+            }),
+          ],
+        }),
       }),
     });
   });
@@ -169,6 +221,43 @@ describe("validateCanvasSource", () => {
         category: "validation_error",
         message: "Canvas source must not contain raw HTML",
         fieldPath: "document.sections.0.blocks.0.markdown",
+      },
+    });
+  });
+
+  it("rejects report chart series with mismatched values lengths", () => {
+    const result = validateCanvasSource(
+      JSON.stringify({
+        version: 1,
+        kind: "report_canvas",
+        title: "Broken",
+        document: {
+          summary: "Workspace audit.",
+          stats: [],
+          sections: [
+            {
+              title: "Findings",
+              blocks: [
+                {
+                  type: "chart",
+                  kind: "line",
+                  title: "Package trends",
+                  categories: ["Jan", "Feb"],
+                  series: [{ name: "Packages", values: [6] }],
+                },
+              ],
+            },
+          ],
+        },
+      })
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        category: "validation_error",
+        message: expect.any(String),
+        fieldPath: "document.sections.0.blocks.0.series.0.values",
       },
     });
   });

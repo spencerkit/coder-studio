@@ -12,6 +12,39 @@ export interface RuntimeExecuteMeta {
   authContext?: RequestAuthContext;
 }
 
+export type RuntimeSummaryScope = "runtime" | "workspace" | "bridge";
+
+export interface NativeRuntimeSummary {
+  id: string;
+  kind: "native";
+  scope: "runtime";
+}
+
+export interface WorkspaceScopedWslRuntimeSummary {
+  id: string;
+  kind: "wsl";
+  scope: "workspace";
+  workspaceId: string;
+  distro: string;
+}
+
+export interface BridgeScopedWslRuntimeSummary {
+  id: string;
+  kind: "wsl";
+  scope: "bridge";
+  distro: string;
+  runtimeVersion?: string;
+  nodeVersion?: string;
+  pid?: number;
+  uptimeMs?: number;
+  activeWorkspaceIds: string[];
+}
+
+export type RuntimeSummary =
+  | NativeRuntimeSummary
+  | WorkspaceScopedWslRuntimeSummary
+  | BridgeScopedWslRuntimeSummary;
+
 export interface RuntimeHostBridge {
   issueSessionToken(input: {
     sessionId: string;
@@ -34,5 +67,6 @@ export interface RuntimeHandle {
   execute(op: string, args: unknown, meta?: RuntimeExecuteMeta): Promise<unknown>;
   disposeWorkspace(workspaceId: string): Promise<void>;
   setProviderRegistry?(providers: ProviderDefinition[]): void;
+  getSummary?(): RuntimeSummary;
   health(): Promise<{ ok: true }>;
 }

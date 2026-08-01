@@ -670,9 +670,19 @@ describe("EditorSurface", () => {
           baseHash: "hash-css",
           isDirty: true,
         },
+        activeEditorTab: { kind: "file", path: "packages/web/src/styles/components.css" },
       }),
       activateOpenFile,
       closeOpenFilePath,
+      openEditorTabs: [
+        {
+          kind: "file",
+          path: "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
+        },
+        { kind: "file", path: "packages/web/src/styles/components.css" },
+        { kind: "file", path: "packages/web/src/features/agent-panes/index.tsx" },
+        { kind: "file", path: "packages/web/src/features/workspace/index.tsx" },
+      ],
       openEditorPaths: [
         "packages/web/src/features/code-editor/views/shared/editor-surface.tsx",
         "packages/web/src/styles/components.css",
@@ -777,6 +787,7 @@ describe("EditorSurface", () => {
   it("does not derive global editor tabs from shared open-file cache entries", () => {
     const state = createState({
       activeFilePath: "src/global.ts",
+      activeEditorTab: { kind: "file", path: "src/global.ts" },
       currentFile: {
         kind: "text",
         path: "src/global.ts",
@@ -786,6 +797,7 @@ describe("EditorSurface", () => {
         isDirty: false,
       },
       openEditorPaths: ["src/global.ts"],
+      openEditorTabs: [{ kind: "file", path: "src/global.ts" }],
       openFiles: {
         "src/global.ts": {
           kind: "text",

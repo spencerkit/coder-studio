@@ -1,18 +1,22 @@
+import { randomUUID } from "node:crypto";
 import {
   copyFile,
   lstat,
   mkdir,
   readdir,
   readlink,
+  rename,
   rm,
   symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { ProviderDefinition, SkillMountRelation } from "@coder-studio/core";
 import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
 import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js";
+
+const MOUNT_STAGING_DIR_NAME = ".coder-studio-mount-staging";
 
 interface SkillMountManagerDeps {
   getProviderRegistry: () => ProviderDefinition[];
@@ -82,7 +86,7 @@ export class SkillMountManager {
     }
 
     await mkdir(dirname(targetPath), { recursive: true });
-    if (existing?.targetPath) {
+    if (existing?.targetPath && !isSamePath(existing.targetPath, targetPath)) {
       await unlinkSafe(existing.targetPath);
     }
 
@@ -92,24 +96,22 @@ export class SkillMountManager {
     let mountModeResolved: SkillMountRelation["mountModeResolved"] = "symlink";
     if (shouldCopyMount) {
       mountModeResolved = "copy";
-      await rm(targetPath, { recursive: true, force: true });
-      await copyRecursively(libraryEntry.libraryPath, targetPath);
+      await materializeCopyMount({
+        sourcePath: libraryEntry.libraryPath,
+        targetPath,
+        mountedOverrides: input.mountedOverrides,
+      });
     } else {
       try {
-        await rm(targetPath, { recursive: true, force: true });
-        await symlink(libraryEntry.libraryPath, targetPath);
+        await materializeSymlinkMount(libraryEntry.libraryPath, targetPath);
       } catch {
         mountModeResolved = "copy";
-        await rm(targetPath, { recursive: true, force: true });
-        await copyRecursively(libraryEntry.libraryPath, targetPath);
+        await materializeCopyMount({
+          sourcePath: libraryEntry.libraryPath,
+          targetPath,
+          mountedOverrides: input.mountedOverrides,
+        });
       }
-    }
-
-    for (const override of input.mountedOverrides ?? []) {
-      const overridePath = join(targetPath, override.relativePath);
-      await mkdir(dirname(overridePath), { recursive: true });
-      await unlinkIfSymlink(overridePath);
-      await writeFile(overridePath, override.content, "utf8");
     }
 
     const relation: SkillMountRelation = {
@@ -137,6 +139,12 @@ export class SkillMountManager {
     }
     this.deps.skillMountRepo.delete(providerId, skillSlug);
   }
+}
+
+interface MaterializeCopyMountInput {
+  sourcePath: string;
+  targetPath: string;
+  mountedOverrides?: Array<{ relativePath: string; content: string }>;
 }
 
 function isSamePath(left: string, right: string): boolean {
@@ -171,6 +179,98 @@ async function unlinkIfSymlink(path: string): Promise<void> {
   } catch {
     return;
   }
+}
+
+async function materializeCopyMount(input: MaterializeCopyMountInput): Promise<void> {
+  await replaceMountedPath(input.targetPath, async (stagedPath) => {
+    await copyRecursively(input.sourcePath, stagedPath);
+    await applyMountedOverrides(stagedPath, input.mountedOverrides);
+  });
+}
+
+async function materializeSymlinkMount(sourcePath: string, targetPath: string): Promise<void> {
+  await replaceMountedPath(targetPath, async (stagedPath) => {
+    await symlink(sourcePath, stagedPath);
+  });
+}
+
+async function applyMountedOverrides(
+  targetPath: string,
+  mountedOverrides?: Array<{ relativePath: string; content: string }>
+): Promise<void> {
+  for (const override of mountedOverrides ?? []) {
+    const overridePath = join(targetPath, override.relativePath);
+    await mkdir(dirname(overridePath), { recursive: true });
+    await unlinkIfSymlink(overridePath);
+    await writeFile(overridePath, override.content, "utf8");
+  }
+}
+
+async function replaceMountedPath(
+  targetPath: string,
+  materialize: (stagedPath: string) => Promise<void>
+): Promise<void> {
+  const stagingRoot = join(dirname(targetPath), MOUNT_STAGING_DIR_NAME);
+  const token = randomUUID();
+  const stagedPath = join(stagingRoot, `${basename(targetPath)}-${token}`);
+  const backupPath = join(stagingRoot, `${basename(targetPath)}-backup-${token}`);
+  let hasBackup = false;
+
+  await mkdir(stagingRoot, { recursive: true });
+
+  try {
+    await materialize(stagedPath);
+
+    if (await pathExists(targetPath)) {
+      await rename(targetPath, backupPath);
+      hasBackup = true;
+    }
+
+    try {
+      await rename(stagedPath, targetPath);
+    } catch (error) {
+      if (hasBackup) {
+        await restoreMountedPathBackup(backupPath, targetPath);
+        hasBackup = false;
+      }
+      throw error;
+    }
+
+    if (hasBackup) {
+      await unlinkSafe(backupPath);
+    }
+  } catch (error) {
+    await removeIfExists(stagedPath);
+    if (hasBackup) {
+      await restoreMountedPathBackup(backupPath, targetPath).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function removeIfExists(path: string): Promise<void> {
+  if (!(await pathExists(path))) {
+    return;
+  }
+
+  await unlinkSafe(path);
+}
+
+async function restoreMountedPathBackup(backupPath: string, targetPath: string): Promise<void> {
+  if (!(await pathExists(backupPath))) {
+    return;
+  }
+
+  await rename(backupPath, targetPath);
 }
 
 async function copyRecursively(source: string, target: string): Promise<void> {

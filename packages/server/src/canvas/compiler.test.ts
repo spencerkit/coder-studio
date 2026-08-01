@@ -1,5 +1,19 @@
+import { type ReportChartKind, ReportChartKindSchema } from "@coder-studio/core";
 import { describe, expect, it } from "vitest";
 import { compileCanvasDocument } from "./compiler.js";
+
+function createReportChartBlock(kind: ReportChartKind) {
+  return {
+    type: "chart" as const,
+    kind,
+    title: "Package trends",
+    summary: "Packages over time.",
+    unit: "packages",
+    categories: ["Jan", "Feb"],
+    series: [{ name: "Packages", values: [6, 7] }],
+    showLegend: true,
+  };
+}
 
 describe("compileCanvasDocument", () => {
   it("produces an architecture_canvas render model", () => {
@@ -47,7 +61,7 @@ describe("compileCanvasDocument", () => {
     });
   });
 
-  it("produces a report_canvas render model", () => {
+  it("stringifies report stats values", () => {
     const compiled = compileCanvasDocument({
       version: 1,
       kind: "report_canvas",
@@ -91,6 +105,55 @@ describe("compileCanvasDocument", () => {
         },
       ],
     });
+  });
+
+  it.each(
+    ReportChartKindSchema.options
+  )("preserves a %s chart block when compiling report canvases", (kind) => {
+    const chartBlock = createReportChartBlock(kind);
+    const compiled = compileCanvasDocument({
+      version: 1,
+      kind: "report_canvas",
+      title: "Audit",
+      document: {
+        summary: "Workspace audit.",
+        stats: [],
+        sections: [
+          {
+            title: "Findings",
+            blocks: [
+              { type: "markdown", markdown: "Server owns rendering." },
+              chartBlock,
+              {
+                type: "callout",
+                tone: "info",
+                title: "Ownership",
+                body: "Charts stay in their original position.",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(compiled.kind).toBe("report_canvas");
+    expect(compiled.title).toBe("Audit");
+    expect(compiled.sections).toHaveLength(2);
+    expect(compiled.sections.map((section) => section.type)).toEqual(["stats", "section"]);
+    expect(compiled.sections[0]).toEqual({
+      type: "stats",
+      items: [],
+    });
+    expect(compiled.sections[1]).toMatchObject({
+      type: "section",
+      title: "Findings",
+    });
+    expect(compiled.sections[1]?.blocks.map((block) => block.type)).toEqual([
+      "markdown",
+      "chart",
+      "callout",
+    ]);
+    expect(compiled.sections[1]?.blocks[1]).toEqual(chartBlock);
   });
 
   it("uses Mermaid flowchart compilation for Mermaid architecture canvases", () => {

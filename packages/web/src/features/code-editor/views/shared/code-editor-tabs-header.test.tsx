@@ -39,7 +39,7 @@ describe("CodeEditorTabsHeader", () => {
 
   it("opens a tab context menu with keep open for preview tabs", () => {
     const keepOpen = vi.fn();
-    render(
+    const { container } = render(
       <CodeEditorTabsHeader
         activeFilePath="src/preview.ts"
         activeFullPath="/workspace/src/preview.ts"
@@ -57,6 +57,12 @@ describe("CodeEditorTabsHeader", () => {
     );
 
     fireEvent.contextMenu(screen.getByRole("tab"));
+    const menuLayer = document.body.querySelector(".file-context-menu-layer");
+
+    expect(menuLayer).toBeInTheDocument();
+    expect(menuLayer?.parentElement).toBe(document.body);
+    expect(container.querySelector("header")?.contains(menuLayer as Node)).toBe(false);
+
     fireEvent.click(screen.getByRole("menuitem", { name: "Keep Open" }));
 
     expect(keepOpen).toHaveBeenCalledWith({

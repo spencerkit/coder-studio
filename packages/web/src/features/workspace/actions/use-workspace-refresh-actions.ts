@@ -18,6 +18,7 @@ import {
   applyRootTreeRefresh,
   collectRefreshTargets,
 } from "./file-tree-refresh";
+import { useWorkspaceUiStatePersistence } from "./use-workspace-ui-state-persistence";
 
 type WorkspaceRefreshStatus = "idle" | "refreshing" | "error";
 
@@ -38,10 +39,31 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
   const setWorktreeList = useSetAtom(worktreeListAtomFamily(workspaceId));
   const setFileTree = useSetAtom(fileTreeAtomFamily(workspaceId));
   const setLoadedDirs = useSetAtom(loadedDirsAtomFamily(workspaceId));
+  const setExpandedDirs = useSetAtom(expandedDirsAtomFamily(workspaceId));
   const setEditorRefreshToken = useSetAtom(editorRefreshTokenAtomFamily(workspaceId));
+  const { persistUiState } = useWorkspaceUiStatePersistence(workspaceId);
   const [status, setStatus] = useState<WorkspaceRefreshStatus>("idle");
   const inFlightRef = useRef(false);
   const queuedRef = useRef(false);
+
+  const syncExpandedDirs = useCallback(
+    (current: Set<string> | null, next: Set<string>) => {
+      if (current === null) {
+        return next;
+      }
+
+      if (current.size === next.size && [...current].every((value) => next.has(value))) {
+        return current;
+      }
+
+      const normalized = collectRefreshTargets(next);
+      const synced = new Set(normalized);
+      setExpandedDirs(synced);
+      void persistUiState({ fileTreeExpandedDirs: normalized });
+      return synced;
+    },
+    [persistUiState, setExpandedDirs]
+  );
 
   const refreshWorkspace = useCallback(async () => {
     if (!workspaceId) {
@@ -106,12 +128,16 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
 
           let currentTree = reconciled.tree;
           let currentLoadedDirs = reconciled.loadedDirs;
-          let currentExpandedDirs = reconciled.prunedExpandedDirs;
+          let currentExpandedDirs = syncExpandedDirs(expandedDirs, reconciled.prunedExpandedDirs);
 
           setFileTree(currentTree);
           setLoadedDirs(currentLoadedDirs);
 
           for (const dirPath of collectRefreshTargets(currentExpandedDirs)) {
+            if (!currentExpandedDirs.has(dirPath)) {
+              continue;
+            }
+
             const result = await dispatch<ReadTreeResult>("file.readTree", {
               workspaceId,
               subPath: dirPath,
@@ -132,7 +158,10 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
 
             currentTree = refreshed.tree;
             currentLoadedDirs = new Set(refreshed.loadedDirs).add(dirPath);
-            currentExpandedDirs = refreshed.prunedExpandedDirs;
+            currentExpandedDirs = syncExpandedDirs(
+              currentExpandedDirs,
+              refreshed.prunedExpandedDirs
+            );
 
             setFileTree(currentTree);
             setLoadedDirs(currentLoadedDirs);
@@ -168,12 +197,15 @@ export function useWorkspaceRefreshActions(workspaceId: string) {
     expandedDirs,
     loadedDirs,
     pushToast,
+    persistUiState,
     setBranchList,
     setEditorRefreshToken,
+    setExpandedDirs,
     setFileTree,
     setGitState,
     setLoadedDirs,
     setWorktreeList,
+    syncExpandedDirs,
     t,
     workspaceId,
   ]);

@@ -175,10 +175,23 @@ export const EditorSurface: FC<EditorSurfaceProps> = ({
     : mergeOpenEditorPaths(openEditorPaths, activeFilePath ? [activeFilePath] : undefined);
   const visibleEditorTabs = isCommitPreview
     ? []
-    : [
-        ...visibleEditorPaths.map(resolveFileEditorTab),
-        ...openEditorTabs.filter((tab) => tab.kind === "browser" || tab.kind === "canvas"),
-      ];
+    : (() => {
+        const seen = new Map<string, Extract<WorkspaceEditorTab, { kind: "file" }>>();
+        for (const tab of openEditorTabs) {
+          if (tab.kind === "file") {
+            seen.set(tab.path, tab);
+          }
+        }
+
+        if (activeFilePath && !seen.has(activeFilePath)) {
+          seen.set(activeFilePath, resolveFileEditorTab(activeFilePath));
+        }
+
+        return [
+          ...seen.values(),
+          ...openEditorTabs.filter((tab) => tab.kind === "browser" || tab.kind === "canvas"),
+        ];
+      })();
   const activeFullPath =
     resolvedActiveEditorTab?.kind === "canvas"
       ? resolvedActiveEditorTab.sourcePath

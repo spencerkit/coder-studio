@@ -8,6 +8,7 @@
 
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { EmbeddedCanvasRoute } from "./features/canvas/routes/embedded-canvas-route";
+import { EmbeddedCanvasSnapshotRoute } from "./features/canvas/routes/embedded-canvas-snapshot-route";
 import { useViewport } from "./hooks/use-viewport";
 import { DesktopShell } from "./shells/desktop-shell";
 import { MobileShell } from "./shells/mobile-shell";
@@ -23,6 +24,10 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/embedded/canvas/:workspaceId" element={<EmbeddedCanvasRoute />} />
+        <Route
+          path="/embedded/canvas-snapshot/:snapshotId"
+          element={<EmbeddedCanvasSnapshotRoute />}
+        />
         <Route path="*" element={<ShellSwitch />} />
       </Routes>
     </BrowserRouter>
