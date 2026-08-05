@@ -45,11 +45,14 @@ Runtime 版本可以独立于 Desktop 安装包版本：
 
 ```powershell
 $env:CODER_STUDIO_RUNTIME_VERSION='0.5.7'
-$env:CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION='0.5.6'
+$env:CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION='0.1.0'
 pnpm build:desktop-runtime
 ```
 
-未设置时，Runtime 版本回退到 CLI package 版本，最低 Shell 版本回退到 Desktop package 版本。
+正式发布时，Runtime 与 CLI 共用产品版本：未设置覆盖变量时，Runtime 版本读取
+`packages/cli/package.json`。Desktop Shell 使用自己的版本线并从 `0.1.0` 开始，最低 Shell
+版本读取 `packages/desktop/package.json`。`CODER_STUDIO_RUNTIME_VERSION` 主要用于候选包和发布验证，
+不应让正式 Runtime 长期偏离 CLI 版本。
 
 所有 Product Runtime 和 Engine 生产资源都会移除 `.map`。构建目录中的 Electron Shell sourcemap
 只用于单独的错误诊断，`electron-builder` 仍会从安装包中排除它们。

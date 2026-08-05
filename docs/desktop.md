@@ -97,7 +97,19 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 
 ## 版本与更新
 
-桌面包版本应与 `packages/cli/package.json` 和 GitHub Release tag 保持一致。桌面应用使用 `electron-updater` 和 `electron-builder.yml` 中的 GitHub provider：
+版本分为两条发布线：
+
+| 产物 | 版本来源 | 初始/当前版本 | 发布规则 |
+| --- | --- | --- | --- |
+| CLI + Product Runtime | `packages/cli/package.json` | `0.5.6` | 两者共用版本号 |
+| Desktop Shell + 安装包 | `packages/desktop/package.json` | `0.1.0` | 独立递增 |
+| Engine ABI | Runtime manifest 的 `requiredEngineVersion` | `1` | 只有宿主兼容边界变化时递增 |
+
+`scripts/package-desktop.ts` 只读取 Desktop package 版本；Runtime 构建默认只读取 CLI package
+版本。Runtime manifest 的 `minShellVersion` 用于表达某个 Runtime 所需的最低 Desktop 版本，
+因此两条 SemVer 不需要数值一致。
+
+桌面应用使用 `electron-updater` 和 `electron-builder.yml` 中的 GitHub provider：
 
 - 启动后进行非阻塞检查；
 - `Help > Check for Updates...` 可以手动检查；
@@ -106,6 +118,12 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 - sidecar 内现有 npm updater 被明确标记为不适用，避免桌面包执行全局 npm 更新。
 
 GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据（例如 Windows 的 `latest.yml`）。缺少更新元数据时，安装包仍能运行，但自动更新不可用。
+
+当前 Desktop 和 Runtime 都从同一仓库的 `releases/latest/download` 获取稳定通道文件，而 GitHub
+只能有一个 latest Release。因此每次把任一版本线发布为 latest 时，都必须携带另一条版本线当前有效的
+通道元数据：Desktop 的 `latest.yml`、安装包和 blockmap，以及 Runtime 的平台 manifest 和其引用的
+`.tgz`。如果后续需要完全独立的发布节奏，应把两个更新通道迁移到各自固定的对象存储/CDN 路径，
+不要继续共享 GitHub 的 latest 指针。
 
 ## 签名、公证与发布
 

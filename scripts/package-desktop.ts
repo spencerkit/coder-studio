@@ -1,14 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { DESKTOP_DIR, error, info, ROOT_DIR, run, success } from "./shared/index.js";
+import { DESKTOP_DIR, error, info, run, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
-async function readDesktopReleaseVersion(): Promise<string> {
-  const manifest = JSON.parse(
-    await readFile(resolve(ROOT_DIR, "packages/cli/package.json"), "utf8")
-  ) as { version?: unknown };
+export async function readDesktopReleaseVersion(
+  packagePath = resolve(DESKTOP_DIR, "package.json")
+): Promise<string> {
+  const manifest = JSON.parse(await readFile(packagePath, "utf8")) as { version?: unknown };
   if (typeof manifest.version !== "string" || !manifest.version.trim()) {
-    throw new Error("Unable to resolve the desktop release version from packages/cli/package.json");
+    throw new Error(
+      "Unable to resolve the desktop release version from packages/desktop/package.json"
+    );
   }
   return manifest.version.trim();
 }
