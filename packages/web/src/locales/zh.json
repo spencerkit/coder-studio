@@ -149,6 +149,22 @@
     "reconnecting": "重连中",
     "rejected": "被拒绝"
   },
+  "desktop_environment": {
+    "title": "Coder Studio 运行环境",
+    "select": "连接到运行环境",
+    "local": "本地",
+    "wsl": "WSL",
+    "local_windows": "本地：Windows",
+    "checking": "正在检查环境…",
+    "preparing": "正在准备…",
+    "status": {
+      "ready": "可用",
+      "not-installed": "尚未安装 Coder Studio Runtime",
+      "preparing": "正在准备",
+      "unavailable": "不可用",
+      "error": "无法检查环境"
+    }
+  },
   "bottom_panel": {
     "tabs_label": "底部面板",
     "terminal": "终端",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -9,27 +10,60 @@ import {
   Menu,
   type MenuItemConstructorOptions,
   type MessageBoxOptions,
+  type Session,
   session,
   shell,
 } from "electron";
 import { BackendManager } from "./backend-manager.js";
+import { DesktopEnvironmentManager } from "./environment-manager.js";
+import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
+import { DesktopGateway } from "./gateway.js";
+import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
+import { DESKTOP_NODE_VERSION } from "./runtime-manifest.js";
 import type { ProductRuntime } from "./runtime-store.js";
 import { RuntimeStore } from "./runtime-store.js";
 import { ProductRuntimeUpdateManager } from "./runtime-update-manager.js";
 import { DesktopUpdateManager } from "./update-manager.js";
+import { createWslBackendLaunch } from "./wsl-backend.js";
+import { WslDiscovery } from "./wsl-discovery.js";
+import { windowsWslPathToLinux } from "./wsl-path.js";
+import type { WslRuntimeCandidate } from "./wsl-runtime-store.js";
+import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
 
 declare const __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: string;
 declare const __CODER_STUDIO_RUNTIME_UPDATE_URL__: string;
+declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
 
 let mainWindow: BrowserWindow | null = null;
 let backendManager: BackendManager | null = null;
+let desktopGateway: DesktopGateway | null = null;
+let activeSession: Session | null = null;
+let activeGatewayUrl: string | null = null;
 let updateManager: DesktopUpdateManager | null = null;
 let runtimeUpdateManager: ProductRuntimeUpdateManager | null = null;
 let activeProductRuntime: ProductRuntime | null = null;
+let environmentManager: DesktopEnvironmentManager | null = null;
+let activeEnvironmentTarget: DesktopEnvironmentTarget = NATIVE_ENVIRONMENT;
+let environmentSwitching = false;
 let appOrigin: string | null = null;
 let shutdownComplete = false;
 let shutdownStarted = false;
 const smokeResultPath = process.env.CODER_STUDIO_DESKTOP_SMOKE_RESULT?.trim() || null;
+
+function getEnvironmentPartition(target: DesktopEnvironmentTarget): string {
+  const id = createHash("sha256").update(target.id).digest("hex").slice(0, 16);
+  return `persist:coder-studio-${id}`;
+}
+
+function getReleaseBaseUrl(runtimeUpdateUrl: string): string {
+  const override = process.env.CODER_STUDIO_RELEASE_BASE_URL?.trim();
+  if (override) return override.endsWith("/") ? override : `${override}/`;
+  return new URL(".", runtimeUpdateUrl).toString();
+}
+
+function emitEnvironmentProgress(progress: DesktopEnvironmentProgress): void {
+  mainWindow?.webContents.send("desktop:environment-progress", progress);
+}
 
 async function finishSmokeTest(result: Record<string, unknown>, exitCode = 0): Promise<void> {
   if (!smokeResultPath) return;
@@ -69,16 +103,116 @@ async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
 function registerIpcHandlers(): void {
   ipcMain.handle("desktop:select-workspace-directory", async () => {
     if (!mainWindow) return null;
+    const activeDistro =
+      activeEnvironmentTarget.kind === "wsl" ? activeEnvironmentTarget.distro : undefined;
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Open workspace",
+      ...(activeDistro ? { defaultPath: `\\\\wsl.localhost\\${activeDistro}\\` } : {}),
       properties: ["openDirectory", "createDirectory"],
     });
-    return result.canceled ? null : (result.filePaths[0] ?? null);
+    const selectedPath = result.canceled ? null : (result.filePaths[0] ?? null);
+    if (!selectedPath || !activeDistro) return selectedPath;
+    return windowsWslPathToLinux(selectedPath, activeDistro);
   });
   ipcMain.handle("desktop:open-external", (_event, value: unknown) =>
     typeof value === "string" ? openExternal(value) : false
   );
   ipcMain.handle("desktop:get-backend-status", () => backendManager?.getStatus() ?? null);
+  ipcMain.handle("desktop:list-environments", async () => {
+    if (!environmentManager) throw new Error("Desktop environments are not initialized");
+    return environmentManager.listEnvironments();
+  });
+  ipcMain.handle("desktop:get-active-environment", async () => {
+    if (!environmentManager) throw new Error("Desktop environments are not initialized");
+    return environmentManager.getActiveEnvironment();
+  });
+  ipcMain.handle("desktop:switch-environment", async (_event, environmentId: unknown) => {
+    if (!environmentManager) throw new Error("Desktop environments are not initialized");
+    if (typeof environmentId !== "string") throw new Error("Invalid Desktop environment id");
+    if (environmentSwitching) throw new Error("A Desktop environment switch is already running");
+    const target = await environmentManager.resolveTarget(environmentId);
+    if (target.id === activeEnvironmentTarget.id) return { status: "unchanged" as const };
+
+    environmentSwitching = true;
+    let relaunchScheduled = false;
+    try {
+      if (target.kind === "wsl") await environmentManager.prepareWsl(target);
+      const message = `Switch from ${activeEnvironmentTarget.label} to ${target.label}?`;
+      const result = mainWindow
+        ? await dialog.showMessageBox(mainWindow, {
+            type: "warning",
+            title: "Switch Coder Studio environment",
+            message,
+            detail:
+              "Coder Studio will restart. Active terminals and agent sessions in the current environment will stop.",
+            buttons: ["Switch and Restart", "Cancel"],
+            defaultId: 0,
+            cancelId: 1,
+          })
+        : await dialog.showMessageBox({
+            type: "warning",
+            title: "Switch Coder Studio environment",
+            message,
+            buttons: ["Switch and Restart", "Cancel"],
+            defaultId: 0,
+            cancelId: 1,
+          });
+      if (result.response !== 0) return { status: "unchanged" as const };
+
+      await environmentManager.beginSwitch(target);
+      emitEnvironmentProgress({
+        environmentId: target.id,
+        phase: "relaunching",
+        message: `Restarting in ${target.label}…`,
+        percent: 100,
+      });
+      setTimeout(() => {
+        app.relaunch();
+        app.quit();
+      }, 50);
+      relaunchScheduled = true;
+      return { status: "relaunching" as const };
+    } finally {
+      if (!relaunchScheduled) environmentSwitching = false;
+    }
+  });
+}
+
+async function handleStartupFailure(error: unknown): Promise<void> {
+  if (smokeResultPath) {
+    await finishSmokeTest(
+      {
+        loaded: false,
+        error: error instanceof Error ? error.stack || error.message : String(error),
+      },
+      1
+    );
+    return;
+  }
+
+  const details = error instanceof Error ? error.stack || error.message : String(error);
+  if (activeEnvironmentTarget.kind !== "wsl" || !environmentManager) {
+    dialog.showErrorBox("Unable to start Coder Studio", details);
+    app.quit();
+    return;
+  }
+
+  const result = await dialog.showMessageBox({
+    type: "error",
+    title: "Unable to start the WSL environment",
+    message: `${activeEnvironmentTarget.label} could not be started.`,
+    detail: details,
+    buttons: ["Retry", "Switch to Local Windows", "Quit"],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  if (result.response === 1) {
+    await environmentManager.beginSwitch(NATIVE_ENVIRONMENT);
+  }
+  if (result.response === 0 || result.response === 1) {
+    app.relaunch();
+  }
+  app.quit();
 }
 
 function installApplicationMenu(): void {
@@ -150,7 +284,7 @@ function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function createMainWindow(url: string): BrowserWindow {
+function createMainWindow(url: string, browserSession = activeSession): BrowserWindow {
   appOrigin = new URL(url).origin;
   const window = new BrowserWindow({
     width: 1440,
@@ -161,6 +295,7 @@ function createMainWindow(url: string): BrowserWindow {
     backgroundColor: "#111318",
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
+      ...(browserSession ? { session: browserSession } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -217,8 +352,15 @@ async function handleUnexpectedBackendExit(details: {
     return;
   }
   try {
-    const status = await backendManager.start(session.defaultSession);
-    const url = process.env.CODER_STUDIO_DESKTOP_DEV_URL?.trim() || status.url;
+    const status = await backendManager.start(activeSession ?? session.defaultSession);
+    desktopGateway?.setBackendUrl(status.url);
+    if (desktopGateway && activeGatewayUrl) {
+      await backendManager.authenticatePublicSession(
+        activeSession ?? session.defaultSession,
+        activeGatewayUrl
+      );
+    }
+    const url = process.env.CODER_STUDIO_DESKTOP_DEV_URL?.trim() || activeGatewayUrl || status.url;
     await waitForUrl(url);
     await mainWindow?.loadURL(url);
   } catch (error) {
@@ -237,48 +379,127 @@ async function startApplication(): Promise<void> {
     typeof __CODER_STUDIO_RUNTIME_PUBLIC_KEY__ === "string"
       ? __CODER_STUDIO_RUNTIME_PUBLIC_KEY__.trim()
       : "";
+  const compiledRuntimeUpdateUrl =
+    typeof __CODER_STUDIO_RUNTIME_UPDATE_URL__ === "string"
+      ? __CODER_STUDIO_RUNTIME_UPDATE_URL__.trim()
+      : "";
+  const productVersion =
+    typeof __CODER_STUDIO_PRODUCT_VERSION__ === "string"
+      ? __CODER_STUDIO_PRODUCT_VERSION__.trim()
+      : "0.0.0";
   const runtimeStore = app.isPackaged
     ? new RuntimeStore({
         root: join(userDataDir, "runtime-store"),
         factoryRuntimeRoot: join(process.resourcesPath, "factory-runtime"),
         shellVersion: app.getVersion(),
-        nodeVersion: "24.19.0",
+        nodeVersion: DESKTOP_NODE_VERSION,
         publicKeyPem: runtimePublicKey || undefined,
       })
     : null;
-  let runtime = runtimeStore ? await runtimeStore.getLaunchCandidate() : null;
+  let webRuntime = runtimeStore ? await runtimeStore.getLaunchCandidate() : null;
+  const environmentStateStore = new EnvironmentStateStore(userDataDir);
+  environmentManager = new DesktopEnvironmentManager({
+    stateStore: environmentStateStore,
+    discovery: new WslDiscovery(),
+    shellVersion: app.getVersion(),
+    nodeVersion: DESKTOP_NODE_VERSION,
+    runtimeVersion: webRuntime?.manifest.runtimeVersion ?? productVersion,
+    publicKeyPem: runtimePublicKey,
+    enableWsl: app.isPackaged && process.platform === "win32",
+    releaseBaseUrl: getReleaseBaseUrl(
+      process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl
+    ),
+    onProgress: emitEnvironmentProgress,
+  });
+  activeEnvironmentTarget = app.isPackaged
+    ? await environmentManager.getStartupTarget()
+    : NATIVE_ENVIRONMENT;
+  environmentManager.setActiveTarget(activeEnvironmentTarget);
+  activeSession = session.fromPartition(getEnvironmentPartition(activeEnvironmentTarget));
 
-  const createBackendManager = (productRuntime: ProductRuntime | null) =>
+  let wslRuntime: WslRuntimeCandidate | null = null;
+  let wslRuntimeStore: WslRuntimeStoreClient | null = null;
+  let wslProbe: Awaited<ReturnType<DesktopEnvironmentManager["prepareWsl"]>>["probe"] | null = null;
+  if (activeEnvironmentTarget.kind === "wsl") {
+    const prepared = await environmentManager.prepareWsl(activeEnvironmentTarget);
+    wslProbe = prepared.probe;
+    wslRuntimeStore = prepared.runtimeStore;
+    wslRuntime = prepared.runtime;
+  }
+
+  const createBackendManager = () =>
     new BackendManager({
-      appVersion: app.getVersion(),
+      appVersion:
+        activeEnvironmentTarget.kind === "wsl"
+          ? (wslRuntime?.manifest.runtimeVersion ?? productVersion)
+          : (webRuntime?.manifest.runtimeVersion ?? productVersion),
       isPackaged: app.isPackaged,
       logsDir: app.getPath("logs"),
       resourcesPath: process.resourcesPath,
-      productRuntimeDir: productRuntime?.root,
+      productRuntimeDir:
+        activeEnvironmentTarget.kind === "wsl" ? wslRuntime?.root : webRuntime?.root,
       runtimeDir: join(userDataDir, "runtime"),
       stateDir: process.env.CODER_STUDIO_DESKTOP_STATE_DIR?.trim() || join(userDataDir, "data"),
       uploadsDir:
         process.env.CODER_STUDIO_DESKTOP_UPLOADS_DIR?.trim() || join(userDataDir, "uploads"),
+      ...(activeEnvironmentTarget.kind === "wsl" && wslProbe && wslRuntime
+        ? {
+            createLaunch: (context: Parameters<typeof createWslBackendLaunch>[2]) =>
+              createWslBackendLaunch(
+                wslProbe,
+                wslRuntime as WslRuntimeCandidate,
+                context,
+                userDataDir
+              ),
+          }
+        : {}),
       onUnexpectedExit: (details) => void handleUnexpectedBackendExit(details),
     });
 
   let status: Awaited<ReturnType<BackendManager["start"]>>;
   let url: string;
   for (;;) {
-    backendManager = createBackendManager(runtime);
+    backendManager = createBackendManager();
     try {
-      status = await backendManager.start(session.defaultSession);
-      url = process.env.CODER_STUDIO_DESKTOP_DEV_URL?.trim() || status.url;
-      await waitForUrl(url);
-      if (runtimeStore && runtime && status.source === "managed") {
-        await runtimeStore.markLaunchSuccessful(runtime);
+      status = await backendManager.start(activeSession);
+      const developmentUrl = process.env.CODER_STUDIO_DESKTOP_DEV_URL?.trim();
+      if (app.isPackaged && webRuntime && status.source === "managed") {
+        if (!webRuntime.manifest.webRoot) {
+          throw new Error("The selected Product Runtime does not contain the shared Web payload");
+        }
+        const webRoot = join(webRuntime.root, webRuntime.manifest.webRoot);
+        desktopGateway = new DesktopGateway({ backendUrl: status.url, webRoot });
+        const gatewayStatus = await desktopGateway.start();
+        activeGatewayUrl = gatewayStatus.url;
+        await backendManager.authenticatePublicSession(activeSession, gatewayStatus.url);
+        url = gatewayStatus.url;
+      } else {
+        url = developmentUrl || status.url;
       }
-      activeProductRuntime = runtime;
+      await waitForUrl(url);
+      if (runtimeStore && webRuntime && status.source === "managed") {
+        await runtimeStore.markLaunchSuccessful(webRuntime);
+      }
+      if (activeEnvironmentTarget.kind === "wsl" && wslRuntimeStore && wslRuntime) {
+        await wslRuntimeStore.markLaunchSuccessful(wslRuntime);
+      }
+      await environmentManager.markLaunchSuccessful(activeEnvironmentTarget);
+      activeProductRuntime = webRuntime;
       break;
     } catch (error) {
+      await desktopGateway?.stop().catch(() => undefined);
+      desktopGateway = null;
+      activeGatewayUrl = null;
       await backendManager.stop().catch(() => undefined);
-      if (!runtimeStore || !runtime) throw error;
-      runtime = await runtimeStore.fallbackAfterFailure(runtime, error);
+      if (activeEnvironmentTarget.kind === "wsl") {
+        if (!wslRuntimeStore || !wslRuntime) throw error;
+        await wslRuntimeStore.fallbackAfterFailure(wslRuntime, error);
+        wslRuntime = await wslRuntimeStore.getLaunchCandidate();
+        if (!environmentManager.isRuntimeCompatible(wslRuntime.manifest)) throw error;
+      } else {
+        if (!runtimeStore || !webRuntime) throw error;
+        webRuntime = await runtimeStore.fallbackAfterFailure(webRuntime, error);
+      }
     }
   }
   mainWindow = createMainWindow(url);
@@ -289,13 +510,9 @@ async function startApplication(): Promise<void> {
   });
   updateManager.start();
   if (runtimeStore && activeProductRuntime && runtimePublicKey && !smokeResultPath) {
-    const compiledUpdateUrl =
-      typeof __CODER_STUDIO_RUNTIME_UPDATE_URL__ === "string"
-        ? __CODER_STUDIO_RUNTIME_UPDATE_URL__.trim()
-        : "";
     runtimeUpdateManager = new ProductRuntimeUpdateManager({
       store: runtimeStore,
-      manifestUrl: process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledUpdateUrl,
+      manifestUrl: process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl,
       getCurrentRuntime: () => activeProductRuntime as ProductRuntime,
       onError: (error) => console.warn("[runtime-update]", error.message),
       onUpdateReady: (readyRuntime) => {
@@ -333,26 +550,7 @@ if (!hasSingleInstanceLock) {
     mainWindow.focus();
   });
 
-  app
-    .whenReady()
-    .then(startApplication)
-    .catch(async (error) => {
-      if (smokeResultPath) {
-        await finishSmokeTest(
-          {
-            loaded: false,
-            error: error instanceof Error ? error.stack || error.message : String(error),
-          },
-          1
-        );
-        return;
-      }
-      dialog.showErrorBox(
-        "Unable to start Coder Studio",
-        error instanceof Error ? error.stack || error.message : String(error)
-      );
-      app.quit();
-    });
+  app.whenReady().then(startApplication).catch(handleStartupFailure);
 }
 
 app.on("activate", () => {
@@ -369,7 +567,9 @@ app.on("before-quit", (event: Event) => {
   shutdownStarted = true;
   updateManager?.stop();
   runtimeUpdateManager?.stop();
-  void (backendManager?.stop() ?? Promise.resolve())
+  void (desktopGateway?.stop() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => backendManager?.stop() ?? Promise.resolve())
     .catch(() => undefined)
     .finally(() => {
       shutdownComplete = true;

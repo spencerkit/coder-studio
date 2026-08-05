@@ -15,11 +15,26 @@ Product Runtime（独立更新）
 ├─ web/
 ├─ assets/mermaid.min.js
 └─ manifest.json
+
+WSL Engine（按 distribution/架构安装）
+├─ Linux Node.js 24.19.0
+├─ node-pty 与 Linux 原生 ABI 依赖
+└─ 稳定语言工具
+
+WSL Server Runtime（按 distribution/架构安装）
+├─ server.mjs
+├─ assets/mermaid.min.js
+└─ manifest.json（无 webRoot）
 ```
 
 Fastify、Zod、WebSocket 等纯 JavaScript 依赖被打入 `server.mjs`。Runtime 不会从 Desktop
 任意加载普通业务依赖；唯一显式的 Engine Host 边界是 `node-pty` 和随 Engine 安装的稳定语言工具。
 构建会检查 Runtime bundle 的外置模块，出现未登记的裸模块引用时直接失败。
+
+Web 在 Windows Product Runtime 中只有一份。切到 WSL 后，Windows Gateway 继续托管这份 Web，只把
+HTTP API 和 WebSocket 代理到 WSL Server；因此 WSL Server Runtime 不包含 `web/`。Server 的纯
+JavaScript npm 依赖仍捆进 `server.mjs`，`node-pty` 等 ABI 敏感依赖与 Node 一起放进 WSL Engine。
+这让业务 Runtime 保持简单，同时避免运行时从用户的 WSL npm 环境解析依赖。
 
 ## 构建产物
 
@@ -41,6 +56,21 @@ release/runtime/
 和它的 `packageFile` 指向的版本化 `.tgz`。Desktop 默认从当前仓库的 `releases/latest/download`
 检查稳定通道，也可以用 `CODER_STUDIO_RUNTIME_UPDATE_URL` 覆盖。
 
+WSL 产物只能在 Linux runner 构建：
+
+```text
+pnpm build:wsl-engine
+pnpm build:wsl-runtime
+
+release/engine/
+├─ coder-studio-engine-<engine>-linux-<arch>.tgz
+└─ coder-studio-engine-linux-<arch>.manifest.json
+
+release/runtime/
+├─ coder-studio-server-runtime-<version>-linux-<arch>.tgz
+└─ coder-studio-server-runtime-linux-<arch>.manifest.json
+```
+
 Runtime 版本可以独立于 Desktop 安装包版本：
 
 ```powershell
@@ -54,8 +84,8 @@ pnpm build:desktop-runtime
 版本读取 `packages/desktop/package.json`。`CODER_STUDIO_RUNTIME_VERSION` 主要用于候选包和发布验证，
 不应让正式 Runtime 长期偏离 CLI 版本。
 
-所有 Product Runtime 和 Engine 生产资源都会移除 `.map`。构建目录中的 Electron Shell sourcemap
-只用于单独的错误诊断，`electron-builder` 仍会从安装包中排除它们。
+所有 Product Runtime、Engine 和 Electron Shell 发布产物都不保留 `.map`。共享 Web 的中间构建
+可以为 CI 错误诊断生成 map，但 Runtime 组装时必须删除；调试符号只能独立存放在受控位置。
 
 ## Ed25519 签名
 
@@ -94,6 +124,11 @@ Runtime 启动本地 Server，并完成认证、健康检查和 Web 加载；成
 `previous`。候选 Runtime 启动失败时依次回退到 previous/active 和安装包内 Factory Runtime，并记录
 `failed.json`。同一个失败版本会被隔离，不会在每次启动时反复下载安装；发布方需要使用更高的
 Runtime 版本号提供修复，或由用户显式清除失败记录后重试。
+
+当 Windows shared Web 更新后，如果当前选择的是 WSL，下一次启动会要求 WSL Server Runtime 与 Web
+使用相同的 CLI/Product 版本；缺失或版本不匹配时先下载、验签并写入 WSL `pending`。WSL Runtime
+也只有在 Server ready、Gateway 认证、健康检查和 Web 加载全部成功后才提升为 active，失败会删除
+pending 或回退 previous。Engine 只有在 ABI/Node 兼容边界变化时更新，不随每次业务 Runtime 发布重装。
 
 这里的“热更新”是无需重新下载安装 Desktop 的 Product Runtime 更新，但仍通过一次应用重启完成
 Server 与 Web 的原子切换；不在运行中的 Node 进程内替换业务代码。

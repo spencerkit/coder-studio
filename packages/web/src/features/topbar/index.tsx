@@ -18,6 +18,7 @@ import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/ato
 import { WorkspaceFullscreenButton } from "../workspace/components/workspace-fullscreen-button";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
 import { ConnectionStatus } from "./components/connection-status";
+import { EnvironmentSwitcher } from "./components/environment-switcher";
 import { WorkspaceTab } from "./components/tab";
 
 interface TopBarProps {
@@ -59,6 +60,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
 
   return (
     <header className="app-topbar">
+      <EnvironmentSwitcher />
       <div className="topbar-tabs">
         {workspaceList.length === 0 ? (
           <EmptyState

@@ -59,6 +59,7 @@ function createWorkspace(id: string, path: string): Workspace {
 
 describe("TopBar", () => {
   beforeEach(() => {
+    delete window.coderStudioDesktop;
     routerMocks.navigate.mockReset();
     viewportMocks.value = "desktop";
   });

@@ -11,6 +11,8 @@
     "build:cli": "tsx scripts/build-cli.ts",
     "build:desktop": "tsx scripts/build-desktop.ts",
     "build:desktop-runtime": "tsx scripts/build-desktop-runtime.ts",
+    "build:wsl-runtime": "tsx scripts/build-wsl-runtime.ts",
+    "build:wsl-engine": "tsx scripts/build-wsl-engine.ts",
     "prepare:desktop": "tsx scripts/prepare-desktop-package.ts",
     "pack:desktop": "pnpm build:desktop && pnpm prepare:desktop && pnpm --filter @coder-studio/desktop run pack",
     "dist:desktop": "pnpm build:desktop && pnpm prepare:desktop && pnpm --filter @coder-studio/desktop run dist",

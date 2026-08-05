@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as esbuild from "esbuild";
 import { buildDesktopRuntime } from "./build-desktop-runtime.js";
@@ -14,12 +14,19 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
   }
   await ensureDir(DESKTOP_DIST_DIR);
   const runtimePublicKey = process.env.CODER_STUDIO_RUNTIME_PUBLIC_KEY?.trim() ?? "";
+  const cliManifest = JSON.parse(
+    await readFile(resolve(ROOT_DIR, "packages/cli/package.json"), "utf8")
+  ) as { version?: unknown };
+  if (typeof cliManifest.version !== "string" || !cliManifest.version.trim()) {
+    throw new Error("Unable to resolve the Product Runtime version");
+  }
   const runtimeUpdateUrl =
     process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() ??
     `https://github.com/spencerkit/coder-studio/releases/latest/download/coder-studio-runtime-${process.platform}-${process.arch}.manifest.json`;
   const runtimeDefines = {
     __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: JSON.stringify(runtimePublicKey),
     __CODER_STUDIO_RUNTIME_UPDATE_URL__: JSON.stringify(runtimeUpdateUrl),
+    __CODER_STUDIO_PRODUCT_VERSION__: JSON.stringify(cliManifest.version.trim()),
   };
 
   await Promise.all([
@@ -32,7 +39,7 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
       outfile: resolve(DESKTOP_DIST_DIR, "main.cjs"),
       external: ["electron"],
       define: runtimeDefines,
-      sourcemap: true,
+      sourcemap: false,
     }),
     esbuild.build({
       entryPoints: [resolve(DESKTOP_DIR, "src/preload.ts")],
@@ -43,7 +50,7 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
       outfile: resolve(DESKTOP_DIST_DIR, "preload.cjs"),
       external: ["electron"],
       define: runtimeDefines,
-      sourcemap: true,
+      sourcemap: false,
     }),
   ]);
 }

@@ -1,0 +1,103 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { createStore, Provider } from "jotai";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { localeAtom } from "../../../atoms/app-ui";
+import { EnvironmentSwitcher } from "./environment-switcher";
+
+const nativeEnvironment: DesktopEnvironmentSummary = {
+  id: "native",
+  kind: "native",
+  label: "Local: Windows",
+  active: true,
+  status: "ready",
+  platform: "win32",
+};
+
+const wslEnvironment: DesktopEnvironmentSummary = {
+  id: "wsl:ubuntu",
+  kind: "wsl",
+  label: "WSL: Ubuntu-24.04",
+  distro: "Ubuntu-24.04",
+  active: false,
+  status: "not-installed",
+  platform: "linux",
+  arch: "x64",
+};
+
+function installDesktopApi() {
+  let progressListener: ((event: DesktopEnvironmentProgress) => void) | undefined;
+  const switchEnvironment = vi.fn().mockResolvedValue({ status: "relaunching" as const });
+  const api: CoderStudioDesktopApi = {
+    platform: "win32",
+    selectWorkspaceDirectory: vi.fn().mockResolvedValue(null),
+    openExternal: vi.fn().mockResolvedValue(true),
+    getBackendStatus: vi.fn().mockResolvedValue(null),
+    listEnvironments: vi.fn().mockResolvedValue([nativeEnvironment, wslEnvironment]),
+    getActiveEnvironment: vi.fn().mockResolvedValue(nativeEnvironment),
+    switchEnvironment,
+    onEnvironmentProgress: vi.fn((listener) => {
+      progressListener = listener;
+      return () => {
+        progressListener = undefined;
+      };
+    }),
+  };
+  Object.defineProperty(window, "coderStudioDesktop", {
+    configurable: true,
+    value: api,
+  });
+  return {
+    switchEnvironment,
+    emitProgress: (event: DesktopEnvironmentProgress) => progressListener?.(event),
+  };
+}
+
+function renderSwitcher() {
+  const store = createStore();
+  store.set(localeAtom, "en");
+  return render(
+    <Provider store={store}>
+      <EnvironmentSwitcher />
+    </Provider>
+  );
+}
+
+describe("EnvironmentSwitcher", () => {
+  beforeEach(() => {
+    delete window.coderStudioDesktop;
+  });
+
+  afterEach(() => {
+    delete window.coderStudioDesktop;
+  });
+
+  it("lists Windows and WSL environments and requests a WSL switch", async () => {
+    const user = userEvent.setup();
+    const { switchEnvironment } = installDesktopApi();
+    renderSwitcher();
+
+    expect(await screen.findByText("Local: Windows")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Coder Studio environment" }));
+    await user.click(await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ }));
+
+    expect(switchEnvironment).toHaveBeenCalledWith("wsl:ubuntu");
+    expect(screen.getByText("Preparing…")).toBeInTheDocument();
+  });
+
+  it("renders installation progress reported by the Desktop host", async () => {
+    const { emitProgress } = installDesktopApi();
+    renderSwitcher();
+    await screen.findByText("Local: Windows");
+
+    emitProgress({
+      environmentId: "wsl:ubuntu",
+      phase: "downloading",
+      message: "Downloading WSL Engine…",
+      percent: 25,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Coder Studio environment" }));
+
+    await waitFor(() => expect(screen.getByText("Downloading WSL Engine…")).toBeInTheDocument());
+  });
+});

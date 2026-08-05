@@ -14,9 +14,49 @@ export interface DesktopBackendStatus {
   pid: number | null;
 }
 
+export type DesktopEnvironmentKind = "native" | "wsl";
+export type DesktopEnvironmentStatus =
+  | "ready"
+  | "not-installed"
+  | "preparing"
+  | "unavailable"
+  | "error";
+
+export interface DesktopEnvironmentTarget {
+  id: string;
+  kind: DesktopEnvironmentKind;
+  label: string;
+  distro?: string;
+}
+
+export interface DesktopEnvironmentSummary extends DesktopEnvironmentTarget {
+  active: boolean;
+  status: DesktopEnvironmentStatus;
+  platform: "win32" | "linux";
+  arch?: string;
+  engineVersion?: string;
+  runtimeVersion?: string;
+  message?: string;
+}
+
+export interface DesktopEnvironmentProgress {
+  environmentId: string;
+  phase: "checking" | "downloading" | "installing" | "verifying" | "relaunching";
+  message: string;
+  percent?: number;
+}
+
+export interface DesktopEnvironmentSwitchResult {
+  status: "unchanged" | "relaunching";
+}
+
 export interface DesktopApi {
   platform: NodeJS.Platform;
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
   getBackendStatus(): Promise<DesktopBackendStatus | null>;
+  listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
+  getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
+  switchEnvironment(environmentId: string): Promise<DesktopEnvironmentSwitchResult>;
+  onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
 }

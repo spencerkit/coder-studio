@@ -7,6 +7,7 @@ import {
   API_PROTOCOL_VERSION,
   DATA_SCHEMA_VERSION,
   DESKTOP_ENGINE_VERSION,
+  DESKTOP_NODE_VERSION,
   getRuntimeManifestSigningPayload,
   RUNTIME_HOST_API_VERSION,
   RUNTIME_MANIFEST_SCHEMA_VERSION,
@@ -111,7 +112,9 @@ function signManifest(manifest: RuntimeManifest): RuntimeManifest {
   return signedManifest;
 }
 
-export async function buildDesktopRuntime(): Promise<{
+export async function buildDesktopRuntime(
+  options: { includeWeb?: boolean; packagePrefix?: string } = {}
+): Promise<{
   factoryRuntimeDir: string;
   releaseRuntimeDir: string;
   manifest: RuntimeManifest;
@@ -122,8 +125,10 @@ export async function buildDesktopRuntime(): Promise<{
   const minShellVersion =
     process.env.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION?.trim() ||
     (await readPackageVersion(resolve(DESKTOP_DIR, "package.json"), "Desktop Shell"));
-  const packageBaseName = `coder-studio-runtime-${runtimeVersion}-${process.platform}-${process.arch}`;
-  await buildWeb();
+  const includeWeb = options.includeWeb ?? true;
+  const packagePrefix = options.packagePrefix ?? "coder-studio-runtime";
+  const packageBaseName = `${packagePrefix}-${runtimeVersion}-${process.platform}-${process.arch}`;
+  if (includeWeb) await buildWeb();
   await rm(DESKTOP_FACTORY_RUNTIME_DIR, { recursive: true, force: true });
   await ensureDir(DESKTOP_FACTORY_RUNTIME_DIR);
 
@@ -157,7 +162,7 @@ export async function buildDesktopRuntime(): Promise<{
   assertRuntimeBundleBoundary(result);
 
   await Promise.all([
-    copyDir(WEB_DIST_DIR, resolve(DESKTOP_FACTORY_RUNTIME_DIR, "web")),
+    ...(includeWeb ? [copyDir(WEB_DIST_DIR, resolve(DESKTOP_FACTORY_RUNTIME_DIR, "web"))] : []),
     copy(
       resolve(SERVER_DIR, "node_modules/mermaid/dist/mermaid.min.js"),
       resolve(DESKTOP_FACTORY_RUNTIME_DIR, "assets/mermaid.min.js")
@@ -170,14 +175,14 @@ export async function buildDesktopRuntime(): Promise<{
     runtimeVersion,
     minShellVersion,
     requiredEngineVersion: DESKTOP_ENGINE_VERSION,
-    requiredNodeVersion: "24.19.0",
+    requiredNodeVersion: DESKTOP_NODE_VERSION,
     runtimeHostApiVersion: RUNTIME_HOST_API_VERSION,
     apiProtocolVersion: API_PROTOCOL_VERSION,
     dataSchemaVersion: DATA_SCHEMA_VERSION,
     platform: process.platform,
     arch: process.arch,
     entrypoint: "server.mjs",
-    webRoot: "web",
+    ...(includeWeb ? { webRoot: "web" } : {}),
     packageFile: `${packageBaseName}.tgz`,
     files: await createFileEntries(DESKTOP_FACTORY_RUNTIME_DIR),
   });
@@ -197,7 +202,7 @@ export async function buildDesktopRuntime(): Promise<{
   );
   const channelManifestPath = resolve(
     DESKTOP_RUNTIME_RELEASE_DIR,
-    `coder-studio-runtime-${process.platform}-${process.arch}.manifest.json`
+    `${packagePrefix}-${process.platform}-${process.arch}.manifest.json`
   );
   const releasePackagePath = resolve(DESKTOP_RUNTIME_RELEASE_DIR, `${packageBaseName}.tgz`);
   await Promise.all([

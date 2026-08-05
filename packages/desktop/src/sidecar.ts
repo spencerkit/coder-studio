@@ -89,6 +89,7 @@ async function run(): Promise<void> {
       void stop();
     }
   });
+  process.stdin.on("end", () => void stop());
   process.stdin.resume();
 
   process.on("SIGINT", () => void stop());

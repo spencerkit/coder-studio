@@ -4,6 +4,7 @@ import { resolve, sep } from "node:path";
 
 export const RUNTIME_MANIFEST_SCHEMA_VERSION = 1;
 export const DESKTOP_ENGINE_VERSION = "1";
+export const DESKTOP_NODE_VERSION = "24.19.0";
 export const RUNTIME_HOST_API_VERSION = 1;
 export const API_PROTOCOL_VERSION = 1;
 export const DATA_SCHEMA_VERSION = 1;
@@ -31,7 +32,7 @@ export interface RuntimeManifest {
   platform: NodeJS.Platform;
   arch: NodeJS.Architecture;
   entrypoint: string;
-  webRoot: string;
+  webRoot?: string;
   packageFile?: string;
   files: RuntimeFileEntry[];
   signature?: RuntimeSignature;
@@ -104,7 +105,6 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
     "platform",
     "arch",
     "entrypoint",
-    "webRoot",
   ];
   for (const field of stringFields) {
     if (typeof manifest[field] !== "string" || !(manifest[field] as string).trim()) {
@@ -123,7 +123,7 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifest {
   if (!isSafeRuntimeRelativePath(manifest.entrypoint as string)) {
     throw new Error("Runtime manifest entrypoint is unsafe");
   }
-  if (!isSafeRuntimeRelativePath(manifest.webRoot as string)) {
+  if (manifest.webRoot !== undefined && !isSafeRuntimeRelativePath(manifest.webRoot)) {
     throw new Error("Runtime manifest webRoot is unsafe");
   }
   if (

@@ -149,6 +149,22 @@
     "reconnecting": "Reconnecting",
     "rejected": "Rejected"
   },
+  "desktop_environment": {
+    "title": "Coder Studio environment",
+    "select": "Connect to an environment",
+    "local": "Local",
+    "wsl": "WSL",
+    "local_windows": "Local: Windows",
+    "checking": "Checking environment…",
+    "preparing": "Preparing…",
+    "status": {
+      "ready": "Ready",
+      "not-installed": "Coder Studio Runtime is not installed",
+      "preparing": "Preparing",
+      "unavailable": "Unavailable",
+      "error": "Unable to inspect environment"
+    }
+  },
   "bottom_panel": {
     "tabs_label": "Bottom panel",
     "terminal": "Terminal",

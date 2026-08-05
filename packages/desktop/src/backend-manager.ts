@@ -24,6 +24,18 @@ interface BackendConnection extends DesktopBackendStatus {
   secret: string | null;
 }
 
+export interface ManagedBackendLaunchContext {
+  secret: string;
+  appVersion: string;
+}
+
+export interface ManagedBackendLaunch {
+  command: string;
+  args: string[];
+  cwd: string;
+  env?: NodeJS.ProcessEnv;
+}
+
 interface BackendManagerOptions {
   appVersion: string;
   isPackaged: boolean;
@@ -33,6 +45,9 @@ interface BackendManagerOptions {
   runtimeDir: string;
   stateDir: string;
   uploadsDir: string;
+  createLaunch?: (
+    context: ManagedBackendLaunchContext
+  ) => ManagedBackendLaunch | Promise<ManagedBackendLaunch>;
   onUnexpectedExit?: (details: { code: number | null; signal: NodeJS.Signals | null }) => void;
 }
 
@@ -181,7 +196,7 @@ export class BackendManager {
   async start(electronSession: Session): Promise<DesktopBackendStatus> {
     try {
       const external =
-        this.options.isPackaged && isExternalBackendReuseEnabled()
+        this.options.isPackaged && !this.options.createLaunch && isExternalBackendReuseEnabled()
           ? await discoverExternalBackend()
           : null;
       this.connection = external ?? (await this.spawnManagedBackend());
@@ -193,18 +208,19 @@ export class BackendManager {
     }
   }
 
+  async authenticatePublicSession(electronSession: Session, publicUrl: string): Promise<void> {
+    if (!this.connection) throw new Error("Desktop backend is not running");
+    await authenticateSession(electronSession, { ...this.connection, url: publicUrl });
+  }
+
   private async spawnManagedBackend(): Promise<BackendConnection> {
-    const launch = resolveLaunch(this.options);
+    const secret = randomBytes(32).toString("base64url");
+    const launch: ManagedBackendLaunch = this.options.createLaunch
+      ? await this.options.createLaunch({ secret, appVersion: this.options.appVersion })
+      : resolveLaunch(this.options);
     const executablePath = dirname(launch.command);
     const userPath = await resolveUserPath();
     const sidecarPath = [executablePath, userPath].filter(Boolean).join(delimiter);
-    const secret = randomBytes(32).toString("base64url");
-    const webRoot = this.options.isPackaged
-      ? join(
-          this.options.productRuntimeDir ?? join(this.options.resourcesPath, "factory-runtime"),
-          "web"
-        )
-      : process.env.CODER_STUDIO_DESKTOP_WEB_ROOT?.trim();
     const logPath = join(this.options.logsDir, "backend.log");
     const logStream = createWriteStream(logPath, { flags: "a" });
 
@@ -214,30 +230,34 @@ export class BackendManager {
       stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
-        PATH: sidecarPath,
-        ...(process.platform === "win32" ? { Path: sidecarPath } : {}),
-        NODE_ENV: "production",
-        CODER_STUDIO_LOG_FORMAT: "json",
-        CODER_STUDIO_RUNTIME_DIR: this.options.runtimeDir,
-        CODER_STUDIO_DESKTOP_SECRET: secret,
-        CODER_STUDIO_DESKTOP_PORT:
-          process.env.CODER_STUDIO_DESKTOP_PORT?.trim() || (this.options.isPackaged ? "0" : "4173"),
-        CODER_STUDIO_DESKTOP_STATE_DIR: this.options.stateDir,
-        CODER_STUDIO_DESKTOP_UPLOADS_DIR: this.options.uploadsDir,
-        CODER_STUDIO_DESKTOP_APP_VERSION: this.options.appVersion,
-        ...(this.options.isPackaged
-          ? {
-              CODER_STUDIO_ENGINE_ROOT: join(this.options.resourcesPath, "engine"),
-              CODER_STUDIO_MERMAID_RUNTIME_PATH: join(
-                this.options.productRuntimeDir ??
-                  join(this.options.resourcesPath, "factory-runtime"),
-                "assets",
-                "mermaid.min.js"
-              ),
-              NODE_PATH: join(this.options.resourcesPath, "engine", "node_modules"),
-            }
-          : {}),
-        ...(webRoot ? { CODER_STUDIO_DESKTOP_WEB_ROOT: webRoot } : {}),
+        ...(this.options.createLaunch
+          ? launch.env
+          : {
+              PATH: sidecarPath,
+              ...(process.platform === "win32" ? { Path: sidecarPath } : {}),
+              NODE_ENV: "production",
+              CODER_STUDIO_LOG_FORMAT: "json",
+              CODER_STUDIO_RUNTIME_DIR: this.options.runtimeDir,
+              CODER_STUDIO_DESKTOP_SECRET: secret,
+              CODER_STUDIO_DESKTOP_PORT:
+                process.env.CODER_STUDIO_DESKTOP_PORT?.trim() ||
+                (this.options.isPackaged ? "0" : "4173"),
+              CODER_STUDIO_DESKTOP_STATE_DIR: this.options.stateDir,
+              CODER_STUDIO_DESKTOP_UPLOADS_DIR: this.options.uploadsDir,
+              CODER_STUDIO_DESKTOP_APP_VERSION: this.options.appVersion,
+              ...(this.options.isPackaged
+                ? {
+                    CODER_STUDIO_ENGINE_ROOT: join(this.options.resourcesPath, "engine"),
+                    CODER_STUDIO_MERMAID_RUNTIME_PATH: join(
+                      this.options.productRuntimeDir ??
+                        join(this.options.resourcesPath, "factory-runtime"),
+                      "assets",
+                      "mermaid.min.js"
+                    ),
+                    NODE_PATH: join(this.options.resourcesPath, "engine", "node_modules"),
+                  }
+                : {}),
+            }),
       },
     });
     this.child = child;

@@ -4,7 +4,7 @@
 
 ## 架构决策
 
-运行链路如下：
+本地 Windows 环境的运行链路如下：
 
 ```text
 Electron main/preload
@@ -22,12 +22,35 @@ Existing React web app in BrowserWindow
 
 Electron 只负责应用生命周期、窗口、原生目录选择、外链和更新。服务端继续运行在独立的官方 Node.js 进程中，因此 `process.execPath`、`node-pty`、LSP 和 Provider 子进程仍处于标准 Node 环境，也不会与 Electron 的 Node ABI 绑定。
 
+Windows 上还可以按整个 App 生命周期切换到一个 WSL2 distribution。Web 不会复制到 WSL，仍由
+Windows Product Runtime 提供：
+
+```text
+BrowserWindow
+    |
+    | HTTP / WebSocket（同源）
+    v
+Windows Gateway（127.0.0.1:随机端口）
+    |-- 静态请求 -----------------> Windows shared Web
+    `-- /api、/auth、/ws 等 ------> WSL Server（127.0.0.1:随机端口）
+                                      ^
+                                      | wsl.exe --exec
+Electron main -- stdin/stdout 控制 ---+
+```
+
+Windows 与 WSL 的业务通信是 HTTP/WebSocket，依赖 WSL2 的 localhost forwarding；
+`wsl.exe` 的 stdin/stdout 只用于启动参数、ready 消息、日志和关闭协议。Gateway 与 Server 都绑定
+`127.0.0.1:0`，由系统分配端口，所以不会占用固定端口，也不会和 CLI 的端口产生静态冲突。
+
 桌面包包含：
 
 - Electron 主进程和受限 preload；
 - 已构建的 Web UI 与 server sidecar；
 - 生产依赖和对应目标平台的 `node-pty` 原生文件；
 - 固定版本、经过 SHA-256 校验的官方 Node.js 运行时。
+
+安装包只自带当前 Windows 平台的 Factory Runtime 和 Engine。WSL Engine 与 WSL Server Runtime
+是选择某个 distribution 时按需安装的 Linux 产物，不会把所有架构和 distribution 的运行时塞进安装包。
 
 ## 启动与退出
 
@@ -36,6 +59,14 @@ Electron 只负责应用生命周期、窗口、原生目录选择、外链和�
 3. sidecar 的状态、上传和运行目录位于 Electron user-data 下，与 `~/.coder-studio` 中的 CLI 数据隔离。
 4. Electron 通过自己的 session 登录，然后加载同源页面。
 5. 关闭应用时，通过 stdin 协议请求 sidecar 优雅退出；超时后终止它。
+
+选择 WSL 环境时，Desktop 会先探测 WSL2、glibc 和架构，按需安装对应 Engine/Server Runtime，
+写入 `pending` 后重启 App。新环境完成认证、健康检查和 Web 加载后才成为 active；启动失败可重试或
+切回 Local Windows。一次 App 生命周期只托管一个环境，不同时运行 Windows 和 WSL 两套 Server。
+
+关闭 WSL 模式的 App 时，Desktop 同样向 `wsl.exe` 子进程发送关闭消息。WSL sidecar 会停止 Fastify、
+释放状态锁并退出；stdin 意外断开也会触发退出。Desktop 不调用 `wsl --terminate`，不会关闭整个
+distribution，也不会影响用户在其中运行的其他进程。
 
 CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-data 下的 `data` 目录。两者可以同时运行，并分别通过各自目录中的 `server.lock` 防止同类后端重复写入。进程崩溃后可以回收 stale lock。
 
@@ -52,6 +83,11 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 - BrowserWindow 只允许在当前本地服务的 origin 内导航；
 - sidecar 不读写全局 `runtime.json`，状态、上传和运行配置放在 Electron user-data 目录；
 - backend 日志写入 Electron 的平台日志目录。
+- Windows Gateway 和 WSL Server 都只监听 loopback；Renderer 不直接获得 WSL 控制通道；
+- WSL 安装 manifest 使用 Ed25519 验签，下载包校验大小、SHA-256、目标平台和逐文件清单后，才通过
+  stdin 流式交给 WSL 内的 `tar`；
+- WSL 安装使用 distribution 内的目录锁、staging 目录和原子 pointer，Desktop 不拼接用户输入的
+  shell 命令。
 
 ## 本地开发
 
@@ -61,6 +97,9 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 | --- | --- |
 | `pnpm dev:desktop` | 启动 Vite、Electron 和开发 sidecar |
 | `pnpm build:desktop` | 构建 Web、main/preload 和 sidecar |
+| `pnpm build:desktop-runtime` | 构建 Windows Product Runtime |
+| `pnpm build:wsl-runtime` | 在 Linux runner 构建不含 Web 的 WSL Server Runtime |
+| `pnpm build:wsl-engine` | 在 Linux runner 构建 WSL Node/原生依赖 Engine |
 | `pnpm prepare:desktop` | 部署生产依赖并准备官方 Node runtime |
 | `pnpm pack:desktop` | 完整构建并生成 unpacked 应用目录 |
 | `pnpm dist:desktop` | 生成当前平台的安装包 |
@@ -83,7 +122,9 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 
 `prepare:desktop` 当前固定 Node.js `24.19.0`，从 nodejs.org 同时下载归档和 `SHASUMS256.txt`，校验成功后才会进入包内。生产依赖使用 hoisted、无绝对 junction 的布局，确保安装包不会引用构建机路径。
 
-构建目录仍生成 shell、sidecar 和 Web sourcemap，供 CI 上传到错误追踪或作为独立调试产物；Electron 安装包和生产 Runtime 资源明确排除所有 `.map` 文件。
+Electron shell 生产构建不生成 sourcemap；共享 Web 的中间构建仍可为 CI 错误诊断生成 map，但
+Product Runtime 组装时会删除它们和依赖中残留的 `.map`。安装包及所有可发布 Runtime/Engine 产物
+都不得包含 `.map`；调试符号只能作为独立、受控的 CI 产物保存，不能混入发布包。
 
 默认输出位于 `release/desktop`：
 
@@ -136,6 +177,10 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
 5. `pnpm smoke:desktop`（Linux runner 需要可用的图形显示或 xvfb）；
 6. 将安装包、blockmap 和更新元数据上传到同一个 GitHub Release。
 
+WSL 产物必须在对应架构的 Linux runner 上另外执行 `pnpm build:wsl-engine` 和
+`pnpm build:wsl-runtime`，使用同一把 Runtime Ed25519 私钥签名，并上传版本化包和稳定通道 manifest。
+Windows runner 不能生成或复用 `node-pty` 的 Linux 原生文件。
+
 发布所需凭据不进入仓库：
 
 - Windows：代码签名证书（electron-builder 的 `CSC_LINK` / `CSC_KEY_PASSWORD` 或等价证书存储配置）；
@@ -149,11 +194,14 @@ Windows 未签名包会触发 SmartScreen；macOS 未签名、未公证包不应
 - 无系统 Node.js 时仍能启动；
 - 窗口加载现有 Web UI，WebSocket 正常连接；
 - 原生目录选择可以返回绝对目录；
+- WSL 模式的目录选择从 `\\wsl.localhost\\<distro>` 开始，并只返回对应的 Linux 绝对路径；
 - 能创建 shell/agent 终端，`node-pty` 从包内加载；
 - 单实例行为正确；
 - CLI 与桌面默认使用独立状态目录并可同时运行；
 - sidecar 异常退出时可重启或退出；
 - 关闭窗口后托管 sidecar 和 `server.lock` 都被清理；
+- WSL 切换仅在新环境健康后提交，失败时可以重试或切回 Windows；
+- 关闭 WSL 模式只停止 Coder Studio Server，不终止 distribution；
 - Provider CLI 仍从用户 PATH 发现；
 - 外链不会在拥有 preload 权限的窗口中打开；
 - 安装包签名、macOS 公证及 GitHub 更新元数据完整。
@@ -163,4 +211,6 @@ Windows 未签名包会触发 SmartScreen；macOS 未签名、未公证包不应
 - Agent Provider CLI 不随桌面包分发，用户仍需自行安装并登录 Claude Code、Codex 等工具；
 - Provider CLI 可执行文件、登录状态和技能目录仍是系统用户级资源；桌面与 CLI 的 backend 状态隔离不代表 Provider home 完全隔离；
 - 没有托盘常驻，退出桌面应用会停止它托管的 backend；
-- Windows x64 已具备本地自动化验证链路；macOS、Linux 仍必须在对应平台 runner 和干净机器上做最终验收。
+- 当前 WSL 通信依赖 WSL2 localhost forwarding，尚未实现 guest IP fallback；
+- WSL 仅支持 x64/arm64、glibc-based WSL2 distribution；
+- Windows x64 已具备本地自动化验证链路；WSL Linux 产物、macOS 和 Linux Desktop 仍必须在对应平台 runner 和干净机器上做最终验收。

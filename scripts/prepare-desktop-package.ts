@@ -1,17 +1,23 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { DESKTOP_NODE_VERSION } from "../packages/desktop/src/runtime-manifest.js";
 import { DESKTOP_DIST_DIR } from "./build-desktop.js";
-import { copyDir, ensureDir, error, log, ROOT_DIR, run, step, success } from "./shared/index.js";
+import { ensureDir, error, log, ROOT_DIR, run, step, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
-export const DESKTOP_NODE_VERSION = "24.19.0";
+export { DESKTOP_NODE_VERSION } from "../packages/desktop/src/runtime-manifest.js";
 export const DESKTOP_ENGINE_DIR = resolve(DESKTOP_DIST_DIR, "engine");
 
 interface RuntimeTarget {
   archiveName: string;
   rootDirName: string;
+}
+
+async function copyEngineTree(source: string, destination: string): Promise<void> {
+  await ensureDir(destination);
+  await cp(source, destination, { recursive: true, dereference: true, force: true });
 }
 
 function resolveRuntimeTarget(platform = process.platform, arch = process.arch): RuntimeTarget {
@@ -56,7 +62,7 @@ async function verifyArchive(
 async function stageNodeRuntime(): Promise<void> {
   const suppliedRuntime = process.env.CODER_STUDIO_DESKTOP_NODE_DIR?.trim();
   if (suppliedRuntime) {
-    await copyDir(resolve(suppliedRuntime), DESKTOP_ENGINE_DIR);
+    await copyEngineTree(resolve(suppliedRuntime), DESKTOP_ENGINE_DIR);
     return;
   }
 
@@ -73,7 +79,7 @@ async function stageNodeRuntime(): Promise<void> {
     await verifyArchive(archivePath, target.archiveName, await readFile(checksumsPath, "utf8"));
     await run("tar", ["-xf", archivePath, "-C", workDir]);
     const extractedDir = join(workDir, target.rootDirName);
-    await copyDir(extractedDir, DESKTOP_ENGINE_DIR);
+    await copyEngineTree(extractedDir, DESKTOP_ENGINE_DIR);
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
@@ -96,7 +102,10 @@ async function stageEngineDependencies(): Promise<void> {
       ],
       { cwd: ROOT_DIR }
     );
-    await copyDir(resolve(deployDir, "node_modules"), resolve(DESKTOP_ENGINE_DIR, "node_modules"));
+    await copyEngineTree(
+      resolve(deployDir, "node_modules"),
+      resolve(DESKTOP_ENGINE_DIR, "node_modules")
+    );
   } finally {
     await rm(deployRoot, { recursive: true, force: true });
   }
