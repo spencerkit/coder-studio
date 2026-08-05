@@ -19,6 +19,7 @@ export const SERVER_DIR = resolve(PACKAGES_DIR, "server");
 export const UTILS_DIR = resolve(PACKAGES_DIR, "utils");
 export const WEB_DIR = resolve(PACKAGES_DIR, "web");
 export const CLI_DIR = resolve(PACKAGES_DIR, "cli");
+export const DESKTOP_DIR = resolve(PACKAGES_DIR, "desktop");
 
 // Build output directories
 export const WEB_DIST_DIR = resolve(WEB_DIR, "dist");

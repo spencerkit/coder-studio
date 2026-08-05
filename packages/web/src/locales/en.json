@@ -392,6 +392,7 @@
       "clear_recent_confirm_title": "Clear recent workspaces?",
       "clear_recent_confirm_description": "This only clears the recent workspace list. It does not delete any project directories from disk.",
       "clear_all": "Clear all",
+      "choose_folder": "Choose Folder...",
       "home_directory": "Home Directory",
       "go_up": "Go Up",
       "new_folder": "New Folder",

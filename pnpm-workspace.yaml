@@ -3,5 +3,6 @@ packages:
   - 'e2e'
   - 'e2e-ui'
 allowBuilds:
+  electron: true
   esbuild: true
   node-pty: true

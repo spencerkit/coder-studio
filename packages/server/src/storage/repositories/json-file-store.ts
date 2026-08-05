@@ -1,5 +1,6 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { renameSyncWithRetry } from "../../fs/rename-with-retry.js";
 
 function hasCode(error: unknown, code: string): boolean {
   return Boolean(
@@ -29,7 +30,7 @@ export function writeJsonFileAtomic(filePath: string, value: unknown): void {
 
   try {
     writeFileSync(tempPath, JSON.stringify(value, null, 2) + "\n", "utf-8");
-    renameSync(tempPath, filePath);
+    renameSyncWithRetry(tempPath, filePath);
   } catch (error) {
     rmSync(tempPath, { force: true });
     throw error;

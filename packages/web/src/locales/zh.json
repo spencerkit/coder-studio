@@ -404,6 +404,7 @@
       "clear_recent_confirm_title": "清空最近工作区？",
       "clear_recent_confirm_description": "这只会清空最近工作区列表，不会删除磁盘上的任何项目目录。",
       "clear_all": "全部清空",
+      "choose_folder": "选择文件夹...",
       "home_directory": "主目录",
       "go_up": "返回上一级",
       "new_folder": "新建文件夹",

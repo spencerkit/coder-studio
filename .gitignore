@@ -5,6 +5,7 @@ dist/
 .build/
 build/
 output/
+/release/
 .cache/
 .turbo/
 .vite-style-build/

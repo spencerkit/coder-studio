@@ -6,16 +6,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getCliVersion } from "./package-manifest.js";
 import { getUpdateRuntimeInfo } from "./update-runtime.js";
 
-const { createServer, parseServerConfig, readCliConfig, hasWebAssets, getStaticAssetsDir } =
-  vi.hoisted(() => ({
-    createServer: vi.fn(),
-    parseServerConfig: vi.fn(),
-    readCliConfig: vi.fn(),
-    hasWebAssets: vi.fn(),
-    getStaticAssetsDir: vi.fn(),
-  }));
+const {
+  acquireStateLock,
+  createServer,
+  parseServerConfig,
+  readCliConfig,
+  hasWebAssets,
+  getStaticAssetsDir,
+} = vi.hoisted(() => ({
+  acquireStateLock: vi.fn(),
+  createServer: vi.fn(),
+  parseServerConfig: vi.fn(),
+  readCliConfig: vi.fn(),
+  hasWebAssets: vi.fn(),
+  getStaticAssetsDir: vi.fn(),
+}));
 
 vi.mock("@coder-studio/server", () => ({
+  acquireStateLock,
   createServer,
   parseServerConfig,
 }));
@@ -41,6 +49,13 @@ describe("server-runner", () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
+
+  const setupStateLock = () => {
+    const release = vi.fn();
+    acquireStateLock.mockReturnValue({ path: "/tmp/cs-data/server.lock", release });
+    parseServerConfig.mockReturnValue({ stateDir: "/tmp/cs-data" });
+    return release;
+  };
 
   it("includes the CLI package version in the server config", () => {
     readCliConfig.mockReturnValue(null);
@@ -78,6 +93,7 @@ describe("server-runner", () => {
   });
 
   it("starts the server and wires shutdown handlers", async () => {
+    const releaseStateLock = setupStateLock();
     readCliConfig.mockReturnValue({
       host: "127.0.0.1",
       port: 4173,
@@ -109,6 +125,7 @@ describe("server-runner", () => {
     await shutdown();
 
     expect(stop).toHaveBeenCalledTimes(1);
+    expect(releaseStateLock).toHaveBeenCalledTimes(1);
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
@@ -156,6 +173,7 @@ describe("server-runner", () => {
   });
 
   it("starts the server when executed as the entrypoint", async () => {
+    setupStateLock();
     readCliConfig.mockReturnValue(null);
     hasWebAssets.mockReturnValue(true);
     getStaticAssetsDir.mockReturnValue("/tmp/web");
@@ -178,6 +196,7 @@ describe("server-runner", () => {
   });
 
   it("starts the server when pm2 runs the bundle through ProcessContainerFork", async () => {
+    setupStateLock();
     readCliConfig.mockReturnValue(null);
     hasWebAssets.mockReturnValue(true);
     getStaticAssetsDir.mockReturnValue("/tmp/web");

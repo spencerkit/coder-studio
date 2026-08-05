@@ -2,6 +2,7 @@
  * esbuild configuration and utilities
  */
 
+import { readFile } from "node:fs/promises";
 import { type BuildOptions } from "esbuild";
 import { resolve } from "path";
 import { CLI_DIR, CORE_DIR, PACKAGES_DIR, PROVIDERS_DIR, SERVER_DIR, UTILS_DIR } from "./paths.js";
@@ -11,12 +12,13 @@ import { CLI_DIR, CORE_DIR, PACKAGES_DIR, PROVIDERS_DIR, SERVER_DIR, UTILS_DIR }
  */
 async function getExternalDeps(packageDir: string): Promise<string[]> {
   try {
-    const { default: pkg } = await import(resolve(packageDir, "package.json"), {
-      assert: { type: "json" },
-    });
+    const pkg = JSON.parse(await readFile(resolve(packageDir, "package.json"), "utf8")) as {
+      dependencies?: Record<string, unknown>;
+      peerDependencies?: Record<string, unknown>;
+    };
 
-    const deps = Object.keys(pkg.dependencies || {});
-    const peerDeps = Object.keys(pkg.peerDependencies || {});
+    const deps = Object.keys(pkg.dependencies ?? {});
+    const peerDeps = Object.keys(pkg.peerDependencies ?? {});
 
     return [...deps, ...peerDeps];
   } catch {

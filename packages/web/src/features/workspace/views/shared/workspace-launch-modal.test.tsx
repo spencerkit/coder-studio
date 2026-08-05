@@ -98,7 +98,53 @@ describe("WorkspaceLaunchModal", () => {
       value: originalFocus,
     });
     delete (document as Document & { activeElement?: Element }).activeElement;
+    delete window.coderStudioDesktop;
     vi.restoreAllMocks();
+  });
+
+  it("opens a workspace selected through the desktop directory picker", async () => {
+    const selectWorkspaceDirectory = vi.fn().mockResolvedValue("C:\\repo\\coder-studio");
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        platform: "win32",
+        selectWorkspaceDirectory,
+        openExternal: vi.fn(),
+        getBackendStatus: vi.fn(),
+      },
+    });
+    const onClose = vi.fn();
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "workspace.browse") {
+        return { currentPath: "C:\\repo", parentPath: "C:\\", directories: [] };
+      }
+      if (op === "workspace.history.list") return [];
+      if (op === "workspace.open") return { id: "ws-desktop-picker" };
+      return {};
+    });
+    const store = createStore();
+    store.set(localeAtom, "en");
+    store.set(wsClientAtom, { sendCommand } as never);
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WorkspaceLaunchModal onClose={onClose} />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Folder..." }));
+
+    await waitFor(() => expect(selectWorkspaceDirectory).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith(
+        "workspace.open",
+        { path: "C:\\repo\\coder-studio" },
+        undefined
+      );
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("navigates into a selected folder from the inline enter action", async () => {

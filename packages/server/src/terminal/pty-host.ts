@@ -5,13 +5,12 @@
  */
 
 import { chmodSync, existsSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { resolveSpawnArgv } from "@coder-studio/utils";
 import type * as NodePty from "node-pty";
+import { loadEngineModule, resolveEngineModule } from "../engine-modules.js";
 import type { PtyHost, PtyProcess, PtySpawnOptions } from "./types.js";
 
-const require = createRequire(import.meta.url);
 const NODE_PTY_PKG = "node-pty/package.json";
 
 /**
@@ -46,7 +45,7 @@ export function ensureNodePtySpawnHelperExecutable(
   }
   const arch = deps.arch ?? process.arch;
 
-  const resolve = deps.resolve ?? ((id: string) => require.resolve(id));
+  const resolve = deps.resolve ?? resolveEngineModule;
   const fileExists = deps.existsSync ?? existsSync;
   const stat = deps.statSync ?? statSync;
   const chmod = deps.chmodSync ?? chmodSync;
@@ -195,7 +194,7 @@ export class NodePtyHost implements PtyHost {
     // Lazy load node-pty to avoid native module loading errors
     let pty: typeof NodePty;
     try {
-      pty = require("node-pty");
+      pty = loadEngineModule<typeof NodePty>("node-pty");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`node-pty native module not available. ${message}`);

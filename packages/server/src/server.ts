@@ -470,16 +470,19 @@ export async function createServer(
     sessionTokenRepo,
     appearanceAssetRepo,
     canvasService,
-    logger: {
-      level: "info",
-      transport: {
-        target: "pino-pretty",
-        options: {
-          translateTime: "HH:MM:ss Z",
-          ignore: "pid,hostname",
-        },
-      },
-    },
+    logger:
+      process.env.CODER_STUDIO_LOG_FORMAT === "json"
+        ? { level: "info" }
+        : {
+            level: "info",
+            transport: {
+              target: "pino-pretty",
+              options: {
+                translateTime: "HH:MM:ss Z",
+                ignore: "pid,hostname",
+              },
+            },
+          },
   });
   logStartupPhase(app, "buildFastifyApp", startupAt);
 

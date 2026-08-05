@@ -1,5 +1,5 @@
 import type { Server, ServerConfigInput } from "@coder-studio/server";
-import { parseServerConfig } from "@coder-studio/server";
+import { acquireStateLock, parseServerConfig } from "@coder-studio/server";
 import { mkdirSync } from "fs";
 import { fileURLToPath } from "url";
 import { readCliConfig } from "./config-store.js";
@@ -76,7 +76,27 @@ export const runServerEntrypoint = async (moduleUrl: string, argvEntry?: string)
 export const startServer = async (): Promise<Server> => {
   assertSupportedNodeVersion();
   const { createServer } = await import("@coder-studio/server");
-  const server = await createServer(buildServerConfig());
+  const serverConfig = buildServerConfig();
+  const resolvedConfig = parseServerConfig(serverConfig);
+  const stateLock = acquireStateLock(resolvedConfig.stateDir);
+  let createdServer: Server;
+  try {
+    createdServer = await createServer(serverConfig);
+  } catch (error) {
+    stateLock.release();
+    throw error;
+  }
+  const originalStop = createdServer.stop;
+  const server: Server = {
+    ...createdServer,
+    stop: async () => {
+      try {
+        await originalStop();
+      } finally {
+        stateLock.release();
+      }
+    },
+  };
   const shutdown = createShutdownHandler(server);
 
   process.on("SIGINT", shutdown);

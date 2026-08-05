@@ -71,16 +71,20 @@ export async function buildFastifyApp(deps: AppDeps): Promise<FastifyInstance> {
     });
 
   const app = Fastify({
-    logger: deps.logger ?? {
-      level: "info",
-      transport: {
-        target: "pino-pretty",
-        options: {
-          translateTime: "HH:MM:ss Z",
-          ignore: "pid,hostname",
-        },
-      },
-    },
+    logger:
+      deps.logger ??
+      (process.env.CODER_STUDIO_LOG_FORMAT === "json"
+        ? { level: "info" }
+        : {
+            level: "info",
+            transport: {
+              target: "pino-pretty",
+              options: {
+                translateTime: "HH:MM:ss Z",
+                ignore: "pid,hostname",
+              },
+            },
+          }),
   });
 
   await app.register(websocket, {

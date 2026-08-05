@@ -355,6 +355,19 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
     await openWorkspaceByPath(selectedPath);
   }, [openWorkspaceByPath, selectedPath, t]);
 
+  const canUseNativeDirectoryPicker = Boolean(window.coderStudioDesktop);
+  const chooseWorkspaceDirectory = useCallback(async () => {
+    const desktopApi = window.coderStudioDesktop;
+    if (!desktopApi) return;
+
+    try {
+      const path = await desktopApi.selectWorkspaceDirectory();
+      if (path) await openWorkspaceByPath(path);
+    } catch (chooseError) {
+      setError(chooseError instanceof Error ? chooseError.message : String(chooseError));
+    }
+  }, [openWorkspaceByPath]);
+
   const getShortPath = useCallback(
     (path: string) => {
       if (path === "/") return "/";
@@ -371,6 +384,8 @@ export function useWorkspaceLaunchActions(onClose: () => void) {
 
   return {
     browsing,
+    canUseNativeDirectoryPicker,
+    chooseWorkspaceDirectory,
     currentPath,
     directories,
     error,
