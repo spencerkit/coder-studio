@@ -18,7 +18,7 @@ import {
 import { buildWeb } from "./build-web.js";
 import { copy, copyDir, ensureDir, run } from "./shared/index.js";
 import { error, log, success, warn } from "./shared/logger.js";
-import { DESKTOP_DIR, ROOT_DIR, SERVER_DIR, WEB_DIST_DIR } from "./shared/paths.js";
+import { CLI_DIR, DESKTOP_DIR, ROOT_DIR, SERVER_DIR, WEB_DIST_DIR } from "./shared/paths.js";
 import { isDirectExecution } from "./shared/process.js";
 
 export const DESKTOP_FACTORY_RUNTIME_DIR = resolve(DESKTOP_DIR, "dist/factory-runtime");
@@ -31,6 +31,40 @@ const NODE_BUILTIN_MODULES = new Set(
     name.startsWith("node:") ? name.slice(5) : `node:${name}`,
   ])
 );
+
+export function createDesktopRuntimeBuildOptions(): esbuild.BuildOptions {
+  return {
+    entryPoints: {
+      server: resolve(DESKTOP_DIR, "src/sidecar.ts"),
+      "automation-entry": resolve(CLI_DIR, "src/automation-entry.ts"),
+    },
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "esm",
+    outdir: DESKTOP_FACTORY_RUNTIME_DIR,
+    outExtension: { ".js": ".mjs" },
+    external: RUNTIME_EXTERNAL_MODULES,
+    sourcemap: false,
+    minify: false,
+    metafile: true,
+    alias: {
+      "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
+      "@coder-studio/core/runtime": resolve(ROOT_DIR, "packages/core/src/runtime.ts"),
+      "@coder-studio/core/state-paths": resolve(ROOT_DIR, "packages/core/src/state-paths.ts"),
+      "@coder-studio/core": resolve(ROOT_DIR, "packages/core/src/index.ts"),
+      "@coder-studio/providers": resolve(ROOT_DIR, "packages/providers/src/index.ts"),
+      "@coder-studio/utils": resolve(ROOT_DIR, "packages/utils/src/index.ts"),
+    },
+    banner: {
+      js: [
+        "// Coder Studio Product Runtime - generated artifact",
+        'import { createRequire as __coderStudioCreateRequire } from "node:module";',
+        "const require = __coderStudioCreateRequire(import.meta.url);",
+      ].join("\n"),
+    },
+  };
+}
 
 async function readPackageVersion(packagePath: string, label: string): Promise<string> {
   const manifest = JSON.parse(await readFile(packagePath, "utf8")) as { version?: unknown };
@@ -132,33 +166,7 @@ export async function buildDesktopRuntime(
   await rm(DESKTOP_FACTORY_RUNTIME_DIR, { recursive: true, force: true });
   await ensureDir(DESKTOP_FACTORY_RUNTIME_DIR);
 
-  const result = await esbuild.build({
-    entryPoints: [resolve(DESKTOP_DIR, "src/sidecar.ts")],
-    bundle: true,
-    platform: "node",
-    target: "node24",
-    format: "esm",
-    outfile: resolve(DESKTOP_FACTORY_RUNTIME_DIR, "server.mjs"),
-    external: RUNTIME_EXTERNAL_MODULES,
-    sourcemap: false,
-    minify: false,
-    metafile: true,
-    alias: {
-      "@coder-studio/server": resolve(SERVER_DIR, "src/index.ts"),
-      "@coder-studio/core/runtime": resolve(ROOT_DIR, "packages/core/src/runtime.ts"),
-      "@coder-studio/core/state-paths": resolve(ROOT_DIR, "packages/core/src/state-paths.ts"),
-      "@coder-studio/core": resolve(ROOT_DIR, "packages/core/src/index.ts"),
-      "@coder-studio/providers": resolve(ROOT_DIR, "packages/providers/src/index.ts"),
-      "@coder-studio/utils": resolve(ROOT_DIR, "packages/utils/src/index.ts"),
-    },
-    banner: {
-      js: [
-        "// Coder Studio Product Runtime - generated artifact",
-        'import { createRequire as __coderStudioCreateRequire } from "node:module";',
-        "const require = __coderStudioCreateRequire(import.meta.url);",
-      ].join("\n"),
-    },
-  });
+  const result = await esbuild.build(createDesktopRuntimeBuildOptions());
   assertRuntimeBundleBoundary(result);
 
   await Promise.all([

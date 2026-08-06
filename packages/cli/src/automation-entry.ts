@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { callCoderStudioCommand } from "./automation-command-client.js";
+import { callCoderStudioWsCommand } from "./automation-ws-client.js";
 
 type SupportedOp =
   | "memory.list"
@@ -673,9 +673,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const env = readSessionEnv();
   const [op, ...rest] = argv;
   const parsed = parseCommand(op, rest, env);
-  const result = await callCoderStudioCommand({
+  const result = await callCoderStudioWsCommand({
     apiUrl: env.apiUrl,
-    resolveStrategy: "session",
     op: parsed.op,
     args: parsed.args,
   });

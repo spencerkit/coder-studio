@@ -66,6 +66,13 @@ async function findResourcesDir(): Promise<string> {
 }
 
 async function verifyProductionResources(resourcesDir: string): Promise<void> {
+  const automationEntryPath = join(resourcesDir, "factory-runtime", "automation-entry.mjs");
+  if (!(await exists(automationEntryPath))) {
+    throw new Error(
+      `Packaged Runtime is missing the Agent automation entry: ${automationEntryPath}`
+    );
+  }
+
   const roots = [join(resourcesDir, "factory-runtime"), join(resourcesDir, "engine")];
   const sourceMaps = (await Promise.all(roots.map((root) => readdir(root, { recursive: true }))))
     .flat()
