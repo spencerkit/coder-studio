@@ -29,6 +29,8 @@ describe("createWslBackendLaunch", () => {
         },
         home: "/home/alice",
         dataRoot: "/home/alice/.local/share/coder-studio-desktop",
+        userPath:
+          "/home/alice/.cargo/bin:/run/user/1000/fnm_multishells/42/bin:/mnt/c/Windows/System32:C:\\Windows\\System32:relative/bin:/usr/bin:/home/alice/.cargo/bin",
         arch: "x64",
         kernel: "microsoft-standard-WSL2",
         libc: "glibc 2.39",
@@ -50,6 +52,12 @@ describe("createWslBackendLaunch", () => {
     expect(launch.args).toContain("--exec");
     expect(launch.args).toContain("/usr/bin/env");
     expect(launch.args).toContain("CODER_STUDIO_DESKTOP_SECRET=secret-value");
+    const pathArgument = launch.args.find((argument) => argument.startsWith("PATH="));
+    expect(pathArgument).toBe(
+      "PATH=/home/alice/.local/share/coder-studio-desktop/engine/versions/1/bin:/home/alice/.cargo/bin:/run/user/1000/fnm_multishells/42/bin:/usr/bin:/home/alice/.local/bin:/home/alice/.local/share/pnpm:/home/alice/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/bin"
+    );
+    expect(pathArgument).not.toContain("/mnt/");
+    expect(pathArgument).not.toContain("C:\\Windows");
     expect(launch.args.at(-2)).toBe(
       "/home/alice/.local/share/coder-studio-desktop/engine/versions/1/bin/node"
     );

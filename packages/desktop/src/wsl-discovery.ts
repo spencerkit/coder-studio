@@ -12,6 +12,8 @@ export interface WslDistroProbe {
   target: DesktopEnvironmentTarget;
   home: string;
   dataRoot: string;
+  /** PATH reported by the user's interactive WSL shell, before safety filtering. */
+  userPath?: string;
   arch: "x64" | "arm64";
   kernel: string;
   libc: string;
@@ -35,7 +37,19 @@ const PROBE_SCRIPT = [
   'if test -f "$data_root/runtime-store/active.json"; then runtime_installed=true; fi',
   'printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$home" "$data_root" "$arch" "$kernel" "$libc"',
   'printf "%s\\n%s\\n" "$engine_installed" "$runtime_installed"',
+  // Agent CLIs are spawned directly by the Server rather than through a shell. Capture the
+  // interactive shell PATH so tools managed by fnm/nvm/asdf/etc. can be inherited as well.
+  // Bound rc-file execution so a broken interactive shell cannot block Desktop startup.
+  'if test -x /usr/bin/timeout; then shell=${SHELL:-/bin/sh}; if test -x "$shell"; then /usr/bin/timeout 5s "$shell" -ic \'printf "\\n__CODER_STUDIO_USER_PATH__%s\\n" "$PATH"\' 2>/dev/null || true; fi; fi',
 ].join("; ");
+
+const USER_PATH_MARKER = "__CODER_STUDIO_USER_PATH__";
+
+function parseUserPath(output: string): string | undefined {
+  const markerLine = output.split(/\r?\n/).find((line) => line.startsWith(USER_PATH_MARKER));
+  const userPath = markerLine?.slice(USER_PATH_MARKER.length).trim();
+  return userPath || undefined;
+}
 
 function parseDistroList(output: Buffer): string[] {
   return decodeWindowsConsoleOutput(output)
@@ -78,8 +92,10 @@ export class WslDiscovery {
       undefined,
       this.options.runner ?? runWslCommand
     );
+    const output = result.stdout.toString("utf8");
     const [home, dataRoot, rawArch, kernel, libc, engineInstalledValue, runtimeInstalledValue] =
-      result.stdout.toString("utf8").split(/\r?\n/);
+      output.split(/\r?\n/);
+    const userPath = parseUserPath(output);
     const engineInstalled = engineInstalledValue?.trim() === "true";
     const runtimeInstalled = runtimeInstalledValue?.trim() === "true";
     const arch = normalizeArch(rawArch?.trim() ?? "");
@@ -91,6 +107,7 @@ export class WslDiscovery {
         target,
         home: home?.trim() ?? "",
         dataRoot: dataRoot?.trim() ?? "",
+        userPath,
         arch: arch ?? "x64",
         kernel: kernel?.trim() ?? "",
         libc: libc?.trim() ?? "",
@@ -105,6 +122,7 @@ export class WslDiscovery {
         target,
         home: home.trim(),
         dataRoot: dataRoot.trim(),
+        userPath,
         arch,
         kernel: kernel?.trim() ?? "",
         libc: libc?.trim() ?? "",
@@ -120,6 +138,7 @@ export class WslDiscovery {
       target,
       home: home.trim(),
       dataRoot: dataRoot.trim(),
+      userPath,
       arch,
       kernel: kernel?.trim() ?? "",
       libc: libc?.trim() ?? "",

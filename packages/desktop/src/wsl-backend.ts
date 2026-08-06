@@ -9,6 +9,30 @@ function environmentArgument(name: string, value: string): string {
   return `${name}=${value}`;
 }
 
+function safeUserPathEntries(userPath: string | undefined): string[] {
+  if (!userPath) return [];
+
+  const entries: string[] = [];
+  const seen = new Set<string>();
+  for (const rawEntry of userPath.split(":")) {
+    const entry = rawEntry.trim();
+    if (
+      !entry.startsWith("/") ||
+      entry === "/mnt" ||
+      entry.startsWith("/mnt/") ||
+      entry.includes("\0") ||
+      entry.includes("\n") ||
+      entry.includes("\r") ||
+      seen.has(entry)
+    ) {
+      continue;
+    }
+    seen.add(entry);
+    entries.push(entry);
+  }
+  return entries;
+}
+
 export function createWslBackendLaunch(
   probe: WslDistroProbe,
   runtime: WslRuntimeCandidate,
@@ -18,18 +42,21 @@ export function createWslBackendLaunch(
   const distro = probe.target.distro;
   if (!distro) throw new Error("WSL environment has no distribution name");
   const engineRoot = `${probe.dataRoot}/engine/versions/${runtime.manifest.requiredEngineVersion}`;
-  const userPath = [
-    `${engineRoot}/bin`,
-    `${probe.home}/.local/bin`,
-    `${probe.home}/.local/share/pnpm`,
-    `${probe.home}/.npm-global/bin`,
-    "/usr/local/sbin",
-    "/usr/local/bin",
-    "/usr/sbin",
-    "/usr/bin",
-    "/sbin",
-    "/bin",
-  ].join(":");
+  const userPath = Array.from(
+    new Set([
+      `${engineRoot}/bin`,
+      ...safeUserPathEntries(probe.userPath),
+      `${probe.home}/.local/bin`,
+      `${probe.home}/.local/share/pnpm`,
+      `${probe.home}/.npm-global/bin`,
+      "/usr/local/sbin",
+      "/usr/local/bin",
+      "/usr/sbin",
+      "/usr/bin",
+      "/sbin",
+      "/bin",
+    ])
+  ).join(":");
   const env = [
     environmentArgument("PATH", userPath),
     environmentArgument("NODE_ENV", "production"),

@@ -33,6 +33,8 @@ describe("WslDiscovery", () => {
             "glibc 2.39",
             "true",
             "true",
+            "shell startup noise",
+            "__CODER_STUDIO_USER_PATH__/home/alice/.cargo/bin:/run/user/1000/fnm_multishells/42/bin:/mnt/c/Windows/System32:/usr/bin",
             "",
           ].join("\n")
         )
@@ -44,6 +46,8 @@ describe("WslDiscovery", () => {
       engineInstalled: true,
       installed: true,
       supported: true,
+      userPath:
+        "/home/alice/.cargo/bin:/run/user/1000/fnm_multishells/42/bin:/mnt/c/Windows/System32:/usr/bin",
     });
   });
 
