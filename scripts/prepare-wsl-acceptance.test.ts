@@ -1,0 +1,44 @@
+import { describe, expect, it } from "vitest";
+import {
+  createAcceptanceRuntimeVersion,
+  parsePrepareWslAcceptanceArgs,
+} from "./prepare-wsl-acceptance.js";
+
+describe("prepare-wsl-acceptance", () => {
+  it("uses the standard local acceptance defaults", () => {
+    expect(parsePrepareWslAcceptanceArgs([])).toEqual({
+      distro: undefined,
+      installer: false,
+      port: 8787,
+    });
+  });
+
+  it("parses an explicit distro, port, and installer request", () => {
+    expect(
+      parsePrepareWslAcceptanceArgs([
+        "--",
+        "--distro",
+        "Ubuntu-24.04",
+        "--port",
+        "9876",
+        "--installer",
+      ])
+    ).toEqual({
+      distro: "Ubuntu-24.04",
+      installer: true,
+      port: 9876,
+    });
+  });
+
+  it("rejects invalid ports", () => {
+    expect(() => parsePrepareWslAcceptanceArgs(["--port", "0"])).toThrow(
+      "--port must be an integer between 1 and 65535"
+    );
+  });
+
+  it("creates a commit-specific Product Runtime version", () => {
+    expect(
+      createAcceptanceRuntimeVersion("0.5.6", "4e80e3cd92c2d7dd46a0b0763d070120db240efa")
+    ).toBe("0.5.6-acceptance.4e80e3cd92c2");
+  });
+});

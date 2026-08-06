@@ -104,6 +104,8 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 | `pnpm pack:desktop` | 完整构建并生成 unpacked 应用目录 |
 | `pnpm dist:desktop` | 生成当前平台的安装包 |
 | `pnpm smoke:desktop` | 验证打包 Node、原生 PTY、认证、退出和窗口加载 |
+| `pnpm acceptance:wsl:prepare` | 在本机 WSL 构建并汇总完整的 WSL 验收通道和 packaged Desktop |
+| `pnpm acceptance:wsl:serve` | 在 `127.0.0.1:8787` 提供已准备的本地 WSL 下载通道 |
 
 开发模式使用固定端口 `4173` 启动 sidecar，Vite 使用 `5173`。正式包使用随机端口。
 
@@ -117,6 +119,74 @@ CLI Server 使用 `~/.coder-studio/data`，桌面 sidecar 使用 Electron user-d
 | `CODER_STUDIO_DESKTOP_PATH` | 覆盖传给 sidecar/Provider 的 PATH |
 | `CODER_STUDIO_DESKTOP_NODE_DIR` | 打包时使用已准备的 Node runtime，适合离线 CI |
 | `CODER_STUDIO_DESKTOP_RESOURCES_DIR` | smoke 时指定已打包的 resources 目录 |
+
+## 本地 WSL 标准验收
+
+本地完整验收使用一个只监听 Windows loopback 的静态下载服务。它模拟正式 Release/CDN，向
+packaged Desktop 提供签名后的 WSL Engine、WSL Server Runtime 和 Windows Product Runtime。
+`pnpm dev:desktop` 不开放 WSL 环境入口，因此不能替代这条链路。
+
+前置条件：
+
+- Windows 已启用 WSL2，并安装一个 x64/arm64、glibc-based distribution；
+- distribution 中有 `curl`、`tar`、`xz`、`sha256sum`、`python3`、`make` 和 `g++`；
+- 工作树已经提交且干净。验收构建固定使用 committed `HEAD`，并把 commit 写入验收报告。
+
+Ubuntu/Debian 缺少 Linux 原生构建工具时先执行：
+
+```bash
+sudo apt install build-essential python3 curl xz-utils
+```
+
+第一步，在 Windows PowerShell 中准备全部产物：
+
+```powershell
+pnpm acceptance:wsl:prepare -- --distro Ubuntu-24.04
+```
+
+该命令会自动完成：
+
+1. 探测 distribution 的 WSL2、glibc 和架构；
+2. 生成或复用 `release/wsl-acceptance/keys` 下的本地 Ed25519 测试密钥；
+3. 将 committed `HEAD` 归档到 WSL 缓存工作区，准备受管 Node/pnpm，并安装 Linux 依赖；
+4. 在 WSL 中构建签名后的 Linux Engine 和不含 Web 的 Server Runtime；
+5. 使用同一公钥、签名密钥和本地下载 URL 构建 Windows packaged Desktop；
+6. 将通道 manifest 和其引用的 `.tgz` 汇总到 `release/wsl-acceptance/downloads`，并验证签名、
+   版本、平台和 Engine 包哈希；
+7. 写出 `release/wsl-acceptance/acceptance.json`。
+
+默认只生成便于验收的 `release/desktop/win-unpacked`。需要同时验收 NSIS 安装包时追加
+`--installer`。验收 Runtime 使用 `<CLI version>-acceptance.<commit>`，避免不同 commit 在 WSL 中
+错误复用同版本的旧业务 Runtime。
+
+第二步，保持本地下载服务运行：
+
+```powershell
+pnpm acceptance:wsl:serve
+```
+
+第三步，另开 PowerShell，使用隔离的 Electron user-data 启动构建结果：
+
+```powershell
+& ".\release\desktop\win-unpacked\Coder Studio.exe" `
+  "--user-data-dir=$PWD\release\wsl-acceptance\user-data"
+```
+
+验收顺序：
+
+1. 在环境菜单选择目标 WSL distribution，确认出现 Checking、Downloading、Verifying、Installing；
+2. 确认切换并等待 App 重启，环境标签应显示所选 WSL；
+3. 打开 `\\wsl.localhost\\<distro>` 下的项目，在终端检查 `uname -a`、
+   `node -p "process.platform"` 和 `pwd`，结果应为 Linux/Linux 路径；
+4. 验证文件、Git、Terminal、Agent 以及 WebSocket 重连；
+5. 关闭 App，确认 `pgrep -af server.mjs` 不再显示 Coder Studio Server，但 distribution 未被终止；
+6. 停止本地下载服务后再次启动 App，同一 commit 应能复用已安装 Runtime；
+7. 切回 Local Windows，确认重启后 Windows 项目和独立状态仍可用。
+
+如果该 distribution 已安装 Engine，同一次验收只会下载新的 Server Runtime。需要重新验收真正的
+“首次安装 Engine + Runtime”时，应先关闭 App，再把
+`~/.local/share/coder-studio-desktop` 整体移动到明确的备份目录；其中包含 WSL 端的 Coder Studio
+状态和会话数据，因此不要直接删除，验收完成后可以恢复。
 
 ## 构建产物
 

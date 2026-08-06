@@ -71,6 +71,12 @@ release/runtime/
 └─ coder-studio-server-runtime-linux-<arch>.manifest.json
 ```
 
+Windows 本机的标准 WSL 验收由 `pnpm acceptance:wsl:prepare -- --distro <name>` 编排。它通过
+目标 distribution 构建 Linux 原生产物，再把 Engine、Linux Server Runtime 和 Windows Product
+Runtime 汇总到 `release/wsl-acceptance/downloads`。随后运行 `pnpm acceptance:wsl:serve`，即可用
+与正式发布相同的 manifest、签名和下载校验链路完成首次安装与环境切换验收。详细步骤见
+[`desktop.md`](./desktop.md#本地-wsl-标准验收)。
+
 Runtime 版本可以独立于 Desktop 安装包版本：
 
 ```powershell

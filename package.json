@@ -33,6 +33,8 @@
     "acceptance:phase1": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1",
     "acceptance:phase1:update-baseline": "pnpm --dir e2e exec playwright test --config playwright.config.ts --grep @phase1 --update-snapshots",
     "acceptance:phase1:report": "node e2e/fixtures/report-writer.ts phase-1",
+    "acceptance:wsl:prepare": "tsx scripts/prepare-wsl-acceptance.ts",
+    "acceptance:wsl:serve": "tsx scripts/serve-wsl-acceptance.ts",
     "e2e-ui": "tsx scripts/e2e-ui.ts",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
