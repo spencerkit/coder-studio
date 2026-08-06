@@ -196,8 +196,8 @@ async function toWslPath(distro: string, windowsPath: string): Promise<string> {
     distro,
     "--exec",
     "wslpath",
-    "--absolute",
-    "--unix",
+    "-a",
+    "-u",
     windowsPath,
   ]);
   return result.stdout.toString("utf8").trim();
