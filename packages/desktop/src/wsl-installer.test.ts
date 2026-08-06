@@ -169,6 +169,12 @@ describe("WslInstaller", () => {
     expect(runner).toHaveBeenCalledTimes(2);
     expect(runner.mock.calls[0]?.[0]).toContain("/bin/sh");
     expect(runner.mock.calls[0]?.[1]).toBeInstanceOf(Buffer);
+    const installArgs = runner.mock.calls[0]?.[0] ?? [];
+    const installScript = installArgs[installArgs.indexOf("-c") + 1] ?? "";
+    expect(installScript.indexOf('mkdir -p "$root"')).toBeGreaterThanOrEqual(0);
+    expect(installScript.indexOf('mkdir -p "$root"')).toBeLessThan(
+      installScript.indexOf('mkdir "$lock"')
+    );
     expect(runner.mock.calls[1]?.[0]).toContain("runtime-store");
     expect(progress).toHaveBeenLastCalledWith({
       phase: "verifying",

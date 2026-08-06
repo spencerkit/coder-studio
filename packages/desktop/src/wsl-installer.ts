@@ -55,6 +55,7 @@ const MAX_RUNTIME_PACKAGE_BYTES = 300 * 1024 * 1024;
 const INSTALL_SCRIPT = [
   "set -eu",
   "root=$1; kind=$2; version=$3; id=$4",
+  'mkdir -p "$root"',
   'lock="$root/install.lock"',
   'if ! mkdir "$lock" 2>/dev/null; then echo "Coder Studio environment installation is already running" >&2; exit 73; fi',
   "trap 'rmdir \"$lock\" 2>/dev/null || true' EXIT INT TERM",
