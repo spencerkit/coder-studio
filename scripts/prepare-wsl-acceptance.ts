@@ -259,6 +259,7 @@ if ! test -x "$node_root/bin/node"; then
   mv "$node_staging/runtime" "$node_root"
 fi
 
+export PATH="$node_root/bin:$PATH"
 if ! test -x "$pnpm_root/node_modules/.bin/pnpm"; then
   "$node_root/bin/npm" install --prefix "$pnpm_root" "pnpm@$pnpm_version"
 fi
