@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -130,5 +130,46 @@ describe("WslRuntimeStoreClient", () => {
         code: "ENOENT",
       }
     );
+  });
+
+  it("keeps the current and previous Runtime and removes obsolete Runtime and Engine versions", async () => {
+    const dataRoot = await mkdtemp(resolve(tmpdir(), "coder-studio-wsl-runtime-store-test-"));
+    cleanupRoots.push(dataRoot);
+    const runtimeStoreRoot = resolve(dataRoot, "runtime-store");
+    const versionsRoot = resolve(runtimeStoreRoot, "versions");
+    const engineVersionsRoot = resolve(dataRoot, "engine", "versions");
+    await Promise.all([
+      mkdir(runtimeStoreRoot, { recursive: true }),
+      mkdir(resolve(engineVersionsRoot, "old-engine"), { recursive: true }),
+      mkdir(resolve(engineVersionsRoot, DESKTOP_ENGINE_VERSION), { recursive: true }),
+    ]);
+    const client = new WslRuntimeStoreClient({
+      probe: createProbe(dataRoot),
+      runner: localNodeRunner,
+    });
+    const activate = async (id: string, version: string) => {
+      const pointer = await writeRuntime(dataRoot, id, version, `console.log('${version}')`);
+      await writeFile(resolve(runtimeStoreRoot, "pending.json"), JSON.stringify(pointer));
+      const pending = await client.getLaunchCandidate();
+      await client.markLaunchSuccessful(pending);
+      return pointer;
+    };
+
+    const first = await activate("111111111111111111111111", "0.5.6");
+    const orphan = await writeRuntime(
+      dataRoot,
+      "999999999999999999999999",
+      "0.5.0",
+      "console.log('orphan')"
+    );
+    const second = await activate("222222222222222222222222", "0.5.7");
+    expect((await readdir(versionsRoot)).sort()).toEqual([first.id, second.id].sort());
+    expect(await readdir(engineVersionsRoot)).toEqual([DESKTOP_ENGINE_VERSION]);
+    await expect(
+      readFile(resolve(versionsRoot, orphan.id, "server.mjs"), "utf8")
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    const third = await activate("333333333333333333333333", "0.5.8");
+    expect((await readdir(versionsRoot)).sort()).toEqual([second.id, third.id].sort());
   });
 });

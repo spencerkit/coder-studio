@@ -71,15 +71,39 @@ const fs = require("node:fs");
 const path = require("node:path");
 const root = process.argv[1];
 const pointer = JSON.parse(process.argv[2]);
+const source = process.argv[3];
+const engineVersion = process.argv[4];
 const activePath = path.join(root, "runtime-store", "active.json");
 let current = null;
 try { current = JSON.parse(fs.readFileSync(activePath, "utf8")); } catch {}
-const next = { active: pointer };
-if (current?.active?.id && current.active.id !== pointer.id) next.previous = current.active;
-fs.writeFileSync(activePath + ".tmp", JSON.stringify(next, null, 2));
-fs.renameSync(activePath + ".tmp", activePath);
-fs.rmSync(path.join(root, "runtime-store", "pending.json"), { force: true });
-fs.rmSync(path.join(root, "runtime-store", "failed.json"), { force: true });
+if (source === "pending") {
+  const next = { active: pointer };
+  if (current?.active?.id && current.active.id !== pointer.id) next.previous = current.active;
+  fs.writeFileSync(activePath + ".tmp", JSON.stringify(next, null, 2));
+  fs.renameSync(activePath + ".tmp", activePath);
+  current = next;
+  fs.rmSync(path.join(root, "runtime-store", "pending.json"), { force: true });
+  fs.rmSync(path.join(root, "runtime-store", "failed.json"), { force: true });
+}
+const protectedRuntimeIds = new Set(
+  [current?.active?.id, current?.previous?.id, pointer.id].filter(Boolean)
+);
+try {
+  const versionsRoot = path.join(root, "runtime-store", "versions");
+  for (const entry of fs.readdirSync(versionsRoot, { withFileTypes: true })) {
+    if (entry.isDirectory() && !protectedRuntimeIds.has(entry.name)) {
+      try { fs.rmSync(path.join(versionsRoot, entry.name), { recursive: true, force: true }); } catch {}
+    }
+  }
+} catch {}
+try {
+  const engineVersionsRoot = path.join(root, "engine", "versions");
+  for (const entry of fs.readdirSync(engineVersionsRoot, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name !== engineVersion) {
+      try { fs.rmSync(path.join(engineVersionsRoot, entry.name), { recursive: true, force: true }); } catch {}
+    }
+  }
+} catch {}
 `;
 
 const FALLBACK_SCRIPT = String.raw`
@@ -141,8 +165,11 @@ export class WslRuntimeStoreClient {
   }
 
   async markLaunchSuccessful(candidate: WslRuntimeCandidate): Promise<void> {
-    if (candidate.source !== "pending") return;
-    await this.execute(MARK_SUCCESS_SCRIPT, [JSON.stringify(candidate.pointer)]);
+    await this.execute(MARK_SUCCESS_SCRIPT, [
+      JSON.stringify(candidate.pointer),
+      candidate.source,
+      DESKTOP_ENGINE_VERSION,
+    ]);
   }
 
   async fallbackAfterFailure(candidate: WslRuntimeCandidate, error: unknown): Promise<void> {

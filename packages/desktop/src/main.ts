@@ -56,6 +56,7 @@ let environmentManager: DesktopEnvironmentManager | null = null;
 let activeEnvironmentTarget: DesktopEnvironmentTarget = NATIVE_ENVIRONMENT;
 let environmentOpening = false;
 let environmentInstanceRoot: string | null = null;
+let releaseProductRuntimeLease: (() => Promise<void>) | null = null;
 let appOrigin: string | null = null;
 let shutdownComplete = false;
 let shutdownStarted = false;
@@ -523,6 +524,8 @@ async function startApplication(): Promise<void> {
       })
     : null;
   let webRuntime = runtimeStore ? await runtimeStore.getLaunchCandidate() : null;
+  releaseProductRuntimeLease =
+    runtimeStore && webRuntime ? await runtimeStore.acquireLease(webRuntime) : null;
   const environmentStateStore = new EnvironmentStateStore(userDataDir);
   environmentManager = new DesktopEnvironmentManager({
     stateStore: environmentStateStore,
@@ -624,7 +627,9 @@ async function startApplication(): Promise<void> {
         if (!environmentManager.isRuntimeCompatible(wslRuntime.manifest)) throw error;
       } else {
         if (!runtimeStore || !webRuntime) throw error;
+        await releaseProductRuntimeLease?.().catch(() => undefined);
         webRuntime = await runtimeStore.fallbackAfterFailure(webRuntime, error);
+        releaseProductRuntimeLease = await runtimeStore.acquireLease(webRuntime);
       }
     }
   }
@@ -690,6 +695,8 @@ app.on("before-quit", (event: Event) => {
   void (desktopGateway?.stop() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => backendManager?.stop() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => releaseProductRuntimeLease?.() ?? Promise.resolve())
     .catch(() => undefined)
     .finally(() => {
       shutdownComplete = true;

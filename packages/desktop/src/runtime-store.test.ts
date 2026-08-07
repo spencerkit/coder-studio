@@ -189,4 +189,107 @@ describe("RuntimeStore", () => {
       "signature is invalid"
     );
   });
+
+  it("prefers a newer Factory Runtime and keeps only one stored rollback", async () => {
+    const root = await createRoot();
+    const storeRoot = resolve(root, "store");
+    const oldFactoryRoot = resolve(root, "factory-old");
+    await createRuntime(oldFactoryRoot, "0.5.4");
+    const oldStore = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: oldFactoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+    const firstRoot = resolve(await createRoot(), "first");
+    const secondRoot = resolve(await createRoot(), "second");
+    await createRuntime(firstRoot, "0.5.5", { signed: true });
+    await createRuntime(secondRoot, "0.5.7", { signed: true });
+    const first = await oldStore.stageDownloadedRuntime(firstRoot);
+    await oldStore.markLaunchSuccessful(first);
+    const second = await oldStore.stageDownloadedRuntime(secondRoot);
+    await oldStore.markLaunchSuccessful(second);
+
+    const newFactoryRoot = resolve(root, "factory-new");
+    await createRuntime(newFactoryRoot, "0.5.8");
+    const upgradedStore = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: newFactoryRoot,
+      shellVersion: "0.6.0",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+    const selected = await upgradedStore.getLaunchCandidate();
+
+    expect(selected).toMatchObject({
+      source: "factory",
+      manifest: { runtimeVersion: "0.5.8" },
+    });
+    await upgradedStore.markLaunchSuccessful(selected);
+    await expect(readFile(resolve(first.root, "server.mjs"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(resolve(second.root, "server.mjs"), "utf8")).resolves.toContain("0.5.7");
+  });
+
+  it("preserves a leased Runtime until the other Desktop instance releases it", async () => {
+    const { store } = await createStore();
+    const createAndActivate = async (version: string) => {
+      const runtimeRoot = resolve(await createRoot(), version);
+      await createRuntime(runtimeRoot, version, { signed: true });
+      const staged = await store.stageDownloadedRuntime(runtimeRoot);
+      await store.markLaunchSuccessful(staged);
+      return staged;
+    };
+    const first = await createAndActivate("0.5.7");
+    const releaseLease = await store.acquireLease(first);
+    await createAndActivate("0.5.8");
+    await createAndActivate("0.5.9");
+
+    await expect(readFile(resolve(first.root, "server.mjs"), "utf8")).resolves.toContain("0.5.7");
+    await releaseLease();
+    await store.markLaunchSuccessful(await store.getLaunchCandidate());
+    await expect(readFile(resolve(first.root, "server.mjs"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("falls back to the stored active Runtime when a newer Factory Runtime fails", async () => {
+    const root = await createRoot();
+    const storeRoot = resolve(root, "store");
+    const oldFactoryRoot = resolve(root, "factory-old");
+    await createRuntime(oldFactoryRoot, "0.5.6");
+    const oldStore = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: oldFactoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+    const activeRoot = resolve(await createRoot(), "active");
+    await createRuntime(activeRoot, "0.5.7", { signed: true });
+    await oldStore.markLaunchSuccessful(await oldStore.stageDownloadedRuntime(activeRoot));
+
+    const newFactoryRoot = resolve(root, "factory-new");
+    await createRuntime(newFactoryRoot, "0.5.8");
+    const upgradedStore = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: newFactoryRoot,
+      shellVersion: "0.6.0",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+    const factory = await upgradedStore.getLaunchCandidate();
+    const fallback = await upgradedStore.fallbackAfterFailure(factory, new Error("factory failed"));
+
+    expect(fallback).toMatchObject({
+      source: "active",
+      manifest: { runtimeVersion: "0.5.7" },
+    });
+    await expect(upgradedStore.getLaunchCandidate()).resolves.toMatchObject({
+      source: "active",
+      manifest: { runtimeVersion: "0.5.7" },
+    });
+  });
 });

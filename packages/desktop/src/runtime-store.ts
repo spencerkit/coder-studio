@@ -102,6 +102,7 @@ export class RuntimeStore {
   private readonly activePath: string;
   private readonly pendingPath: string;
   private readonly failedPath: string;
+  private readonly leasesRoot: string;
 
   constructor(private readonly options: RuntimeStoreOptions) {
     this.versionsRoot = resolve(options.root, "versions");
@@ -109,12 +110,14 @@ export class RuntimeStore {
     this.activePath = resolve(options.root, "active.json");
     this.pendingPath = resolve(options.root, "pending.json");
     this.failedPath = resolve(options.root, "failed.json");
+    this.leasesRoot = resolve(options.root, "leases");
   }
 
   async initialize(): Promise<void> {
     await Promise.all([
       mkdir(this.versionsRoot, { recursive: true }),
       mkdir(this.downloadsRoot, { recursive: true }),
+      mkdir(this.leasesRoot, { recursive: true }),
     ]);
   }
 
@@ -173,33 +176,57 @@ export class RuntimeStore {
 
   async getLaunchCandidate(): Promise<ProductRuntime> {
     await this.initialize();
-    const pending = await this.readPointerFile(this.pendingPath);
-    if (pending) {
-      const runtime = await this.resolveStoredRuntime(pending, "pending").catch(() => null);
-      if (runtime) return runtime;
+    const failedVersion = await this.readFailedVersion();
+    const pendingPointer = await this.readPointerFile(this.pendingPath);
+    let pending: ProductRuntime | null = null;
+    if (pendingPointer) {
+      pending = await this.resolveStoredRuntime(pendingPointer, "pending").catch(() => null);
+      if (pending?.manifest.runtimeVersion === failedVersion) pending = null;
+    }
+    if (!pending) {
       await rm(this.pendingPath, { force: true });
     }
 
     const activeState = await this.readActiveState();
+    let active: ProductRuntime | null = null;
     if (activeState) {
-      const runtime = await this.resolveStoredRuntime(activeState.active, "active").catch(
-        () => null
-      );
-      if (runtime) return runtime;
-      if (activeState.previous) {
+      active = await this.resolveStoredRuntime(activeState.active, "active").catch(() => null);
+      if (!active && activeState.previous) {
         const previous = await this.resolveStoredRuntime(activeState.previous, "active").catch(
           () => null
         );
         if (previous) {
           await writeJsonAtomic(this.activePath, { active: activeState.previous });
-          return previous;
+          active = previous;
         }
       }
-      await rm(this.activePath, { force: true });
+      if (!active) await rm(this.activePath, { force: true });
     }
 
-    const manifest = await this.validateRuntimeRoot(this.options.factoryRuntimeRoot, true);
-    return { root: this.options.factoryRuntimeRoot, manifest, source: "factory" };
+    const factory: ProductRuntime = {
+      root: this.options.factoryRuntimeRoot,
+      manifest: await this.validateRuntimeRoot(this.options.factoryRuntimeRoot, true),
+      source: "factory",
+    };
+    const candidates = [pending, active, factory].filter(
+      (candidate): candidate is ProductRuntime =>
+        Boolean(candidate) &&
+        !(candidate?.source === "factory" && candidate.manifest.runtimeVersion === failedVersion)
+    );
+    if (candidates.length === 0) return factory;
+    const sourcePriority: Record<ProductRuntime["source"], number> = {
+      active: 1,
+      pending: 2,
+      factory: 3,
+    };
+    candidates.sort((left, right) => {
+      const versionOrder = compareVersions(
+        right.manifest.runtimeVersion,
+        left.manifest.runtimeVersion
+      );
+      return versionOrder || sourcePriority[right.source] - sourcePriority[left.source];
+    });
+    return candidates[0] as ProductRuntime;
   }
 
   async stageDownloadedRuntime(sourceRoot: string): Promise<ProductRuntime> {
@@ -243,16 +270,45 @@ export class RuntimeStore {
   }
 
   async markLaunchSuccessful(runtime: ProductRuntime): Promise<void> {
-    if (runtime.source !== "pending" || !runtime.pointer) return;
-    const current = await this.readActiveState();
-    await writeJsonAtomic(this.activePath, {
-      active: runtime.pointer,
-      ...(current?.active.id !== runtime.pointer.id ? { previous: current?.active } : {}),
-    });
-    await Promise.all([
-      rm(this.pendingPath, { force: true }),
-      rm(this.failedPath, { force: true }),
-    ]);
+    if (runtime.source === "pending" && runtime.pointer) {
+      const current = await this.readActiveState();
+      await writeJsonAtomic(this.activePath, {
+        active: runtime.pointer,
+        ...(current?.active.id !== runtime.pointer.id ? { previous: current?.active } : {}),
+      });
+      await Promise.all([
+        rm(this.pendingPath, { force: true }),
+        rm(this.failedPath, { force: true }),
+      ]);
+    } else if (runtime.source === "factory") {
+      const current = await this.readActiveState();
+      if (current?.active.runtimeVersion === runtime.manifest.runtimeVersion) {
+        await rm(this.activePath, { force: true });
+      } else if (current?.active) {
+        await writeJsonAtomic(this.activePath, { active: current.active });
+      }
+      await Promise.all([
+        rm(this.pendingPath, { force: true }),
+        rm(this.failedPath, { force: true }),
+      ]);
+    } else {
+      await rm(this.pendingPath, { force: true });
+    }
+    await this.cleanupUnusedVersions().catch(() => {});
+  }
+
+  async acquireLease(runtime: ProductRuntime): Promise<() => Promise<void>> {
+    if (!runtime.pointer) return async () => {};
+    await this.initialize();
+    const leasePath = resolve(this.leasesRoot, `${process.pid}-${randomUUID()}.json`);
+    await writeFile(
+      leasePath,
+      `${JSON.stringify({ pid: process.pid, runtimeId: runtime.pointer.id })}\n`,
+      "utf8"
+    );
+    return async () => {
+      await rm(leasePath, { force: true });
+    };
   }
 
   async fallbackAfterFailure(runtime: ProductRuntime, error: unknown): Promise<ProductRuntime> {
@@ -280,6 +336,14 @@ export class RuntimeStore {
       await rm(this.activePath, { force: true });
       const manifest = await this.validateRuntimeRoot(this.options.factoryRuntimeRoot, true);
       return { root: this.options.factoryRuntimeRoot, manifest, source: "factory" };
+    }
+    if (runtime.source === "factory") {
+      const activeState = await this.readActiveState();
+      for (const pointer of [activeState?.active, activeState?.previous]) {
+        if (!pointer || pointer.runtimeVersion === runtime.manifest.runtimeVersion) continue;
+        const fallback = await this.resolveStoredRuntime(pointer, "active").catch(() => null);
+        if (fallback) return fallback;
+      }
     }
     throw error;
   }
@@ -332,5 +396,64 @@ export class RuntimeStore {
     } catch {
       return null;
     }
+  }
+
+  private async cleanupUnusedVersions(): Promise<void> {
+    const protectedIds = new Set<string>();
+    const [activeState, pending, leasedIds] = await Promise.all([
+      this.readActiveState(),
+      this.readPointerFile(this.pendingPath),
+      this.readLeasedRuntimeIds(),
+    ]);
+    if (activeState?.active.id) protectedIds.add(activeState.active.id);
+    if (activeState?.previous?.id) protectedIds.add(activeState.previous.id);
+    if (pending?.id) protectedIds.add(pending.id);
+    for (const id of leasedIds) protectedIds.add(id);
+
+    const entries = await readdir(this.versionsRoot, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && !protectedIds.has(entry.name))
+        .map((entry) =>
+          rm(resolve(this.versionsRoot, entry.name), { recursive: true, force: true }).catch(
+            () => {}
+          )
+        )
+    );
+  }
+
+  private async readLeasedRuntimeIds(): Promise<Set<string>> {
+    const ids = new Set<string>();
+    const entries = await readdir(this.leasesRoot, { withFileTypes: true });
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isFile() || !entry.name.endsWith(".json")) return;
+        const path = resolve(this.leasesRoot, entry.name);
+        try {
+          const value = JSON.parse(await readFile(path, "utf8")) as {
+            pid?: unknown;
+            runtimeId?: unknown;
+          };
+          if (
+            typeof value.pid !== "number" ||
+            typeof value.runtimeId !== "string" ||
+            !POINTER_ID_PATTERN.test(value.runtimeId)
+          ) {
+            await rm(path, { force: true });
+            return;
+          }
+          try {
+            process.kill(value.pid, 0);
+            ids.add(value.runtimeId);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "EPERM") ids.add(value.runtimeId);
+            else await rm(path, { force: true });
+          }
+        } catch {
+          await rm(path, { force: true });
+        }
+      })
+    );
+    return ids;
   }
 }
