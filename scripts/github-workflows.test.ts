@@ -204,6 +204,7 @@ describe("GitHub workflow boundaries", () => {
       release_base_url: "${{ steps.channel.outputs.release_base_url }}",
       runtime_update_url: "${{ steps.channel.outputs.runtime_update_url }}",
       signing_key_artifact: "${{ steps.channel.outputs.signing_key_artifact }}",
+      public_key_artifact: "${{ steps.channel.outputs.public_key_artifact }}",
     });
     expect(resolveChannel?.run).toContain(
       'release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
@@ -217,6 +218,9 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain(
       'signing_key_artifact="desktop-ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
     );
+    expect(resolveChannel?.run).toContain(
+      'public_key_artifact="desktop-acceptance-public-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+    );
     expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
     expect(signingKeyUpload?.with).toMatchObject({
       name: "${{ steps.channel.outputs.signing_key_artifact }}",
@@ -224,7 +228,7 @@ describe("GitHub workflow boundaries", () => {
       "retention-days": 1,
     });
     expect(publicKeyUpload?.with).toMatchObject({
-      name: "desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}",
+      name: "${{ steps.channel.outputs.public_key_artifact }}",
       path: "release/desktop-ci-signing/runtime-public.pem",
     });
     expect(repositoryVerify).toMatchObject({
@@ -254,7 +258,7 @@ describe("GitHub workflow boundaries", () => {
       expect(download.with?.path).toBe("release/desktop-acceptance");
     }
     expect(publicKeyDownload?.with).toMatchObject({
-      name: "desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}",
+      name: "${{ needs.prepare.outputs.public_key_artifact }}",
       path: "release/desktop-ci-signing",
     });
     expect(validation?.run).toContain(
@@ -262,6 +266,15 @@ describe("GitHub workflow boundaries", () => {
     );
     expect(release?.run).toContain("gh release create");
     expect(release?.run).toContain("--draft");
+    expect(release?.run).toContain(
+      "gh api \"repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}\" --jq '.draft'"
+    );
+    expect(release?.run).toContain('if [[ "${existing_is_draft}" != "true" ]]');
+    expect(release?.run).toContain("Refusing to overwrite non-draft release");
+    expect(release?.run).toContain("elif grep -q '(HTTP 404)'");
+    expect(release?.run).toContain(
+      'gh release upload "${RELEASE_TAG}" release/desktop-acceptance/* --clobber'
+    );
     expect(release?.run).toContain(
       'gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false'
     );

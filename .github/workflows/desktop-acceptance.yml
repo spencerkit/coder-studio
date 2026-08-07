@@ -17,6 +17,7 @@ jobs:
       release_base_url: ${{ steps.channel.outputs.release_base_url }}
       runtime_update_url: ${{ steps.channel.outputs.runtime_update_url }}
       signing_key_artifact: ${{ steps.channel.outputs.signing_key_artifact }}
+      public_key_artifact: ${{ steps.channel.outputs.public_key_artifact }}
 
     steps:
       - name: Resolve acceptance channel
@@ -27,10 +28,12 @@ jobs:
           release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
           runtime_update_url=${release_base_url}/coder-studio-runtime-win32-x64.manifest.json
           signing_key_artifact="desktop-ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          public_key_artifact="desktop-acceptance-public-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "release_base_url=${release_base_url}" >> "${GITHUB_OUTPUT}"
           echo "runtime_update_url=${runtime_update_url}" >> "${GITHUB_OUTPUT}"
           echo "signing_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
+          echo "public_key_artifact=${public_key_artifact}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate ephemeral Runtime signing key
         shell: bash
@@ -53,7 +56,7 @@ jobs:
       - name: Upload acceptance public key
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ steps.channel.outputs.public_key_artifact }}
           path: release/desktop-ci-signing/runtime-public.pem
           if-no-files-found: error
           retention-days: 3
@@ -118,7 +121,7 @@ jobs:
       - name: Download acceptance public key
         uses: actions/download-artifact@v4
         with:
-          name: desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ needs.prepare.outputs.public_key_artifact }}
           path: release/desktop-ci-signing
 
       - name: Load acceptance public key
@@ -141,12 +144,23 @@ jobs:
         run: |
           desktop_version=$(node -p "require('./packages/desktop/package.json').version")
           installer="Coder-Studio-Setup-${desktop_version}.exe"
-          gh release create "${RELEASE_TAG}" \
-            --target "${GITHUB_SHA}" \
-            --title "Coder Studio Desktop acceptance ${GITHUB_RUN_NUMBER}" \
-            --notes "Ephemeral signed acceptance channel for ${GITHUB_SHA}. The signing key is test-only; do not promote these assets to production." \
-            --draft \
-            release/desktop-acceptance/*
+          release_error="${RUNNER_TEMP}/desktop-acceptance-release-error.log"
+          if existing_is_draft=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.draft' 2>"${release_error}"); then
+            if [[ "${existing_is_draft}" != "true" ]]; then
+              echo "Refusing to overwrite non-draft release ${RELEASE_TAG}." >&2
+              exit 1
+            fi
+          elif grep -q '(HTTP 404)' "${release_error}"; then
+            gh release create "${RELEASE_TAG}" \
+              --target "${GITHUB_SHA}" \
+              --title "Coder Studio Desktop acceptance ${GITHUB_RUN_NUMBER}" \
+              --notes "Ephemeral signed acceptance channel for ${GITHUB_SHA}. The signing key is test-only; do not promote these assets to production." \
+              --draft
+          else
+            cat "${release_error}" >&2
+            exit 1
+          fi
+          gh release upload "${RELEASE_TAG}" release/desktop-acceptance/* --clobber
           gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false
           {
             echo "## Desktop acceptance channel"
