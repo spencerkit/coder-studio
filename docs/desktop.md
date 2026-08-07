@@ -250,8 +250,9 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
   job 构建并校验 WSL Engine 与 WSL Server Runtime。直接运行允许 manifest 无签名，只上传验证 artifact，
   不创建 Release。
 - `.github/workflows/desktop-acceptance.yml` 只能通过 GitHub Actions 中的
-  `Publish Desktop acceptance` 手动触发。它生成仅供本次运行使用的 Ed25519 测试密钥，等待通用快速 CI，
-  再复用 Desktop 验证 workflow 构建并校验完整签名资产，最后发布独立的
+  `Publish Desktop acceptance` 手动触发。它生成仅供本次运行使用的 Ed25519 测试密钥，并行调用通用
+  快速 CI 与可复用 Desktop 验证 workflow 的签名构建；发布阶段等待 `prepare`、通用 CI 和完整签名
+  Desktop 资产全部成功，再创建独立的
   `desktop-ci-<run-id>-<attempt>` prerelease。只有这一层会发布测试资产；该通道固定到对应 tag，永远不会
   更新 GitHub `latest`，也不能晋升为生产发布。
 - `.github/workflows/desktop-release.yml` 保持生产发布边界不变：只能手动从 `main` 触发，并受
