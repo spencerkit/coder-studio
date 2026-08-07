@@ -17,6 +17,7 @@
     "pack:desktop": "pnpm build:desktop && pnpm prepare:desktop && pnpm --filter @coder-studio/desktop run pack",
     "dist:desktop": "pnpm build:desktop && pnpm prepare:desktop && pnpm --filter @coder-studio/desktop run dist",
     "smoke:desktop": "tsx scripts/smoke-desktop-package.ts",
+    "desktop:artifacts": "tsx scripts/desktop-release-artifacts.ts",
     "changeset": "changeset",
     "changeset:validate": "tsx scripts/validate-changesets.ts",
     "version-packages": "changeset version",
@@ -50,6 +51,7 @@
     "@types/node": "^25.6.0",
     "esbuild": "^0.28.0",
     "husky": "^9.1.7",
+    "tar": "^7.5.22",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

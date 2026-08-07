@@ -10,7 +10,7 @@ on:
         type: string
 
 concurrency:
-  group: publish-cli
+  group: publish-release-channel
   cancel-in-progress: false
 
 jobs:
@@ -96,19 +96,49 @@ jobs:
           git tag "${{ steps.release.outputs.tag }}"
           git push origin "${{ steps.release.outputs.tag }}"
 
+      - name: Preserve Desktop update channel assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p desktop-channel-assets
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || true)
+          if [ -n "${latest_tag}" ]; then
+            for pattern in \
+              "latest.yml" \
+              "Coder-Studio-Setup-*.exe" \
+              "*.blockmap" \
+              "coder-studio-runtime-win32-x64.manifest.json" \
+              "coder-studio-runtime-*-win32-x64.tgz" \
+              "coder-studio-engine-linux-x64.manifest.json" \
+              "coder-studio-engine-*-linux-x64.tgz" \
+              "coder-studio-server-runtime-linux-x64.manifest.json" \
+              "coder-studio-server-runtime-*-linux-x64.tgz"; do
+              gh release download "${latest_tag}" \
+                --pattern "${pattern}" \
+                --dir desktop-channel-assets \
+                --clobber 2>/dev/null || true
+            done
+          fi
+
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          desktop_assets=()
+          while IFS= read -r -d '' asset; do
+            desktop_assets+=("${asset}")
+          done < <(find desktop-channel-assets -maxdepth 1 -type f -print0)
           release_notes_file="docs/promotion/releases/${{ steps.release.outputs.tag }}.md"
 
           if [ -f "${release_notes_file}" ]; then
             gh release create "${{ steps.release.outputs.tag }}" \
+              "${desktop_assets[@]}" \
               --title "@spencer-kit/coder-studio ${{ steps.release.outputs.version }}" \
               --notes-file "${release_notes_file}" \
               --verify-tag
           else
             gh release create "${{ steps.release.outputs.tag }}" \
+              "${desktop_assets[@]}" \
               --title "@spencer-kit/coder-studio ${{ steps.release.outputs.version }}" \
               --generate-notes \
               --verify-tag

@@ -37,6 +37,7 @@ export async function packageDesktop(options: {
 }): Promise<void> {
   const version = await readDesktopReleaseVersion();
   info(`Packaging Coder Studio desktop ${version}`);
+  await run("pnpm", ["exec", "install-electron"], { cwd: DESKTOP_DIR });
   await run(
     "pnpm",
     [...createDesktopPackageArgs(options), "--config.extraMetadata.version", version],

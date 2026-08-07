@@ -2,6 +2,7 @@ appId: com.coderstudio.desktop
 productName: Coder Studio
 copyright: Copyright © Coder Studio
 asar: true
+electronDist: node_modules/electron/dist
 
 directories:
   output: ../../release/desktop
@@ -38,6 +39,7 @@ win:
         - x64
 
 nsis:
+  artifactName: Coder-Studio-Setup-${version}.${ext}
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always

@@ -29,6 +29,9 @@ importers:
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      tar:
+        specifier: ^7.5.22
+        version: 7.5.22
       tsx:
         specifier: ^4.21.0
         version: 4.21.0

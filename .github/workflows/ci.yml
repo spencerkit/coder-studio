@@ -95,3 +95,97 @@ jobs:
 
       - name: Build CLI package
         run: pnpm --filter @spencer-kit/coder-studio build
+
+  desktop-windows-verify:
+    name: Desktop Windows package and smoke
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test and type-check Desktop
+        run: |
+          pnpm --filter @coder-studio/desktop test
+          pnpm --filter @coder-studio/desktop typecheck
+
+      - name: Build unsigned Windows installer and Runtime
+        run: pnpm dist:desktop
+
+      - name: Smoke packaged Engine, Runtime, PTY, and Electron window
+        run: pnpm smoke:desktop
+
+      - name: Stage and validate Windows release assets
+        run: |
+          pnpm desktop:artifacts stage --directory release/desktop-release-windows --components 'desktop,win-runtime'
+          pnpm desktop:artifacts validate --directory release/desktop-release-windows --components 'desktop,win-runtime' --allow-unsigned
+
+      - name: Upload Windows verification assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-${{ github.sha }}
+          path: release/desktop-release-windows/
+          if-no-files-found: error
+          retention-days: 3
+
+  desktop-linux-assets-verify:
+    name: WSL Engine and Runtime verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unsigned WSL Engine and Server Runtime
+        run: |
+          pnpm build:wsl-engine
+          pnpm build:wsl-runtime
+
+      - name: Stage and validate WSL release assets
+        run: |
+          pnpm desktop:artifacts stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
+          pnpm desktop:artifacts validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime' --allow-unsigned
+
+      - name: Upload WSL verification assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-${{ github.sha }}
+          path: release/desktop-release-linux/
+          if-no-files-found: error
+          retention-days: 3

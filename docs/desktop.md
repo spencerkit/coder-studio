@@ -214,7 +214,7 @@ Product Runtime 组装时会删除它们和依赖中残留的 `.map`。安装包
 | --- | --- | --- | --- |
 | CLI + Product Runtime | `packages/cli/package.json` | `0.5.6` | 两者共用版本号 |
 | Desktop Shell + 安装包 | `packages/desktop/package.json` | `0.1.0` | 独立递增 |
-| Engine ABI | Runtime manifest 的 `requiredEngineVersion` | `1` | 只有宿主兼容边界变化时递增 |
+| Engine ABI | Runtime manifest 的 `requiredEngineVersion` | `2` | 只有宿主兼容边界变化时递增 |
 
 `scripts/package-desktop.ts` 只读取 Desktop package 版本；Runtime 构建默认只读取 CLI package
 版本。Runtime manifest 的 `minShellVersion` 用于表达某个 Runtime 所需的最低 Desktop 版本，
@@ -238,14 +238,28 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
 
 ## 签名、公证与发布
 
-推荐在 GitHub Actions 的原生 runner 上按平台并行执行：
+仓库提供两层 Desktop 流水线：
+
+- `.github/workflows/ci.yml` 在 PR 与 `main` push 上并行构建 Windows 安装包和 Linux WSL
+  资产。Windows job 会运行 Desktop 测试、类型检查、完整 NSIS 打包以及 Engine/Runtime、PTY、Electron
+  窗口 smoke；Linux job 会真实运行 WSL Engine 内的 npm/npx/corepack，并校验 Engine 与 Server Runtime
+  归档。CI 允许 manifest 无签名，但不会发布这些候选资产。
+- `.github/workflows/desktop-release.yml` 只能手动从 `main` 触发，并受
+  `desktop-production` environment 审批保护。`full` 模式发布 Shell、Windows Runtime、WSL Engine 和
+  WSL Runtime；`runtime` 模式只发布 Windows/WSL Product Runtime，并从当前稳定 Release 继承 Shell
+  安装包与 WSL Engine。
+
+生产流水线在原生 runner 上按平台并行执行：
 
 1. checkout，并安装 Node 24 与 pnpm；
 2. `pnpm install --frozen-lockfile`；
-3. 运行类型检查、桌面测试和针对性 server/CLI/Web 测试；
-4. `pnpm dist:desktop`；
-5. `pnpm smoke:desktop`（Linux runner 需要可用的图形显示或 xvfb）；
-6. 将安装包、blockmap 和更新元数据上传到同一个 GitHub Release。
+3. Windows job 运行 Desktop 类型检查和测试；完整 server/CLI/Web 校验由同一提交的 CI 负责；
+4. full 模式运行 `pnpm dist:desktop`；
+5. Windows full 模式运行 `pnpm smoke:desktop`；
+6. 用 `scripts/desktop-release-artifacts.ts` 汇总并重新解包校验签名、版本边界、文件 SHA-256、Engine
+   包 SHA-256、sourcemap 和更新元数据；
+7. 为最终资产生成 GitHub artifact attestation，并将安装包、blockmap 和更新元数据上传到同一个
+   GitHub Release。
 
 WSL 产物必须在对应架构的 Linux runner 上另外执行 `pnpm build:wsl-engine` 和
 `pnpm build:wsl-runtime`，使用同一把 Runtime Ed25519 私钥签名，并上传版本化包和稳定通道 manifest。
@@ -253,9 +267,20 @@ Windows runner 不能生成或复用 `node-pty` 的 Linux 原生文件。
 
 发布所需凭据不进入仓库：
 
-- Windows：代码签名证书（electron-builder 的 `CSC_LINK` / `CSC_KEY_PASSWORD` 或等价证书存储配置）；
+- Runtime：`DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY` 与 `DESKTOP_RUNTIME_PUBLIC_KEY`，保存 Ed25519 PEM；
+- Windows：`DESKTOP_WINDOWS_CSC_LINK` 与 `DESKTOP_WINDOWS_CSC_KEY_PASSWORD`，流水线会映射为
+  electron-builder 的 `CSC_LINK` / `CSC_KEY_PASSWORD`；
 - macOS：Developer ID Application 证书，以及 Apple notarization 的 API key/issuer 或 Apple ID/team 凭据；
 - GitHub：对目标 Release 有写权限的 token。
+
+上述四个 Desktop secret 应配置在 GitHub `desktop-production` environment 中，并为该 environment
+启用 required reviewers。稳定 full release 使用 `desktop-v<desktop-version>` 标签，Runtime-only release
+使用 `desktop-runtime-v<runtime-version>` 标签；标签已存在时流水线直接失败，不覆盖已有产物。
+
+由于 CLI 与 Desktop 共用同一个 GitHub `latest` 指针，CLI 发布流水线会把当前 Desktop 安装包、更新
+元数据、Windows Runtime、WSL Engine 和 WSL Runtime 复制到新的 CLI Release。这样 CLI 发布成为
+latest 后，已安装 Desktop 的强更新与 Runtime 热更新地址仍然有效。CLI 与 Desktop 发布还会共用一个
+concurrency group，避免两个 Release 同时更新稳定通道。
 
 Windows 未签名包会触发 SmartScreen；macOS 未签名、未公证包不应作为正式下载发布。自动更新也应只在签名链稳定后启用生产发布。
 

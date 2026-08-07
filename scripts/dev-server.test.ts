@@ -55,6 +55,11 @@ describe("dev-server", () => {
 
     await devServer();
 
+    expect(runBackground).toHaveBeenCalledWith(
+      "pnpm",
+      ["tsx", "watch", "src/main.ts"],
+      expect.objectContaining({ cwd: "/repo/packages/server" })
+    );
     expect(buildDevServerEnv).toHaveBeenCalledWith({
       rootDir: "/repo",
       cliDir: "/repo/packages/cli",

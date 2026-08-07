@@ -15,7 +15,6 @@ import {
 } from "@coder-studio/core/runtime";
 import { IN_MEMORY_STATE_DIR } from "@coder-studio/core/state-paths";
 import { providerRegistry } from "@coder-studio/providers";
-import { isDirectExecution } from "@coder-studio/utils";
 import type { FastifyInstance } from "fastify";
 import { AgentInstructionsPublisher } from "./agent-instructions/publisher.js";
 import { buildFastifyApp } from "./app.js";
@@ -879,20 +878,4 @@ function extractListenPort(app: FastifyInstance): number | undefined {
 
 function createPtyHost() {
   return new NodePtyHost();
-}
-
-if (isDirectExecution(import.meta.url)) {
-  const server = await createServer();
-
-  process.on("SIGINT", async () => {
-    console.log("\nShutting down...");
-    await server.stop();
-    process.exit(0);
-  });
-
-  process.on("SIGTERM", async () => {
-    console.log("\nShutting down...");
-    await server.stop();
-    process.exit(0);
-  });
 }

@@ -56,6 +56,11 @@ release/runtime/
 和它的 `packageFile` 指向的版本化 `.tgz`。Desktop 默认从当前仓库的 `releases/latest/download`
 检查稳定通道，也可以用 `CODER_STUDIO_RUNTIME_UPDATE_URL` 覆盖。
 
+生产发布通过 GitHub Actions 的 `Publish Desktop` 工作流完成。选择 `full` 时会重新构建 Desktop
+Shell/安装包、Windows Runtime、WSL Engine 与 WSL Runtime；选择 `runtime` 时仅构建两个 Product
+Runtime，并继承当前稳定通道中的安装包和 Engine。两种模式都会在发布前解包校验 manifest 签名、
+版本兼容边界、文件集合与 SHA-256，并拒绝任何 sourcemap。
+
 WSL 产物只能在 Linux runner 构建：
 
 ```text

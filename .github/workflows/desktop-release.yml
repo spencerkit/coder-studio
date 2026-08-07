@@ -1,0 +1,317 @@
+name: Publish Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Full Shell/Engine release or Product Runtime-only update"
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - runtime
+      prerelease:
+        description: "Publish as a GitHub prerelease"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: publish-release-channel
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve release boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      desktop_version: ${{ steps.release.outputs.desktop_version }}
+      runtime_version: ${{ steps.release.outputs.runtime_version }}
+      tag: ${{ steps.release.outputs.tag }}
+      title: ${{ steps.release.outputs.title }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require main branch
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Desktop production releases must run from main" >&2
+            exit 1
+          fi
+
+      - name: Resolve versions and release tag
+        id: release
+        shell: bash
+        run: |
+          desktop_version=$(node -p "require('./packages/desktop/package.json').version")
+          runtime_version=$(node -p "require('./packages/cli/package.json').version")
+          if [[ "${{ inputs.mode }}" == "full" ]]; then
+            tag="desktop-v${desktop_version}"
+            title="Coder Studio Desktop ${desktop_version}"
+          else
+            tag="desktop-runtime-v${runtime_version}"
+            title="Coder Studio Runtime ${runtime_version}"
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Release tag ${tag} already exists" >&2
+            exit 1
+          fi
+          echo "desktop_version=${desktop_version}" >> "${GITHUB_OUTPUT}"
+          echo "runtime_version=${runtime_version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "title=${title}" >> "${GITHUB_OUTPUT}"
+
+  linux-assets:
+    name: Build signed WSL assets
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: desktop-production
+    permissions:
+      contents: read
+    env:
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Require Runtime signing keys
+        shell: bash
+        run: |
+          if [[ -z "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" || -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+            echo "Desktop Runtime Ed25519 signing secrets are required" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build signed WSL assets
+        shell: bash
+        run: |
+          if [[ "${{ inputs.mode }}" == "full" ]]; then
+            pnpm build:wsl-engine
+          fi
+          pnpm build:wsl-runtime
+
+      - name: Stage and validate signed WSL assets
+        shell: bash
+        run: |
+          components="wsl-runtime"
+          if [[ "${{ inputs.mode }}" == "full" ]]; then
+            components="wsl-engine,wsl-runtime"
+          fi
+          pnpm desktop:artifacts stage --directory release/desktop-release-linux --components "${components}"
+          pnpm desktop:artifacts validate --directory release/desktop-release-linux --components "${components}"
+
+      - name: Upload WSL assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-release
+          path: release/desktop-release-linux/
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-assets:
+    name: Build signed Windows assets
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: desktop-production
+    permissions:
+      contents: read
+    env:
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Require signing credentials
+        shell: pwsh
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY -or -not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw "Desktop Runtime Ed25519 signing secrets are required"
+          }
+          if ("${{ inputs.mode }}" -eq "full" -and (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD)) {
+            throw "Windows Authenticode signing secrets are required for a full Desktop release"
+          }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test and type-check Desktop
+        run: |
+          pnpm --filter @coder-studio/desktop test
+          pnpm --filter @coder-studio/desktop typecheck
+
+      - name: Build signed Windows assets
+        shell: pwsh
+        run: |
+          if ("${{ inputs.mode }}" -eq "full") {
+            pnpm dist:desktop
+            pnpm smoke:desktop
+          } else {
+            pnpm build:desktop-runtime
+          }
+
+      - name: Verify Authenticode signatures
+        if: inputs.mode == 'full'
+        shell: pwsh
+        run: |
+          $metadata = Get-Content release/desktop/latest.yml -Raw
+          $installerName = [regex]::Match($metadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $paths = @(
+            (Join-Path release/desktop $installerName),
+            'release/desktop/win-unpacked/Coder Studio.exe',
+            'release/desktop/win-unpacked/resources/engine/node.exe'
+          )
+          foreach ($path in $paths) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne 'Valid') {
+              throw "Invalid Authenticode signature for ${path}: $($signature.Status)"
+            }
+          }
+
+      - name: Stage and validate signed Windows assets
+        shell: pwsh
+        run: |
+          $components = 'win-runtime'
+          if ("${{ inputs.mode }}" -eq "full") {
+            $components = 'desktop,win-runtime'
+          }
+          pnpm desktop:artifacts stage --directory release/desktop-release-windows --components $components
+          pnpm desktop:artifacts validate --directory release/desktop-release-windows --components $components
+
+      - name: Upload Windows assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-release
+          path: release/desktop-release-windows/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs:
+      - prepare
+      - linux-assets
+      - windows-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: desktop-production
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Carry forward Shell and Engine for Runtime-only releases
+        if: inputs.mode == 'runtime'
+        shell: bash
+        run: |
+          mkdir -p release/desktop-release-final
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          for pattern in \
+            "latest.yml" \
+            "Coder-Studio-Setup-*.exe" \
+            "*.blockmap" \
+            "coder-studio-engine-linux-x64.manifest.json" \
+            "coder-studio-engine-*-linux-x64.tgz"; do
+            gh release download "${latest_tag}" --pattern "${pattern}" --dir release/desktop-release-final --clobber
+          done
+
+      - name: Download newly built release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*-release
+          path: release/desktop-release-final
+          merge-multiple: true
+
+      - name: Validate complete production release
+        run: pnpm desktop:artifacts validate --directory release/desktop-release-final --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/desktop-release-final/*
+
+      - name: Publish release
+        shell: bash
+        run: |
+          release_flags=(--target "${GITHUB_SHA}" --title "${{ needs.prepare.outputs.title }}" --generate-notes)
+          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
+            release_flags+=(--prerelease)
+          else
+            release_flags+=(--latest)
+          fi
+          gh release create "${{ needs.prepare.outputs.tag }}" \
+            "${release_flags[@]}" \
+            release/desktop-release-final/*
+
+      - name: Upload final release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-${{ needs.prepare.outputs.tag }}
+          path: release/desktop-release-final/
+          if-no-files-found: error
+          retention-days: 30

@@ -210,6 +210,9 @@ async function verifySidecar(resourcesDir: string, tempRoot: string): Promise<vo
     env: {
       ...process.env,
       NODE_ENV: "production",
+      // The bundled sidecar must use its explicit Desktop port, never auto-run the Server CLI
+      // entry that reads PORT. An invalid sentinel makes that bundle-boundary regression fatal.
+      PORT: "desktop-smoke-must-not-read-global-port",
       NODE_PATH: join(engineDir, "node_modules"),
       CODER_STUDIO_ENGINE_ROOT: engineDir,
       CODER_STUDIO_LOG_FORMAT: "json",
@@ -286,6 +289,7 @@ async function verifyApp(resourcesDir: string, tempRoot: string): Promise<void> 
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...appEnv,
+      PORT: "desktop-smoke-must-not-read-global-port",
       CODER_STUDIO_DESKTOP_SMOKE_RESULT: resultPath,
     },
   });
