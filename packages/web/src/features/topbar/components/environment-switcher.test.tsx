@@ -27,7 +27,7 @@ const wslEnvironment: DesktopEnvironmentSummary = {
 
 function installDesktopApi() {
   let progressListener: ((event: DesktopEnvironmentProgress) => void) | undefined;
-  const switchEnvironment = vi.fn().mockResolvedValue({ status: "relaunching" as const });
+  const openEnvironment = vi.fn().mockResolvedValue({ status: "opened" as const });
   const api: CoderStudioDesktopApi = {
     platform: "win32",
     selectWorkspaceDirectory: vi.fn().mockResolvedValue(null),
@@ -35,7 +35,7 @@ function installDesktopApi() {
     getBackendStatus: vi.fn().mockResolvedValue(null),
     listEnvironments: vi.fn().mockResolvedValue([nativeEnvironment, wslEnvironment]),
     getActiveEnvironment: vi.fn().mockResolvedValue(nativeEnvironment),
-    switchEnvironment,
+    openEnvironment,
     onEnvironmentProgress: vi.fn((listener) => {
       progressListener = listener;
       return () => {
@@ -48,7 +48,7 @@ function installDesktopApi() {
     value: api,
   });
   return {
-    switchEnvironment,
+    openEnvironment,
     emitProgress: (event: DesktopEnvironmentProgress) => progressListener?.(event),
   };
 }
@@ -72,17 +72,19 @@ describe("EnvironmentSwitcher", () => {
     delete window.coderStudioDesktop;
   });
 
-  it("lists Windows and WSL environments and requests a WSL switch", async () => {
+  it("keeps the current window and opens WSL as another environment instance", async () => {
     const user = userEvent.setup();
-    const { switchEnvironment } = installDesktopApi();
+    const { openEnvironment } = installDesktopApi();
     renderSwitcher();
 
     expect(await screen.findByText("Local: Windows")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Coder Studio environment" }));
     await user.click(await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ }));
 
-    expect(switchEnvironment).toHaveBeenCalledWith("wsl:ubuntu");
-    expect(screen.getByText("Preparing…")).toBeInTheDocument();
+    expect(openEnvironment).toHaveBeenCalledWith("wsl:ubuntu");
+    await waitFor(() =>
+      expect(screen.queryByText("Open another environment")).not.toBeInTheDocument()
+    );
   });
 
   it("renders installation progress reported by the Desktop host", async () => {
@@ -99,5 +101,20 @@ describe("EnvironmentSwitcher", () => {
     await userEvent.click(screen.getByRole("button", { name: "Coder Studio environment" }));
 
     await waitFor(() => expect(screen.getByText("Downloading WSL Engine…")).toBeInTheDocument());
+  });
+
+  it("keeps the menu actionable when opening another instance fails", async () => {
+    const user = userEvent.setup();
+    const { openEnvironment } = installDesktopApi();
+    openEnvironment.mockRejectedValueOnce(new Error("Unable to launch WSL instance"));
+    renderSwitcher();
+
+    await screen.findByText("Local: Windows");
+    await user.click(screen.getByRole("button", { name: "Coder Studio environment" }));
+    const wslButton = await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ });
+    await user.click(wslButton);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to launch WSL instance");
+    expect(wslButton).toBeEnabled();
   });
 });

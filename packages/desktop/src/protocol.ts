@@ -41,13 +41,13 @@ export interface DesktopEnvironmentSummary extends DesktopEnvironmentTarget {
 
 export interface DesktopEnvironmentProgress {
   environmentId: string;
-  phase: "checking" | "downloading" | "installing" | "verifying" | "relaunching";
+  phase: "checking" | "downloading" | "installing" | "verifying" | "launching";
   message: string;
   percent?: number;
 }
 
-export interface DesktopEnvironmentSwitchResult {
-  status: "unchanged" | "relaunching";
+export interface DesktopEnvironmentOpenResult {
+  status: "unchanged" | "opened";
 }
 
 export interface DesktopApi {
@@ -57,6 +57,6 @@ export interface DesktopApi {
   getBackendStatus(): Promise<DesktopBackendStatus | null>;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
-  switchEnvironment(environmentId: string): Promise<DesktopEnvironmentSwitchResult>;
+  openEnvironment(environmentId: string): Promise<DesktopEnvironmentOpenResult>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
 }

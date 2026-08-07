@@ -151,12 +151,13 @@
   },
   "desktop_environment": {
     "title": "Coder Studio environment",
-    "select": "Connect to an environment",
+    "select": "Open another environment",
     "local": "Local",
     "wsl": "WSL",
     "local_windows": "Local: Windows",
+    "current_window": "Current window",
     "checking": "Checking environment…",
-    "preparing": "Preparing…",
+    "preparing": "Opening…",
     "status": {
       "ready": "Ready",
       "not-installed": "Coder Studio Runtime is not installed",

@@ -15,7 +15,7 @@ export function EnvironmentSwitcher() {
   const [environments, setEnvironments] = useState<DesktopEnvironmentSummary[]>([]);
   const [active, setActive] = useState<DesktopEnvironmentSummary | null>(null);
   const [loading, setLoading] = useState(false);
-  const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [progress, setProgress] = useState<DesktopEnvironmentProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +42,7 @@ export function EnvironmentSwitcher() {
     void refresh();
     return api.onEnvironmentProgress((nextProgress) => {
       setProgress(nextProgress);
-      setSwitchingId(nextProgress.environmentId);
+      setOpeningId(nextProgress.environmentId);
     });
   }, [api]);
 
@@ -64,9 +64,9 @@ export function EnvironmentSwitcher() {
 
   if (!api || api.platform !== "win32") return null;
 
-  const switchTo = async (environment: DesktopEnvironmentSummary) => {
-    if (environment.active || switchingId) return;
-    setSwitchingId(environment.id);
+  const openEnvironment = async (environment: DesktopEnvironmentSummary) => {
+    if (environment.active || openingId) return;
+    setOpeningId(environment.id);
     setProgress({
       environmentId: environment.id,
       phase: "checking",
@@ -74,15 +74,13 @@ export function EnvironmentSwitcher() {
     });
     setError(null);
     try {
-      const result = await api.switchEnvironment(environment.id);
-      if (result.status === "unchanged") {
-        setSwitchingId(null);
-        setProgress(null);
-        setOpen(false);
-      }
-    } catch (switchError) {
-      setError(getErrorMessage(switchError));
-      setSwitchingId(null);
+      await api.openEnvironment(environment.id);
+      setOpeningId(null);
+      setProgress(null);
+      setOpen(false);
+    } catch (openError) {
+      setError(getErrorMessage(openError));
+      setOpeningId(null);
       setProgress(null);
     }
   };
@@ -113,14 +111,14 @@ export function EnvironmentSwitcher() {
                 {group.items.map((environment) => {
                   const unavailable =
                     environment.status === "unavailable" || environment.status === "error";
-                  const pending = switchingId === environment.id;
+                  const pending = openingId === environment.id;
                   return (
                     <button
                       aria-current={environment.active ? "true" : undefined}
                       className={styles.item}
-                      disabled={environment.active || unavailable || Boolean(switchingId)}
+                      disabled={environment.active || unavailable || Boolean(openingId)}
                       key={environment.id}
-                      onClick={() => void switchTo(environment)}
+                      onClick={() => void openEnvironment(environment)}
                       title={environment.message}
                       type="button"
                     >
@@ -136,7 +134,9 @@ export function EnvironmentSwitcher() {
                         <span className={styles.itemStatus}>
                           {pending
                             ? t("desktop_environment.preparing")
-                            : t(`desktop_environment.status.${environment.status}`)}
+                            : environment.active
+                              ? t("desktop_environment.current_window")
+                              : t(`desktop_environment.status.${environment.status}`)}
                         </span>
                       </span>
                       {environment.active ? <Check aria-hidden="true" size={15} /> : null}
@@ -178,7 +178,7 @@ export function EnvironmentSwitcher() {
         <span className={styles.triggerLabel}>
           {active?.label ?? t("desktop_environment.local_windows")}
         </span>
-        {switchingId ? (
+        {openingId ? (
           <LoaderCircle aria-hidden="true" className={styles.spinner} size={13} />
         ) : (
           <ChevronDown aria-hidden="true" size={13} />

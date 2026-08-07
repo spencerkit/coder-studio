@@ -2,9 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   DesktopApi,
   DesktopBackendStatus,
+  DesktopEnvironmentOpenResult,
   DesktopEnvironmentProgress,
   DesktopEnvironmentSummary,
-  DesktopEnvironmentSwitchResult,
 } from "./protocol.js";
 
 const api: DesktopApi = {
@@ -17,11 +17,11 @@ const api: DesktopApi = {
     ipcRenderer.invoke("desktop:list-environments") as Promise<DesktopEnvironmentSummary[]>,
   getActiveEnvironment: () =>
     ipcRenderer.invoke("desktop:get-active-environment") as Promise<DesktopEnvironmentSummary>,
-  switchEnvironment: (environmentId: string) =>
+  openEnvironment: (environmentId: string) =>
     ipcRenderer.invoke(
-      "desktop:switch-environment",
+      "desktop:open-environment",
       environmentId
-    ) as Promise<DesktopEnvironmentSwitchResult>,
+    ) as Promise<DesktopEnvironmentOpenResult>,
   onEnvironmentProgress: (listener: (event: DesktopEnvironmentProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: DesktopEnvironmentProgress) =>
       listener(progress);

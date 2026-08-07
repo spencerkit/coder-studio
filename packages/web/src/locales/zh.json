@@ -151,12 +151,13 @@
   },
   "desktop_environment": {
     "title": "Coder Studio 运行环境",
-    "select": "连接到运行环境",
+    "select": "打开另一个运行环境",
     "local": "本地",
     "wsl": "WSL",
     "local_windows": "本地：Windows",
+    "current_window": "当前窗口",
     "checking": "正在检查环境…",
-    "preparing": "正在准备…",
+    "preparing": "正在打开…",
     "status": {
       "ready": "可用",
       "not-installed": "尚未安装 Coder Studio Runtime",

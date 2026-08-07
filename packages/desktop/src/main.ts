@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -15,6 +16,11 @@ import {
   shell,
 } from "electron";
 import { BackendManager } from "./backend-manager.js";
+import {
+  createEnvironmentInstanceArgs,
+  getEnvironmentInstanceRoot,
+  readEnvironmentInstanceTarget,
+} from "./environment-instance.js";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import { DesktopGateway } from "./gateway.js";
@@ -44,7 +50,8 @@ let runtimeUpdateManager: ProductRuntimeUpdateManager | null = null;
 let activeProductRuntime: ProductRuntime | null = null;
 let environmentManager: DesktopEnvironmentManager | null = null;
 let activeEnvironmentTarget: DesktopEnvironmentTarget = NATIVE_ENVIRONMENT;
-let environmentSwitching = false;
+let environmentOpening = false;
+let environmentInstanceRoot: string | null = null;
 let appOrigin: string | null = null;
 let shutdownComplete = false;
 let shutdownStarted = false;
@@ -63,6 +70,24 @@ function getReleaseBaseUrl(runtimeUpdateUrl: string): string {
 
 function emitEnvironmentProgress(progress: DesktopEnvironmentProgress): void {
   mainWindow?.webContents.send("desktop:environment-progress", progress);
+}
+
+async function openEnvironmentInstance(
+  rootUserDataDir: string,
+  target: DesktopEnvironmentTarget
+): Promise<void> {
+  await new Promise<void>((resolveOpened, rejectOpened) => {
+    const child = spawn(process.execPath, createEnvironmentInstanceArgs(rootUserDataDir, target), {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.once("error", rejectOpened);
+    child.once("spawn", () => {
+      child.unref();
+      resolveOpened();
+    });
+  });
 }
 
 async function finishSmokeTest(result: Record<string, unknown>, exitCode = 0): Promise<void> {
@@ -100,7 +125,7 @@ async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
   throw new Error(`Timed out waiting for desktop UI: ${url}`);
 }
 
-function registerIpcHandlers(): void {
+function registerIpcHandlers(rootUserDataDir: string): void {
   ipcMain.handle("desktop:select-workspace-directory", async () => {
     if (!mainWindow) return null;
     const activeDistro =
@@ -126,54 +151,26 @@ function registerIpcHandlers(): void {
     if (!environmentManager) throw new Error("Desktop environments are not initialized");
     return environmentManager.getActiveEnvironment();
   });
-  ipcMain.handle("desktop:switch-environment", async (_event, environmentId: unknown) => {
+  ipcMain.handle("desktop:open-environment", async (_event, environmentId: unknown) => {
     if (!environmentManager) throw new Error("Desktop environments are not initialized");
     if (typeof environmentId !== "string") throw new Error("Invalid Desktop environment id");
-    if (environmentSwitching) throw new Error("A Desktop environment switch is already running");
+    if (environmentOpening) throw new Error("A Desktop environment is already being opened");
     const target = await environmentManager.resolveTarget(environmentId);
     if (target.id === activeEnvironmentTarget.id) return { status: "unchanged" as const };
 
-    environmentSwitching = true;
-    let relaunchScheduled = false;
+    environmentOpening = true;
     try {
       if (target.kind === "wsl") await environmentManager.prepareWsl(target);
-      const message = `Switch from ${activeEnvironmentTarget.label} to ${target.label}?`;
-      const result = mainWindow
-        ? await dialog.showMessageBox(mainWindow, {
-            type: "warning",
-            title: "Switch Coder Studio environment",
-            message,
-            detail:
-              "Coder Studio will restart. Active terminals and agent sessions in the current environment will stop.",
-            buttons: ["Switch and Restart", "Cancel"],
-            defaultId: 0,
-            cancelId: 1,
-          })
-        : await dialog.showMessageBox({
-            type: "warning",
-            title: "Switch Coder Studio environment",
-            message,
-            buttons: ["Switch and Restart", "Cancel"],
-            defaultId: 0,
-            cancelId: 1,
-          });
-      if (result.response !== 0) return { status: "unchanged" as const };
-
-      await environmentManager.beginSwitch(target);
       emitEnvironmentProgress({
         environmentId: target.id,
-        phase: "relaunching",
-        message: `Restarting in ${target.label}…`,
+        phase: "launching",
+        message: `Opening ${target.label}…`,
         percent: 100,
       });
-      setTimeout(() => {
-        app.relaunch();
-        app.quit();
-      }, 50);
-      relaunchScheduled = true;
-      return { status: "relaunching" as const };
+      await openEnvironmentInstance(rootUserDataDir, target);
+      return { status: "opened" as const };
     } finally {
-      if (!relaunchScheduled) environmentSwitching = false;
+      environmentOpening = false;
     }
   });
 }
@@ -202,15 +199,13 @@ async function handleStartupFailure(error: unknown): Promise<void> {
     title: "Unable to start the WSL environment",
     message: `${activeEnvironmentTarget.label} could not be started.`,
     detail: details,
-    buttons: ["Retry", "Switch to Local Windows", "Quit"],
+    buttons: ["Retry", "Open Local Windows", "Quit"],
     defaultId: 0,
     cancelId: 2,
   });
-  if (result.response === 1) {
-    await environmentManager.beginSwitch(NATIVE_ENVIRONMENT);
-  }
-  if (result.response === 0 || result.response === 1) {
-    app.relaunch();
+  if (result.response === 0) app.relaunch();
+  if (result.response === 1 && environmentInstanceRoot) {
+    await openEnvironmentInstance(environmentInstanceRoot, NATIVE_ENVIRONMENT);
   }
   app.quit();
 }
@@ -287,6 +282,7 @@ function installApplicationMenu(): void {
 function createMainWindow(url: string, browserSession = activeSession): BrowserWindow {
   appOrigin = new URL(url).origin;
   const window = new BrowserWindow({
+    title: `Coder Studio — ${activeEnvironmentTarget.label}`,
     width: 1440,
     height: 900,
     minWidth: 960,
@@ -304,6 +300,10 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
   });
 
   if (!smokeResultPath) window.once("ready-to-show", () => window.show());
+  window.on("page-title-updated", (event) => {
+    event.preventDefault();
+    window.setTitle(`Coder Studio — ${activeEnvironmentTarget.label}`);
+  });
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
@@ -373,8 +373,10 @@ async function handleUnexpectedBackendExit(details: {
 }
 
 async function startApplication(): Promise<void> {
-  registerIpcHandlers();
   const userDataDir = app.getPath("userData");
+  const rootUserDataDir = getEnvironmentInstanceRoot(app.commandLine, userDataDir);
+  environmentInstanceRoot = rootUserDataDir;
+  registerIpcHandlers(rootUserDataDir);
   const runtimePublicKey =
     typeof __CODER_STUDIO_RUNTIME_PUBLIC_KEY__ === "string"
       ? __CODER_STUDIO_RUNTIME_PUBLIC_KEY__.trim()
@@ -389,7 +391,7 @@ async function startApplication(): Promise<void> {
       : "0.0.0";
   const runtimeStore = app.isPackaged
     ? new RuntimeStore({
-        root: join(userDataDir, "runtime-store"),
+        root: join(rootUserDataDir, "runtime-store"),
         factoryRuntimeRoot: join(process.resourcesPath, "factory-runtime"),
         shellVersion: app.getVersion(),
         nodeVersion: DESKTOP_NODE_VERSION,
@@ -412,7 +414,7 @@ async function startApplication(): Promise<void> {
     onProgress: emitEnvironmentProgress,
   });
   activeEnvironmentTarget = app.isPackaged
-    ? await environmentManager.getStartupTarget()
+    ? readEnvironmentInstanceTarget(app.commandLine)
     : NATIVE_ENVIRONMENT;
   environmentManager.setActiveTarget(activeEnvironmentTarget);
   activeSession = session.fromPartition(getEnvironmentPartition(activeEnvironmentTarget));
@@ -506,10 +508,16 @@ async function startApplication(): Promise<void> {
   updateManager = new DesktopUpdateManager({
     currentVersion: app.getVersion(),
     getWindow: () => mainWindow,
-    isPackaged: app.isPackaged && !smokeResultPath,
+    isPackaged: app.isPackaged && activeEnvironmentTarget.kind === "native" && !smokeResultPath,
   });
   updateManager.start();
-  if (runtimeStore && activeProductRuntime && runtimePublicKey && !smokeResultPath) {
+  if (
+    runtimeStore &&
+    activeProductRuntime &&
+    runtimePublicKey &&
+    activeEnvironmentTarget.kind === "native" &&
+    !smokeResultPath
+  ) {
     runtimeUpdateManager = new ProductRuntimeUpdateManager({
       store: runtimeStore,
       manifestUrl: process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl,

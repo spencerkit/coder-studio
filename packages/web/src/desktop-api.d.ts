@@ -9,7 +9,7 @@ interface CoderStudioDesktopApi {
   } | null>;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
-  switchEnvironment(environmentId: string): Promise<{ status: "unchanged" | "relaunching" }>;
+  openEnvironment(environmentId: string): Promise<{ status: "unchanged" | "opened" }>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
 }
 
@@ -29,7 +29,7 @@ interface DesktopEnvironmentSummary {
 
 interface DesktopEnvironmentProgress {
   environmentId: string;
-  phase: "checking" | "downloading" | "installing" | "verifying" | "relaunching";
+  phase: "checking" | "downloading" | "installing" | "verifying" | "launching";
   message: string;
   percent?: number;
 }
