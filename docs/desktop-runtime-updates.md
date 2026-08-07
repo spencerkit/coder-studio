@@ -87,11 +87,14 @@ Runtime 汇总到 `release/wsl-acceptance/downloads`。随后运行 `pnpm accept
 ```powershell
 pnpm acceptance:runtime:update -- --runtime-version 0.5.7-acceptance.local
 pnpm acceptance:wsl:serve
+pnpm acceptance:runtime:verify
 ```
 
 该命令复用首次准备时的 Desktop 可执行文件、Ed25519 密钥、用户数据目录和下载端口，只替换 Windows
 Product Runtime 与同版本 WSL Server Runtime 的 channel manifest 和版本化包。更新版本的前三段
 SemVer 必须高于当前验收 Runtime；私钥和所有产物仍只保存在被忽略的 `release/wsl-acceptance` 下。
+`acceptance:runtime:verify` 会从实际 HTTP channel 下载并验签 Windows Runtime，验证
+`factory → pending → active` 状态切换，同时确认存在同版本且签名有效的 WSL Server Runtime。
 
 需要从 GitHub Actions 下载可直接验收 WSL 首次安装的测试包时，手动运行 `CI` workflow 并保持
 `publish_acceptance=true`。流水线会创建一个 tag 固定的 prerelease，安装包内置本次运行的临时公钥和
