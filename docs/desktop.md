@@ -223,7 +223,8 @@ Product Runtime 组装时会删除它们和依赖中残留的 `.map`。安装包
 桌面应用使用 `electron-updater` 和 `electron-builder.yml` 中的 GitHub provider：
 
 - 启动后进行非阻塞检查；
-- `Help > Check for Updates...` 可以手动检查；
+- `Help > Check for Desktop App Updates...` 可以手动检查安装包更新；
+- `Help > Check for Product Runtime Updates...` 独立检查 Server + Web Runtime 更新；
 - 用户确认后下载，进度显示在操作系统任务栏；
 - 下载完成后由用户选择重启安装；
 - sidecar 内现有 npm updater 被明确标记为不适用，避免桌面包执行全局 npm 更新。

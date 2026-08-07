@@ -89,6 +89,10 @@ export class ProductRuntimeUpdateManager {
     return this.checkPromise;
   }
 
+  getPendingVersion(): Promise<string | null> {
+    return this.options.store.readPendingVersion();
+  }
+
   private async performCheck(): Promise<RuntimeUpdateCheckResult> {
     const manifestUrl = this.options.manifestUrl as string;
     const fetchImpl = this.options.fetch ?? fetch;

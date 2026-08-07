@@ -111,6 +111,77 @@ async function openExternal(value: string): Promise<boolean> {
   return true;
 }
 
+async function promptForRuntimeRestart(runtimeVersion: string): Promise<void> {
+  if (!mainWindow) return;
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: "info",
+    title: "Coder Studio Runtime update ready",
+    message: `Runtime ${runtimeVersion} is ready to install.`,
+    detail: "Restart Coder Studio to activate the Server and Web update.",
+    buttons: ["Restart Now", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (result.response !== 0) return;
+  app.relaunch();
+  app.quit();
+}
+
+async function checkRuntimeUpdatesManually(): Promise<void> {
+  if (!mainWindow) return;
+  if (!runtimeUpdateManager || !activeProductRuntime) {
+    await dialog.showMessageBox(mainWindow, {
+      type: "info",
+      title: "Product Runtime updates unavailable",
+      message: "Runtime updates are not enabled for this Coder Studio instance.",
+      detail:
+        "Runtime updates require a packaged Local Windows instance with a trusted update channel.",
+    });
+    return;
+  }
+
+  try {
+    const result = await runtimeUpdateManager.check();
+    switch (result.status) {
+      case "ready":
+        // onUpdateReady owns the restart prompt for both automatic and manual checks.
+        return;
+      case "current":
+        await dialog.showMessageBox(mainWindow, {
+          type: "info",
+          title: "Product Runtime is up to date",
+          message: `Runtime ${activeProductRuntime.manifest.runtimeVersion} is the latest available version.`,
+        });
+        return;
+      case "already-staged": {
+        const pendingVersion = await runtimeUpdateManager.getPendingVersion();
+        await promptForRuntimeRestart(pendingVersion ?? "update");
+        return;
+      }
+      case "failed":
+        await dialog.showMessageBox(mainWindow, {
+          type: "warning",
+          title: "Product Runtime update quarantined",
+          message: "The latest Runtime was previously rolled back after a failed launch.",
+          detail: "Coder Studio will keep the current Runtime until a newer version is published.",
+        });
+        return;
+      case "disabled":
+        await dialog.showMessageBox(mainWindow, {
+          type: "info",
+          title: "Product Runtime updates unavailable",
+          message: "No Runtime update channel is configured.",
+        });
+    }
+  } catch (error) {
+    await dialog.showMessageBox(mainWindow, {
+      type: "error",
+      title: "Unable to check for Product Runtime updates",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -266,9 +337,14 @@ function installApplicationMenu(): void {
       label: "Help",
       submenu: [
         {
-          label: "Check for Updates...",
+          label: "Check for Desktop App Updates...",
           click: () => void updateManager?.check(true),
         },
+        {
+          label: "Check for Product Runtime Updates...",
+          click: () => void checkRuntimeUpdatesManually(),
+        },
+        { type: "separator" },
         {
           label: "Coder Studio on GitHub",
           click: () => void openExternal("https://github.com/spencerkit/coder-studio"),
@@ -524,22 +600,7 @@ async function startApplication(): Promise<void> {
       getCurrentRuntime: () => activeProductRuntime as ProductRuntime,
       onError: (error) => console.warn("[runtime-update]", error.message),
       onUpdateReady: (readyRuntime) => {
-        if (!mainWindow) return;
-        void dialog
-          .showMessageBox(mainWindow, {
-            type: "info",
-            title: "Coder Studio Runtime update ready",
-            message: `Runtime ${readyRuntime.manifest.runtimeVersion} is ready to install.`,
-            detail: "Restart Coder Studio to activate the Server and Web update.",
-            buttons: ["Restart Now", "Later"],
-            defaultId: 0,
-            cancelId: 1,
-          })
-          .then((result) => {
-            if (result.response !== 0) return;
-            app.relaunch();
-            app.quit();
-          });
+        void promptForRuntimeRestart(readyRuntime.manifest.runtimeVersion);
       },
     });
     runtimeUpdateManager.start();

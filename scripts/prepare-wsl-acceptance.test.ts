@@ -12,6 +12,8 @@ describe("prepare-wsl-acceptance", () => {
       distro: undefined,
       installer: false,
       port: 8787,
+      runtimeOnly: false,
+      runtimeVersion: undefined,
     });
   });
 
@@ -29,7 +31,31 @@ describe("prepare-wsl-acceptance", () => {
       distro: "Ubuntu-24.04",
       installer: true,
       port: 9876,
+      runtimeOnly: false,
+      runtimeVersion: undefined,
     });
+  });
+
+  it("parses a Runtime-only update request", () => {
+    expect(
+      parsePrepareWslAcceptanceArgs([
+        "--runtime-only",
+        "--runtime-version",
+        "0.5.7-acceptance.local",
+      ])
+    ).toEqual({
+      distro: undefined,
+      installer: false,
+      port: 8787,
+      runtimeOnly: true,
+      runtimeVersion: "0.5.7-acceptance.local",
+    });
+  });
+
+  it("requires an explicit version for Runtime-only updates", () => {
+    expect(() => parsePrepareWslAcceptanceArgs(["--runtime-only"])).toThrow(
+      "--runtime-only requires --runtime-version"
+    );
   });
 
   it("rejects invalid ports", () => {

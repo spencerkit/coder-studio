@@ -82,6 +82,17 @@ Runtime 汇总到 `release/wsl-acceptance/downloads`。随后运行 `pnpm accept
 与正式发布相同的 manifest、签名和下载校验链路完成首次安装与环境切换验收。详细步骤见
 [`desktop.md`](./desktop.md#本地-wsl-标准验收)。
 
+首次验收包准备完成后，可以在不重建 Desktop Shell 和 Engine 的情况下发布一个本地 Runtime 更新：
+
+```powershell
+pnpm acceptance:runtime:update -- --runtime-version 0.5.7-acceptance.local
+pnpm acceptance:wsl:serve
+```
+
+该命令复用首次准备时的 Desktop 可执行文件、Ed25519 密钥、用户数据目录和下载端口，只替换 Windows
+Product Runtime 与同版本 WSL Server Runtime 的 channel manifest 和版本化包。更新版本的前三段
+SemVer 必须高于当前验收 Runtime；私钥和所有产物仍只保存在被忽略的 `release/wsl-acceptance` 下。
+
 需要从 GitHub Actions 下载可直接验收 WSL 首次安装的测试包时，手动运行 `CI` workflow 并保持
 `publish_acceptance=true`。流水线会创建一个 tag 固定的 prerelease，安装包内置本次运行的临时公钥和
 prerelease 下载地址，Windows/WSL Runtime 资产则由对应临时私钥签名。测试私钥会作为短期内部 artifact
@@ -140,6 +151,12 @@ Runtime 启动本地 Server，并完成认证、健康检查和 Web 加载；成
 `previous`。候选 Runtime 启动失败时依次回退到 previous/active 和安装包内 Factory Runtime，并记录
 `failed.json`。同一个失败版本会被隔离，不会在每次启动时反复下载安装；发布方需要使用更高的
 Runtime 版本号提供修复，或由用户显式清除失败记录后重试。
+
+检查入口有两种：Local Windows 实例启动成功后会立即非阻塞检查一次，之后每 6 小时检查；用户也可以
+通过 `Help > Check for Product Runtime Updates...` 立即检查。相邻的
+`Help > Check for Desktop App Updates...` 只负责 Electron Shell/安装包更新，两者互不替代。WSL 实例
+共享 Windows Product Runtime 中的 Web，因此由 Local Windows 实例下载 Product Runtime；启动 WSL
+实例时再按相同版本准备对应的 WSL Server Runtime。
 
 当 Windows shared Web 更新后，如果当前选择的是 WSL，下一次启动会要求 WSL Server Runtime 与 Web
 使用相同的 CLI/Product 版本；缺失或版本不匹配时先下载、验签并写入 WSL `pending`。WSL Runtime

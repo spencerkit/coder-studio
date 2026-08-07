@@ -9,6 +9,7 @@ import {
   parseEngineManifest,
 } from "../packages/desktop/src/engine-manifest.js";
 import {
+  compareVersions,
   DESKTOP_NODE_VERSION,
   getRuntimeManifestSigningPayload,
   parseRuntimeManifest,
@@ -16,6 +17,7 @@ import {
 import { runWslCommandChecked } from "../packages/desktop/src/wsl-command.js";
 import { WslDiscovery } from "../packages/desktop/src/wsl-discovery.js";
 import { buildDesktop } from "./build-desktop.js";
+import { buildDesktopRuntime } from "./build-desktop-runtime.js";
 import { packageDesktop } from "./package-desktop.js";
 import { prepareDesktopPackage } from "./prepare-desktop-package.js";
 import { error, info, ROOT_DIR, step, success } from "./shared/index.js";
@@ -34,6 +36,8 @@ export interface PrepareWslAcceptanceOptions {
   distro?: string;
   installer: boolean;
   port: number;
+  runtimeOnly: boolean;
+  runtimeVersion?: string;
 }
 
 interface AcceptanceArtifact {
@@ -50,6 +54,7 @@ interface AcceptanceReport {
   commit: string;
   distro: string;
   runtimeVersion: string;
+  factoryRuntimeVersion?: string;
   downloadBaseUrl: string;
   desktopExecutable: string;
   userDataDirectory: string;
@@ -67,6 +72,8 @@ export function parsePrepareWslAcceptanceArgs(argv: string[]): PrepareWslAccepta
     distro: undefined,
     installer: false,
     port: DEFAULT_PORT,
+    runtimeOnly: false,
+    runtimeVersion: undefined,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -79,6 +86,13 @@ export function parsePrepareWslAcceptanceArgs(argv: string[]): PrepareWslAccepta
         break;
       case "--installer":
         options.installer = true;
+        break;
+      case "--runtime-only":
+        options.runtimeOnly = true;
+        break;
+      case "--runtime-version":
+        options.runtimeVersion = readValue(argv, ++index, "--runtime-version").trim();
+        if (!options.runtimeVersion) throw new Error("--runtime-version must not be empty");
         break;
       case "--port": {
         const port = Number(readValue(argv, ++index, "--port"));
@@ -96,6 +110,9 @@ export function parsePrepareWslAcceptanceArgs(argv: string[]): PrepareWslAccepta
         throw new Error(`Unknown WSL acceptance option: ${argument}`);
     }
   }
+  if (options.runtimeOnly && !options.runtimeVersion) {
+    throw new Error("--runtime-only requires --runtime-version");
+  }
   return options;
 }
 
@@ -104,9 +121,11 @@ function printUsage(): void {
 
 Usage:
   pnpm acceptance:wsl:prepare -- --distro Ubuntu-24.04 [--port 8787] [--installer]
+  pnpm acceptance:runtime:update -- --runtime-version 0.5.7-acceptance.local [--distro Ubuntu-24.04]
 
 The command builds committed HEAD in WSL, writes downloads under
-release/wsl-acceptance/downloads, and creates a packaged Windows app.`);
+release/wsl-acceptance/downloads, and creates a packaged Windows app. Runtime-only
+mode reuses that App, signing key, Engine, user data, and download channel.`);
 }
 
 async function capture(command: string, args: string[], cwd = ROOT_DIR): Promise<string> {
@@ -217,6 +236,7 @@ async function runWslBuild(
     publicKey: string;
     runtimeVersion: string;
     commit: string;
+    includeEngine: boolean;
   }
 ): Promise<void> {
   const shellScript = String.raw`
@@ -228,7 +248,8 @@ public_key=$4
 runtime_version=$5
 source_id=$6
 node_version=$7
-pnpm_version=$8
+  pnpm_version=$8
+include_engine=$9
 
 for required_command in curl tar xz sha256sum python3 make g++; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
@@ -285,15 +306,19 @@ export CODER_STUDIO_RUNTIME_VERSION="$runtime_version"
 export CODER_STUDIO_DESKTOP_NODE_DIR="$node_root"
 
 pnpm install --frozen-lockfile
-pnpm build:wsl-engine
+if test "$include_engine" = "true"; then
+  pnpm build:wsl-engine
+fi
 pnpm build:wsl-runtime
 
-engine_manifest="release/engine/coder-studio-engine-linux-$acceptance_arch.manifest.json"
 runtime_manifest="release/runtime/coder-studio-server-runtime-linux-$acceptance_arch.manifest.json"
-engine_package=$(node -e 'process.stdout.write(require("./" + process.argv[1]).packageFile)' "$engine_manifest")
 runtime_package=$(node -e 'process.stdout.write(require("./" + process.argv[1]).packageFile)' "$runtime_manifest")
-cp "$engine_manifest" "$output_directory/"
-cp "release/engine/$engine_package" "$output_directory/"
+if test "$include_engine" = "true"; then
+  engine_manifest="release/engine/coder-studio-engine-linux-$acceptance_arch.manifest.json"
+  engine_package=$(node -e 'process.stdout.write(require("./" + process.argv[1]).packageFile)' "$engine_manifest")
+  cp "$engine_manifest" "$output_directory/"
+  cp "release/engine/$engine_package" "$output_directory/"
+fi
 cp "$runtime_manifest" "$output_directory/"
 cp "release/runtime/$runtime_package" "$output_directory/"
 `;
@@ -315,6 +340,7 @@ cp "release/runtime/$runtime_package" "$output_directory/"
       values.commit,
       DESKTOP_NODE_VERSION,
       PNPM_VERSION,
+      String(values.includeEngine),
     ],
     { windowsHide: true, stdio: ["pipe", "inherit", "inherit"] }
   );
@@ -427,6 +453,32 @@ async function readCliVersion(): Promise<string> {
   return manifest.version.trim();
 }
 
+async function readExistingAcceptanceReport(): Promise<AcceptanceReport> {
+  const reportPath = resolve(ACCEPTANCE_ROOT, "acceptance.json");
+  let report: AcceptanceReport;
+  try {
+    report = JSON.parse(await readFile(reportPath, "utf8")) as AcceptanceReport;
+  } catch {
+    throw new Error(
+      "No existing local acceptance App was found. Run pnpm acceptance:wsl:prepare first."
+    );
+  }
+  if (
+    report.schemaVersion !== 1 ||
+    !report.distro ||
+    !report.runtimeVersion ||
+    !report.downloadBaseUrl ||
+    !report.desktopExecutable ||
+    !report.userDataDirectory
+  ) {
+    throw new Error(`Invalid local acceptance report: ${reportPath}`);
+  }
+  await stat(report.desktopExecutable).catch(() => {
+    throw new Error(`The existing local acceptance App is missing: ${report.desktopExecutable}`);
+  });
+  return report;
+}
+
 function restoreEnvironment(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name];
   else process.env[name] = value;
@@ -441,22 +493,37 @@ export async function prepareWslAcceptance(
   step("WSL ACCEPTANCE", "Preparing a signed local WSL download channel...\n");
   const commit = await assertCommittedHead();
   const desktopOutputRoot = resolveAcceptanceDesktopOutput(commit);
+  const existingReport = options.runtimeOnly ? await readExistingAcceptanceReport() : null;
   const discovery = new WslDiscovery();
   const distros = await discovery.listDistros();
-  const distro = options.distro ?? distros[0];
+  const distro = options.distro ?? existingReport?.distro ?? distros[0];
   if (!distro) throw new Error("No WSL distribution is installed");
   if (!distros.includes(distro)) throw new Error(`WSL distribution is not installed: ${distro}`);
   const probe = await discovery.probe(distro);
   if (!probe.supported) throw new Error(probe.message ?? `${distro} is not supported`);
 
-  const runtimeVersion = createAcceptanceRuntimeVersion(await readCliVersion(), commit);
+  const runtimeVersion =
+    options.runtimeVersion ?? createAcceptanceRuntimeVersion(await readCliVersion(), commit);
+  if (existingReport && compareVersions(runtimeVersion, existingReport.runtimeVersion) <= 0) {
+    throw new Error(
+      `Runtime update version ${runtimeVersion} must be greater than ${existingReport.runtimeVersion}`
+    );
+  }
+  if (existingReport) {
+    const configuredPort = Number(new URL(existingReport.downloadBaseUrl).port || 80);
+    if (configuredPort !== options.port) {
+      throw new Error(
+        `Runtime-only updates must reuse the App's configured port ${configuredPort}; received ${options.port}`
+      );
+    }
+  }
   const { privateKeyPem, publicKeyPem } = await ensureSigningKeys();
-  await Promise.all([
-    mkdir(SOURCE_ROOT, { recursive: true }),
-    rm(DOWNLOAD_ROOT, { recursive: true, force: true }).then(() =>
-      mkdir(DOWNLOAD_ROOT, { recursive: true })
-    ),
-  ]);
+  await mkdir(SOURCE_ROOT, { recursive: true });
+  if (options.runtimeOnly) await mkdir(DOWNLOAD_ROOT, { recursive: true });
+  else {
+    await rm(DOWNLOAD_ROOT, { recursive: true, force: true });
+    await mkdir(DOWNLOAD_ROOT, { recursive: true });
+  }
   const sourceArchive = resolve(SOURCE_ROOT, `${commit}.tar`);
   await rm(sourceArchive, { force: true });
   await run("git", ["archive", "--format=tar", `--output=${sourceArchive}`, commit], {
@@ -477,6 +544,7 @@ export async function prepareWslAcceptance(
     publicKey: publicKeyWsl,
     runtimeVersion,
     commit,
+    includeEngine: !options.runtimeOnly,
   });
 
   const runtimeUpdateUrl = `http://127.0.0.1:${options.port}/coder-studio-runtime-win32-${process.arch}.manifest.json`;
@@ -489,14 +557,19 @@ export async function prepareWslAcceptance(
   process.env.CODER_STUDIO_RUNTIME_UPDATE_URL = runtimeUpdateUrl;
   process.env.CODER_STUDIO_RUNTIME_VERSION = runtimeVersion;
   try {
-    info("Building the packaged Windows Desktop against the local acceptance channel");
-    await rm(desktopOutputRoot, { recursive: true, force: true });
-    await buildDesktop();
-    await prepareDesktopPackage();
-    await packageDesktop({
-      unpacked: !options.installer,
-      outputDirectory: desktopOutputRoot,
-    });
+    if (options.runtimeOnly) {
+      info("Building only the signed Windows Product Runtime for the existing App");
+      await buildDesktopRuntime();
+    } else {
+      info("Building the packaged Windows Desktop against the local acceptance channel");
+      await rm(desktopOutputRoot, { recursive: true, force: true });
+      await buildDesktop();
+      await prepareDesktopPackage();
+      await packageDesktop({
+        unpacked: !options.installer,
+        outputDirectory: desktopOutputRoot,
+      });
+    }
   } finally {
     restoreEnvironment("CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY", previousPrivateKey);
     restoreEnvironment("CODER_STUDIO_RUNTIME_PUBLIC_KEY", previousPublicKey);
@@ -526,9 +599,13 @@ export async function prepareWslAcceptance(
     commit,
     distro,
     runtimeVersion,
+    factoryRuntimeVersion:
+      existingReport?.factoryRuntimeVersion ?? existingReport?.runtimeVersion ?? runtimeVersion,
     downloadBaseUrl: `http://127.0.0.1:${options.port}/`,
-    desktopExecutable: resolve(desktopOutputRoot, "win-unpacked/Coder Studio.exe"),
-    userDataDirectory: resolve(ACCEPTANCE_ROOT, "user-data"),
+    desktopExecutable:
+      existingReport?.desktopExecutable ??
+      resolve(desktopOutputRoot, "win-unpacked/Coder Studio.exe"),
+    userDataDirectory: existingReport?.userDataDirectory ?? resolve(ACCEPTANCE_ROOT, "user-data"),
     artifacts,
   };
   await Promise.all([
