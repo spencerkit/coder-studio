@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { appendFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   app,
@@ -180,6 +180,14 @@ async function checkRuntimeUpdatesManually(): Promise<void> {
       message: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function reportRuntimeUpdateError(error: Error): void {
+  console.warn("[runtime-update]", error.message);
+  const entry = `[${new Date().toISOString()}] ${error.stack || error.message}\n`;
+  void appendFile(join(app.getPath("logs"), "runtime-update.log"), entry, "utf8").catch(
+    (writeError) => console.warn("[runtime-update] unable to write update log", writeError)
+  );
 }
 
 async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
@@ -598,7 +606,7 @@ async function startApplication(): Promise<void> {
       store: runtimeStore,
       manifestUrl: process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl,
       getCurrentRuntime: () => activeProductRuntime as ProductRuntime,
-      onError: (error) => console.warn("[runtime-update]", error.message),
+      onError: reportRuntimeUpdateError,
       onUpdateReady: (readyRuntime) => {
         void promptForRuntimeRestart(readyRuntime.manifest.runtimeVersion);
       },

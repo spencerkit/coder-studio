@@ -161,6 +161,9 @@ Runtime 版本号提供修复，或由用户显式清除失败记录后重试。
 共享 Windows Product Runtime 中的 Web，因此由 Local Windows 实例下载 Product Runtime；启动 WSL
 实例时再按相同版本准备对应的 WSL Server Runtime。
 
+自动检查或下载失败时会记录到 Desktop 日志目录的 `runtime-update.log`；手动检查还会直接显示错误对话框，
+避免打包后的 GUI 进程只把错误写入不可见的标准错误流。
+
 当 Windows shared Web 更新后，如果当前选择的是 WSL，下一次启动会要求 WSL Server Runtime 与 Web
 使用相同的 CLI/Product 版本；缺失或版本不匹配时先下载、验签并写入 WSL `pending`。WSL Runtime
 也只有在 Server ready、Gateway 认证、健康检查和 Web 加载全部成功后才提升为 active，失败会删除
