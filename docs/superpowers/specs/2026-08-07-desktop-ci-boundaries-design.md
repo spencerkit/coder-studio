@@ -42,7 +42,8 @@ and acceptance publishing currently share one broadly triggered CI workflow.
 
 It no longer generates signing keys, builds Desktop installers, builds WSL release assets, uploads
 Desktop artifacts, or publishes acceptance releases. The workflow remains triggered for every pull
-request and pushes to `main`.
+request and pushes to `main`. It also exposes `workflow_call` so a manually requested acceptance
+channel can preserve the existing repository-wide validation gate without copying these jobs.
 
 ### Reusable Desktop verification
 
@@ -84,7 +85,7 @@ workspace packages. Documentation-only changes do not trigger heavyweight packag
 
 1. resolves a run-specific prerelease tag and Runtime update URL;
 2. generates an ephemeral Ed25519 key pair and uploads it with one-day retention;
-3. calls the reusable Desktop verification workflow in signed mode;
+3. calls fast repository CI and the reusable Desktop verification workflow in signed mode;
 4. downloads and validates the complete signed Windows and WSL asset set;
 5. creates a tag-pinned GitHub prerelease and uploads the public key as a diagnostic artifact.
 
