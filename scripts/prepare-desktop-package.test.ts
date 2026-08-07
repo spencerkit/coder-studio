@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -24,6 +24,9 @@ async function createEngineFixture(): Promise<string> {
     "lib/node_modules/npm/bin/npx-cli.js": "npx",
   };
   await mkdir(resolve(root, "bin"), { recursive: true });
+  if (process.platform !== "win32") {
+    await symlink(process.execPath, resolve(root, "bin", "node"));
+  }
   await Promise.all(
     Object.entries(targets).map(async ([path, name]) => {
       const destination = resolve(root, ...path.split("/"));
