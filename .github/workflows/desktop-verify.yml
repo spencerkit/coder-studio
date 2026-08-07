@@ -1,0 +1,207 @@
+name: Desktop verification
+
+on:
+  workflow_call:
+    inputs:
+      signed:
+        type: boolean
+        required: false
+        default: false
+      signing_key_artifact:
+        type: string
+        required: false
+        default: ""
+      runtime_update_url:
+        type: string
+        required: false
+        default: ""
+    outputs:
+      windows_artifact:
+        description: Windows Desktop verification artifact
+        value: ${{ jobs['desktop-windows-verify'].outputs.artifact_name }}
+      linux_artifact:
+        description: Linux Desktop verification artifact
+        value: ${{ jobs['desktop-linux-assets-verify'].outputs.artifact_name }}
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/desktop-verify.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - packages/desktop/**
+      - packages/desktop-engine/**
+      - packages/server/**
+      - packages/web/**
+      - packages/providers/**
+      - packages/core/**
+      - packages/utils/**
+      - packages/cli/**
+      - scripts/**
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-windows-verify:
+    name: Desktop Windows package and smoke
+    runs-on: windows-latest
+    timeout-minutes: 60
+    outputs:
+      artifact_name: ${{ steps.artifact_name.outputs.value }}
+
+    steps:
+      - name: Resolve Windows artifact name
+        id: artifact_name
+        shell: pwsh
+        run: '"value=desktop-windows-${{ github.sha }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append'
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download acceptance signing key
+        if: inputs.signed
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Configure signed acceptance channel
+        if: inputs.signed
+        shell: pwsh
+        run: |
+          $privateKey = Get-Content release/desktop-ci-signing/runtime-private.pem -Raw
+          $publicKey = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
+          @"
+          CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY<<PRIVATE_KEY
+          $privateKey
+          PRIVATE_KEY
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY
+          $publicKey
+          PUBLIC_KEY
+          CODER_STUDIO_RUNTIME_UPDATE_URL=${{ inputs.runtime_update_url }}
+          "@ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Test and type-check Desktop
+        run: |
+          pnpm --filter @coder-studio/desktop test
+          pnpm --filter @coder-studio/desktop typecheck
+
+      - name: Build Windows installer and Runtime
+        run: pnpm dist:desktop
+
+      - name: Smoke packaged Engine, Runtime, PTY, and Electron window
+        run: pnpm smoke:desktop
+
+      - name: Stage and validate Windows release assets
+        shell: pwsh
+        run: |
+          pnpm desktop:artifacts stage --directory release/desktop-release-windows --components 'desktop,win-runtime'
+          if ("${{ inputs.signed }}" -eq "true") {
+            pnpm desktop:artifacts validate --directory release/desktop-release-windows --components 'desktop,win-runtime'
+          } else {
+            pnpm desktop:artifacts validate --directory release/desktop-release-windows --components 'desktop,win-runtime' --allow-unsigned
+          }
+
+      - name: Upload Windows verification assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.value }}
+          path: release/desktop-release-windows/
+          if-no-files-found: error
+          retention-days: 3
+
+  desktop-linux-assets-verify:
+    name: WSL Engine and Runtime verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      artifact_name: ${{ steps.artifact_name.outputs.value }}
+
+    steps:
+      - name: Resolve Linux artifact name
+        id: artifact_name
+        shell: bash
+        run: echo "value=desktop-linux-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download acceptance signing key
+        if: inputs.signed
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Configure signed acceptance channel
+        if: inputs.signed
+        shell: bash
+        run: |
+          {
+            echo 'CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY<<PRIVATE_KEY'
+            cat release/desktop-ci-signing/runtime-private.pem
+            echo 'PRIVATE_KEY'
+            echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
+            cat release/desktop-ci-signing/runtime-public.pem
+            echo 'PUBLIC_KEY'
+          } >> "${GITHUB_ENV}"
+
+      - name: Build WSL Engine and Server Runtime
+        run: |
+          pnpm build:wsl-engine
+          pnpm build:wsl-runtime
+
+      - name: Stage and validate WSL release assets
+        run: |
+          pnpm desktop:artifacts stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
+          if [[ "${{ inputs.signed }}" == "true" ]]; then
+            pnpm desktop:artifacts validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
+          else
+            pnpm desktop:artifacts validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime' --allow-unsigned
+          fi
+
+      - name: Upload WSL verification assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.value }}
+          path: release/desktop-release-linux/
+          if-no-files-found: error
+          retention-days: 3
