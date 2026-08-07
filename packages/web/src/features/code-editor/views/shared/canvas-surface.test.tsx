@@ -1270,7 +1270,11 @@ describe("CanvasSurface", () => {
     renderCanvasSurface();
     await screen.findByText("Runtime Flow");
 
-    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+    const exportButton = screen.getByRole("button", { name: "Export PNG" });
+    await waitFor(() => {
+      expect(exportButton).toBeEnabled();
+    });
+    fireEvent.click(exportButton);
 
     await waitFor(() => {
       expect(document.querySelector(".canvas-content__scene--export")).toBeTruthy();
@@ -1292,7 +1296,11 @@ describe("CanvasSurface", () => {
     renderCanvasSurface();
     await screen.findByText("Runtime Flow");
 
-    fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
+    const exportButton = screen.getByRole("button", { name: "Export PNG" });
+    await waitFor(() => {
+      expect(exportButton).toBeEnabled();
+    });
+    fireEvent.click(exportButton);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Failed to export canvas");
   });
