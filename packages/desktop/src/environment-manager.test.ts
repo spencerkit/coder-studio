@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
-import type { RuntimeManifest } from "./runtime-manifest.js";
+import { DESKTOP_ENGINE_VERSION, type RuntimeManifest } from "./runtime-manifest.js";
 
 const compatibleManifest: RuntimeManifest = {
   schemaVersion: 1,
   runtimeVersion: "0.5.6",
   minShellVersion: "0.1.0",
-  requiredEngineVersion: "1",
+  requiredEngineVersion: DESKTOP_ENGINE_VERSION,
   requiredNodeVersion: "24.19.0",
   runtimeHostApiVersion: 1,
   apiProtocolVersion: 1,
@@ -35,9 +35,9 @@ describe("DesktopEnvironmentManager Runtime compatibility", () => {
 
     expect(manager.isRuntimeCompatible(compatibleManifest)).toBe(true);
     expect(manager.isRuntimeCompatible({ ...compatibleManifest, webRoot: "web" })).toBe(false);
-    expect(manager.isRuntimeCompatible({ ...compatibleManifest, requiredEngineVersion: "2" })).toBe(
-      false
-    );
+    expect(
+      manager.isRuntimeCompatible({ ...compatibleManifest, requiredEngineVersion: "999" })
+    ).toBe(false);
     expect(manager.isRuntimeCompatible({ ...compatibleManifest, runtimeHostApiVersion: 2 })).toBe(
       false
     );

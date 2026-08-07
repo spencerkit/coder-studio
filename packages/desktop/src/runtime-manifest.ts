@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
 export const RUNTIME_MANIFEST_SCHEMA_VERSION = 1;
-export const DESKTOP_ENGINE_VERSION = "1";
+export const DESKTOP_ENGINE_VERSION = "2";
 export const DESKTOP_NODE_VERSION = "24.19.0";
 export const RUNTIME_HOST_API_VERSION = 1;
 export const API_PROTOCOL_VERSION = 1;

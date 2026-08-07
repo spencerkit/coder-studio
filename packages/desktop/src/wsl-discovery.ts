@@ -168,7 +168,7 @@ export class WslDiscovery {
             status: !probe.supported ? "unavailable" : probe.installed ? "ready" : "not-installed",
             platform: "linux",
             arch: probe.arch,
-            engineVersion: probe.installed ? "1" : undefined,
+            engineVersion: probe.installed ? DESKTOP_ENGINE_VERSION : undefined,
             message: probe.message,
           };
         } catch (error) {

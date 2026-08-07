@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { create } from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DESKTOP_ENGINE_VERSION,
   getRuntimeManifestSigningPayload,
   hashRuntimeFile,
   type RuntimeManifest,
@@ -48,7 +49,7 @@ async function writeRuntime(
     schemaVersion: 1,
     runtimeVersion: version,
     minShellVersion: "0.5.6",
-    requiredEngineVersion: "1",
+    requiredEngineVersion: DESKTOP_ENGINE_VERSION,
     requiredNodeVersion: "24.19.0",
     runtimeHostApiVersion: 1,
     apiProtocolVersion: 1,

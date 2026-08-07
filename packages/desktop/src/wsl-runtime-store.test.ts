@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { RuntimeManifest } from "./runtime-manifest.js";
+import { DESKTOP_ENGINE_VERSION, type RuntimeManifest } from "./runtime-manifest.js";
 import type { WslCommandRunner } from "./wsl-command.js";
 import type { WslDistroProbe } from "./wsl-discovery.js";
 import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
@@ -62,7 +62,7 @@ async function writeRuntime(root: string, id: string, runtimeVersion: string, so
     schemaVersion: 1,
     runtimeVersion,
     minShellVersion: "0.1.0",
-    requiredEngineVersion: "1",
+    requiredEngineVersion: DESKTOP_ENGINE_VERSION,
     requiredNodeVersion: "24.19.0",
     runtimeHostApiVersion: 1,
     apiProtocolVersion: 1,

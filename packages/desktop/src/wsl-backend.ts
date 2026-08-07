@@ -42,8 +42,10 @@ export function createWslBackendLaunch(
   const distro = probe.target.distro;
   if (!distro) throw new Error("WSL environment has no distribution name");
   const engineRoot = `${probe.dataRoot}/engine/versions/${runtime.manifest.requiredEngineVersion}`;
+  const npmPrefix = `${probe.dataRoot}/tools/npm`;
   const userPath = Array.from(
     new Set([
+      `${npmPrefix}/bin`,
       `${engineRoot}/bin`,
       ...safeUserPathEntries(probe.userPath),
       `${probe.home}/.local/bin`,
@@ -59,6 +61,7 @@ export function createWslBackendLaunch(
   ).join(":");
   const env = [
     environmentArgument("PATH", userPath),
+    environmentArgument("NPM_CONFIG_PREFIX", npmPrefix),
     environmentArgument("NODE_ENV", "production"),
     environmentArgument("CODER_STUDIO_LOG_FORMAT", "json"),
     environmentArgument("CODER_STUDIO_RUNTIME_DIR", `${probe.dataRoot}/runtime`),

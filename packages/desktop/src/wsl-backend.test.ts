@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { RuntimeManifest } from "./runtime-manifest.js";
+import { DESKTOP_ENGINE_VERSION, type RuntimeManifest } from "./runtime-manifest.js";
 import { createWslBackendLaunch } from "./wsl-backend.js";
 
 const manifest: RuntimeManifest = {
   schemaVersion: 1,
   runtimeVersion: "0.5.6",
   minShellVersion: "0.1.0",
-  requiredEngineVersion: "1",
+  requiredEngineVersion: DESKTOP_ENGINE_VERSION,
   requiredNodeVersion: "24.19.0",
   runtimeHostApiVersion: 1,
   apiProtocolVersion: 1,
@@ -52,14 +52,17 @@ describe("createWslBackendLaunch", () => {
     expect(launch.args).toContain("--exec");
     expect(launch.args).toContain("/usr/bin/env");
     expect(launch.args).toContain("CODER_STUDIO_DESKTOP_SECRET=secret-value");
+    expect(launch.args).toContain(
+      "NPM_CONFIG_PREFIX=/home/alice/.local/share/coder-studio-desktop/tools/npm"
+    );
     const pathArgument = launch.args.find((argument) => argument.startsWith("PATH="));
     expect(pathArgument).toBe(
-      "PATH=/home/alice/.local/share/coder-studio-desktop/engine/versions/1/bin:/home/alice/.cargo/bin:/run/user/1000/fnm_multishells/42/bin:/usr/bin:/home/alice/.local/bin:/home/alice/.local/share/pnpm:/home/alice/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/bin"
+      "PATH=/home/alice/.local/share/coder-studio-desktop/tools/npm/bin:/home/alice/.local/share/coder-studio-desktop/engine/versions/2/bin:/home/alice/.cargo/bin:/run/user/1000/fnm_multishells/42/bin:/usr/bin:/home/alice/.local/bin:/home/alice/.local/share/pnpm:/home/alice/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/bin"
     );
     expect(pathArgument).not.toContain("/mnt/");
     expect(pathArgument).not.toContain("C:\\Windows");
     expect(launch.args.at(-2)).toBe(
-      "/home/alice/.local/share/coder-studio-desktop/engine/versions/1/bin/node"
+      "/home/alice/.local/share/coder-studio-desktop/engine/versions/2/bin/node"
     );
     expect(launch.args.at(-1)).toContain("/runtime-store/versions/abc/server.mjs");
     expect(launch.args).not.toContain("-c");

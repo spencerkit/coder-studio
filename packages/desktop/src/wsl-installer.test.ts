@@ -5,7 +5,11 @@ import { resolve } from "node:path";
 import { create } from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type EngineManifest, getEngineManifestSigningPayload } from "./engine-manifest.js";
-import { getRuntimeManifestSigningPayload, type RuntimeManifest } from "./runtime-manifest.js";
+import {
+  DESKTOP_ENGINE_VERSION,
+  getRuntimeManifestSigningPayload,
+  type RuntimeManifest,
+} from "./runtime-manifest.js";
 import type { WslCommandRunner } from "./wsl-command.js";
 import type { WslDistroProbe } from "./wsl-discovery.js";
 import { WslInstaller } from "./wsl-installer.js";
@@ -92,7 +96,7 @@ describe("WslInstaller", () => {
     const engineManifest = signEngine(
       {
         schemaVersion: 1,
-        engineVersion: "1",
+        engineVersion: DESKTOP_ENGINE_VERSION,
         nodeVersion: "24.19.0",
         platform: "linux",
         arch: "x64",
@@ -111,7 +115,7 @@ describe("WslInstaller", () => {
         schemaVersion: 1,
         runtimeVersion: "0.5.6",
         minShellVersion: "0.1.0",
-        requiredEngineVersion: "1",
+        requiredEngineVersion: DESKTOP_ENGINE_VERSION,
         requiredNodeVersion: "24.19.0",
         runtimeHostApiVersion: 1,
         apiProtocolVersion: 1,
@@ -162,7 +166,7 @@ describe("WslInstaller", () => {
 
     const installed = await installer.prepare(createProbe());
     expect(installed).toMatchObject({
-      engineRoot: "/home/alice/.local/share/coder-studio-desktop/engine/versions/1",
+      engineRoot: `/home/alice/.local/share/coder-studio-desktop/engine/versions/${DESKTOP_ENGINE_VERSION}`,
       manifest: { runtimeVersion: "0.5.6" },
     });
     expect(installed.manifest).not.toHaveProperty("webRoot");

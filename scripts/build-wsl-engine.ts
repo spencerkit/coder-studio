@@ -13,7 +13,7 @@ import {
   DESKTOP_NODE_VERSION,
   prepareDesktopPackage,
 } from "./prepare-desktop-package.js";
-import { ensureDir, error, ROOT_DIR, success, warn } from "./shared/index.js";
+import { ensureDir, error, ROOT_DIR, run, success, warn } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
 export const WSL_ENGINE_RELEASE_DIR = resolve(ROOT_DIR, "release/engine");
@@ -46,6 +46,12 @@ function signManifest(manifest: EngineManifest): EngineManifest {
   };
 }
 
+async function verifyNodeToolLaunchers(): Promise<void> {
+  for (const command of ["npm", "npx", "corepack"]) {
+    await run(resolve(DESKTOP_ENGINE_DIR, `bin/${command}`), ["--version"]);
+  }
+}
+
 export async function buildWslEngine(): Promise<{ manifest: EngineManifest; packagePath: string }> {
   if (process.platform !== "linux") {
     throw new Error("The WSL Engine must be built on a Linux runner");
@@ -54,6 +60,7 @@ export async function buildWslEngine(): Promise<{ manifest: EngineManifest; pack
     throw new Error(`Unsupported WSL Engine architecture: ${process.arch}`);
   }
   await prepareDesktopPackage();
+  await verifyNodeToolLaunchers();
   await ensureDir(WSL_ENGINE_RELEASE_DIR);
 
   const files = await collectFiles(DESKTOP_ENGINE_DIR);

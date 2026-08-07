@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DESKTOP_NODE_VERSION } from "../packages/desktop/src/runtime-manifest.js";
@@ -14,6 +14,12 @@ interface RuntimeTarget {
   archiveName: string;
   rootDirName: string;
 }
+
+const PORTABLE_NODE_LAUNCHERS = [
+  { path: "bin/corepack", target: "lib/node_modules/corepack/dist/corepack.js" },
+  { path: "bin/npm", target: "lib/node_modules/npm/bin/npm-cli.js" },
+  { path: "bin/npx", target: "lib/node_modules/npm/bin/npx-cli.js" },
+] as const;
 
 async function copyEngineTree(source: string, destination: string): Promise<void> {
   await ensureDir(destination);
@@ -85,6 +91,39 @@ async function stageNodeRuntime(): Promise<void> {
   }
 }
 
+/**
+ * Node's POSIX archives expose these commands as symlinks into lib/node_modules. The Engine
+ * staging copy intentionally dereferences links so the signed package only contains regular
+ * files. Recreate each command as a location-independent JavaScript launcher after the copy;
+ * otherwise the dereferenced npm-cli.js resolves ../lib relative to engine/bin and cannot start.
+ */
+export async function repairPortableNodeLaunchers(
+  engineRoot = DESKTOP_ENGINE_DIR,
+  platform: NodeJS.Platform = process.platform
+): Promise<void> {
+  if (platform === "win32") return;
+
+  await Promise.all(
+    PORTABLE_NODE_LAUNCHERS.map(async (launcher) => {
+      const targetPath = resolve(engineRoot, ...launcher.target.split("/"));
+      await access(targetPath);
+      const launcherPath = resolve(engineRoot, ...launcher.path.split("/"));
+      const relativeTarget = `../${launcher.target}`;
+      await writeFile(
+        launcherPath,
+        [
+          "#!/bin/sh",
+          'bin_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)',
+          `exec "$bin_dir/node" "$bin_dir/${relativeTarget}" "$@"`,
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+      await chmod(launcherPath, 0o755);
+    })
+  );
+}
+
 async function stageEngineDependencies(): Promise<void> {
   const deployRoot = await mkdtemp(join(tmpdir(), "coder-studio-engine-deploy-"));
   const deployDir = resolve(deployRoot, "package");
@@ -127,6 +166,7 @@ export async function prepareDesktopPackage(): Promise<void> {
   await rm(DESKTOP_ENGINE_DIR, { recursive: true, force: true });
   await ensureDir(DESKTOP_ENGINE_DIR);
   await stageNodeRuntime();
+  await repairPortableNodeLaunchers();
   await stageEngineDependencies();
   await removeEngineSourcemaps();
   success(`Desktop Engine prepared with Node ${DESKTOP_NODE_VERSION}`);
