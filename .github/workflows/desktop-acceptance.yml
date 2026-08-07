@@ -1,0 +1,157 @@
+name: Publish Desktop acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare acceptance channel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.channel.outputs.release_tag }}
+      release_base_url: ${{ steps.channel.outputs.release_base_url }}
+      runtime_update_url: ${{ steps.channel.outputs.runtime_update_url }}
+      signing_key_artifact: ${{ steps.channel.outputs.signing_key_artifact }}
+
+    steps:
+      - name: Resolve acceptance channel
+        id: channel
+        shell: bash
+        run: |
+          release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
+          runtime_update_url=${release_base_url}/coder-studio-runtime-win32-x64.manifest.json
+          signing_key_artifact="desktop-ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_base_url=${release_base_url}" >> "${GITHUB_OUTPUT}"
+          echo "runtime_update_url=${runtime_update_url}" >> "${GITHUB_OUTPUT}"
+          echo "signing_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate ephemeral Runtime signing key
+        shell: bash
+        run: |
+          mkdir -p release/desktop-ci-signing
+          openssl genpkey -algorithm Ed25519 -out release/desktop-ci-signing/runtime-private.pem
+          openssl pkey \
+            -in release/desktop-ci-signing/runtime-private.pem \
+            -pubout \
+            -out release/desktop-ci-signing/runtime-public.pem
+
+      - name: Upload ephemeral signing key
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.channel.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload acceptance public key
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/desktop-ci-signing/runtime-public.pem
+          if-no-files-found: error
+          retention-days: 3
+
+  repository-verify:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  build-assets:
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-verify.yml
+    with:
+      signed: true
+      signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
+      runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
+
+  publish:
+    name: Publish signed Desktop acceptance channel
+    needs:
+      - prepare
+      - repository-verify
+      - build-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Windows acceptance assets
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-assets.outputs.windows_artifact }}
+          path: release/desktop-acceptance
+
+      - name: Download Linux acceptance assets
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-assets.outputs.linux_artifact }}
+          path: release/desktop-acceptance
+
+      - name: Download acceptance public key
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/desktop-ci-signing
+
+      - name: Load acceptance public key
+        shell: bash
+        run: |
+          {
+            echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
+            cat release/desktop-ci-signing/runtime-public.pem
+            echo 'PUBLIC_KEY'
+          } >> "${GITHUB_ENV}"
+
+      - name: Validate complete signed acceptance channel
+        run: pnpm desktop:artifacts validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+
+      - name: Publish tag-pinned prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          desktop_version=$(node -p "require('./packages/desktop/package.json').version")
+          installer="Coder-Studio-Setup-${desktop_version}.exe"
+          gh release create "${RELEASE_TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "Coder Studio Desktop acceptance ${GITHUB_RUN_NUMBER}" \
+            --notes "Ephemeral signed acceptance channel for ${GITHUB_SHA}. The signing key is test-only; do not promote these assets to production." \
+            --draft \
+            release/desktop-acceptance/*
+          gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false
+          {
+            echo "## Desktop acceptance channel"
+            echo
+            echo "- Installer: ${{ needs.prepare.outputs.release_base_url }}/${installer}"
+            echo "- Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+            echo "- Runtime channel: ${{ needs.prepare.outputs.runtime_update_url }}"
+          } >> "${GITHUB_STEP_SUMMARY}"

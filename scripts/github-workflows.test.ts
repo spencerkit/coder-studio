@@ -5,8 +5,10 @@ import { parse } from "yaml";
 
 interface WorkflowJob {
   uses?: string;
+  needs?: string | string[];
   permissions?: Record<string, string>;
   outputs?: Record<string, string>;
+  with?: Record<string, unknown>;
   steps?: Array<{
     id?: string;
     name?: string;
@@ -156,5 +158,112 @@ describe("GitHub workflow boundaries", () => {
       "validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'"
     );
     expect(linuxValidation?.run).toContain("--allow-unsigned");
+  });
+
+  it("publishes acceptance assets only through an explicit manual workflow", () => {
+    const workflow = loadWorkflow("desktop-acceptance.yml");
+    const prepare = workflow.jobs.prepare;
+    const repositoryVerify = workflow.jobs["repository-verify"];
+    const buildAssets = workflow.jobs["build-assets"];
+    const publish = workflow.jobs.publish;
+    const prepareSteps = prepare.steps ?? [];
+    const publishSteps = publish.steps ?? [];
+    const resolveChannel = prepareSteps.find((step) => step.name === "Resolve acceptance channel");
+    const generateKey = prepareSteps.find(
+      (step) => step.name === "Generate ephemeral Runtime signing key"
+    );
+    const signingKeyUpload = prepareSteps.find(
+      (step) => step.name === "Upload ephemeral signing key"
+    );
+    const publicKeyUpload = prepareSteps.find(
+      (step) => step.name === "Upload acceptance public key"
+    );
+    const artifactDownloads = publishSteps.filter(
+      (step) =>
+        step.uses === "actions/download-artifact@v4" && step.name?.includes("acceptance assets")
+    );
+    const publicKeyDownload = publishSteps.find(
+      (step) => step.name === "Download acceptance public key"
+    );
+    const validation = publishSteps.find(
+      (step) => step.name === "Validate complete signed acceptance channel"
+    );
+    const release = publishSteps.find((step) => step.name === "Publish tag-pinned prerelease");
+
+    expect(workflow.on).toEqual({ workflow_dispatch: null });
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(Object.keys(workflow.jobs)).toEqual([
+      "prepare",
+      "repository-verify",
+      "build-assets",
+      "publish",
+    ]);
+    expect(prepare.permissions).toEqual({ contents: "read" });
+    expect(prepare.outputs).toEqual({
+      release_tag: "${{ steps.channel.outputs.release_tag }}",
+      release_base_url: "${{ steps.channel.outputs.release_base_url }}",
+      runtime_update_url: "${{ steps.channel.outputs.runtime_update_url }}",
+      signing_key_artifact: "${{ steps.channel.outputs.signing_key_artifact }}",
+    });
+    expect(resolveChannel?.run).toContain(
+      'release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+    );
+    expect(resolveChannel?.run).toContain(
+      'release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"'
+    );
+    expect(resolveChannel?.run).toContain(
+      "runtime_update_url=${release_base_url}/coder-studio-runtime-win32-x64.manifest.json"
+    );
+    expect(resolveChannel?.run).toContain(
+      'signing_key_artifact="desktop-ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+    );
+    expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
+    expect(signingKeyUpload?.with).toMatchObject({
+      name: "${{ steps.channel.outputs.signing_key_artifact }}",
+      path: "release/desktop-ci-signing/",
+      "retention-days": 1,
+    });
+    expect(publicKeyUpload?.with).toMatchObject({
+      name: "desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}",
+      path: "release/desktop-ci-signing/runtime-public.pem",
+    });
+    expect(repositoryVerify).toMatchObject({
+      permissions: { contents: "read" },
+      uses: "./.github/workflows/ci.yml",
+    });
+    expect(buildAssets).toMatchObject({
+      needs: "prepare",
+      permissions: { contents: "read" },
+      uses: "./.github/workflows/desktop-verify.yml",
+      with: {
+        signed: true,
+        signing_key_artifact: "${{ needs.prepare.outputs.signing_key_artifact }}",
+        runtime_update_url: "${{ needs.prepare.outputs.runtime_update_url }}",
+      },
+    });
+    expect(publish.needs).toEqual(["prepare", "repository-verify", "build-assets"]);
+    expect(publish.permissions).toEqual({ contents: "write" });
+    for (const [name, job] of Object.entries(workflow.jobs)) {
+      if (name !== "publish") expect(job.permissions?.contents).not.toBe("write");
+    }
+    expect(artifactDownloads.map((step) => step.with?.name)).toEqual([
+      "${{ needs.build-assets.outputs.windows_artifact }}",
+      "${{ needs.build-assets.outputs.linux_artifact }}",
+    ]);
+    for (const download of artifactDownloads) {
+      expect(download.with?.path).toBe("release/desktop-acceptance");
+    }
+    expect(publicKeyDownload?.with).toMatchObject({
+      name: "desktop-acceptance-public-key-${{ github.run_id }}-${{ github.run_attempt }}",
+      path: "release/desktop-ci-signing",
+    });
+    expect(validation?.run).toContain(
+      "validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime'"
+    );
+    expect(release?.run).toContain("gh release create");
+    expect(release?.run).toContain("--draft");
+    expect(release?.run).toContain(
+      'gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false'
+    );
   });
 });
