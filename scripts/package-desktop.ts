@@ -15,20 +15,31 @@ export async function readDesktopReleaseVersion(
   return manifest.version.trim();
 }
 
-export async function packageDesktop(options: { unpacked: boolean }): Promise<void> {
+export function createDesktopPackageArgs(options: {
+  unpacked: boolean;
+  outputDirectory?: string;
+}): string[] {
+  return [
+    "exec",
+    "electron-builder",
+    ...(options.unpacked ? ["--dir"] : []),
+    "--config",
+    "electron-builder.yml",
+    ...(options.outputDirectory
+      ? ["--config.directories.output", resolve(options.outputDirectory)]
+      : []),
+  ];
+}
+
+export async function packageDesktop(options: {
+  unpacked: boolean;
+  outputDirectory?: string;
+}): Promise<void> {
   const version = await readDesktopReleaseVersion();
   info(`Packaging Coder Studio desktop ${version}`);
   await run(
     "pnpm",
-    [
-      "exec",
-      "electron-builder",
-      ...(options.unpacked ? ["--dir"] : []),
-      "--config",
-      "electron-builder.yml",
-      "--config.extraMetadata.version",
-      version,
-    ],
+    [...createDesktopPackageArgs(options), "--config.extraMetadata.version", version],
     {
       cwd: DESKTOP_DIR,
     }

@@ -1,7 +1,9 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createAcceptanceRuntimeVersion,
   parsePrepareWslAcceptanceArgs,
+  resolveAcceptanceDesktopOutput,
 } from "./prepare-wsl-acceptance.js";
 
 describe("prepare-wsl-acceptance", () => {
@@ -40,5 +42,12 @@ describe("prepare-wsl-acceptance", () => {
     expect(
       createAcceptanceRuntimeVersion("0.5.6", "4e80e3cd92c2d7dd46a0b0763d070120db240efa")
     ).toBe("0.5.6-acceptance.4e80e3cd92c2");
+  });
+
+  it("keeps Desktop packaging outside a workspace that may be watched by the running App", () => {
+    const temporaryRoot = resolve("acceptance-temp");
+    expect(resolveAcceptanceDesktopOutput("abc123", temporaryRoot)).toBe(
+      resolve(temporaryRoot, "coder-studio-wsl-acceptance", "desktop", "abc123")
+    );
   });
 });

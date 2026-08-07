@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
 import { access, copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
   type EngineManifest,
@@ -150,6 +151,10 @@ export function createAcceptanceRuntimeVersion(baseVersion: string, commit: stri
   if (!normalizedVersion) throw new Error("Runtime base version must not be empty");
   if (!/^[a-f0-9]{7,64}$/.test(normalizedCommit)) throw new Error("Invalid Git commit hash");
   return `${normalizedVersion}-acceptance.${normalizedCommit.slice(0, 12)}`;
+}
+
+export function resolveAcceptanceDesktopOutput(commit: string, temporaryRoot = tmpdir()): string {
+  return resolve(temporaryRoot, "coder-studio-wsl-acceptance", "desktop", commit);
 }
 
 async function ensureSigningKeys(): Promise<{ privateKeyPem: string; publicKeyPem: string }> {
@@ -435,6 +440,7 @@ export async function prepareWslAcceptance(
   }
   step("WSL ACCEPTANCE", "Preparing a signed local WSL download channel...\n");
   const commit = await assertCommittedHead();
+  const desktopOutputRoot = resolveAcceptanceDesktopOutput(commit);
   const discovery = new WslDiscovery();
   const distros = await discovery.listDistros();
   const distro = options.distro ?? distros[0];
@@ -484,9 +490,13 @@ export async function prepareWslAcceptance(
   process.env.CODER_STUDIO_RUNTIME_VERSION = runtimeVersion;
   try {
     info("Building the packaged Windows Desktop against the local acceptance channel");
+    await rm(desktopOutputRoot, { recursive: true, force: true });
     await buildDesktop();
     await prepareDesktopPackage();
-    await packageDesktop({ unpacked: !options.installer });
+    await packageDesktop({
+      unpacked: !options.installer,
+      outputDirectory: desktopOutputRoot,
+    });
   } finally {
     restoreEnvironment("CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY", previousPrivateKey);
     restoreEnvironment("CODER_STUDIO_RUNTIME_PUBLIC_KEY", previousPublicKey);
@@ -517,7 +527,7 @@ export async function prepareWslAcceptance(
     distro,
     runtimeVersion,
     downloadBaseUrl: `http://127.0.0.1:${options.port}/`,
-    desktopExecutable: resolve(ROOT_DIR, "release/desktop/win-unpacked/Coder Studio.exe"),
+    desktopExecutable: resolve(desktopOutputRoot, "win-unpacked/Coder Studio.exe"),
     userDataDirectory: resolve(ACCEPTANCE_ROOT, "user-data"),
     artifacts,
   };

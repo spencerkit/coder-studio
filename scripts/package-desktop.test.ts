@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { readDesktopReleaseVersion } from "./package-desktop.js";
+import { createDesktopPackageArgs, readDesktopReleaseVersion } from "./package-desktop.js";
 import { DESKTOP_DIR, ROOT_DIR } from "./shared/index.js";
 
 async function readVersion(packagePath: string): Promise<string> {
@@ -16,5 +16,18 @@ describe("readDesktopReleaseVersion", () => {
 
     expect(await readDesktopReleaseVersion()).toBe(desktopVersion);
     expect(desktopVersion).not.toBe(cliVersion);
+  });
+
+  it("can isolate electron-builder output from a workspace being watched by Desktop", () => {
+    const outputDirectory = resolve(ROOT_DIR, "..", "acceptance desktop output");
+
+    expect(createDesktopPackageArgs({ unpacked: false, outputDirectory })).toEqual([
+      "exec",
+      "electron-builder",
+      "--config",
+      "electron-builder.yml",
+      "--config.directories.output",
+      outputDirectory,
+    ]);
   });
 });
