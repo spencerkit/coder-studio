@@ -96,10 +96,13 @@ SemVer 必须高于当前验收 Runtime；私钥和所有产物仍只保存在�
 `acceptance:runtime:verify` 会从实际 HTTP channel 下载并验签 Windows Runtime，验证
 `factory → pending → active` 状态切换，同时确认存在同版本且签名有效的 WSL Server Runtime。
 
-需要从 GitHub Actions 下载可直接验收 WSL 首次安装的测试包时，手动运行 `CI` workflow 并保持
-`publish_acceptance=true`。流水线会创建一个 tag 固定的 prerelease，安装包内置本次运行的临时公钥和
-prerelease 下载地址，Windows/WSL Runtime 资产则由对应临时私钥签名。测试私钥会作为短期内部 artifact
-保留一天；prerelease 不会成为 `latest`，验收结束后应删除对应的 `desktop-ci-*` Release 和 tag。
+需要从 GitHub Actions 下载可直接验收 WSL 首次安装的测试包时，手动运行
+`Publish Desktop acceptance` workflow。它会等待通用 `CI` 快速检查，并通过 `Desktop verification`
+workflow 构建完整的签名集成资产；直接运行 `Desktop verification` 只生成无签名验证 artifact，不会发布
+测试通道。验收流水线会创建一个 tag 固定的 prerelease，安装包内置本次运行的临时公钥和 prerelease
+下载地址，Windows/WSL Runtime 资产则由对应临时私钥签名。测试私钥会作为短期内部 artifact 保留一天；
+prerelease 永远不会成为 `latest`，验收结束后应删除对应的 `desktop-ci-*` Release 和 tag。生产发布仍由
+`Publish Desktop` workflow 承担，并保持 `full` 与 `runtime` 两种模式。
 
 Runtime 版本可以独立于 Desktop 安装包版本：
 

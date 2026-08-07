@@ -239,16 +239,22 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
 
 ## 签名、公证与发布
 
-仓库提供两层 Desktop 流水线：
+仓库提供四层边界清晰的 Desktop 流水线：
 
-- `.github/workflows/ci.yml` 在 PR 与 `main` push 上并行构建 Windows 安装包和 Linux WSL
-  资产。Windows job 会运行 Desktop 测试、类型检查、完整 NSIS 打包以及 Engine/Runtime、PTY、Electron
-  窗口 smoke；Linux job 会真实运行 WSL Engine 内的 npm/npx/corepack，并校验 Engine 与 Server Runtime
-  归档。PR 与 `main` push 允许 manifest 无签名，但不会发布这些候选资产。手动触发并启用
-  `publish_acceptance` 时，流水线会生成仅供本次运行使用的 Ed25519 测试密钥，用同一把密钥签名 Windows
-  Runtime、WSL Engine 和 WSL Runtime，把公钥与 tag 固定的下载地址编译进测试 Desktop，最后发布独立的
-  `desktop-ci-<run-id>-<attempt>` prerelease。该通道不更新 GitHub `latest`，也不能晋升为生产发布。
-- `.github/workflows/desktop-release.yml` 只能手动从 `main` 触发，并受
+- `.github/workflows/ci.yml` 是通用快速检查，在 PR 与 `main` push 上运行 changeset 校验、lint、测试、
+  Web/CLI 生产构建和有针对性的 Windows Runtime 校验，也可由其他 workflow 调用。它不构建 Desktop
+  安装包、Factory Runtime 或 WSL 集成资产。
+- `.github/workflows/desktop-verify.yml` 负责重量级 Desktop 集成验证。相关构建路径发生变化的 PR 会触发
+  它，`main` push 始终运行，也可以直接手动运行无签名验证；`desktop-acceptance.yml` 则通过
+  `workflow_call` 请求签名构建。Windows job 构建安装包与 Factory Runtime 并执行 packaged smoke，Linux
+  job 构建并校验 WSL Engine 与 WSL Server Runtime。直接运行允许 manifest 无签名，只上传验证 artifact，
+  不创建 Release。
+- `.github/workflows/desktop-acceptance.yml` 只能通过 GitHub Actions 中的
+  `Publish Desktop acceptance` 手动触发。它生成仅供本次运行使用的 Ed25519 测试密钥，等待通用快速 CI，
+  再复用 Desktop 验证 workflow 构建并校验完整签名资产，最后发布独立的
+  `desktop-ci-<run-id>-<attempt>` prerelease。只有这一层会发布测试资产；该通道固定到对应 tag，永远不会
+  更新 GitHub `latest`，也不能晋升为生产发布。
+- `.github/workflows/desktop-release.yml` 保持生产发布边界不变：只能手动从 `main` 触发，并受
   `desktop-production` environment 审批保护。`full` 模式发布 Shell、Windows Runtime、WSL Engine 和
   WSL Runtime；`runtime` 模式只发布 Windows/WSL Product Runtime，并从当前稳定 Release 继承 Shell
   安装包与 WSL Engine。
