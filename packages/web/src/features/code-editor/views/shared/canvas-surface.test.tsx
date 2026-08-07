@@ -846,8 +846,10 @@ describe("CanvasSurface", () => {
       button: 0,
     });
 
+    await waitFor(() => {
+      expect(container.querySelector(".canvas-overlay-layer__handle--rect-resize")).toBeTruthy();
+    });
     const resizeHandle = container.querySelector(".canvas-overlay-layer__handle--rect-resize");
-    expect(resizeHandle).toBeTruthy();
 
     fireEvent.pointerDown(resizeHandle as Element, {
       clientX: 160,
