@@ -70,6 +70,7 @@ describe("GitHub workflow boundaries", () => {
       "package.json",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
+      "tsconfig.base.json",
       "packages/desktop/**",
       "packages/desktop-engine/**",
       "packages/server/**",

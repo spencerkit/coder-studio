@@ -131,6 +131,7 @@ it("runs Desktop integration for relevant changes and reusable signed builds", (
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
+    "tsconfig.base.json",
     "packages/desktop/**",
     "packages/desktop-engine/**",
     "packages/server/**",
