@@ -55,23 +55,69 @@ const STARTUP_TIMEOUT_MS = 30_000;
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 const execFileAsync = promisify(execFile);
 
-async function resolveUserPath(): Promise<string> {
-  const override = process.env.CODER_STUDIO_DESKTOP_PATH?.trim();
+interface UserPathResolutionOptions {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  runShell?: (
+    command: string,
+    args: string[],
+    options: { encoding: "utf8"; timeout: number; windowsHide: true }
+  ) => Promise<{ stdout: string }>;
+}
+
+function readMarkedPath(stdout: string, marker: string): string {
+  const markerIndex = stdout.lastIndexOf(marker);
+  return markerIndex >= 0 ? stdout.slice(markerIndex + marker.length).trim() : "";
+}
+
+export async function resolveUserPath(options: UserPathResolutionOptions = {}): Promise<string> {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const override = env.CODER_STUDIO_DESKTOP_PATH?.trim();
   if (override) return override;
 
-  const inherited = process.env.PATH ?? process.env.Path ?? "";
-  if (process.platform !== "darwin") return inherited;
+  const inherited = env.PATH ?? env.Path ?? "";
+  const runShell =
+    options.runShell ??
+    (execFileAsync as unknown as NonNullable<UserPathResolutionOptions["runShell"]>);
+  const marker = "__CODER_STUDIO_PATH__";
 
-  const shell = process.env.SHELL?.trim() || "/bin/zsh";
+  if (platform === "win32") {
+    // Explorer-launched apps only inherit the static Windows environment. Version managers such
+    // as fnm/nvm/Volta commonly add active Node and npm shims from the PowerShell profile, so
+    // terminals can find `codex`/`claude` while the Desktop sidecar cannot. Capture that profile
+    // PATH without opening a console. Expand %VAR% entries such as a literal `%APPDATA%\npm` too.
+    for (const shell of ["powershell.exe", "pwsh.exe"]) {
+      try {
+        const script = `[Console]::Out.Write("\n${marker}" + [Environment]::ExpandEnvironmentVariables($env:PATH))`;
+        const { stdout } = await runShell(
+          shell,
+          ["-NoLogo", "-NonInteractive", "-Command", script],
+          {
+            encoding: "utf8",
+            timeout: 5_000,
+            windowsHide: true,
+          }
+        );
+        const shellPath = readMarkedPath(stdout, marker);
+        if (shellPath && shellPath !== inherited) return shellPath;
+      } catch {
+        // Try the next PowerShell host, then fall back to the inherited environment.
+      }
+    }
+    return inherited;
+  }
+
+  if (platform !== "darwin") return inherited;
+
+  const shell = env.SHELL?.trim() || "/bin/zsh";
   try {
-    const marker = "__CODER_STUDIO_PATH__";
-    const { stdout } = await execFileAsync(shell, ["-ilc", `printf '\n${marker}%s' \"$PATH\"`], {
+    const { stdout } = await runShell(shell, ["-ilc", `printf '\n${marker}%s' \"$PATH\"`], {
       encoding: "utf8",
       timeout: 5_000,
       windowsHide: true,
     });
-    const markerIndex = stdout.lastIndexOf(marker);
-    const loginPath = markerIndex >= 0 ? stdout.slice(markerIndex + marker.length).trim() : "";
+    const loginPath = readMarkedPath(stdout, marker);
     return loginPath || inherited;
   } catch {
     return inherited;
