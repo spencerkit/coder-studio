@@ -112,7 +112,7 @@ describe("EnvironmentSwitcher", () => {
     await screen.findByText("Local: Windows");
     await userEvent.click(screen.getByRole("button", { name: "Coder Studio environment" }));
 
-    expect(screen.getAllByText("Product Runtime 0.5.7-acceptance.local")).toHaveLength(2);
+    expect(screen.getAllByText("Product Runtime v0.5.7-acceptance.local")).toHaveLength(2);
   });
 
   it("keeps the menu actionable when opening another instance fails", async () => {

@@ -140,7 +140,7 @@ export function EnvironmentSwitcher() {
                         </span>
                         {environment.runtimeVersion ? (
                           <span className={styles.runtimeVersion}>
-                            Product Runtime {environment.runtimeVersion}
+                            Product Runtime v{environment.runtimeVersion}
                           </span>
                         ) : null}
                       </span>
