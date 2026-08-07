@@ -112,6 +112,7 @@ export function AboutSettings({
   const [confirmState, setConfirmState] = useState<UpdatePrepareInstallResponse | null>(null);
   const [loading, setLoading] = useState<null | "check" | "prepare" | "install">(null);
   const desktopApi = window.coderStudioDesktop;
+  const [desktopAppVersion, setDesktopAppVersion] = useState<string | null>(null);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopRuntimeUpdateState | null>(
     null
   );
@@ -141,6 +142,12 @@ export function AboutSettings({
       .catch(() => {
         // A manual check will surface IPC failures to the user.
       });
+    void desktopApi
+      .getAppVersion()
+      .then((version) => {
+        if (!disposed) setDesktopAppVersion(version);
+      })
+      .catch(() => {});
     return () => {
       disposed = true;
       unsubscribe();
@@ -305,18 +312,39 @@ export function AboutSettings({
             <span className="settings-info-label">{t("settings.about.product_name")}</span>
             <span className="settings-info-value">Coder Studio</span>
           </div>
-          <div className="settings-info-row">
-            <span className="settings-info-label">{t("settings.about.current_version")}</span>
-            <span className="settings-info-value">
-              v{visibleUpdateState?.currentVersion ?? serverInfo?.version ?? "0.0.0"}
-            </span>
-          </div>
+          {desktopApi ? (
+            <>
+              <div className="settings-info-row">
+                <span className="settings-info-label">{t("settings.about.app_version")}</span>
+                <span className="settings-info-value">
+                  {desktopAppVersion ? `v${desktopAppVersion}` : "-"}
+                </span>
+              </div>
+              <div className="settings-info-row">
+                <span className="settings-info-label">{t("settings.about.runtime_version")}</span>
+                <span className="settings-info-value">
+                  v{serverInfo?.version ?? visibleUpdateState?.currentVersion ?? "0.0.0"}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="settings-info-row">
+              <span className="settings-info-label">{t("settings.about.current_version")}</span>
+              <span className="settings-info-value">v{serverInfo?.version ?? "0.0.0"}</span>
+            </div>
+          )}
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
             <span className="settings-info-value">{serverInfo?.serverInstanceId ?? "-"}</span>
           </div>
           <div className="settings-info-row">
-            <span className="settings-info-label">{t("settings.about.install_support")}</span>
+            <span className="settings-info-label">
+              {t(
+                desktopApi
+                  ? "settings.about.runtime_update_support"
+                  : "settings.about.install_support"
+              )}
+            </span>
             <span className="settings-info-value">
               {visibleUpdateState?.supported
                 ? t("settings.about.install_supported")
@@ -329,11 +357,25 @@ export function AboutSettings({
 
       {showUpdateStatus ? (
         <div className="settings-group">
-          <h3 className="settings-group-title">{t("settings.about.update_group")}</h3>
-          <p className="settings-group-desc">{t("settings.about.update_group_hint")}</p>
+          <h3 className="settings-group-title">
+            {t(desktopApi ? "settings.about.runtime_update_group" : "settings.about.update_group")}
+          </h3>
+          <p className="settings-group-desc">
+            {t(
+              desktopApi
+                ? "settings.about.runtime_update_group_hint"
+                : "settings.about.update_group_hint"
+            )}
+          </p>
 
           <div className="settings-info-row">
-            <span className="settings-info-label">{t("settings.about.latest_version")}</span>
+            <span className="settings-info-label">
+              {t(
+                desktopApi
+                  ? "settings.about.latest_runtime_version"
+                  : "settings.about.latest_version"
+              )}
+            </span>
             <span className="settings-info-value">
               {visibleUpdateState?.latestVersion ? `v${visibleUpdateState.latestVersion}` : "-"}
             </span>

@@ -1,5 +1,6 @@
 interface CoderStudioDesktopApi {
   platform: string;
+  getAppVersion(): Promise<string>;
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
   getBackendStatus(): Promise<{

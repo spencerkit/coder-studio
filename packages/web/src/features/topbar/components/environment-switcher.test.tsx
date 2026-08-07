@@ -32,6 +32,7 @@ function installDesktopApi() {
   const openEnvironment = vi.fn().mockResolvedValue({ status: "opened" as const });
   const api: CoderStudioDesktopApi = {
     platform: "win32",
+    getAppVersion: vi.fn().mockResolvedValue("0.1.0"),
     selectWorkspaceDirectory: vi.fn().mockResolvedValue(null),
     openExternal: vi.fn().mockResolvedValue(true),
     getBackendStatus: vi.fn().mockResolvedValue(null),

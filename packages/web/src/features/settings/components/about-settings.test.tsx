@@ -12,6 +12,7 @@ import { AboutSettings } from "./about-settings";
 function createDesktopApi(overrides: Partial<CoderStudioDesktopApi> = {}): CoderStudioDesktopApi {
   return {
     platform: "win32",
+    getAppVersion: vi.fn(async () => "0.1.0"),
     selectWorkspaceDirectory: vi.fn(async () => null),
     openExternal: vi.fn(async () => true),
     getBackendStatus: vi.fn(async () => null),
@@ -185,6 +186,13 @@ describe("AboutSettings", () => {
     const dispatch = vi.fn();
     renderAboutSettings({ dispatch });
 
+    expect(await screen.findByText("App 版本")).toBeInTheDocument();
+    expect(screen.getByText("Runtime 版本")).toBeInTheDocument();
+    expect(screen.getByText("最新 Runtime 版本")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Runtime 更新" })).toBeInTheDocument();
+    expect(await screen.findByText("v0.1.0")).toBeInTheDocument();
+    expect(screen.getByText("v0.4.0")).toBeInTheDocument();
+    expect(screen.queryByText("当前版本")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "立即检查" })).toBeEnabled();
     });

@@ -226,6 +226,7 @@ async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
 }
 
 function registerIpcHandlers(rootUserDataDir: string): void {
+  ipcMain.handle("desktop:get-app-version", () => app.getVersion());
   ipcMain.handle("desktop:select-workspace-directory", async () => {
     if (!mainWindow) return null;
     const activeDistro =

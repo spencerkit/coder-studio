@@ -10,6 +10,7 @@ import type {
 
 const api: DesktopApi = {
   platform: process.platform,
+  getAppVersion: () => ipcRenderer.invoke("desktop:get-app-version") as Promise<string>,
   selectWorkspaceDirectory: () => ipcRenderer.invoke("desktop:select-workspace-directory"),
   openExternal: (url: string) => ipcRenderer.invoke("desktop:open-external", url),
   getBackendStatus: () =>

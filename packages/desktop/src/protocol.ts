@@ -72,6 +72,7 @@ export interface DesktopRuntimeUpdateState {
 
 export interface DesktopApi {
   platform: NodeJS.Platform;
+  getAppVersion(): Promise<string>;
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
   getBackendStatus(): Promise<DesktopBackendStatus | null>;
