@@ -12,6 +12,7 @@ const nativeEnvironment: DesktopEnvironmentSummary = {
   active: true,
   status: "ready",
   platform: "win32",
+  runtimeVersion: "0.5.7-acceptance.local",
 };
 
 const wslEnvironment: DesktopEnvironmentSummary = {
@@ -23,6 +24,7 @@ const wslEnvironment: DesktopEnvironmentSummary = {
   status: "not-installed",
   platform: "linux",
   arch: "x64",
+  runtimeVersion: "0.5.7-acceptance.local",
 };
 
 function installDesktopApi() {
@@ -101,6 +103,16 @@ describe("EnvironmentSwitcher", () => {
     await userEvent.click(screen.getByRole("button", { name: "Coder Studio environment" }));
 
     await waitFor(() => expect(screen.getByText("Downloading WSL Engine…")).toBeInTheDocument());
+  });
+
+  it("shows the Product Runtime version for each Desktop environment", async () => {
+    installDesktopApi();
+    renderSwitcher();
+
+    await screen.findByText("Local: Windows");
+    await userEvent.click(screen.getByRole("button", { name: "Coder Studio environment" }));
+
+    expect(screen.getAllByText("Runtime 0.5.7-acceptance.local")).toHaveLength(2);
   });
 
   it("keeps the menu actionable when opening another instance fails", async () => {

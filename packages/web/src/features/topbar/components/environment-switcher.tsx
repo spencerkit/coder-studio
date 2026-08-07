@@ -138,6 +138,11 @@ export function EnvironmentSwitcher() {
                               ? t("desktop_environment.current_window")
                               : t(`desktop_environment.status.${environment.status}`)}
                         </span>
+                        {environment.runtimeVersion ? (
+                          <span className={styles.runtimeVersion}>
+                            Runtime {environment.runtimeVersion}
+                          </span>
+                        ) : null}
                       </span>
                       {environment.active ? <Check aria-hidden="true" size={15} /> : null}
                       {unavailable ? <CircleAlert aria-hidden="true" size={15} /> : null}

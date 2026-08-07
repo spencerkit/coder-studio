@@ -120,9 +120,17 @@
 }
 
 .itemStatus,
+.runtimeVersion,
 .progressLabel {
   color: var(--text-ter);
   font-size: var(--type-body-6-size);
+}
+
+.runtimeVersion {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .progress {
