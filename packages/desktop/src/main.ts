@@ -24,7 +24,11 @@ import {
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import { DesktopGateway } from "./gateway.js";
-import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
+import type {
+  DesktopEnvironmentProgress,
+  DesktopEnvironmentTarget,
+  DesktopRuntimeUpdateState,
+} from "./protocol.js";
 import { DESKTOP_NODE_VERSION } from "./runtime-manifest.js";
 import type { ProductRuntime } from "./runtime-store.js";
 import { RuntimeStore } from "./runtime-store.js";
@@ -190,6 +194,23 @@ function reportRuntimeUpdateError(error: Error): void {
   );
 }
 
+async function getRuntimeUpdateState(): Promise<DesktopRuntimeUpdateState> {
+  if (runtimeUpdateManager) return runtimeUpdateManager.getState();
+  return {
+    supported: false,
+    currentVersion: activeProductRuntime?.manifest.runtimeVersion ?? "0.0.0",
+    latestVersion: null,
+    pendingVersion: null,
+    lastCheckedAt: null,
+    status: "disabled",
+    errorSummary: null,
+    unsupportedReason:
+      activeEnvironmentTarget.kind === "wsl"
+        ? "Product Runtime updates are managed by the Local Windows instance"
+        : "Product Runtime updates are unavailable for this Desktop instance",
+  };
+}
+
 async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -222,6 +243,24 @@ function registerIpcHandlers(rootUserDataDir: string): void {
     typeof value === "string" ? openExternal(value) : false
   );
   ipcMain.handle("desktop:get-backend-status", () => backendManager?.getStatus() ?? null);
+  ipcMain.handle("desktop:get-runtime-update-state", getRuntimeUpdateState);
+  ipcMain.handle("desktop:check-runtime-update", async () => {
+    if (!runtimeUpdateManager) return getRuntimeUpdateState();
+    try {
+      await runtimeUpdateManager.check();
+    } catch {
+      // The manager records a serializable error state for the renderer.
+    }
+    return runtimeUpdateManager.getState();
+  });
+  ipcMain.handle("desktop:restart-for-runtime-update", async () => {
+    if (!runtimeUpdateManager || !(await runtimeUpdateManager.getPendingVersion())) return false;
+    setImmediate(() => {
+      app.relaunch();
+      app.quit();
+    });
+    return true;
+  });
   ipcMain.handle("desktop:list-environments", async () => {
     if (!environmentManager) throw new Error("Desktop environments are not initialized");
     return environmentManager.listEnvironments();
@@ -588,13 +627,6 @@ async function startApplication(): Promise<void> {
       }
     }
   }
-  mainWindow = createMainWindow(url);
-  updateManager = new DesktopUpdateManager({
-    currentVersion: app.getVersion(),
-    getWindow: () => mainWindow,
-    isPackaged: app.isPackaged && activeEnvironmentTarget.kind === "native" && !smokeResultPath,
-  });
-  updateManager.start();
   if (
     runtimeStore &&
     activeProductRuntime &&
@@ -607,12 +639,22 @@ async function startApplication(): Promise<void> {
       manifestUrl: process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl,
       getCurrentRuntime: () => activeProductRuntime as ProductRuntime,
       onError: reportRuntimeUpdateError,
+      onStateChanged: (state) => {
+        mainWindow?.webContents.send("desktop:runtime-update-state-changed", state);
+      },
       onUpdateReady: (readyRuntime) => {
         void promptForRuntimeRestart(readyRuntime.manifest.runtimeVersion);
       },
     });
-    runtimeUpdateManager.start();
   }
+  mainWindow = createMainWindow(url);
+  updateManager = new DesktopUpdateManager({
+    currentVersion: app.getVersion(),
+    getWindow: () => mainWindow,
+    isPackaged: app.isPackaged && activeEnvironmentTarget.kind === "native" && !smokeResultPath,
+  });
+  updateManager.start();
+  runtimeUpdateManager?.start();
   installApplicationMenu();
 }
 

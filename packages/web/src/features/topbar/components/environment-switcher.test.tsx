@@ -44,6 +44,10 @@ function installDesktopApi() {
         progressListener = undefined;
       };
     }),
+    getRuntimeUpdateState: vi.fn(),
+    checkRuntimeUpdate: vi.fn(),
+    restartForRuntimeUpdate: vi.fn(),
+    onRuntimeUpdateStateChanged: vi.fn(() => () => {}),
   };
   Object.defineProperty(window, "coderStudioDesktop", {
     configurable: true,

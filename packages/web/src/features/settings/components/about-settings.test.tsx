@@ -1,13 +1,56 @@
 // @vitest-environment jsdom
 
 import type { UpdatePrepareInstallResponse, UpdateStateView } from "@coder-studio/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { serverInfoAtom, wsClientAtom } from "../../../atoms/connection";
 import { toastsAtom } from "../../notifications/atoms";
 import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
 import { AboutSettings } from "./about-settings";
+
+function createDesktopApi(overrides: Partial<CoderStudioDesktopApi> = {}): CoderStudioDesktopApi {
+  return {
+    platform: "win32",
+    selectWorkspaceDirectory: vi.fn(async () => null),
+    openExternal: vi.fn(async () => true),
+    getBackendStatus: vi.fn(async () => null),
+    listEnvironments: vi.fn(async () => []),
+    getActiveEnvironment: vi.fn(async () => ({
+      id: "native",
+      kind: "native",
+      label: "Local Windows",
+      active: true,
+      status: "ready",
+      platform: "win32",
+    })),
+    openEnvironment: vi.fn(async () => ({ status: "unchanged" })),
+    onEnvironmentProgress: vi.fn(() => () => {}),
+    getRuntimeUpdateState: vi.fn(async () => ({
+      supported: true,
+      currentVersion: "0.5.6",
+      latestVersion: "0.5.6",
+      pendingVersion: null,
+      lastCheckedAt: 123,
+      status: "current",
+      errorSummary: null,
+      unsupportedReason: null,
+    })),
+    checkRuntimeUpdate: vi.fn(async () => ({
+      supported: true,
+      currentVersion: "0.5.6",
+      latestVersion: "0.5.6",
+      pendingVersion: null,
+      lastCheckedAt: 123,
+      status: "current",
+      errorSummary: null,
+      unsupportedReason: null,
+    })),
+    restartForRuntimeUpdate: vi.fn(async () => false),
+    onRuntimeUpdateStateChanged: vi.fn(() => () => {}),
+    ...overrides,
+  };
+}
 
 function renderAboutSettings({
   dispatch = vi.fn(),
@@ -74,6 +117,7 @@ function renderAboutSettings({
 describe("AboutSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete window.coderStudioDesktop;
   });
 
   it("renders current and latest version info", () => {
@@ -124,6 +168,104 @@ describe("AboutSettings", () => {
       expect(store.get(updateStateAtom)?.latestVersion).toBe("0.6.0");
     });
     expect(store.get(toastsAtom)).toHaveLength(0);
+  });
+
+  it("uses the Product Runtime updater for Desktop checks", async () => {
+    const checkRuntimeUpdate = vi.fn(async () => ({
+      supported: true,
+      currentVersion: "0.5.6",
+      latestVersion: "0.5.7",
+      pendingVersion: "0.5.7",
+      lastCheckedAt: 321,
+      status: "ready" as const,
+      errorSummary: null,
+      unsupportedReason: null,
+    }));
+    window.coderStudioDesktop = createDesktopApi({ checkRuntimeUpdate });
+    const dispatch = vi.fn();
+    renderAboutSettings({ dispatch });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "立即检查" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "立即检查" }));
+
+    await waitFor(() => {
+      expect(checkRuntimeUpdate).toHaveBeenCalledTimes(1);
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(await screen.findByText("v0.5.7")).toBeInTheDocument();
+  });
+
+  it("restarts Desktop to activate a staged Product Runtime", async () => {
+    const readyState: DesktopRuntimeUpdateState = {
+      supported: true,
+      currentVersion: "0.5.6",
+      latestVersion: "0.5.7",
+      pendingVersion: "0.5.7",
+      lastCheckedAt: 321,
+      status: "ready",
+      errorSummary: null,
+      unsupportedReason: null,
+    };
+    const restartForRuntimeUpdate = vi.fn(async () => true);
+    window.coderStudioDesktop = createDesktopApi({
+      getRuntimeUpdateState: vi.fn(async () => readyState),
+      restartForRuntimeUpdate,
+    });
+    const dispatch = vi.fn();
+    renderAboutSettings({ dispatch });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "立即更新" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "立即更新" }));
+
+    await waitFor(() => {
+      expect(restartForRuntimeUpdate).toHaveBeenCalledTimes(1);
+    });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("refreshes Desktop controls when an automatic Runtime check finishes", async () => {
+    let stateListener: ((state: DesktopRuntimeUpdateState) => void) | undefined;
+    window.coderStudioDesktop = createDesktopApi({
+      getRuntimeUpdateState: vi.fn(async () => ({
+        supported: true,
+        currentVersion: "0.5.6",
+        latestVersion: null,
+        pendingVersion: null,
+        lastCheckedAt: null,
+        status: "checking",
+        errorSummary: null,
+        unsupportedReason: null,
+      })),
+      onRuntimeUpdateStateChanged: vi.fn((listener) => {
+        stateListener = listener;
+        return () => {
+          stateListener = undefined;
+        };
+      }),
+    });
+    renderAboutSettings();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "立即检查" })).toBeDisabled();
+    });
+    await act(async () => {
+      stateListener?.({
+        supported: true,
+        currentVersion: "0.5.6",
+        latestVersion: "0.5.6",
+        pendingVersion: null,
+        lastCheckedAt: 456,
+        status: "current",
+        errorSummary: null,
+        unsupportedReason: null,
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "立即检查" })).toBeEnabled();
   });
 
   it("opens confirmation when active work exists before install", async () => {

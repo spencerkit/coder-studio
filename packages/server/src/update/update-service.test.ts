@@ -94,6 +94,45 @@ describe("UpdateService", () => {
     service.stop();
   });
 
+  it("does not query npm or schedule checks for an unsupported Desktop sidecar", async () => {
+    vi.useFakeTimers();
+    try {
+      const runLatestVersionLookup = vi.fn(async () => "0.5.0");
+      const service = new UpdateService(
+        createDeps({
+          runtime: {
+            supported: false,
+            installKind: "unsupported",
+            packageName: "@spencer-kit/coder-studio",
+            currentVersion: "0.4.0",
+            cliCommand: "coder-studio",
+            unsupportedReason: "Desktop uses the Product Runtime updater",
+          },
+          runLatestVersionLookup,
+        })
+      );
+
+      service.start();
+      service.reloadScheduleFromSettings();
+      await vi.advanceTimersByTimeAsync(7_200_000);
+
+      expect(runLatestVersionLookup).not.toHaveBeenCalled();
+      expect(service.getStateView()).toMatchObject({
+        supported: false,
+        latestVersion: null,
+        availability: "unknown",
+        updateStatus: "idle",
+      });
+      await expect(service.checkForUpdates({ manual: true })).rejects.toMatchObject({
+        code: "update_unsupported",
+        message: "Desktop uses the Product Runtime updater",
+      });
+      service.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("maps a newer published version to update_available", async () => {
     const deps = createDeps();
     const service = new UpdateService(deps);

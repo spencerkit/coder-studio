@@ -129,6 +129,7 @@ export class UpdateService {
 
   start(): void {
     this.reconcileOnStartup();
+    if (!this.runtime.supported) return;
     this.reloadScheduleFromSettings();
     if (this.getSettings().autoCheckEnabled) {
       void this.checkForUpdates({ manual: false }).catch(() => {});
@@ -147,6 +148,8 @@ export class UpdateService {
       clearInterval(this.scheduleTimer);
       this.scheduleTimer = null;
     }
+
+    if (!this.runtime.supported) return;
 
     const settings = this.getSettings();
     if (!settings.autoCheckEnabled) {
@@ -181,6 +184,10 @@ export class UpdateService {
   }
 
   async checkForUpdates(_options: { manual: boolean }): Promise<UpdateStateView> {
+    const support = this.getSupportInfo();
+    if (!support.supported) {
+      throw createValidationError("update_unsupported", support.unsupportedReason ?? "Unsupported");
+    }
     const current = this.deps.updateStateRepo.get();
     if (current.updateStatus === "installing" || current.updateStatus === "restarting") {
       throw createBusyError("Update installation is already in progress");
@@ -398,17 +405,34 @@ export class UpdateService {
     snapshot: UpdateStateSnapshot,
     options?: { includeInFlightCheck?: boolean }
   ): UpdateStateView {
+    const support = this.getSupportInfo();
+    if (!support.supported) {
+      return {
+        ...snapshot,
+        ...support,
+        currentVersion: this.runtime.currentVersion,
+        latestVersion: null,
+        availability: "unknown",
+        updateStatus: "idle",
+        targetVersion: null,
+        startedAt: null,
+        finishedAt: null,
+        requiresManualStep: false,
+        manualCommand: null,
+        errorSummary: null,
+      };
+    }
     if (options?.includeInFlightCheck !== false && this.inFlightCheck) {
       return {
         ...snapshot,
-        ...this.getSupportInfo(),
+        ...support,
         updateStatus: "checking",
         errorSummary: null,
       };
     }
     return {
       ...snapshot,
-      ...this.getSupportInfo(),
+      ...support,
     };
   }
 

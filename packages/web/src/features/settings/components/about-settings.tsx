@@ -1,6 +1,6 @@
 import type { UpdatePrepareInstallResponse, UpdateStateView } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { dispatchCommandAtom, serverInfoAtom } from "../../../atoms/connection";
 import {
   Button,
@@ -47,6 +47,40 @@ function getStatusTone(
   }
 }
 
+function mapDesktopRuntimeUpdateState(state: DesktopRuntimeUpdateState): UpdateStateView {
+  const availability =
+    state.status === "current"
+      ? "up_to_date"
+      : state.status === "ready"
+        ? "update_available"
+        : state.status === "error" || state.status === "quarantined"
+          ? "check_failed"
+          : "unknown";
+  const updateStatus =
+    state.status === "checking"
+      ? "checking"
+      : state.status === "error" || state.status === "quarantined"
+        ? "failed"
+        : "idle";
+  return {
+    version: 1,
+    currentVersion: state.currentVersion,
+    latestVersion: state.latestVersion,
+    availability,
+    updateStatus,
+    lastCheckedAt: state.lastCheckedAt,
+    targetVersion: state.pendingVersion,
+    startedAt: null,
+    finishedAt: null,
+    requiresManualStep: false,
+    manualCommand: null,
+    errorSummary: state.errorSummary,
+    supported: state.supported,
+    installKind: "unsupported",
+    unsupportedReason: state.unsupportedReason,
+  };
+}
+
 const UPDATE_INTERVALS = [3600, 21600, 43200, 86400] as const;
 
 export type AboutSettingsView = "all" | "product" | "update-status" | "auto-update";
@@ -77,18 +111,47 @@ export function AboutSettings({
   const pushToast = useSetAtom(pushToastAtom);
   const [confirmState, setConfirmState] = useState<UpdatePrepareInstallResponse | null>(null);
   const [loading, setLoading] = useState<null | "check" | "prepare" | "install">(null);
+  const desktopApi = window.coderStudioDesktop;
+  const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopRuntimeUpdateState | null>(
+    null
+  );
   const autoCheckLabelId = useId();
   const autoCheckDescId = useId();
   const checkIntervalLabelId = useId();
   const showProduct = view === "all" || view === "product";
   const showUpdateStatus = view === "all" || view === "update-status";
   const showAutoUpdate = view === "all" || view === "auto-update";
+  const visibleUpdateState = desktopApi
+    ? desktopUpdateState
+      ? mapDesktopRuntimeUpdateState(desktopUpdateState)
+      : null
+    : updateState;
+
+  useEffect(() => {
+    if (!desktopApi) return;
+    let disposed = false;
+    const unsubscribe = desktopApi.onRuntimeUpdateStateChanged((state) => {
+      if (!disposed) setDesktopUpdateState(state);
+    });
+    void desktopApi
+      .getRuntimeUpdateState()
+      .then((state) => {
+        if (!disposed) setDesktopUpdateState(state);
+      })
+      .catch(() => {
+        // A manual check will surface IPC failures to the user.
+      });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [desktopApi]);
 
   const statusLabel = useMemo(() => {
-    if (!updateState) {
+    if (!visibleUpdateState) {
       return t("settings.about.update_status_unknown");
     }
-    switch (updateState.updateStatus) {
+    switch (visibleUpdateState.updateStatus) {
       case "idle":
         return t("settings.about.update_status_idle");
       case "checking":
@@ -104,13 +167,13 @@ export function AboutSettings({
       case "manual_required":
         return t("settings.about.update_status_manual_required");
     }
-  }, [t, updateState]);
+  }, [t, visibleUpdateState]);
 
   const availabilityLabel = useMemo(() => {
-    if (!updateState) {
+    if (!visibleUpdateState) {
       return t("settings.about.availability_unknown");
     }
-    switch (updateState.availability) {
+    switch (visibleUpdateState.availability) {
       case "unknown":
         return t("settings.about.availability_unknown");
       case "up_to_date":
@@ -120,7 +183,7 @@ export function AboutSettings({
       case "check_failed":
         return t("settings.about.availability_check_failed");
     }
-  }, [t, updateState]);
+  }, [t, visibleUpdateState]);
 
   const intervalOptions = useMemo(
     () =>
@@ -134,6 +197,28 @@ export function AboutSettings({
 
   const handleCheck = async () => {
     setLoading("check");
+    if (desktopApi) {
+      try {
+        const state = await desktopApi.checkRuntimeUpdate();
+        setDesktopUpdateState(state);
+        if (state.status === "error") {
+          pushToast({
+            kind: "error",
+            title: t("settings.about.check_failed"),
+            body: state.errorSummary ?? undefined,
+          });
+        }
+      } catch (error) {
+        pushToast({
+          kind: "error",
+          title: t("settings.about.check_failed"),
+          body: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setLoading(null);
+      }
+      return;
+    }
     const result = await dispatch<UpdateStateView>("updates.check", {});
     setLoading(null);
     if (!result.ok || !result.data) {
@@ -149,6 +234,29 @@ export function AboutSettings({
 
   const handlePrepareInstall = async () => {
     setLoading("prepare");
+    if (desktopApi) {
+      try {
+        const restarting = await desktopApi.restartForRuntimeUpdate();
+        if (!restarting) {
+          const state = await desktopApi.getRuntimeUpdateState();
+          setDesktopUpdateState(state);
+          pushToast({
+            kind: "error",
+            title: t("settings.about.update_now"),
+            body: state.errorSummary ?? t("settings.about.install_unsupported"),
+          });
+        }
+      } catch (error) {
+        pushToast({
+          kind: "error",
+          title: t("settings.about.update_now"),
+          body: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setLoading(null);
+      }
+      return;
+    }
     const result = await dispatch<UpdatePrepareInstallResponse>("updates.prepareInstall", {});
     setLoading(null);
     if (!result.ok || !result.data) {
@@ -199,7 +307,9 @@ export function AboutSettings({
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.current_version")}</span>
-            <span className="settings-info-value">v{serverInfo?.version ?? "0.0.0"}</span>
+            <span className="settings-info-value">
+              v{visibleUpdateState?.currentVersion ?? serverInfo?.version ?? "0.0.0"}
+            </span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
@@ -208,9 +318,10 @@ export function AboutSettings({
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.install_support")}</span>
             <span className="settings-info-value">
-              {updateState?.supported
+              {visibleUpdateState?.supported
                 ? t("settings.about.install_supported")
-                : (updateState?.unsupportedReason ?? t("settings.about.install_unsupported"))}
+                : (visibleUpdateState?.unsupportedReason ??
+                  t("settings.about.install_unsupported"))}
             </span>
           </div>
         </div>
@@ -224,14 +335,14 @@ export function AboutSettings({
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.latest_version")}</span>
             <span className="settings-info-value">
-              {updateState?.latestVersion ? `v${updateState.latestVersion}` : "-"}
+              {visibleUpdateState?.latestVersion ? `v${visibleUpdateState.latestVersion}` : "-"}
             </span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.last_checked")}</span>
             <span className="settings-info-value">
               {formatTime(
-                updateState?.lastCheckedAt ?? null,
+                visibleUpdateState?.lastCheckedAt ?? null,
                 locale,
                 t("settings.about.availability_unknown")
               )}
@@ -244,24 +355,24 @@ export function AboutSettings({
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.update_status")}</span>
             <span className="settings-info-value settings-info-value--with-dot">
-              <StatusDot tone={getStatusTone(updateState)} size="sm" />
+              <StatusDot tone={getStatusTone(visibleUpdateState)} size="sm" />
               <span>{statusLabel}</span>
             </span>
           </div>
 
-          {updateState?.errorSummary ? (
+          {visibleUpdateState?.errorSummary ? (
             <Notice
-              tone={updateState.updateStatus === "manual_required" ? "warning" : "error"}
+              tone={visibleUpdateState.updateStatus === "manual_required" ? "warning" : "error"}
               title={t("settings.about.error_summary")}
-              message={updateState.errorSummary}
+              message={visibleUpdateState.errorSummary}
             />
           ) : null}
 
-          {updateState?.manualCommand ? (
+          {visibleUpdateState?.manualCommand ? (
             <Notice
               tone="warning"
               title={t("settings.about.manual_command")}
-              message={updateState.manualCommand}
+              message={visibleUpdateState.manualCommand}
             />
           ) : null}
 
@@ -272,9 +383,10 @@ export function AboutSettings({
               }}
               disabled={
                 loading !== null ||
-                updateState?.updateStatus === "checking" ||
-                updateState?.updateStatus === "installing" ||
-                updateState?.updateStatus === "restarting"
+                !visibleUpdateState?.supported ||
+                visibleUpdateState.updateStatus === "checking" ||
+                visibleUpdateState.updateStatus === "installing" ||
+                visibleUpdateState.updateStatus === "restarting"
               }
             >
               {loading === "check" ? t("settings.about.checking") : t("settings.about.check_now")}
@@ -285,12 +397,13 @@ export function AboutSettings({
               }}
               disabled={
                 loading !== null ||
-                !updateState?.supported ||
-                updateState?.availability !== "update_available" ||
-                updateState.updateStatus === "checking" ||
-                updateState.updateStatus === "installing" ||
-                updateState.updateStatus === "restarting" ||
-                Boolean(updateState.manualCommand)
+                !visibleUpdateState?.supported ||
+                visibleUpdateState.availability !== "update_available" ||
+                (Boolean(desktopApi) && !desktopUpdateState?.pendingVersion) ||
+                visibleUpdateState.updateStatus === "checking" ||
+                visibleUpdateState.updateStatus === "installing" ||
+                visibleUpdateState.updateStatus === "restarting" ||
+                Boolean(visibleUpdateState.manualCommand)
               }
             >
               {loading === "install" || loading === "prepare"

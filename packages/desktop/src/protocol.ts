@@ -50,6 +50,26 @@ export interface DesktopEnvironmentOpenResult {
   status: "unchanged" | "opened";
 }
 
+export type DesktopRuntimeUpdateStatus =
+  | "disabled"
+  | "idle"
+  | "checking"
+  | "current"
+  | "ready"
+  | "quarantined"
+  | "error";
+
+export interface DesktopRuntimeUpdateState {
+  supported: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  pendingVersion: string | null;
+  lastCheckedAt: number | null;
+  status: DesktopRuntimeUpdateStatus;
+  errorSummary: string | null;
+  unsupportedReason: string | null;
+}
+
 export interface DesktopApi {
   platform: NodeJS.Platform;
   selectWorkspaceDirectory(): Promise<string | null>;
@@ -59,4 +79,8 @@ export interface DesktopApi {
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<DesktopEnvironmentOpenResult>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
+  getRuntimeUpdateState(): Promise<DesktopRuntimeUpdateState>;
+  checkRuntimeUpdate(): Promise<DesktopRuntimeUpdateState>;
+  restartForRuntimeUpdate(): Promise<boolean>;
+  onRuntimeUpdateStateChanged(listener: (state: DesktopRuntimeUpdateState) => void): () => void;
 }

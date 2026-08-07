@@ -11,6 +11,21 @@ interface CoderStudioDesktopApi {
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<{ status: "unchanged" | "opened" }>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
+  getRuntimeUpdateState(): Promise<DesktopRuntimeUpdateState>;
+  checkRuntimeUpdate(): Promise<DesktopRuntimeUpdateState>;
+  restartForRuntimeUpdate(): Promise<boolean>;
+  onRuntimeUpdateStateChanged(listener: (state: DesktopRuntimeUpdateState) => void): () => void;
+}
+
+interface DesktopRuntimeUpdateState {
+  supported: boolean;
+  currentVersion: string;
+  latestVersion: string | null;
+  pendingVersion: string | null;
+  lastCheckedAt: number | null;
+  status: "disabled" | "idle" | "checking" | "current" | "ready" | "quarantined" | "error";
+  errorSummary: string | null;
+  unsupportedReason: string | null;
 }
 
 interface DesktopEnvironmentSummary {

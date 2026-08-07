@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { extract } from "tar";
+import type { DesktopRuntimeUpdateState, DesktopRuntimeUpdateStatus } from "./protocol.js";
 import {
   compareVersions,
   getRuntimeManifestSigningPayload,
@@ -24,8 +25,10 @@ export interface RuntimeUpdateManagerOptions {
   getCurrentRuntime: () => ProductRuntime;
   onUpdateReady?: (runtime: ProductRuntime) => void;
   onError?: (error: Error) => void;
+  onStateChanged?: (state: DesktopRuntimeUpdateState) => void;
   checkIntervalMs?: number;
   fetch?: typeof fetch;
+  now?: () => number;
 }
 
 const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -63,14 +66,20 @@ function manifestsMatch(expected: RuntimeManifest, actual: RuntimeManifest): boo
 export class ProductRuntimeUpdateManager {
   private timer: NodeJS.Timeout | null = null;
   private checkPromise: Promise<RuntimeUpdateCheckResult> | null = null;
+  private latestVersion: string | null = null;
+  private lastCheckedAt: number | null = null;
+  private status: DesktopRuntimeUpdateStatus;
+  private errorSummary: string | null = null;
 
-  constructor(private readonly options: RuntimeUpdateManagerOptions) {}
+  constructor(private readonly options: RuntimeUpdateManagerOptions) {
+    this.status = options.manifestUrl ? "idle" : "disabled";
+  }
 
   start(): void {
     if (!this.options.manifestUrl) return;
-    void this.check().catch((error) => this.reportError(error));
+    void this.check().catch(() => {});
     this.timer = setInterval(
-      () => void this.check().catch((error) => this.reportError(error)),
+      () => void this.check().catch(() => {}),
       this.options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS
     );
     this.timer.unref();
@@ -83,14 +92,57 @@ export class ProductRuntimeUpdateManager {
 
   check(): Promise<RuntimeUpdateCheckResult> {
     if (!this.options.manifestUrl) return Promise.resolve({ status: "disabled" });
-    this.checkPromise ??= this.performCheck().finally(() => {
-      this.checkPromise = null;
-    });
+    if (this.checkPromise) return this.checkPromise;
+
+    this.status = "checking";
+    this.errorSummary = null;
+    this.notifyStateChanged();
+    const checkPromise = this.performCheck()
+      .then((result) => {
+        this.lastCheckedAt = (this.options.now ?? Date.now)();
+        this.status = this.getStatusForResult(result);
+        this.errorSummary =
+          result.status === "failed"
+            ? "The latest Product Runtime was quarantined after a failed launch"
+            : null;
+        this.notifyStateChanged();
+        return result;
+      })
+      .catch((error: unknown) => {
+        const normalized = error instanceof Error ? error : new Error(String(error));
+        this.lastCheckedAt = (this.options.now ?? Date.now)();
+        this.status = "error";
+        this.errorSummary = normalized.message;
+        this.reportError(normalized);
+        this.notifyStateChanged();
+        throw normalized;
+      })
+      .finally(() => {
+        if (this.checkPromise === checkPromise) this.checkPromise = null;
+      });
+    this.checkPromise = checkPromise;
     return this.checkPromise;
   }
 
   getPendingVersion(): Promise<string | null> {
     return this.options.store.readPendingVersion();
+  }
+
+  async getState(): Promise<DesktopRuntimeUpdateState> {
+    const pendingVersion = await this.getPendingVersion();
+    const pendingReady = Boolean(pendingVersion) && this.status !== "checking";
+    return {
+      supported: Boolean(this.options.manifestUrl),
+      currentVersion: this.options.getCurrentRuntime().manifest.runtimeVersion,
+      latestVersion: pendingVersion ?? this.latestVersion,
+      pendingVersion,
+      lastCheckedAt: this.lastCheckedAt,
+      status: pendingReady ? "ready" : this.status,
+      errorSummary: pendingReady ? null : this.errorSummary,
+      unsupportedReason: this.options.manifestUrl
+        ? null
+        : "No Product Runtime update channel is configured",
+    };
   }
 
   private async performCheck(): Promise<RuntimeUpdateCheckResult> {
@@ -102,6 +154,7 @@ export class ProductRuntimeUpdateManager {
     }
     const manifest = parseRuntimeManifest(await manifestResponse.json());
     this.options.store.assertManifestCompatible(manifest, true);
+    this.latestVersion = manifest.runtimeVersion;
     const currentVersion = this.options.getCurrentRuntime().manifest.runtimeVersion;
     if (compareVersions(manifest.runtimeVersion, currentVersion) <= 0) return { status: "current" };
     if ((await this.options.store.readPendingVersion()) === manifest.runtimeVersion) {
@@ -155,5 +208,26 @@ export class ProductRuntimeUpdateManager {
 
   private reportError(error: unknown): void {
     this.options.onError?.(error instanceof Error ? error : new Error(String(error)));
+  }
+
+  private notifyStateChanged(): void {
+    if (!this.options.onStateChanged) return;
+    void this.getState()
+      .then((state) => this.options.onStateChanged?.(state))
+      .catch(() => {});
+  }
+
+  private getStatusForResult(result: RuntimeUpdateCheckResult): DesktopRuntimeUpdateStatus {
+    switch (result.status) {
+      case "disabled":
+        return "disabled";
+      case "current":
+        return "current";
+      case "already-staged":
+      case "ready":
+        return "ready";
+      case "failed":
+        return "quarantined";
+    }
   }
 }

@@ -5,6 +5,7 @@ import type {
   DesktopEnvironmentOpenResult,
   DesktopEnvironmentProgress,
   DesktopEnvironmentSummary,
+  DesktopRuntimeUpdateState,
 } from "./protocol.js";
 
 const api: DesktopApi = {
@@ -27,6 +28,18 @@ const api: DesktopApi = {
       listener(progress);
     ipcRenderer.on("desktop:environment-progress", handler);
     return () => ipcRenderer.removeListener("desktop:environment-progress", handler);
+  },
+  getRuntimeUpdateState: () =>
+    ipcRenderer.invoke("desktop:get-runtime-update-state") as Promise<DesktopRuntimeUpdateState>,
+  checkRuntimeUpdate: () =>
+    ipcRenderer.invoke("desktop:check-runtime-update") as Promise<DesktopRuntimeUpdateState>,
+  restartForRuntimeUpdate: () =>
+    ipcRenderer.invoke("desktop:restart-for-runtime-update") as Promise<boolean>,
+  onRuntimeUpdateStateChanged: (listener: (state: DesktopRuntimeUpdateState) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: DesktopRuntimeUpdateState) =>
+      listener(state);
+    ipcRenderer.on("desktop:runtime-update-state-changed", handler);
+    return () => ipcRenderer.removeListener("desktop:runtime-update-state-changed", handler);
   },
 };
 

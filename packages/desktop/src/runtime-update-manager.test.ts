@@ -111,6 +111,7 @@ describe("ProductRuntimeUpdateManager", () => {
       manifestUrl: "https://updates.example.test/manifest.json",
       getCurrentRuntime: () => current,
       fetch: fetchMock,
+      now: () => 321,
     });
 
     await expect(manager.check()).resolves.toMatchObject({
@@ -122,5 +123,58 @@ describe("ProductRuntimeUpdateManager", () => {
       manifest: { runtimeVersion: "0.5.7" },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(manager.getState()).resolves.toEqual({
+      supported: true,
+      currentVersion: "0.5.6",
+      latestVersion: "0.5.7",
+      pendingVersion: "0.5.7",
+      lastCheckedAt: 321,
+      status: "ready",
+      errorSummary: null,
+      unsupportedReason: null,
+    });
+
+    const restartedManager = new ProductRuntimeUpdateManager({
+      store,
+      manifestUrl: "https://updates.example.test/manifest.json",
+      getCurrentRuntime: () => current,
+      fetch: fetchMock,
+    });
+    await expect(restartedManager.getState()).resolves.toMatchObject({
+      latestVersion: "0.5.7",
+      pendingVersion: "0.5.7",
+      status: "ready",
+    });
+  });
+
+  it("records a serializable error state when a Runtime check fails", async () => {
+    const root = await temporaryRoot();
+    const factoryRoot = resolve(root, "factory");
+    await writeRuntime(factoryRoot, "0.5.6", undefined);
+    const store = new RuntimeStore({
+      root: resolve(root, "store"),
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+    });
+    const current = await store.getLaunchCandidate();
+    const onError = vi.fn();
+    const manager = new ProductRuntimeUpdateManager({
+      store,
+      manifestUrl: "https://updates.example.test/manifest.json",
+      getCurrentRuntime: () => current,
+      fetch: vi.fn(async () => new Response(null, { status: 503 })),
+      now: () => 456,
+      onError,
+    });
+
+    await expect(manager.check()).rejects.toThrow("Product Runtime update check failed with 503");
+    await expect(manager.getState()).resolves.toMatchObject({
+      currentVersion: "0.5.6",
+      lastCheckedAt: 456,
+      status: "error",
+      errorSummary: "Product Runtime update check failed with 503",
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 });
