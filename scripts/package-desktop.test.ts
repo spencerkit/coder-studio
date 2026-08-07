@@ -26,6 +26,8 @@ describe("readDesktopReleaseVersion", () => {
       "electron-builder",
       "--config",
       "electron-builder.yml",
+      "--publish",
+      "never",
       "--config.directories.output",
       outputDirectory,
     ]);

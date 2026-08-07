@@ -25,6 +25,8 @@ export function createDesktopPackageArgs(options: {
     ...(options.unpacked ? ["--dir"] : []),
     "--config",
     "electron-builder.yml",
+    "--publish",
+    "never",
     ...(options.outputDirectory
       ? ["--config.directories.output", resolve(options.outputDirectory)]
       : []),
