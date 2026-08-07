@@ -243,7 +243,10 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
 - `.github/workflows/ci.yml` 在 PR 与 `main` push 上并行构建 Windows 安装包和 Linux WSL
   资产。Windows job 会运行 Desktop 测试、类型检查、完整 NSIS 打包以及 Engine/Runtime、PTY、Electron
   窗口 smoke；Linux job 会真实运行 WSL Engine 内的 npm/npx/corepack，并校验 Engine 与 Server Runtime
-  归档。CI 允许 manifest 无签名，但不会发布这些候选资产。
+  归档。PR 与 `main` push 允许 manifest 无签名，但不会发布这些候选资产。手动触发并启用
+  `publish_acceptance` 时，流水线会生成仅供本次运行使用的 Ed25519 测试密钥，用同一把密钥签名 Windows
+  Runtime、WSL Engine 和 WSL Runtime，把公钥与 tag 固定的下载地址编译进测试 Desktop，最后发布独立的
+  `desktop-ci-<run-id>-<attempt>` prerelease。该通道不更新 GitHub `latest`，也不能晋升为生产发布。
 - `.github/workflows/desktop-release.yml` 只能手动从 `main` 触发，并受
   `desktop-production` environment 审批保护。`full` 模式发布 Shell、Windows Runtime、WSL Engine 和
   WSL Runtime；`runtime` 模式只发布 Windows/WSL Product Runtime，并从当前稳定 Release 继承 Shell

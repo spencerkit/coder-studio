@@ -82,6 +82,11 @@ Runtime 汇总到 `release/wsl-acceptance/downloads`。随后运行 `pnpm accept
 与正式发布相同的 manifest、签名和下载校验链路完成首次安装与环境切换验收。详细步骤见
 [`desktop.md`](./desktop.md#本地-wsl-标准验收)。
 
+需要从 GitHub Actions 下载可直接验收 WSL 首次安装的测试包时，手动运行 `CI` workflow 并保持
+`publish_acceptance=true`。流水线会创建一个 tag 固定的 prerelease，安装包内置本次运行的临时公钥和
+prerelease 下载地址，Windows/WSL Runtime 资产则由对应临时私钥签名。测试私钥会作为短期内部 artifact
+保留一天；prerelease 不会成为 `latest`，验收结束后应删除对应的 `desktop-ci-*` Release 和 tag。
+
 Runtime 版本可以独立于 Desktop 安装包版本：
 
 ```powershell
