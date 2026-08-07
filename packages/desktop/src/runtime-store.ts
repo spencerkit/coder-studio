@@ -218,12 +218,24 @@ export class RuntimeStore {
     const existing = await this.resolveStoredRuntime(pointer, "pending").catch(() => null);
     if (!existing) {
       await rm(destination, { recursive: true, force: true });
-      const staging = resolve(this.versionsRoot, `.staging-${randomUUID()}`);
-      try {
-        await cp(sourceRoot, staging, { recursive: true, errorOnExist: true });
-        await renameWithRetry(staging, destination);
-      } finally {
-        await rm(staging, { recursive: true, force: true });
+      if (process.platform === "win32") {
+        // Antivirus and search indexers can keep handles open on a freshly populated
+        // directory long enough for a directory rename to fail with EPERM. The
+        // content-addressed destination is not visible until pending.json is written,
+        // so a completed copy followed by the atomic pointer write is equally safe.
+        await cp(sourceRoot, destination, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        });
+      } else {
+        const staging = resolve(this.versionsRoot, `.staging-${randomUUID()}`);
+        try {
+          await cp(sourceRoot, staging, { recursive: true, errorOnExist: true });
+          await renameWithRetry(staging, destination);
+        } finally {
+          await rm(staging, { recursive: true, force: true });
+        }
       }
     }
     await writeJsonAtomic(this.pendingPath, pointer);

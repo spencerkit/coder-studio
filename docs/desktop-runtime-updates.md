@@ -155,6 +155,10 @@ Runtime 启动本地 Server，并完成认证、健康检查和 Web 加载；成
 `failed.json`。同一个失败版本会被隔离，不会在每次启动时反复下载安装；发布方需要使用更高的
 Runtime 版本号提供修复，或由用户显式清除失败记录后重试。
 
+Windows 上刚解压的大型 Web 目录可能被杀毒软件或索引器短暂持有句柄，因此版本目录不会依赖一次目录
+rename 完成安装：文件先复制到未被任何 pointer 引用的内容寻址目录，全部完成后再原子写入
+`pending.json`。中断产生的未引用半成品会在下次更新时重新校验并覆盖。
+
 检查入口有两种：Local Windows 实例启动成功后会立即非阻塞检查一次，之后每 6 小时检查；用户也可以
 通过 `Help > Check for Product Runtime Updates...` 立即检查。相邻的
 `Help > Check for Desktop App Updates...` 只负责 Electron Shell/安装包更新，两者互不替代。WSL 实例
