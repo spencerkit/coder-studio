@@ -51,10 +51,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: Resolve shared Desktop release metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      published_at: ${{ steps.metadata.outputs.published_at }}
+      signing_key_artifact: ${{ steps.metadata.outputs.signing_key_artifact }}
+      public_key_artifact: ${{ steps.metadata.outputs.public_key_artifact }}
+    steps:
+      - name: Resolve shared release metadata
+        id: metadata
+        shell: bash
+        run: |
+          published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+          if [[ "${{ inputs.signed }}" == "true" ]]; then
+            if [[ -z "${{ inputs.signing_key_artifact }}" ]]; then
+              echo "A signing key artifact is required for signed verification" >&2
+              exit 1
+            fi
+            signing_key_artifact="${{ inputs.signing_key_artifact }}"
+          else
+            signing_key_artifact="desktop-verify-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+          echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+          echo "signing_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
+          echo "public_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate ephemeral verification signing key
+        if: ${{ !inputs.signed }}
+        shell: bash
+        run: |
+          mkdir -p release/desktop-verify-signing
+          openssl genpkey -algorithm Ed25519 -out release/desktop-verify-signing/runtime-private.pem
+          openssl pkey -in release/desktop-verify-signing/runtime-private.pem -pubout -out release/desktop-verify-signing/runtime-public.pem
+
+      - name: Upload ephemeral verification signing key
+        if: ${{ !inputs.signed }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.signing_key_artifact }}
+          path: release/desktop-verify-signing/
+          if-no-files-found: error
+          retention-days: 1
+
   desktop-windows-verify:
     name: Desktop Windows package and smoke
+    needs: prepare
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
     outputs:
       artifact_name: ${{ steps.artifact_name.outputs.value }}
 
@@ -77,20 +124,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: "pnpm"
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Download acceptance signing key
-        if: inputs.signed
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.signing_key_artifact }}
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
           path: release/desktop-ci-signing
 
       - name: Configure signed acceptance channel
-        if: inputs.signed
         shell: pwsh
         run: |
           $privateKey = Get-Content release/desktop-ci-signing/runtime-private.pem -Raw
@@ -116,15 +161,8 @@ jobs:
       - name: Smoke packaged Engine, Runtime, PTY, and Electron window
         run: pnpm smoke:desktop
 
-      - name: Stage and validate Windows release assets
-        shell: pwsh
-        run: |
-          pnpm desktop:artifacts stage --directory release/desktop-release-windows --components 'desktop,win-runtime'
-          if ("${{ inputs.signed }}" -eq "true") {
-            pnpm desktop:artifacts validate --directory release/desktop-release-windows --components 'desktop,win-runtime'
-          } else {
-            pnpm desktop:artifacts validate --directory release/desktop-release-windows --components 'desktop,win-runtime' --allow-unsigned
-          }
+      - name: Stage Windows release assets
+        run: pnpm desktop:artifacts stage --directory release/desktop-release-windows --components 'desktop,win-runtime'
 
       - name: Upload Windows verification assets
         uses: actions/upload-artifact@v4
@@ -137,8 +175,11 @@ jobs:
 
   desktop-linux-assets-verify:
     name: WSL Engine and Runtime verification
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
     outputs:
       artifact_name: ${{ steps.artifact_name.outputs.value }}
 
@@ -161,20 +202,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: "pnpm"
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Download acceptance signing key
-        if: inputs.signed
         uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.signing_key_artifact }}
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
           path: release/desktop-ci-signing
 
       - name: Configure signed acceptance channel
-        if: inputs.signed
         shell: bash
         run: |
           {
@@ -191,14 +230,8 @@ jobs:
           pnpm build:wsl-engine
           pnpm build:wsl-runtime
 
-      - name: Stage and validate WSL release assets
-        run: |
-          pnpm desktop:artifacts stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
-          if [[ "${{ inputs.signed }}" == "true" ]]; then
-            pnpm desktop:artifacts validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
-          else
-            pnpm desktop:artifacts validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime' --allow-unsigned
-          fi
+      - name: Stage WSL release assets
+        run: pnpm desktop:artifacts stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
 
       - name: Upload WSL verification assets
         uses: actions/upload-artifact@v4
@@ -208,3 +241,75 @@ jobs:
           if-no-files-found: error
           retention-days: 3
           overwrite: true
+
+  desktop-channel-verify:
+    name: Validate complete signed Desktop channel
+    needs:
+      - prepare
+      - desktop-windows-verify
+      - desktop-linux-assets-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Windows verification assets
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-windows-verify.outputs.artifact_name }}
+          path: release/desktop-release-complete
+
+      - name: Download WSL verification assets
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop-linux-assets-verify.outputs.artifact_name }}
+          path: release/desktop-release-complete
+
+      - name: Download channel signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Build signed Desktop channel
+        run: |
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-complete \
+            --release-tag "desktop-verify-${GITHUB_SHA}" \
+            --channel prerelease \
+            --generated-at "${{ needs.prepare.outputs.published_at }}" \
+            --private-key release/desktop-ci-signing/runtime-private.pem
+
+      - name: Validate complete signed Desktop channel
+        env:
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY_FILE: release/desktop-ci-signing/runtime-public.pem
+        run: |
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY=$(cat "${CODER_STUDIO_RUNTIME_PUBLIC_KEY_FILE}") \
+            pnpm desktop:artifacts validate \
+              --directory release/desktop-release-complete \
+              --components 'desktop,win-runtime,wsl-engine,wsl-runtime' \
+              --release-kind full
+
+      - name: Upload complete Desktop verification bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-complete-${{ github.sha }}
+          path: release/desktop-release-complete/
+          if-no-files-found: error
+          retention-days: 3

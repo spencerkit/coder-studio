@@ -6,6 +6,7 @@ import { parse } from "yaml";
 interface WorkflowJob {
   uses?: string;
   needs?: string | string[];
+  env?: Record<string, string>;
   permissions?: Record<string, string>;
   outputs?: Record<string, string>;
   with?: Record<string, unknown>;
@@ -56,12 +57,8 @@ describe("GitHub workflow boundaries", () => {
     const linuxSteps = linuxJob.steps ?? [];
     const windowsUpload = windowsSteps.find((step) => step.uses === "actions/upload-artifact@v4");
     const linuxUpload = linuxSteps.find((step) => step.uses === "actions/upload-artifact@v4");
-    const windowsValidation = windowsSteps.find(
-      (step) => step.name === "Stage and validate Windows release assets"
-    );
-    const linuxValidation = linuxSteps.find(
-      (step) => step.name === "Stage and validate WSL release assets"
-    );
+    const windowsStage = windowsSteps.find((step) => step.name === "Stage Windows release assets");
+    const linuxStage = linuxSteps.find((step) => step.name === "Stage WSL release assets");
 
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(push).toEqual({ branches: ["main"] });
@@ -98,8 +95,10 @@ describe("GitHub workflow boundaries", () => {
       },
     });
     expect(Object.keys(workflow.jobs)).toEqual([
+      "prepare",
       "desktop-windows-verify",
       "desktop-linux-assets-verify",
+      "desktop-channel-verify",
     ]);
     expect(windowsJob.outputs).toEqual({
       artifact_name: "${{ steps.artifact_name.outputs.value }}",
@@ -129,11 +128,8 @@ describe("GitHub workflow boundaries", () => {
       )
     ).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Download acceptance signing key", if: "inputs.signed" }),
-        expect.objectContaining({
-          name: "Configure signed acceptance channel",
-          if: "inputs.signed",
-        }),
+        expect.objectContaining({ name: "Download acceptance signing key" }),
+        expect.objectContaining({ name: "Configure signed acceptance channel" }),
       ])
     );
     expect(
@@ -142,23 +138,16 @@ describe("GitHub workflow boundaries", () => {
       )
     ).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "Download acceptance signing key", if: "inputs.signed" }),
-        expect.objectContaining({
-          name: "Configure signed acceptance channel",
-          if: "inputs.signed",
-        }),
+        expect.objectContaining({ name: "Download acceptance signing key" }),
+        expect.objectContaining({ name: "Configure signed acceptance channel" }),
       ])
     );
-    expect(windowsValidation?.run).toContain('if ("${{ inputs.signed }}" -eq "true")');
-    expect(windowsValidation?.run).toContain(
-      "validate --directory release/desktop-release-windows --components 'desktop,win-runtime'"
+    expect(windowsStage?.run).toContain(
+      "stage --directory release/desktop-release-windows --components 'desktop,win-runtime'"
     );
-    expect(windowsValidation?.run).toContain("--allow-unsigned");
-    expect(linuxValidation?.run).toContain('if [[ "${{ inputs.signed }}" == "true" ]]');
-    expect(linuxValidation?.run).toContain(
-      "validate --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'"
+    expect(linuxStage?.run).toContain(
+      "stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'"
     );
-    expect(linuxValidation?.run).toContain("--allow-unsigned");
   });
 
   it("publishes acceptance assets only through an explicit manual workflow", () => {
@@ -279,5 +268,95 @@ describe("GitHub workflow boundaries", () => {
     expect(release?.run).toContain(
       'gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false'
     );
+  });
+
+  it("builds and validates one immutable signed Desktop channel before exposure", () => {
+    const verify = loadWorkflow("desktop-verify.yml");
+    const verifyPrepare = verify.jobs.prepare;
+    const windows = verify.jobs["desktop-windows-verify"];
+    const linux = verify.jobs["desktop-linux-assets-verify"];
+    const merged = verify.jobs["desktop-channel-verify"];
+    const mergedSteps = merged.steps ?? [];
+
+    expect(verifyPrepare.outputs).toMatchObject({
+      published_at: "${{ steps.metadata.outputs.published_at }}",
+      signing_key_artifact: "${{ steps.metadata.outputs.signing_key_artifact }}",
+      public_key_artifact: "${{ steps.metadata.outputs.public_key_artifact }}",
+    });
+    const prepareMetadata = (verifyPrepare.steps ?? []).find(
+      (step) => step.name === "Resolve shared release metadata"
+    );
+    expect(prepareMetadata?.run).toContain("date -u +'%Y-%m-%dT%H:%M:%S.000Z'");
+    expect(prepareMetadata?.run).toContain("published_at=${published_at}");
+    expect(windows.needs).toBe("prepare");
+    expect(linux.needs).toBe("prepare");
+    expect(windows.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
+      "${{ needs.prepare.outputs.published_at }}"
+    );
+    expect(linux.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
+      "${{ needs.prepare.outputs.published_at }}"
+    );
+    expect(merged.needs).toEqual([
+      "prepare",
+      "desktop-windows-verify",
+      "desktop-linux-assets-verify",
+    ]);
+    const buildIndex = mergedSteps.findIndex(
+      (step) => step.name === "Build signed Desktop channel"
+    );
+    const validateIndex = mergedSteps.findIndex(
+      (step) => step.name === "Validate complete signed Desktop channel"
+    );
+    const uploadIndex = mergedSteps.findIndex(
+      (step) => step.name === "Upload complete Desktop verification bundle"
+    );
+    expect(buildIndex).toBeGreaterThan(-1);
+    expect(validateIndex).toBeGreaterThan(buildIndex);
+    expect(uploadIndex).toBeGreaterThan(validateIndex);
+    expect(mergedSteps[buildIndex]?.run).toContain("pnpm desktop:channel");
+    expect(mergedSteps[validateIndex]?.run).toContain(
+      "--components 'desktop,win-runtime,wsl-engine,wsl-runtime'"
+    );
+
+    const release = loadWorkflow("desktop-release.yml");
+    const releaseInputs = (release.on.workflow_dispatch as { inputs: Record<string, unknown> })
+      .inputs;
+    expect(releaseInputs.mode).toMatchObject({ options: ["full", "runtime-only"] });
+    expect(release.jobs.prepare.outputs).toMatchObject({
+      published_at: "${{ steps.release.outputs.published_at }}",
+    });
+    const linuxBuild = release.jobs["linux-assets"];
+    const windowsBuild = release.jobs["windows-assets"];
+    expect(linuxBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
+      "${{ needs.prepare.outputs.published_at }}"
+    );
+    expect(windowsBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
+      "${{ needs.prepare.outputs.published_at }}"
+    );
+    const publishSteps = release.jobs.publish.steps ?? [];
+    const previousIndex = publishSteps.findIndex(
+      (step) => step.name === "Download previous immutable release"
+    );
+    const carryIndex = publishSteps.findIndex(
+      (step) => step.name === "Carry forward immutable Shell and Engine"
+    );
+    const channelIndex = publishSteps.findIndex(
+      (step) => step.name === "Build signed Desktop channel"
+    );
+    const productionValidateIndex = publishSteps.findIndex(
+      (step) => step.name === "Validate complete production release"
+    );
+    const attestIndex = publishSteps.findIndex((step) => step.name === "Attest release artifacts");
+    const releaseIndex = publishSteps.findIndex(
+      (step) => step.name === "Publish immutable prerelease"
+    );
+    expect(previousIndex).toBeGreaterThan(-1);
+    expect(carryIndex).toBeGreaterThan(previousIndex);
+    expect(channelIndex).toBeGreaterThan(carryIndex);
+    expect(productionValidateIndex).toBeGreaterThan(channelIndex);
+    expect(attestIndex).toBeGreaterThan(productionValidateIndex);
+    expect(releaseIndex).toBeGreaterThan(attestIndex);
+    expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
+    expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
   });
 });

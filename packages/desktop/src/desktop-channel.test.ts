@@ -90,4 +90,19 @@ describe("Desktop channel", () => {
       "unsafe"
     );
   });
+
+  it("limits unsigned parsing to an explicit local-validation option", () => {
+    const { channel } = signedChannel();
+    const indexUrl = "file:///tmp/coder-studio-release/desktop-channel.json";
+
+    expect(() => parseDesktopChannel(channel, "", indexUrl)).toThrow("signature");
+    expect(parseDesktopChannel(channel, "", indexUrl, { allowUnsigned: true })).toMatchObject({
+      releaseTag: "desktop-v0.3.0",
+    });
+    expect(() =>
+      parseDesktopChannel({ ...channel, generatedAt: "08/08/2026" }, "", indexUrl, {
+        allowUnsigned: true,
+      })
+    ).toThrow("generatedAt");
+  });
 });

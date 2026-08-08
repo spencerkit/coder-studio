@@ -68,7 +68,8 @@ export function resolveChannelAsset(indexUrl: string, relativePath: string): str
 export function parseDesktopChannel(
   value: unknown,
   publicKeyPem: string,
-  indexUrl: string
+  indexUrl: string,
+  options: { allowUnsigned?: boolean } = {}
 ): DesktopChannel {
   if (!value || typeof value !== "object") throw new Error("Desktop channel must be an object");
   const candidate = value as Record<string, unknown>;
@@ -122,7 +123,10 @@ export function parseDesktopChannel(
     runtimes: { "win32-x64": windows, "linux-x64": linux },
     signature: candidate.signature as RuntimeSignature,
   };
-  if (!verifyEd25519Payload(canonicalSigningPayload(channel), channel.signature, publicKeyPem)) {
+  if (
+    !options.allowUnsigned &&
+    !verifyEd25519Payload(canonicalSigningPayload(channel), channel.signature, publicKeyPem)
+  ) {
     throw new Error("Desktop channel signature is invalid");
   }
   return channel;

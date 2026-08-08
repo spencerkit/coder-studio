@@ -10,7 +10,7 @@ on:
         type: choice
         options:
           - full
-          - runtime
+          - runtime-only
       prerelease:
         description: "Publish as a GitHub prerelease"
         required: true
@@ -33,6 +33,8 @@ jobs:
       runtime_version: ${{ steps.release.outputs.runtime_version }}
       tag: ${{ steps.release.outputs.tag }}
       title: ${{ steps.release.outputs.title }}
+      published_at: ${{ steps.release.outputs.published_at }}
+      channel: ${{ steps.release.outputs.channel }}
 
     steps:
       - name: Checkout repository
@@ -54,6 +56,7 @@ jobs:
         run: |
           desktop_version=$(node -p "require('./packages/desktop/package.json').version")
           runtime_version=$(node -p "require('./packages/cli/package.json').version")
+          published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
           if [[ "${{ inputs.mode }}" == "full" ]]; then
             tag="desktop-v${desktop_version}"
             title="Coder Studio Desktop ${desktop_version}"
@@ -69,6 +72,12 @@ jobs:
           echo "runtime_version=${runtime_version}" >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "title=${title}" >> "${GITHUB_OUTPUT}"
+          echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
+            echo "channel=prerelease" >> "${GITHUB_OUTPUT}"
+          else
+            echo "channel=stable" >> "${GITHUB_OUTPUT}"
+          fi
 
   linux-assets:
     name: Build signed WSL assets
@@ -81,6 +90,7 @@ jobs:
     env:
       CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
 
     steps:
       - name: Checkout repository
@@ -117,7 +127,7 @@ jobs:
           fi
           pnpm build:wsl-runtime
 
-      - name: Stage and validate signed WSL assets
+      - name: Stage signed WSL assets
         shell: bash
         run: |
           components="wsl-runtime"
@@ -125,7 +135,6 @@ jobs:
             components="wsl-engine,wsl-runtime"
           fi
           pnpm desktop:artifacts stage --directory release/desktop-release-linux --components "${components}"
-          pnpm desktop:artifacts validate --directory release/desktop-release-linux --components "${components}"
 
       - name: Upload WSL assets
         uses: actions/upload-artifact@v4
@@ -148,6 +157,7 @@ jobs:
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
       CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
 
     steps:
       - name: Checkout repository
@@ -211,7 +221,7 @@ jobs:
             }
           }
 
-      - name: Stage and validate signed Windows assets
+      - name: Stage signed Windows assets
         shell: pwsh
         run: |
           $components = 'win-runtime'
@@ -219,7 +229,6 @@ jobs:
             $components = 'desktop,win-runtime'
           }
           pnpm desktop:artifacts stage --directory release/desktop-release-windows --components $components
-          pnpm desktop:artifacts validate --directory release/desktop-release-windows --components $components
 
       - name: Upload Windows assets
         uses: actions/upload-artifact@v4
@@ -244,6 +253,7 @@ jobs:
       id-token: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
 
     steps:
@@ -265,20 +275,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Carry forward Shell and Engine for Runtime-only releases
-        if: inputs.mode == 'runtime'
+      - name: Download previous immutable release
+        if: inputs.mode == 'runtime-only'
         shell: bash
         run: |
-          mkdir -p release/desktop-release-final
+          mkdir -p release/desktop-release-previous
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
           for pattern in \
             "latest.yml" \
             "Coder-Studio-Setup-*.exe" \
             "*.blockmap" \
+            "build-info.json" \
+            "desktop-channel.json" \
             "coder-studio-engine-linux-x64.manifest.json" \
-            "coder-studio-engine-*-linux-x64.tgz"; do
-            gh release download "${latest_tag}" --pattern "${pattern}" --dir release/desktop-release-final --clobber
+            "coder-studio-engine-*-linux-x64.tgz" \
+            "coder-studio-runtime-win32-x64.manifest.json" \
+            "coder-studio-server-runtime-linux-x64.manifest.json"; do
+            gh release download "${latest_tag}" --pattern "${pattern}" --dir release/desktop-release-previous --clobber
           done
+
+      - name: Carry forward immutable Shell and Engine
+        if: inputs.mode == 'runtime-only'
+        run: |
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-final \
+            --carry-forward-from release/desktop-release-previous
 
       - name: Download newly built release assets
         uses: actions/download-artifact@v4
@@ -287,25 +308,46 @@ jobs:
           path: release/desktop-release-final
           merge-multiple: true
 
+      - name: Build signed Desktop channel
+        shell: bash
+        run: |
+          key_file=$(mktemp)
+          trap 'shred -u "${key_file}"' EXIT
+          printf '%s' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" > "${key_file}"
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-final \
+            --release-tag "${{ needs.prepare.outputs.tag }}" \
+            --channel "${{ needs.prepare.outputs.channel }}" \
+            --generated-at "${{ needs.prepare.outputs.published_at }}" \
+            --private-key "${key_file}"
+
       - name: Validate complete production release
-        run: pnpm desktop:artifacts validate --directory release/desktop-release-final --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+        shell: bash
+        run: |
+          validation_args=(
+            validate
+            --directory release/desktop-release-final
+            --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+            --release-kind "${{ inputs.mode }}"
+          )
+          if [[ "${{ inputs.mode }}" == "runtime-only" ]]; then
+            validation_args+=(--previous-release-directory release/desktop-release-previous)
+          fi
+          pnpm desktop:artifacts "${validation_args[@]}"
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: release/desktop-release-final/*
 
-      - name: Publish release
+      - name: Publish immutable prerelease
         shell: bash
         run: |
-          release_flags=(--target "${GITHUB_SHA}" --title "${{ needs.prepare.outputs.title }}" --generate-notes)
-          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
-            release_flags+=(--prerelease)
-          else
-            release_flags+=(--latest)
-          fi
           gh release create "${{ needs.prepare.outputs.tag }}" \
-            "${release_flags[@]}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ needs.prepare.outputs.title }}" \
+            --generate-notes \
+            --prerelease --latest=false \
             release/desktop-release-final/*
 
       - name: Upload final release bundle

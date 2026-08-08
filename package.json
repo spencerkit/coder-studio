@@ -17,6 +17,7 @@
     "pack:desktop": "pnpm build:desktop && pnpm prepare:desktop && pnpm --filter @coder-studio/desktop run pack",
     "dist:desktop": "pnpm build:desktop && pnpm prepare:desktop && pnpm --filter @coder-studio/desktop run dist",
     "smoke:desktop": "tsx scripts/smoke-desktop-package.ts",
+    "desktop:channel": "tsx scripts/build-desktop-channel.ts",
     "desktop:artifacts": "tsx scripts/desktop-release-artifacts.ts",
     "changeset": "changeset",
     "changeset:validate": "tsx scripts/validate-changesets.ts",
