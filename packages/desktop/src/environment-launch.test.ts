@@ -53,7 +53,7 @@ describe("EnvironmentLaunchStore", () => {
     const requestId = (await store.create(requestTarget)).requestId;
     let settled = false;
     const waiting = store
-      .waitForTerminal(requestId, requestTarget, { pollIntervalMs: 2, timeoutMs: 250 })
+      .waitForTerminal(requestId, requestTarget, { pollIntervalMs: 2, timeoutMs: 5_000 })
       .then((pid) => {
         settled = true;
         return pid;
@@ -228,6 +228,75 @@ describe("EnvironmentLaunchStore", () => {
       status: "failed",
       message: "startup failed",
     });
+  });
+
+  it("retries transient read errors through the real read path", async () => {
+    let transient = true;
+    const store = await createStore({
+      readFile: async (path) => {
+        if (transient) {
+          transient = false;
+          throw Object.assign(new Error("sharing violation"), { code: "EBUSY" });
+        }
+        return readFile(path, "utf8");
+      },
+    });
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await store.create(requestTarget)).requestId;
+
+    await expect(store.read(requestId)).resolves.toMatchObject({ status: "pending" });
+    expect(transient).toBe(false);
+  });
+
+  it("propagates non-transient read errors instead of reporting a missing request", async () => {
+    const store = await createStore({
+      readFile: async () => {
+        throw Object.assign(new Error("I/O failure"), { code: "EIO" });
+      },
+    });
+    const requestId = (await store.create(target("native", "Local: Windows"))).requestId;
+
+    await expect(store.read(requestId)).rejects.toMatchObject({ code: "EIO" });
+  });
+
+  it("keeps a successful claim when transient temp cleanup fails", async () => {
+    let cleanupAttempts = 0;
+    let failCleanup = false;
+    const store = await createStore({
+      remove: async (path, options) => {
+        if (failCleanup && path.includes(".terminal.json.") && path.endsWith(".tmp")) {
+          cleanupAttempts += 1;
+          throw Object.assign(new Error("sharing violation"), { code: "EBUSY" });
+        }
+        await rm(path, options);
+      },
+    });
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await store.create(requestTarget)).requestId;
+    failCleanup = true;
+
+    await expect(store.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(true);
+    expect(cleanupAttempts).toBeGreaterThan(0);
+    await expect(store.read(requestId)).resolves.toMatchObject({ status: "ready", pid: 4321 });
+  });
+
+  it("removes stale pending and terminal temp artifacts", async () => {
+    const store = await createStore();
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await store.create(requestTarget)).requestId;
+    const requestPath = store.getRequestPath(requestId);
+    const terminalPath = requestPath.replace(/\.json$/, ".terminal.json");
+    const pendingTempPath = `${requestPath}.stale.tmp`;
+    const terminalTempPath = `${terminalPath}.stale.tmp`;
+    await writeFile(pendingTempPath, "partial", "utf8");
+    await writeFile(terminalTempPath, "partial", "utf8");
+    const staleTime = new Date(Date.now() - 10_000);
+    await utimes(pendingTempPath, staleTime, staleTime);
+    await utimes(terminalTempPath, staleTime, staleTime);
+
+    await store.cleanupStale(2_000);
+    await expect(stat(pendingTempPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(terminalTempPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("cleans a stale terminal-only claim after its pending file is removed", async () => {

@@ -24,6 +24,8 @@ export interface EnvironmentLaunchWaitOptions {
 
 export interface EnvironmentLaunchStoreOptions {
   link?: (source: string, destination: string) => Promise<void>;
+  readFile?: (path: string) => Promise<string>;
+  remove?: (path: string, options?: { force?: boolean; recursive?: boolean }) => Promise<void>;
 }
 
 const REQUEST_ID_PATTERN =
@@ -103,13 +105,61 @@ async function linkWithRetry(
   }
 }
 
+async function readFileWithRetry(
+  path: string,
+  readOperation: (path: string) => Promise<string>
+): Promise<string> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      return await readOperation(path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!code || !["EPERM", "EACCES", "EBUSY"].includes(code) || attempt === 5) throw error;
+      await wait(20 * 2 ** attempt);
+    }
+  }
+  throw new Error("Unreachable read retry state");
+}
+
+async function removeTemporaryBestEffort(
+  path: string,
+  removeOperation: (
+    path: string,
+    options?: { force?: boolean; recursive?: boolean }
+  ) => Promise<void>
+): Promise<void> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      await removeOperation(path, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code && ["EPERM", "EACCES", "EBUSY"].includes(code) && attempt < 5) {
+        await wait(20 * 2 ** attempt);
+      } else {
+        return;
+      }
+    }
+  }
+}
+
+const TEMP_ENTRY_PATTERN =
+  /^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(\.terminal)?\.json\.[a-z0-9_-]+\.tmp$/i;
+
 export class EnvironmentLaunchStore {
   private readonly launchesRoot: string;
   private readonly linkOperation: (source: string, destination: string) => Promise<void>;
+  private readonly readFileOperation: (path: string) => Promise<string>;
+  private readonly removeOperation: (
+    path: string,
+    options?: { force?: boolean; recursive?: boolean }
+  ) => Promise<void>;
 
   constructor(rootUserDataDir: string, options: EnvironmentLaunchStoreOptions = {}) {
     this.launchesRoot = resolve(rootUserDataDir, "environment-launches");
     this.linkOperation = options.link ?? ((source, destination) => link(source, destination));
+    this.readFileOperation = options.readFile ?? ((path) => readFile(path, "utf8"));
+    this.removeOperation = options.remove ?? ((path, removeOptions) => rm(path, removeOptions));
   }
 
   getRequestPath(requestId: string): string {
@@ -136,21 +186,29 @@ export class EnvironmentLaunchStore {
     if (!isEnvironmentLaunchRequestId(requestId)) return null;
     try {
       const terminal = parseStatus(
-        JSON.parse(await readFile(this.getTerminalClaimPath(requestId), "utf8")),
+        JSON.parse(
+          await readFileWithRetry(this.getTerminalClaimPath(requestId), this.readFileOperation)
+        ),
         requestId
       );
       if (!terminal || terminal.status === "pending") return null;
       return terminal;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return null;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        if (error instanceof SyntaxError) return null;
+        throw error;
+      }
     }
     try {
       return parseStatus(
-        JSON.parse(await readFile(this.getRequestPath(requestId), "utf8")),
+        JSON.parse(await readFileWithRetry(this.getRequestPath(requestId), this.readFileOperation)),
         requestId
       );
-    } catch {
-      return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT" || error instanceof SyntaxError) {
+        return null;
+      }
+      throw error;
     }
   }
 
@@ -240,32 +298,38 @@ export class EnvironmentLaunchStore {
       throw error;
     }
 
-    const requestIds = new Set<string>();
+    const stalePaths = new Set<string>();
     for (const entry of entries) {
       if (!entry.isFile()) continue;
-      const requestId = entry.name.endsWith(".terminal.json")
-        ? entry.name.slice(0, -".terminal.json".length)
-        : entry.name.endsWith(".json")
-          ? entry.name.slice(0, -5)
-          : "";
-      if (isEnvironmentLaunchRequestId(requestId)) requestIds.add(requestId);
+      if (entry.name.endsWith(".terminal.json")) {
+        const requestId = entry.name.slice(0, -".terminal.json".length);
+        if (isEnvironmentLaunchRequestId(requestId)) {
+          stalePaths.add(this.getTerminalClaimPath(requestId));
+        }
+      } else if (entry.name.endsWith(".json")) {
+        const requestId = entry.name.slice(0, -5);
+        if (isEnvironmentLaunchRequestId(requestId)) stalePaths.add(this.getRequestPath(requestId));
+      } else {
+        const match = TEMP_ENTRY_PATTERN.exec(entry.name);
+        if (match && isEnvironmentLaunchRequestId(match[1])) {
+          stalePaths.add(resolve(this.launchesRoot, entry.name));
+        }
+      }
     }
 
-    for (const requestId of requestIds) {
-      for (const path of [this.getRequestPath(requestId), this.getTerminalClaimPath(requestId)]) {
-        let details;
-        try {
-          details = await stat(path);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-          throw error;
-        }
-        if (now - details.mtimeMs <= maxAgeMs) continue;
-        try {
-          await rm(path, { force: true });
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
+    for (const path of stalePaths) {
+      let details;
+      try {
+        details = await stat(path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      if (now - details.mtimeMs <= maxAgeMs) continue;
+      try {
+        await rm(path, { force: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     }
   }
@@ -297,7 +361,7 @@ export class EnvironmentLaunchStore {
         throw error;
       }
     } finally {
-      await rm(temporaryPath, { force: true });
+      await removeTemporaryBestEffort(temporaryPath, this.removeOperation);
     }
   }
 
@@ -309,7 +373,7 @@ export class EnvironmentLaunchStore {
       await writeFile(temporaryPath, `${JSON.stringify(status, null, 2)}\n`, "utf8");
       await renameWithRetry(temporaryPath, requestPath);
     } finally {
-      await rm(temporaryPath, { force: true });
+      await removeTemporaryBestEffort(temporaryPath, this.removeOperation);
     }
   }
 
