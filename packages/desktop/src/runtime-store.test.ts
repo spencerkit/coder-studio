@@ -52,6 +52,7 @@ async function createRuntime(
   );
   let manifest: RuntimeManifest = {
     schemaVersion: RUNTIME_MANIFEST_SCHEMA_VERSION,
+    publishedAt: "2026-08-08T01:02:03.000Z",
     runtimeVersion,
     minShellVersion: "0.5.0",
     requiredEngineVersion: DESKTOP_ENGINE_VERSION,
