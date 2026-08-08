@@ -12,13 +12,13 @@ import { commandPaletteOpenAtom } from "../../atoms/app-ui";
 import { orderedWorkspacesAtom, resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
 import { EmptyState, IconButton, TabList, Tabs, ThemedIcon, Tooltip } from "../../components/ui";
 import { useTranslation } from "../../lib/i18n";
+import { EnvironmentSwitcher } from "../desktop-environment";
 import { useSelectWorkspaceTarget } from "../workspace/actions/use-select-workspace-target";
 import type { WorkspaceFullscreenController } from "../workspace/actions/use-workspace-fullscreen";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
 import { WorkspaceFullscreenButton } from "../workspace/components/workspace-fullscreen-button";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
 import { ConnectionStatus } from "./components/connection-status";
-import { EnvironmentSwitcher } from "./components/environment-switcher";
 import { WorkspaceTab } from "./components/tab";
 
 interface TopBarProps {
