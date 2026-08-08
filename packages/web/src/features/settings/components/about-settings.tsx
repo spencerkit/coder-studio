@@ -250,7 +250,6 @@ export function AboutSettings({
             <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
             <span className="settings-info-value">{serverInfo?.serverInstanceId ?? "-"}</span>
           </div>
-          {guidanceKey ? <Notice tone="info" message={t(guidanceKey)} /> : null}
         </div>
       ) : null}
 
@@ -258,6 +257,7 @@ export function AboutSettings({
         <div className="settings-group">
           <h3 className="settings-group-title">{t("settings.about.update_group")}</h3>
           <p className="settings-group-desc">{t("settings.about.unified_update_group_hint")}</p>
+          {guidanceKey ? <Notice tone="info" message={t(guidanceKey)} /> : null}
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.latest_version")}</span>
             <span className="settings-info-value">{targetVersion ? `v${targetVersion}` : "-"}</span>

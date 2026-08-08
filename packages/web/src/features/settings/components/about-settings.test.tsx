@@ -262,7 +262,7 @@ describe("AboutSettings unified updates", () => {
       status: "unsupported",
     });
     const controller = createController(state, "readonly");
-    renderAbout({ state, controller });
+    renderAbout({ state, controller, view: "update-status" });
     expect(
       screen.getByText("Open Coder Studio Desktop to manage this update.")
     ).toBeInTheDocument();
