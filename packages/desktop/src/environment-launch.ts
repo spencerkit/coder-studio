@@ -22,6 +22,10 @@ export interface EnvironmentLaunchWaitOptions {
   timeoutMs?: number;
 }
 
+export interface EnvironmentLaunchStoreOptions {
+  link?: (source: string, destination: string) => Promise<void>;
+}
+
 const REQUEST_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TRANSITION_FINALIZE_TIMEOUT_MS = 2_000;
@@ -82,11 +86,30 @@ async function wait(delayMs: number): Promise<void> {
   await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, delayMs));
 }
 
+async function linkWithRetry(
+  source: string,
+  destination: string,
+  linkOperation: (source: string, destination: string) => Promise<void>
+): Promise<void> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      await linkOperation(source, destination);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!code || !["EPERM", "EACCES", "EBUSY"].includes(code) || attempt === 5) throw error;
+      await wait(20 * 2 ** attempt);
+    }
+  }
+}
+
 export class EnvironmentLaunchStore {
   private readonly launchesRoot: string;
+  private readonly linkOperation: (source: string, destination: string) => Promise<void>;
 
-  constructor(rootUserDataDir: string) {
+  constructor(rootUserDataDir: string, options: EnvironmentLaunchStoreOptions = {}) {
     this.launchesRoot = resolve(rootUserDataDir, "environment-launches");
+    this.linkOperation = options.link ?? ((source, destination) => link(source, destination));
   }
 
   getRequestPath(requestId: string): string {
@@ -116,9 +139,10 @@ export class EnvironmentLaunchStore {
         JSON.parse(await readFile(this.getTerminalClaimPath(requestId), "utf8")),
         requestId
       );
-      if (terminal && terminal.status !== "pending") return terminal;
-    } catch {
-      // The terminal claim is optional while the request is pending.
+      if (!terminal || terminal.status === "pending") return null;
+      return terminal;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return null;
     }
     try {
       return parseStatus(
@@ -266,7 +290,7 @@ export class EnvironmentLaunchStore {
     try {
       await writeFile(temporaryPath, `${JSON.stringify(status, null, 2)}\n`, "utf8");
       try {
-        await link(temporaryPath, terminalPath);
+        await linkWithRetry(temporaryPath, terminalPath, this.linkOperation);
         return true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
@@ -290,7 +314,10 @@ export class EnvironmentLaunchStore {
   }
 
   private getTerminalClaimPath(requestId: string): string {
-    return `${this.getRequestPath(requestId)}.terminal.json`;
+    if (!isEnvironmentLaunchRequestId(requestId)) {
+      throw new Error("Invalid environment launch request id");
+    }
+    return resolve(this.launchesRoot, `${requestId}.terminal.json`);
   }
 
   private assertTarget(target: DesktopEnvironmentTarget): void {
