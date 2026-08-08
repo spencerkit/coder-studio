@@ -5,7 +5,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import type { UpdateStateSnapshot } from "@coder-studio/core";
+import type { UpdatePrepareInstallResponse, UpdateStateSnapshot } from "@coder-studio/core";
 import {
   type CoderStudioWsCommandInput,
   callCoderStudioWsCommand,
@@ -484,12 +484,12 @@ export async function verifyCliUpdate(
     if (!checked.latestPublishedAt || !Number.isFinite(Date.parse(checked.latestPublishedAt))) {
       throw new Error("Candidate npm publication time is missing");
     }
-    const prepared = await deps.callWs<{ hasActiveWork: boolean }>({
+    const prepared = await deps.callWs<UpdatePrepareInstallResponse>({
       apiUrl: server.apiUrl,
       op: "updates.prepareInstall",
       args: {},
     });
-    if (prepared.hasActiveWork)
+    if (prepared.activity.hasActiveWork)
       throw new Error("CLI acceptance prefix unexpectedly has active work");
     const started = await deps.callWs<UpdateStateSnapshot>({
       apiUrl: server.apiUrl,

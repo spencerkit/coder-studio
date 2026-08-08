@@ -61,9 +61,11 @@ export class DesktopUpdateCoordinator {
   private controllers = new Map<UpdateComponentId, AbortController>();
   private cancelRequested = false;
   private restartIntent = false;
+  private startupReconciled = false;
   private startupTimer: NodeJS.Timeout | null = null;
   private intervalTimer: NodeJS.Timeout | null = null;
   private journalWriteQueue: Promise<void> = Promise.resolve();
+  private journalPlanId: string | null = null;
 
   constructor(private readonly deps: DesktopUpdateCoordinatorDeps) {
     this.assertDesktopContext(deps.runtimeContext);
@@ -74,8 +76,13 @@ export class DesktopUpdateCoordinator {
   }
 
   async start(): Promise<void> {
-    const journal = await this.deps.journal.read();
-    if (journal) this.restoreJournal(journal);
+    if (!this.startupReconciled) {
+      const journal = await this.deps.journal.read();
+      if (journal?.environmentId === this.runtimeEnvironmentId) {
+        this.journalPlanId = journal.planId;
+        this.restoreJournal(journal);
+      }
+    }
     const settings = await this.deps.settings.get();
     this.schedule(settings);
     this.publish();
@@ -147,7 +154,7 @@ export class DesktopUpdateCoordinator {
       const compatibility = this.validatePlan(channel, buildInfo, components, runtimeMetadata);
       const checkedAt = this.deps.now();
       if (components.length === 0) {
-        await this.deps.journal.clear();
+        await this.clearJournal();
         this.state = {
           ...this.createBaseState(),
           status: "idle",
@@ -196,7 +203,21 @@ export class DesktopUpdateCoordinator {
     return this.downloadComponents(false);
   }
 
-  retryFailed(): Promise<ProductUpdateState> {
+  async retryFailed(): Promise<ProductUpdateState> {
+    const failedPlanNeedsRecheck =
+      this.state.status === "failed" &&
+      this.state.components.some((component) => component.status === "available");
+    const failedWithoutMetadata = this.state.components.some(
+      (component) =>
+        component.status === "failed" &&
+        !component.verified &&
+        ((component.kind === "runtime" && (!this.runtimeAdapter || !this.runtimeMetadata)) ||
+          (component.kind === "shell" && !this.shellMetadata))
+    );
+    if (failedPlanNeedsRecheck || failedWithoutMetadata) {
+      await this.check({ manual: true });
+      return this.downloadComponents(false);
+    }
     return this.downloadComponents(true);
   }
 
@@ -333,11 +354,19 @@ export class DesktopUpdateCoordinator {
     pendingRuntimeVersion: string | null;
   }): Promise<ProductUpdateState> {
     const journal = await this.deps.journal.read();
+    this.startupReconciled = true;
     if (!journal) {
+      this.journalPlanId = null;
       this.state = this.createBaseState();
       return this.publish();
     }
-    this.restoreJournal(journal);
+    if (journal.environmentId !== this.runtimeEnvironmentId) {
+      this.journalPlanId = null;
+      this.state = this.createBaseState();
+      return this.publish();
+    }
+    this.journalPlanId = journal.planId;
+    this.restoreJournal(journal, false);
     const components = this.state.components.map((component) => {
       const installed =
         component.id === "shell"
@@ -359,7 +388,48 @@ export class DesktopUpdateCoordinator {
         errorSummary: null,
       };
       this.restartIntent = false;
-      await this.deps.journal.clear();
+      if (components.some((component) => component.id === "shell")) {
+        this.deps.shell.disarmInstallOnQuit();
+      }
+      await this.clearJournal();
+      return this.publish();
+    }
+    const missingPendingRuntime = components.find(
+      (component) =>
+        component.kind === "runtime" &&
+        component.status !== "succeeded" &&
+        component.verified &&
+        component.targetVersion !== actual.pendingRuntimeVersion
+    );
+    if (!journal.restartIntent && missingPendingRuntime) {
+      const summary = "The staged Desktop Runtime is no longer available";
+      this.state = {
+        ...this.state,
+        status: "failed",
+        updatedAt: this.timestamp(),
+        components: components.map((component) =>
+          component.id === missingPendingRuntime.id
+            ? {
+                ...component,
+                status: "failed",
+                progressPercent: null,
+                downloaded: false,
+                verified: false,
+                errorSummary: summary,
+              }
+            : component
+        ),
+        restartRequired: false,
+        errorSummary: summary,
+        diagnostics: {
+          ...this.state.diagnostics,
+          failedComponentId: missingPendingRuntime.id,
+          failedPhase: "verifying",
+          recoveryAction: "Check for updates again to download the Runtime update.",
+        },
+      };
+      this.restartIntent = false;
+      await this.persistPlan();
       return this.publish();
     }
     if (!journal.restartIntent && components.every((component) => component.verified)) {
@@ -406,13 +476,73 @@ export class DesktopUpdateCoordinator {
       await this.persistPlan();
       return this.publish();
     }
+    if (journal.restartIntent) {
+      const failed =
+        missingPendingRuntime ?? components.find((component) => component.status !== "succeeded");
+      const failedRuntime = failed?.kind === "runtime";
+      const summary = failedRuntime
+        ? "Desktop Runtime activation did not reach the planned version"
+        : "The previous Desktop update did not complete";
+      this.state = {
+        ...this.state,
+        status: "failed",
+        updatedAt: this.timestamp(),
+        components: components.map((component) =>
+          component.status === "succeeded"
+            ? component
+            : {
+                ...component,
+                status: "failed",
+                downloaded: failedRuntime ? false : component.downloaded,
+                verified: failedRuntime ? false : component.verified,
+                progressPercent: failedRuntime ? null : component.progressPercent,
+                errorSummary: component.id === failed?.id ? summary : component.errorSummary,
+              }
+        ),
+        restartRequired: false,
+        errorSummary: summary,
+        diagnostics: {
+          ...this.state.diagnostics,
+          failedComponentId: failed?.id ?? null,
+          failedPhase: failedRuntime ? "activating" : "installing",
+          recoveryAction: failedRuntime
+            ? "Check for updates again to download the Runtime update."
+            : this.state.diagnostics.recoveryAction,
+        },
+      };
+      this.restartIntent = false;
+      if (components.some((component) => component.id === "shell")) {
+        this.deps.shell.disarmInstallOnQuit();
+      }
+      await this.persistPlan();
+      return this.publish();
+    }
+    const failed =
+      components.find((component) => !component.verified) ??
+      components.find((component) => component.status !== "succeeded");
+    const summary = "The previous Desktop update did not complete";
     this.state = {
       ...this.state,
-      components,
-      status: journal.status === "ready" ? "ready" : "failed",
-      errorSummary:
-        journal.status === "ready" ? null : "The previous Desktop update did not complete",
+      components: components.map((component) =>
+        component.id === failed?.id
+          ? { ...component, status: "failed", errorSummary: summary }
+          : component
+      ),
+      status: "failed",
+      updatedAt: this.timestamp(),
+      restartRequired: false,
+      errorSummary: summary,
+      diagnostics: {
+        ...this.state.diagnostics,
+        failedComponentId: failed?.id ?? null,
+        failedPhase: journal.status === "downloading" ? "downloading" : "recovering",
+      },
     };
+    this.restartIntent = false;
+    if (components.some((component) => component.id === "shell")) {
+      this.deps.shell.disarmInstallOnQuit();
+    }
+    await this.persistPlan();
     return this.publish();
   }
 
@@ -742,6 +872,7 @@ export class DesktopUpdateCoordinator {
       createdAt: this.state.createdAt,
       updatedAt: this.state.updatedAt ?? this.timestamp(),
       runtimeTarget: this.runtimeTarget,
+      environmentId: this.runtimeEnvironmentId,
       compatibility: this.state.compatibility,
       restartIntent: this.restartIntent,
       components: this.state.components.map((component) => ({
@@ -763,12 +894,30 @@ export class DesktopUpdateCoordinator {
           }
         : null,
     };
-    const pending = this.journalWriteQueue.then(() => this.deps.journal.write(record));
+    const pending = this.journalWriteQueue.then(async () => {
+      await this.deps.journal.write(record, {
+        expectedPlanId: this.journalPlanId,
+        environmentId: this.runtimeEnvironmentId,
+      });
+      this.journalPlanId = record.planId;
+    });
     this.journalWriteQueue = pending.catch(() => {});
     await pending;
   }
 
-  private restoreJournal(journal: DesktopUpdateJournalRecord): void {
+  private async clearJournal(): Promise<void> {
+    const pending = this.journalWriteQueue.then(async () => {
+      await this.deps.journal.clear({
+        expectedPlanId: this.journalPlanId,
+        environmentId: this.runtimeEnvironmentId,
+      });
+      this.journalPlanId = null;
+    });
+    this.journalWriteQueue = pending.catch(() => {});
+    await pending;
+  }
+
+  private restoreJournal(journal: DesktopUpdateJournalRecord, armRestart = true): void {
     this.runtimeTarget = journal.runtimeTarget;
     this.restartIntent = journal.restartIntent;
     const status = journal.status;
@@ -807,7 +956,11 @@ export class DesktopUpdateCoordinator {
       restartRequired: status === "ready" || status === "restarting",
       errorSummary: journal.lastError?.summary ?? null,
     };
-    if (journal.restartIntent && journal.components.every((component) => component.verified)) {
+    if (
+      armRestart &&
+      journal.restartIntent &&
+      journal.components.every((component) => component.verified)
+    ) {
       if (journal.components.some((component) => component.id === "shell")) {
         this.deps.shell.armInstallOnQuit();
       }

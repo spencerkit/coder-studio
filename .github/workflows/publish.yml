@@ -226,21 +226,9 @@ jobs:
           mkdir -p desktop-channel-assets
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || true)
           if [ -n "${latest_tag}" ]; then
-            for pattern in \
-              "latest.yml" \
-              "Coder-Studio-Setup-*.exe" \
-              "*.blockmap" \
-              "coder-studio-runtime-win32-x64.manifest.json" \
-              "coder-studio-runtime-*-win32-x64.tgz" \
-              "coder-studio-engine-linux-x64.manifest.json" \
-              "coder-studio-engine-*-linux-x64.tgz" \
-              "coder-studio-server-runtime-linux-x64.manifest.json" \
-              "coder-studio-server-runtime-*-linux-x64.tgz"; do
-              gh release download "${latest_tag}" \
-                --pattern "${pattern}" \
-                --dir desktop-channel-assets \
-                --clobber 2>/dev/null || true
-            done
+            gh release download "${latest_tag}" --dir desktop-channel-assets --clobber
+            test -f desktop-channel-assets/desktop-channel.json
+            test -f desktop-channel-assets/build-info.json
           fi
 
       - name: Create GitHub release

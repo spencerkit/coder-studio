@@ -1,7 +1,11 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ProductUpdateState } from "@coder-studio/core";
 import { describe, expect, it, vi } from "vitest";
 import type { DesktopChannel } from "./desktop-channel.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
+import { DesktopUpdateJournal } from "./desktop-update-journal.js";
 import type { RuntimeUpdateMetadata } from "./runtime-update-manager.js";
 
 function deferred<T>() {
@@ -77,6 +81,8 @@ function createHarness(
     runtimeVersion?: string;
     shellDownload?: Promise<void>;
     runtimeDownload?: Promise<unknown>;
+    journalOverride?: unknown;
+    planId?: string;
   } = {}
 ) {
   const shellVersion = options.shellVersion ?? "0.2.0";
@@ -154,10 +160,10 @@ function createHarness(
     initialRuntimeTarget: "win32-x64",
     initialEnvironmentId: "native",
     settings: settings as never,
-    journal: journal as never,
+    journal: (options.journalOverride ?? journal) as never,
     journalLocation: "C:\\Coder Studio\\desktop-update-plan.json",
     now: () => Date.parse("2026-08-08T02:00:00.000Z"),
-    randomId: () => "plan-1",
+    randomId: () => options.planId ?? "plan-1",
     onStateChanged: (state) => states.push(state),
     relaunch: vi.fn(),
     quit: vi.fn(),
@@ -223,7 +229,8 @@ describe("DesktopUpdateCoordinator", () => {
 
     await vi.waitFor(() => {
       expect(journal.write).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "downloading" })
+        expect.objectContaining({ status: "downloading" }),
+        expect.any(Object)
       );
     });
     shellDownload.resolve();
@@ -255,7 +262,8 @@ describe("DesktopUpdateCoordinator", () => {
     const downloading = coordinator.download();
     await vi.waitFor(() => {
       expect(journal.write).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "downloading" })
+        expect.objectContaining({ status: "downloading" }),
+        expect.any(Object)
       );
     });
 
@@ -289,7 +297,8 @@ describe("DesktopUpdateCoordinator", () => {
     const downloading = coordinator.download();
     await vi.waitFor(() => {
       expect(journal.write).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "downloading" })
+        expect.objectContaining({ status: "downloading" }),
+        expect.any(Object)
       );
     });
     const completedWrites = journal.write.mock.calls.length;
@@ -317,6 +326,50 @@ describe("DesktopUpdateCoordinator", () => {
         expect.objectContaining({ id: "runtime:win32-x64", verified: true }),
       ],
     });
+  });
+
+  it("prevents two coordinators from replacing one shared update plan", async () => {
+    const root = await mkdtemp(join(tmpdir(), "desktop-update-coordinator-"));
+    try {
+      const filePath = join(root, "desktop-update-plan.json");
+      const firstJournal = new DesktopUpdateJournal({ filePath });
+      const secondJournal = new DesktopUpdateJournal({ filePath });
+      const first = createHarness({
+        shellVersion: "0.3.0",
+        planId: "plan-first",
+        journalOverride: firstJournal,
+      });
+      const second = createHarness({
+        shellVersion: "0.3.0",
+        planId: "plan-second",
+        journalOverride: secondJournal,
+      });
+
+      const results = await Promise.allSettled([
+        first.coordinator.check({ manual: true }),
+        second.coordinator.check({ manual: true }),
+      ]);
+
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+      const persisted = await firstJournal.read();
+      expect(persisted).toMatchObject({
+        planId: expect.stringMatching(/^plan-(first|second)$/),
+        environmentId: "native",
+      });
+      await firstJournal.clear({
+        expectedPlanId: persisted?.planId ?? null,
+        environmentId: "native",
+      });
+      const rejectedIndex = results.findIndex((result) => result.status === "rejected");
+      const rejectedCoordinator = [first.coordinator, second.coordinator][rejectedIndex];
+      await expect(rejectedCoordinator?.retryFailed()).resolves.toMatchObject({
+        status: "ready",
+        restartRequired: true,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("retains a verified component and explicitly retries only the failed component", async () => {
@@ -447,6 +500,115 @@ describe("DesktopUpdateCoordinator", () => {
     expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({ status: "ready" });
   });
 
+  it("persists a partially downloaded startup journal as a retryable failure", async () => {
+    const { coordinator, journal } = createHarness();
+    await coordinator.check({ manual: true });
+    const availableRecord = journal.write.mock.calls.at(-1)?.[0] as {
+      components: Array<{ id: string }>;
+    } & Record<string, unknown>;
+    journal.read.mockResolvedValueOnce({
+      ...availableRecord,
+      status: "downloading",
+      restartIntent: false,
+      components: availableRecord.components.map((component) => ({
+        ...component,
+        downloaded: component.id === "shell",
+        verified: component.id === "shell",
+      })),
+    });
+
+    await expect(
+      coordinator.reconcileOnStartup({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.5.0",
+        pendingRuntimeVersion: null,
+      })
+    ).resolves.toMatchObject({
+      status: "failed",
+      restartRequired: false,
+      diagnostics: {
+        failedComponentId: "runtime:win32-x64",
+        failedPhase: "downloading",
+      },
+    });
+    expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: "failed",
+      restartIntent: false,
+      components: [
+        expect.objectContaining({ id: "shell", verified: true }),
+        expect.objectContaining({
+          id: "runtime:win32-x64",
+          verified: false,
+          errorSummary: "The previous Desktop update did not complete",
+        }),
+      ],
+    });
+  });
+
+  it("rejects a verified Runtime plan when the pending artifact is missing", async () => {
+    const { coordinator, journal } = createHarness({ shellVersion: "0.3.0" });
+    await coordinator.check({ manual: true });
+    await coordinator.download();
+
+    await expect(
+      coordinator.reconcileOnStartup({
+        shellVersion: "0.3.0",
+        runtimeVersion: "0.5.0",
+        pendingRuntimeVersion: null,
+      })
+    ).resolves.toMatchObject({
+      status: "failed",
+      restartRequired: false,
+      errorSummary: "The staged Desktop Runtime is no longer available",
+      components: [
+        expect.objectContaining({
+          id: "runtime:win32-x64",
+          status: "failed",
+          downloaded: false,
+          verified: false,
+        }),
+      ],
+      diagnostics: {
+        failedComponentId: "runtime:win32-x64",
+        failedPhase: "verifying",
+        recoveryAction: "Check for updates again to download the Runtime update.",
+      },
+    });
+    expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: "failed",
+      restartIntent: false,
+      components: [
+        expect.objectContaining({
+          id: "runtime:win32-x64",
+          downloaded: false,
+          verified: false,
+        }),
+      ],
+    });
+  });
+
+  it("rechecks metadata before retrying a recovered Runtime whose artifact is missing", async () => {
+    const first = createHarness({ shellVersion: "0.3.0" });
+    await first.coordinator.check({ manual: true });
+    await first.coordinator.download();
+    const restarted = createHarness({
+      shellVersion: "0.3.0",
+      journalOverride: first.journal,
+    });
+    await restarted.coordinator.reconcileOnStartup({
+      shellVersion: "0.3.0",
+      runtimeVersion: "0.5.0",
+      pendingRuntimeVersion: null,
+    });
+
+    await expect(restarted.coordinator.retryFailed()).resolves.toMatchObject({
+      status: "ready",
+      restartRequired: true,
+    });
+    expect(restarted.runtime.checkMetadata).toHaveBeenCalledTimes(1);
+    expect(restarted.runtime.downloadAndStage).toHaveBeenCalledTimes(1);
+  });
+
   it("reports Shell installer recovery details for a Shell-only restart failure", async () => {
     const { coordinator, shell } = createHarness({ runtimeVersion: "0.6.0" });
     shell.getDiagnostics.mockReturnValue({
@@ -483,6 +645,52 @@ describe("DesktopUpdateCoordinator", () => {
         recoveryAction: "https://releases.example/manual-installer",
       },
     });
+    coordinator.stop();
+  });
+
+  it("persists a failed Runtime activation before startup scheduling rereads the journal", async () => {
+    const { coordinator, shell, journal } = createHarness();
+    await coordinator.check({ manual: true });
+    await coordinator.download();
+    await coordinator.prepareRestart();
+
+    await expect(
+      coordinator.reconcileOnStartup({
+        shellVersion: "0.3.0",
+        runtimeVersion: "0.5.0",
+        pendingRuntimeVersion: null,
+      })
+    ).resolves.toMatchObject({
+      status: "failed",
+      diagnostics: {
+        failedComponentId: "runtime:win32-x64",
+        failedPhase: "activating",
+      },
+    });
+    expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: "failed",
+      restartIntent: false,
+      components: [
+        expect.objectContaining({ id: "shell", installed: true }),
+        expect.objectContaining({
+          id: "runtime:win32-x64",
+          downloaded: false,
+          verified: false,
+          installed: false,
+        }),
+      ],
+    });
+    expect(shell.disarmInstallOnQuit).toHaveBeenCalledTimes(1);
+
+    await coordinator.start();
+    expect(coordinator.getState()).toMatchObject({
+      status: "failed",
+      diagnostics: {
+        failedComponentId: "runtime:win32-x64",
+        failedPhase: "activating",
+      },
+    });
+    expect(shell.armInstallOnQuit).toHaveBeenCalledTimes(1);
     coordinator.stop();
   });
 });

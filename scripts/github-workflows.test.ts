@@ -446,6 +446,9 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Validate required Desktop acceptance report"
     );
     const promoteIndex = steps.findIndex((step) => step.name === "Promote accepted CLI dist-tag");
+    const preserveDesktop = steps.find(
+      (step) => step.name === "Preserve Desktop update channel assets"
+    );
     expect(packIndex).toBeGreaterThan(-1);
     expect(stageIndex).toBeGreaterThan(packIndex);
     expect(acceptanceIndex).toBeGreaterThan(stageIndex);
@@ -456,6 +459,10 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag rm");
+    expect(preserveDesktop?.run).toContain(
+      'gh release download "${latest_tag}" --dir desktop-channel-assets --clobber'
+    );
+    expect(preserveDesktop?.run).not.toContain("--pattern");
     expect(JSON.stringify(cli)).not.toContain("pnpm publish:cli -- --publish");
   });
 });

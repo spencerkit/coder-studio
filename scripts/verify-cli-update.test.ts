@@ -29,7 +29,14 @@ function createDeps(): VerifyCliUpdateDeps {
         };
       }
       if (op === "updates.prepareInstall") {
-        return { hasActiveWork: false, runningTerminalCount: 0, runningSessionCount: 0 };
+        return {
+          activity: {
+            hasActiveWork: false,
+            runningTerminalCount: 0,
+            runningSessionCount: 0,
+            runningSupervisorCount: 0,
+          },
+        };
       }
       if (op === "updates.startInstall") {
         return {
@@ -124,6 +131,54 @@ describe("verify-cli-update", () => {
     });
     expect(deps.runFailureScenario).toHaveBeenCalledTimes(3);
     expect(deps.removePrefix).toHaveBeenCalledWith(prefix);
+  });
+
+  it("rejects an acceptance prefix that reports active work", async () => {
+    const deps = createDeps();
+    vi.mocked(deps.callWs).mockImplementation(async ({ op }) => {
+      if (op === "updates.getState") {
+        return { version: 2, currentVersion: "0.5.0", updateStatus: "idle" };
+      }
+      if (op === "updates.check") {
+        return {
+          version: 2,
+          currentVersion: "0.5.0",
+          latestVersion: "0.6.0",
+          latestPublishedAt: "2026-08-08T01:02:03.000Z",
+        };
+      }
+      if (op === "updates.prepareInstall") {
+        return {
+          activity: {
+            hasActiveWork: true,
+            runningTerminalCount: 1,
+            runningSessionCount: 0,
+            runningSupervisorCount: 0,
+          },
+        };
+      }
+      if (op === "updates.startInstall") {
+        throw new Error("startInstall must not run while acceptance has active work");
+      }
+      throw new Error(`Unexpected operation: ${op}`);
+    });
+
+    await expect(
+      verifyCliUpdate(
+        {
+          packageName: "@spencer-kit/coder-studio",
+          previousVersion: "0.5.0",
+          candidateVersion: "0.6.0",
+          registryUrl: "https://registry.npmjs.org/",
+          distTag: "candidate",
+          prefix: resolve("/tmp/coder-studio-cli-acceptance-active"),
+        },
+        deps
+      )
+    ).rejects.toThrow("active work");
+    expect(deps.callWs).not.toHaveBeenCalledWith(
+      expect.objectContaining({ op: "updates.startInstall" })
+    );
   });
 
   it("rejects failure evidence that escapes the validated acceptance prefix", async () => {
