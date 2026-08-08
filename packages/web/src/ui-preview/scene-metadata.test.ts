@@ -72,6 +72,35 @@ describe("ui preview scene metadata", () => {
     expect(scene?.capture?.selector).toBe(".settings-mobile-root");
   });
 
+  it("captures route-backed settings details without legacy SettingsPage navigation", () => {
+    const detailScenes = UI_PREVIEW_SCENE_METADATA.filter((scene) =>
+      [
+        "settings-general",
+        "settings-appearance",
+        "settings-providers",
+        "settings-shortcuts",
+      ].includes(scene.id)
+    );
+
+    expect(detailScenes).toHaveLength(4);
+    expect(
+      detailScenes.map((scene) => ({
+        id: scene.id,
+        selector: scene.capture?.selector,
+        settingsSection: scene.capture?.settingsSection,
+      }))
+    ).toEqual([
+      { id: "settings-general", selector: ".more-features-page", settingsSection: undefined },
+      {
+        id: "settings-appearance",
+        selector: ".more-features-page",
+        settingsSection: undefined,
+      },
+      { id: "settings-providers", selector: ".more-features-page", settingsSection: undefined },
+      { id: "settings-shortcuts", selector: ".more-features-page", settingsSection: undefined },
+    ]);
+  });
+
   it("registers a dedicated monitoring settings review scene", () => {
     const scene = UI_PREVIEW_SCENE_METADATA.find((entry) => entry.id === "settings-monitoring");
 
@@ -121,7 +150,7 @@ describe("ui preview scene metadata", () => {
       expect.arrayContaining(["settings-appearance", "workspace-desktop", "workspace-mobile"])
     );
     expect(appearanceScene?.source).toBe("real-route");
-    expect(appearanceScene?.capture?.settingsSection).toBe("appearance");
+    expect(appearanceScene?.capture?.selector).toBe(".more-features-page");
     expect(appearanceScene?.description.toLowerCase()).toContain("appearance");
     expect(desktopWorkspaceScene?.source).toBe("real-route");
     expect(desktopWorkspaceScene?.description.toLowerCase()).toContain("appearance");

@@ -33,7 +33,10 @@ describe("WslRuntimeUpdateAdapter", () => {
       checkRuntime: vi.fn(async () => metadata),
       downloadAndStageRuntime: vi.fn(async () => ({ manifest: metadata.manifest })),
     };
-    const runtimeStore = { readPendingVersion: vi.fn(async () => "0.6.0") };
+    const runtimeStore = {
+      getLaunchCandidate: vi.fn(async () => ({ manifest: { runtimeVersion: "0.5.0" } })),
+      readPendingVersion: vi.fn(async () => "0.6.0"),
+    };
     const adapter = new WslRuntimeUpdateAdapter({
       probe,
       installer: installer as never,
@@ -50,6 +53,7 @@ describe("WslRuntimeUpdateAdapter", () => {
 
     expect(installer.checkRuntime).toHaveBeenCalledWith(probe, expected, "0.7.0");
     expect(installer.downloadAndStageRuntime).toHaveBeenCalledWith(metadata, options);
+    await expect(adapter.getCurrentVersion()).resolves.toBe("0.5.0");
     await expect(adapter.getPendingVersion()).resolves.toBe("0.6.0");
   });
 });

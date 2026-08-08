@@ -92,12 +92,16 @@ function createHarness(
     cancelDownload: vi.fn(() => true),
     armInstallOnQuit: vi.fn(),
     disarmInstallOnQuit: vi.fn(),
-    getDiagnostics: vi.fn(() => ({ logLocations: [], recoveryAction: null })),
+    getDiagnostics: vi.fn((): { logLocations: string[]; recoveryAction: string | null } => ({
+      logLocations: [],
+      recoveryAction: null,
+    })),
     quitAndInstall: vi.fn(),
   };
   const runtime = {
     checkMetadata: vi.fn(async () => runtimeMetadata()),
     downloadAndStage: vi.fn(async () => options.runtimeDownload),
+    getCurrentVersion: vi.fn(async () => runtimeVersion),
     getPendingVersion: vi.fn(async () => null),
   };
   const journalRecord = { value: null as unknown };
@@ -151,6 +155,7 @@ function createHarness(
     initialEnvironmentId: "native",
     settings: settings as never,
     journal: journal as never,
+    journalLocation: "C:\\Coder Studio\\desktop-update-plan.json",
     now: () => Date.parse("2026-08-08T02:00:00.000Z"),
     randomId: () => "plan-1",
     onStateChanged: (state) => states.push(state),
@@ -161,6 +166,14 @@ function createHarness(
 }
 
 describe("DesktopUpdateCoordinator", () => {
+  it("includes the durable update journal in diagnostics", () => {
+    const { coordinator } = createHarness();
+
+    expect(coordinator.getState().diagnostics.logLocations).toContain(
+      "C:\\Coder Studio\\desktop-update-plan.json"
+    );
+  });
+
   it.each([
     ["no update", "0.3.0", "0.6.0", [], "idle"],
     ["Shell only", "0.2.0", "0.6.0", ["shell"], "available"],
@@ -195,6 +208,115 @@ describe("DesktopUpdateCoordinator", () => {
     expect(
       (journal.write.mock.calls.at(-1)?.[0] as { components: { verified: boolean }[] }).components
     ).toEqual(expect.arrayContaining([expect.objectContaining({ verified: true })]));
+  });
+
+  it("journals the downloading transition before pending component downloads finish", async () => {
+    const shellDownload = deferred<void>();
+    const runtimeDownload = deferred<unknown>();
+    const { coordinator, journal } = createHarness({
+      shellDownload: shellDownload.promise,
+      runtimeDownload: runtimeDownload.promise,
+    });
+    await coordinator.check({ manual: true });
+
+    const downloading = coordinator.download();
+
+    await vi.waitFor(() => {
+      expect(journal.write).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "downloading" })
+      );
+    });
+    shellDownload.resolve();
+    runtimeDownload.resolve(undefined);
+    await downloading;
+  });
+
+  it("restores the available plan when the downloading transition cannot be journaled", async () => {
+    const { coordinator, shell, runtime, journal } = createHarness();
+    await coordinator.check({ manual: true });
+    journal.write.mockRejectedValueOnce(new Error("journal unavailable"));
+
+    await expect(coordinator.download()).rejects.toThrow("journal unavailable");
+
+    expect(shell.download).not.toHaveBeenCalled();
+    expect(runtime.downloadAndStage).not.toHaveBeenCalled();
+    expect(coordinator.getState()).toMatchObject({ status: "available" });
+    await expect(coordinator.check({ manual: true })).resolves.toBeDefined();
+  });
+
+  it("journals a verified component while another component is still downloading", async () => {
+    const shellDownload = deferred<void>();
+    const runtimeDownload = deferred<unknown>();
+    const { coordinator, journal } = createHarness({
+      shellDownload: shellDownload.promise,
+      runtimeDownload: runtimeDownload.promise,
+    });
+    await coordinator.check({ manual: true });
+    const downloading = coordinator.download();
+    await vi.waitFor(() => {
+      expect(journal.write).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "downloading" })
+      );
+    });
+
+    shellDownload.resolve();
+
+    await vi.waitFor(() => {
+      expect(
+        journal.write.mock.calls.some(([record]) => {
+          const components = (record as { components: Array<{ id: string; verified: boolean }> })
+            .components;
+          return (
+            components.find((component) => component.id === "shell")?.verified === true &&
+            components.find((component) => component.id === "runtime:win32-x64")?.verified === false
+          );
+        })
+      ).toBe(true);
+    });
+    runtimeDownload.resolve(undefined);
+    await downloading;
+  });
+
+  it("serializes component journal writes so an older snapshot cannot finish last", async () => {
+    const shellDownload = deferred<void>();
+    const runtimeDownload = deferred<unknown>();
+    const delayedWrite = deferred<void>();
+    const { coordinator, journal } = createHarness({
+      shellDownload: shellDownload.promise,
+      runtimeDownload: runtimeDownload.promise,
+    });
+    await coordinator.check({ manual: true });
+    const downloading = coordinator.download();
+    await vi.waitFor(() => {
+      expect(journal.write).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "downloading" })
+      );
+    });
+    const completedWrites = journal.write.mock.calls.length;
+    journal.write.mockImplementationOnce(async () => delayedWrite.promise);
+
+    shellDownload.resolve();
+    await vi.waitFor(() => {
+      expect(journal.write).toHaveBeenCalledTimes(completedWrites + 1);
+    });
+    runtimeDownload.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(
+        coordinator.getState().components.find((component) => component.id === "runtime:win32-x64")
+          ?.verified
+      ).toBe(true);
+    });
+
+    expect(journal.write).toHaveBeenCalledTimes(completedWrites + 1);
+    delayedWrite.resolve();
+    await downloading;
+    expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: "ready",
+      components: [
+        expect.objectContaining({ id: "shell", verified: true }),
+        expect.objectContaining({ id: "runtime:win32-x64", verified: true }),
+      ],
+    });
   });
 
   it("retains a verified component and explicitly retries only the failed component", async () => {
@@ -235,6 +357,23 @@ describe("DesktopUpdateCoordinator", () => {
     expect(runtime.downloadAndStage).not.toHaveBeenCalled();
   });
 
+  it("prepares a stale target environment even when the active environment is current", async () => {
+    const { coordinator, runtime } = createHarness({ runtimeVersion: "0.6.0" });
+    runtime.getCurrentVersion.mockResolvedValueOnce("0.5.0");
+    const linuxMetadata = runtimeMetadata();
+    linuxMetadata.componentId = "runtime:linux-x64";
+    linuxMetadata.manifest.platform = "linux";
+    runtime.checkMetadata.mockResolvedValueOnce(linuxMetadata);
+
+    await coordinator.prepareEnvironmentTarget("linux-x64", "wsl:ubuntu");
+
+    expect(runtime.getCurrentVersion).toHaveBeenCalledTimes(1);
+    expect(runtime.downloadAndStage).toHaveBeenCalledWith(
+      expect.objectContaining({ componentId: "runtime:linux-x64", version: "0.6.0" }),
+      expect.any(Object)
+    );
+  });
+
   it("creates one durable restart intent and hands Shell installation off once", async () => {
     const { coordinator, shell, journal } = createHarness();
     await coordinator.check({ manual: true });
@@ -247,6 +386,20 @@ describe("DesktopUpdateCoordinator", () => {
     expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({ restartIntent: true });
     await expect(coordinator.restartAndInstall()).resolves.toBe(true);
     expect(shell.quitAndInstall).toHaveBeenCalledTimes(1);
+    await expect(coordinator.restartAndInstall()).resolves.toBe(false);
+  });
+
+  it("does not arm Shell installation when restart intent persistence fails", async () => {
+    const { coordinator, shell, journal } = createHarness();
+    await coordinator.check({ manual: true });
+    await coordinator.download();
+    journal.write.mockRejectedValueOnce(new Error("journal unavailable"));
+
+    await expect(coordinator.prepareRestart()).rejects.toThrow("journal unavailable");
+
+    expect(shell.armInstallOnQuit).not.toHaveBeenCalled();
+    expect(shell.disarmInstallOnQuit).toHaveBeenCalledTimes(1);
+    expect(coordinator.getState()).toMatchObject({ status: "ready", restartRequired: true });
     await expect(coordinator.restartAndInstall()).resolves.toBe(false);
   });
 
@@ -267,5 +420,57 @@ describe("DesktopUpdateCoordinator", () => {
       productVersion: "0.6.0",
       productPublishedAt: "2026-08-08T01:02:03.000Z",
     });
+  });
+
+  it("recovers a fully verified interrupted download journal as ready", async () => {
+    const { coordinator, journal } = createHarness();
+    await coordinator.check({ manual: true });
+    await coordinator.download();
+    const readyRecord = journal.write.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    journal.read.mockResolvedValueOnce({
+      ...readyRecord,
+      status: "downloading",
+      restartIntent: false,
+    });
+
+    await expect(
+      coordinator.reconcileOnStartup({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.5.0",
+        pendingRuntimeVersion: "0.6.0",
+      })
+    ).resolves.toMatchObject({
+      status: "ready",
+      restartRequired: true,
+      errorSummary: null,
+    });
+    expect(journal.write.mock.calls.at(-1)?.[0]).toMatchObject({ status: "ready" });
+  });
+
+  it("reports Shell installer recovery details for a Shell-only restart failure", async () => {
+    const { coordinator, shell } = createHarness({ runtimeVersion: "0.6.0" });
+    shell.getDiagnostics.mockReturnValue({
+      logLocations: ["updater.log"],
+      recoveryAction: "https://releases.example/manual-installer",
+    });
+    await coordinator.check({ manual: true });
+    await coordinator.download();
+    await coordinator.prepareRestart();
+
+    await expect(
+      coordinator.reconcileOnStartup({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.6.0",
+        pendingRuntimeVersion: null,
+      })
+    ).resolves.toMatchObject({
+      status: "failed",
+      diagnostics: {
+        failedComponentId: "shell",
+        failedPhase: "installing",
+        recoveryAction: "https://releases.example/manual-installer",
+      },
+    });
+    expect(shell.disarmInstallOnQuit).toHaveBeenCalledTimes(1);
   });
 });

@@ -29,6 +29,7 @@ export interface DesktopUpdateCoordinatorDeps {
   initialEnvironmentId: string;
   settings: DesktopUpdateSettingsRepo;
   journal: DesktopUpdateJournal;
+  journalLocation: string;
   now: () => number;
   randomId: () => string;
   onStateChanged: (state: ProductUpdateState) => void;
@@ -62,6 +63,7 @@ export class DesktopUpdateCoordinator {
   private restartIntent = false;
   private startupTimer: NodeJS.Timeout | null = null;
   private intervalTimer: NodeJS.Timeout | null = null;
+  private journalWriteQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: DesktopUpdateCoordinatorDeps) {
     this.assertDesktopContext(deps.runtimeContext);
@@ -225,10 +227,10 @@ export class DesktopUpdateCoordinator {
     ) {
       throw updateError("update_not_ready", "The Desktop update plan is not ready to restart");
     }
+    const previousState = this.state;
+    const previousRestartIntent = this.restartIntent;
+    const includesShell = this.state.components.some((component) => component.id === "shell");
     this.restartIntent = true;
-    if (this.state.components.some((component) => component.id === "shell")) {
-      this.deps.shell.armInstallOnQuit();
-    }
     this.state = {
       ...this.state,
       status: "restarting",
@@ -238,7 +240,16 @@ export class DesktopUpdateCoordinator {
         status: "restarting",
       })),
     };
-    await this.persistPlan();
+    try {
+      await this.persistPlan();
+    } catch (error) {
+      this.state = previousState;
+      this.restartIntent = previousRestartIntent;
+      if (includesShell) this.deps.shell.disarmInstallOnQuit();
+      this.publish();
+      throw error;
+    }
+    if (includesShell) this.deps.shell.armInstallOnQuit();
     return this.publish();
   }
 
@@ -281,7 +292,8 @@ export class DesktopUpdateCoordinator {
       const buildInfo = this.deps.getBuildInfo();
       const expected = channel.runtimes[target];
       const metadata = await adapter.checkMetadata(expected, buildInfo.shellVersion);
-      if (compareVersions(metadata.version, this.deps.currentProductVersion()) <= 0) return;
+      const currentVersion = await adapter.getCurrentVersion();
+      if (compareVersions(metadata.version, currentVersion) <= 0) return;
       this.assertSourceMatchesRuntime(expected, metadata, target);
       this.busyPhase = "downloading";
       const controller = new AbortController();
@@ -350,13 +362,27 @@ export class DesktopUpdateCoordinator {
       await this.deps.journal.clear();
       return this.publish();
     }
+    if (!journal.restartIntent && components.every((component) => component.verified)) {
+      this.state = {
+        ...this.state,
+        status: "ready",
+        updatedAt: this.timestamp(),
+        components,
+        restartRequired: true,
+        errorSummary: null,
+      };
+      await this.persistPlan();
+      return this.publish();
+    }
     const shell = components.find((component) => component.id === "shell");
     const runtime = components.find((component) => component.kind === "runtime");
     if (
       journal.restartIntent &&
       shell &&
       shell.status !== "succeeded" &&
-      runtime?.targetVersion === actual.pendingRuntimeVersion
+      (!runtime ||
+        runtime.status === "succeeded" ||
+        runtime.targetVersion === actual.pendingRuntimeVersion)
     ) {
       this.state = {
         ...this.state,
@@ -409,6 +435,7 @@ export class DesktopUpdateCoordinator {
     if (!this.runtimeAdapter && selected.some((component) => component.kind === "runtime")) {
       throw updateError("update_plan_invalid", "The Runtime update adapter is unavailable");
     }
+    const availableState = this.state;
     this.busyPhase = "downloading";
     this.cancelRequested = false;
     this.state = {
@@ -423,6 +450,14 @@ export class DesktopUpdateCoordinator {
       ),
     };
     this.publish();
+    try {
+      await this.persistPlan();
+    } catch (error) {
+      this.state = availableState;
+      this.busyPhase = null;
+      this.publish();
+      throw error;
+    }
 
     const tasks = selected.map(async (component) => {
       const controller = new AbortController();
@@ -450,6 +485,7 @@ export class DesktopUpdateCoordinator {
           verified: true,
           errorSummary: null,
         });
+        await this.persistPlan();
       } catch (error) {
         if (this.cancelRequested) return;
         const summary = error instanceof Error ? error.message : String(error);
@@ -458,6 +494,7 @@ export class DesktopUpdateCoordinator {
           progressPercent: null,
           errorSummary: summary,
         });
+        await this.persistPlan();
       } finally {
         this.controllers.delete(component.id);
       }
@@ -657,7 +694,7 @@ export class DesktopUpdateCoordinator {
       runtimeHostApiVersion: buildInfo.runtimeHostApiVersion,
       apiProtocolVersion: buildInfo.apiProtocolVersion,
       dataSchemaVersion: buildInfo.dataSchemaVersion,
-      logLocations: shell.logLocations,
+      logLocations: [...new Set([...shell.logLocations, this.deps.journalLocation])],
       recoveryAction: shell.recoveryAction,
     };
   }
@@ -693,7 +730,7 @@ export class DesktopUpdateCoordinator {
               ? "failed"
               : "available";
     const failed = this.state.components.find((component) => component.errorSummary);
-    await this.deps.journal.write({
+    const record: DesktopUpdateJournalRecord = {
       schemaVersion: 1,
       planId: this.state.planId,
       status,
@@ -720,7 +757,10 @@ export class DesktopUpdateCoordinator {
             summary: failed.errorSummary as string,
           }
         : null,
-    });
+    };
+    const pending = this.journalWriteQueue.then(() => this.deps.journal.write(record));
+    this.journalWriteQueue = pending.catch(() => {});
+    await pending;
   }
 
   private restoreJournal(journal: DesktopUpdateJournalRecord): void {

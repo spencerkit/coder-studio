@@ -697,6 +697,7 @@ async function startApplication(): Promise<void> {
     !smokeResultPath
   ) {
     const buildInfo = await readDesktopBuildInfo(process.resourcesPath, app.getVersion());
+    const updateJournalPath = join(rootUserDataDir, "desktop-update-plan.json");
     const shellUpdateAdapter = new DesktopShellUpdateAdapter({
       updater: autoUpdater as unknown as ShellUpdaterPort,
       currentVersion: app.getVersion(),
@@ -747,9 +748,10 @@ async function startApplication(): Promise<void> {
         onWarning: (message) => console.warn("[desktop-update]", message),
       }),
       journal: new DesktopUpdateJournal({
-        filePath: join(rootUserDataDir, "desktop-update-plan.json"),
+        filePath: updateJournalPath,
         onWarning: (message) => console.warn("[desktop-update]", message),
       }),
+      journalLocation: updateJournalPath,
       now: Date.now,
       randomId: randomUUID,
       onStateChanged: (state) => {

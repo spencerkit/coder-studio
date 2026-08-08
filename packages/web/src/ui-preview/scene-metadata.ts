@@ -59,7 +59,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     devices: ["desktop", "mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
-    capture: { selector: ".settings-page", settingsSection: "general" },
+    capture: { selector: ".more-features-page" },
   },
   {
     id: "settings-appearance",
@@ -71,7 +71,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     devices: ["desktop", "mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
-    capture: { selector: ".settings-page", settingsSection: "appearance" },
+    capture: { selector: ".more-features-page" },
   },
   {
     id: "settings-providers",
@@ -82,7 +82,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     devices: ["desktop", "mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
-    capture: { selector: ".settings-page", settingsSection: "providers" },
+    capture: { selector: ".more-features-page" },
   },
   {
     id: "settings-shortcuts",
@@ -93,7 +93,7 @@ export const UI_PREVIEW_SCENE_METADATA: UiPreviewSceneMetadata[] = [
     devices: ["desktop", "mobile"],
     themes: allThemeIds(),
     locales: ["zh", "en"],
-    capture: { selector: ".settings-page", settingsSection: "shortcuts" },
+    capture: { selector: ".more-features-page" },
   },
   {
     id: "settings-monitoring",

@@ -94,6 +94,7 @@ export interface RuntimeDownloadOptions {
 }
 
 export interface RuntimeUpdateAdapter {
+  getCurrentVersion(): Promise<string>;
   checkMetadata(
     expected: DesktopChannelRuntime,
     plannedShellVersion: string
@@ -123,6 +124,10 @@ export class ProductRuntimeUpdateManager {
 
   constructor(private readonly options: RuntimeUpdateManagerOptions) {
     this.status = options.manifestUrl ? "idle" : "disabled";
+  }
+
+  async getCurrentVersion(): Promise<string> {
+    return this.options.getCurrentRuntime().manifest.runtimeVersion;
   }
 
   start(): void {

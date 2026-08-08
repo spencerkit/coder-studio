@@ -19,6 +19,11 @@ on:
         type: string
         required: false
         default: ""
+    secrets:
+      windows_csc_link:
+        required: false
+      windows_csc_key_password:
+        required: false
     outputs:
       windows_artifact:
         description: Windows Desktop verification artifact
@@ -109,6 +114,8 @@ jobs:
     timeout-minutes: 60
     env:
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CSC_LINK: ${{ secrets.windows_csc_link }}
+      CSC_KEY_PASSWORD: ${{ secrets.windows_csc_key_password }}
     outputs:
       artifact_name: ${{ steps.artifact_name.outputs.value }}
 
@@ -162,8 +169,34 @@ jobs:
           pnpm --filter @coder-studio/desktop test
           pnpm --filter @coder-studio/desktop typecheck
 
+      - name: Require acceptance Authenticode credentials
+        if: inputs.signed
+        shell: pwsh
+        run: |
+          if (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD) {
+            throw 'Windows Authenticode signing secrets are required for signed Desktop acceptance'
+          }
+
       - name: Build Windows installer and Runtime
         run: pnpm dist:desktop
+
+      - name: Verify acceptance Authenticode signatures
+        if: inputs.signed
+        shell: pwsh
+        run: |
+          $metadata = Get-Content release/desktop/latest.yml -Raw
+          $installerName = [regex]::Match($metadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $paths = @(
+            (Join-Path release/desktop $installerName),
+            'release/desktop/win-unpacked/Coder Studio.exe',
+            'release/desktop/win-unpacked/resources/engine/node.exe'
+          )
+          foreach ($path in $paths) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne 'Valid') {
+              throw "Invalid Authenticode signature for ${path}: $($signature.Status)"
+            }
+          }
 
       - name: Smoke packaged Engine, Runtime, PTY, and Electron window
         run: pnpm smoke:desktop

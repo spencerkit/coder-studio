@@ -182,12 +182,12 @@ describe("UI preview catalog", () => {
     );
   });
 
-  it("marks settings section scenes for capture-time navigation", () => {
+  it("deep-links settings section scenes for direct More page capture", () => {
     const scene = getUiPreviewScene("settings-appearance");
     expect(
       scene?.router({ theme: "mint-dark", locale: "en", device: "desktop" }).initialEntries
     ).toEqual(["/more/settings/appearance"]);
-    expect(scene?.capture?.settingsSection).toBe("appearance");
+    expect(scene?.capture).toEqual({ selector: ".more-features-page" });
   });
 
   it("renders settings section scenes through the canonical More route", async () => {
@@ -209,9 +209,9 @@ describe("UI preview catalog", () => {
     expect(screen.getByRole("button", { name: "Agents" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("marks the shortcuts settings scene for capture-time navigation", () => {
+  it("captures the deep-linked shortcuts scene from the More page", () => {
     const scene = getUiPreviewScene("settings-shortcuts");
-    expect(scene?.capture?.settingsSection).toBe("shortcuts");
+    expect(scene?.capture).toEqual({ selector: ".more-features-page" });
   });
 
   it("deep-links the monitoring settings scene directly into the monitoring section", () => {

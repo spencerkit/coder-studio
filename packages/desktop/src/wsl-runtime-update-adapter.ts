@@ -22,6 +22,10 @@ export class WslRuntimeUpdateAdapter implements RuntimeUpdateAdapter {
     }
   ) {}
 
+  async getCurrentVersion(): Promise<string> {
+    return (await this.options.runtimeStore.getLaunchCandidate()).manifest.runtimeVersion;
+  }
+
   checkMetadata(
     expected: DesktopChannelRuntime,
     plannedShellVersion: string

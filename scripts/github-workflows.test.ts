@@ -11,6 +11,7 @@ interface WorkflowJob {
   outputs?: Record<string, string>;
   with?: Record<string, unknown>;
   strategy?: { matrix?: Record<string, unknown> };
+  secrets?: Record<string, string>;
   steps?: Array<{
     id?: string;
     name?: string;
@@ -51,6 +52,7 @@ describe("GitHub workflow boundaries", () => {
     const workflowCall = workflow.on.workflow_call as {
       inputs: Record<string, { type: string; required: boolean; default?: unknown }>;
       outputs: Record<string, { description: string; value: string }>;
+      secrets: Record<string, { required: boolean }>;
     };
     const windowsJob = workflow.jobs["desktop-windows-verify"];
     const linuxJob = workflow.jobs["desktop-linux-assets-verify"];
@@ -86,6 +88,10 @@ describe("GitHub workflow boundaries", () => {
       signing_key_artifact: { type: "string", required: false, default: "" },
       runtime_update_url: { type: "string", required: false, default: "" },
       release_tag: { type: "string", required: false, default: "" },
+    });
+    expect(workflowCall.secrets).toEqual({
+      windows_csc_link: { required: false },
+      windows_csc_key_password: { required: false },
     });
     expect(workflowCall.outputs).toEqual({
       windows_artifact: {
@@ -128,6 +134,16 @@ describe("GitHub workflow boundaries", () => {
       name: "${{ steps.artifact_name.outputs.value }}",
       overwrite: true,
     });
+    expect(windowsJob.env).toMatchObject({
+      CSC_LINK: "${{ secrets.windows_csc_link }}",
+      CSC_KEY_PASSWORD: "${{ secrets.windows_csc_key_password }}",
+    });
+    const authenticode = windowsSteps.find(
+      (step) => step.name === "Verify acceptance Authenticode signatures"
+    );
+    expect(authenticode?.if).toBe("inputs.signed");
+    expect(authenticode?.run).toContain("Get-AuthenticodeSignature");
+    expect(authenticode?.run).toContain("release/desktop/latest.yml");
     expect(linuxUpload?.with).toMatchObject({
       name: "${{ steps.artifact_name.outputs.value }}",
       overwrite: true,
@@ -245,6 +261,10 @@ describe("GitHub workflow boundaries", () => {
         signing_key_artifact: "${{ needs.prepare.outputs.signing_key_artifact }}",
         runtime_update_url: "${{ needs.prepare.outputs.runtime_update_url }}",
         release_tag: "${{ needs.prepare.outputs.release_tag }}",
+      },
+      secrets: {
+        windows_csc_link: "${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}",
+        windows_csc_key_password: "${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}",
       },
     });
     expect(publish.needs).toEqual(["prepare", "repository-verify", "build-assets"]);

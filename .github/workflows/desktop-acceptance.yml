@@ -76,6 +76,9 @@ jobs:
       signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
       runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
       release_tag: ${{ needs.prepare.outputs.release_tag }}
+    secrets:
+      windows_csc_link: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
+      windows_csc_key_password: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
 
   publish:
     name: Publish signed Desktop acceptance channel

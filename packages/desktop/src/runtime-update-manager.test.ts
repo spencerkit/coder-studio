@@ -78,6 +78,15 @@ async function writeRuntime(
 }
 
 describe("ProductRuntimeUpdateManager", () => {
+  it("reports the current Runtime version bound to its target environment", async () => {
+    const manager = new ProductRuntimeUpdateManager({
+      store: null as never,
+      getCurrentRuntime: () => ({ manifest: { runtimeVersion: "0.5.6" } }) as never,
+    });
+
+    await expect(manager.getCurrentVersion()).resolves.toBe("0.5.6");
+  });
+
   it("checks signed metadata without downloading or staging the package", async () => {
     const root = await temporaryRoot();
     const factoryRoot = resolve(root, "factory");
