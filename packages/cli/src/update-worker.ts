@@ -3,28 +3,7 @@ import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-
-interface UpdateStateSnapshot {
-  version: 1;
-  currentVersion: string;
-  latestVersion: string | null;
-  availability: "unknown" | "up_to_date" | "update_available" | "check_failed";
-  updateStatus:
-    | "idle"
-    | "checking"
-    | "installing"
-    | "restarting"
-    | "succeeded"
-    | "failed"
-    | "manual_required";
-  lastCheckedAt: number | null;
-  targetVersion: string | null;
-  startedAt: number | null;
-  finishedAt: number | null;
-  requiresManualStep: boolean;
-  manualCommand: string | null;
-  errorSummary: string | null;
-}
+import type { UpdateStateSnapshot } from "@coder-studio/core";
 
 interface WorkerEnv {
   stateFilePath: string;
@@ -33,6 +12,8 @@ interface WorkerEnv {
   targetVersion: string;
   cliCommand: string;
   currentVersion: string;
+  currentPublishedAt: string | null;
+  targetPublishedAt: string | null;
   npmCommand: string;
   restartArgs: string[];
   installArgsPrefix: string[];
@@ -75,6 +56,12 @@ function parseJsonArray(value: string | undefined, fallback: string[]): string[]
   return fallback;
 }
 
+function normalizePublishedAt(value: string | undefined): string | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
 function readEnv(env = process.env): WorkerEnv {
   const stateFilePath = env.CODER_STUDIO_UPDATE_STATE_PATH;
   const logFilePath = env.CODER_STUDIO_UPDATE_LOG_PATH;
@@ -99,6 +86,8 @@ function readEnv(env = process.env): WorkerEnv {
     targetVersion,
     cliCommand,
     currentVersion,
+    currentPublishedAt: normalizePublishedAt(env.CODER_STUDIO_UPDATE_CURRENT_PUBLISHED_AT),
+    targetPublishedAt: normalizePublishedAt(env.CODER_STUDIO_UPDATE_TARGET_PUBLISHED_AT),
     npmCommand: env.CODER_STUDIO_UPDATE_NPM_COMMAND || "npm",
     restartArgs: parseJsonArray(env.CODER_STUDIO_UPDATE_RESTART_ARGS, ["serve", "--restart"]),
     installArgsPrefix: parseJsonArray(env.CODER_STUDIO_UPDATE_INSTALL_ARGS_PREFIX, [
@@ -167,9 +156,46 @@ function buildWorkerEnv(input: WorkerEnv): NodeJS.ProcessEnv {
     CODER_STUDIO_UPDATE_TARGET_VERSION: input.targetVersion,
     CODER_STUDIO_UPDATE_CLI_COMMAND: input.cliCommand,
     CODER_STUDIO_UPDATE_CURRENT_VERSION: input.currentVersion,
+    CODER_STUDIO_UPDATE_CURRENT_PUBLISHED_AT: input.currentPublishedAt ?? "",
+    CODER_STUDIO_UPDATE_TARGET_PUBLISHED_AT: input.targetPublishedAt ?? "",
     CODER_STUDIO_UPDATE_NPM_COMMAND: input.npmCommand,
     CODER_STUDIO_UPDATE_RESTART_ARGS: JSON.stringify(input.restartArgs),
     CODER_STUDIO_UPDATE_INSTALL_ARGS_PREFIX: JSON.stringify(input.installArgsPrefix),
+  };
+}
+
+function createWorkerState(
+  input: WorkerEnv,
+  timestamp: number,
+  patch: Partial<
+    Pick<
+      UpdateStateSnapshot,
+      | "availability"
+      | "updateStatus"
+      | "startedAt"
+      | "finishedAt"
+      | "requiresManualStep"
+      | "manualCommand"
+      | "errorSummary"
+    >
+  >
+): UpdateStateSnapshot {
+  return {
+    version: 2,
+    currentVersion: input.currentVersion,
+    currentPublishedAt: input.currentPublishedAt,
+    latestVersion: input.targetVersion,
+    latestPublishedAt: input.targetPublishedAt,
+    availability: "update_available",
+    updateStatus: "installing",
+    lastCheckedAt: timestamp,
+    targetVersion: input.targetVersion,
+    startedAt: timestamp,
+    finishedAt: null,
+    requiresManualStep: false,
+    manualCommand: null,
+    errorSummary: null,
+    ...patch,
   };
 }
 
@@ -285,38 +311,28 @@ export async function runUpdateWorker(
     const permissionRelated =
       /EACCES|EPERM|permission|not permitted/i.test(message) ||
       /requires elevated privileges/i.test(message);
-    await writeState(input.stateFilePath, {
-      version: 1,
-      currentVersion: input.currentVersion,
-      latestVersion: input.targetVersion,
-      availability: "update_available",
-      updateStatus: permissionRelated ? "manual_required" : "failed",
-      lastCheckedAt: now(),
-      targetVersion: input.targetVersion,
-      startedAt: now(),
-      finishedAt: now(),
-      requiresManualStep: permissionRelated,
-      manualCommand: permissionRelated ? buildManualCommand(input) : null,
-      errorSummary: message,
-    });
+    const timestamp = now();
+    await writeState(
+      input.stateFilePath,
+      createWorkerState(input, timestamp, {
+        updateStatus: permissionRelated ? "manual_required" : "failed",
+        finishedAt: timestamp,
+        requiresManualStep: permissionRelated,
+        manualCommand: permissionRelated ? buildManualCommand(input) : null,
+        errorSummary: message,
+      })
+    );
     await closeLogStream(logStream);
     return;
   }
 
-  await writeState(input.stateFilePath, {
-    version: 1,
-    currentVersion: input.currentVersion,
-    latestVersion: input.targetVersion,
-    availability: "update_available",
-    updateStatus: "restarting",
-    lastCheckedAt: now(),
-    targetVersion: input.targetVersion,
-    startedAt: now(),
-    finishedAt: null,
-    requiresManualStep: false,
-    manualCommand: null,
-    errorSummary: null,
-  });
+  const installedAt = now();
+  await writeState(
+    input.stateFilePath,
+    createWorkerState(input, installedAt, {
+      updateStatus: "restarting",
+    })
+  );
 
   try {
     await spawnRestartHandoff(process.execPath, [WORKER_ENTRY_PATH], {
@@ -327,20 +343,17 @@ export async function runUpdateWorker(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await writeState(input.stateFilePath, {
-      version: 1,
-      currentVersion: input.currentVersion,
-      latestVersion: input.targetVersion,
-      availability: "update_available",
-      updateStatus: "failed",
-      lastCheckedAt: now(),
-      targetVersion: input.targetVersion,
-      startedAt: now(),
-      finishedAt: now(),
-      requiresManualStep: true,
-      manualCommand: `${input.cliCommand} ${input.restartArgs.join(" ")}`,
-      errorSummary: `new version installed but service restart failed: ${message}`,
-    });
+    const timestamp = now();
+    await writeState(
+      input.stateFilePath,
+      createWorkerState(input, timestamp, {
+        updateStatus: "failed",
+        finishedAt: timestamp,
+        requiresManualStep: true,
+        manualCommand: `${input.cliCommand} ${input.restartArgs.join(" ")}`,
+        errorSummary: `new version installed but service restart failed: ${message}`,
+      })
+    );
   } finally {
     await closeLogStream(logStream);
   }
@@ -371,20 +384,17 @@ export async function runRestartHandoff(
     await execute(input.cliCommand, input.restartArgs, { logStream, env: childEnv });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await writeState(input.stateFilePath, {
-      version: 1,
-      currentVersion: input.currentVersion,
-      latestVersion: input.targetVersion,
-      availability: "update_available",
-      updateStatus: "failed",
-      lastCheckedAt: now(),
-      targetVersion: input.targetVersion,
-      startedAt: now(),
-      finishedAt: now(),
-      requiresManualStep: true,
-      manualCommand: `${input.cliCommand} ${input.restartArgs.join(" ")}`,
-      errorSummary: `new version installed but service restart failed: ${message}`,
-    });
+    const timestamp = now();
+    await writeState(
+      input.stateFilePath,
+      createWorkerState(input, timestamp, {
+        updateStatus: "failed",
+        finishedAt: timestamp,
+        requiresManualStep: true,
+        manualCommand: `${input.cliCommand} ${input.restartArgs.join(" ")}`,
+        errorSummary: `new version installed but service restart failed: ${message}`,
+      })
+    );
   } finally {
     await closeLogStream(logStream);
   }

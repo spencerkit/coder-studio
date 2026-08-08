@@ -56,6 +56,8 @@ export interface UpdateServiceDeps {
     targetVersion: string;
     cliCommand: string;
     currentVersion: string;
+    currentPublishedAt: string | null;
+    targetPublishedAt: string | null;
     npmCommand: string;
     restartArgs: string[];
     installArgsPrefix: string[];
@@ -281,6 +283,8 @@ export class UpdateService {
         targetVersion,
         cliCommand: this.runtime.cliCommand,
         currentVersion: this.runtime.currentVersion,
+        currentPublishedAt: state.currentPublishedAt,
+        targetPublishedAt: state.latestPublishedAt,
         npmCommand: this.runtime.npmCommand ?? "npm",
         restartArgs: this.runtime.restartArgs ?? ["serve", "--restart"],
         installArgsPrefix: this.runtime.installArgsPrefix ?? ["install", "-g"],
@@ -417,6 +421,8 @@ export class UpdateService {
         CODER_STUDIO_UPDATE_CLI_COMMAND: input.cliCommand,
         CODER_STUDIO_UPDATE_NPM_COMMAND: input.npmCommand,
         CODER_STUDIO_UPDATE_CURRENT_VERSION: input.currentVersion,
+        CODER_STUDIO_UPDATE_CURRENT_PUBLISHED_AT: input.currentPublishedAt ?? "",
+        CODER_STUDIO_UPDATE_TARGET_PUBLISHED_AT: input.targetPublishedAt ?? "",
         CODER_STUDIO_UPDATE_RESTART_ARGS: JSON.stringify(input.restartArgs),
         CODER_STUDIO_UPDATE_INSTALL_ARGS_PREFIX: JSON.stringify(input.installArgsPrefix),
       },

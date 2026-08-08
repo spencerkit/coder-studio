@@ -440,9 +440,11 @@ describe("UpdateService", () => {
       countRunningSessions: vi.fn(() => 1),
       updateStateRepo: {
         get: vi.fn(() => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "idle",
           lastCheckedAt: 5,
@@ -570,9 +572,11 @@ describe("UpdateService", () => {
       updateStateRepo: {
         getFilePath: vi.fn(() => "/tmp/update-state.json"),
         get: vi.fn(() => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "idle",
           lastCheckedAt: 5,
@@ -584,9 +588,11 @@ describe("UpdateService", () => {
           errorSummary: null,
         })),
         update: vi.fn((patch: unknown) => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "installing",
           lastCheckedAt: 5,
@@ -607,6 +613,8 @@ describe("UpdateService", () => {
     expect(spawnDetachedWorker).toHaveBeenCalledWith(
       expect.objectContaining({
         stateFilePath: "/tmp/update-state.json",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        targetPublishedAt: "2026-08-08T00:00:00.000Z",
       })
     );
   });

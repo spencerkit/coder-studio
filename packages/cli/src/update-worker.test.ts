@@ -29,6 +29,8 @@ describe("update-worker", () => {
       targetVersion: "0.5.0",
       cliCommand: "coder-studio",
       currentVersion: "0.4.0",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      targetPublishedAt: "2026-08-08T00:00:00.000Z",
       npmCommand: "npm",
       restartArgs: ["serve", "--restart"],
       installArgsPrefix: ["install", "-g"],
@@ -49,6 +51,11 @@ describe("update-worker", () => {
 
     const state = JSON.parse(readFileSync(env.stateFilePath, "utf-8")) as { updateStatus: string };
     expect(state.updateStatus).toBe("restarting");
+    expect(state).toMatchObject({
+      version: 2,
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
     expect(runCommand).toHaveBeenNthCalledWith(
       1,
       "npm",
@@ -84,6 +91,11 @@ describe("update-worker", () => {
     expect(state.updateStatus).toBe("manual_required");
     expect(state.requiresManualStep).toBe(true);
     expect(state.manualCommand).toContain("npm install -g @spencer-kit/coder-studio@0.5.0");
+    expect(state).toMatchObject({
+      version: 2,
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
   });
 
   it("marks restart failures with manual restart guidance", async () => {
@@ -108,6 +120,11 @@ describe("update-worker", () => {
     expect(state.updateStatus).toBe("failed");
     expect(state.manualCommand).toBe("coder-studio serve --restart");
     expect(state.errorSummary).toContain("restart failed");
+    expect(state).toMatchObject({
+      version: 2,
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
     expect(waitForProcessExit).toHaveBeenCalledWith(999);
   });
 
