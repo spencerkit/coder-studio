@@ -60,6 +60,16 @@ function installDesktopApi() {
   };
 }
 
+function deferred<T>() {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, reject: rejectPromise, resolve: resolvePromise };
+}
+
 function renderSwitcher() {
   const store = createStore();
   store.set(localeAtom, "en");
@@ -89,6 +99,33 @@ describe("EnvironmentSwitcher", () => {
     await user.click(await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ }));
 
     expect(openEnvironment).toHaveBeenCalledWith("wsl:ubuntu");
+    await waitFor(() =>
+      expect(screen.queryByText("Open another environment")).not.toBeInTheDocument()
+    );
+  });
+
+  it("keeps showing opening progress until the target window reports ready", async () => {
+    const user = userEvent.setup();
+    const { openEnvironment } = installDesktopApi();
+    const opening = deferred<{ status: "opened" }>();
+    openEnvironment.mockReturnValueOnce(opening.promise);
+    renderSwitcher();
+
+    expect(await screen.findByText("Local: Windows")).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: "Coder Studio environment" });
+    await user.click(trigger);
+    const wslButton = await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ });
+    await user.click(wslButton);
+
+    expect(wslButton).toBeDisabled();
+    expect(screen.getByText("Opening…")).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.queryByText("Open another environment")).not.toBeInTheDocument();
+    await user.click(trigger);
+    expect(screen.getByText("Opening…")).toBeInTheDocument();
+
+    opening.resolve({ status: "opened" });
     await waitFor(() =>
       expect(screen.queryByText("Open another environment")).not.toBeInTheDocument()
     );
@@ -133,5 +170,25 @@ describe("EnvironmentSwitcher", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to launch WSL instance");
     expect(wslButton).toBeEnabled();
+  });
+
+  it("re-enables retry after a launch readiness timeout", async () => {
+    const user = userEvent.setup();
+    const { openEnvironment } = installDesktopApi();
+    const opening = deferred<{ status: "opened" }>();
+    openEnvironment.mockReturnValueOnce(opening.promise);
+    renderSwitcher();
+
+    await screen.findByText("Local: Windows");
+    await user.click(screen.getByRole("button", { name: "Coder Studio environment" }));
+    const wslButton = await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ });
+    await user.click(wslButton);
+
+    opening.reject(new Error("Timed out waiting for WSL: Ubuntu-24.04 to open"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Timed out waiting");
+    expect(wslButton).toBeEnabled();
+    await user.click(wslButton);
+    expect(openEnvironment).toHaveBeenCalledTimes(2);
   });
 });
