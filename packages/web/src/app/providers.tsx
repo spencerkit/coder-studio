@@ -72,7 +72,14 @@ import {
   resetGlobalRecoveryCoordinator,
   setGlobalRecoveryCoordinator,
 } from "../features/terminal-panel/recovery-singleton";
-import { updateStateAtom } from "../features/updates/atoms";
+import {
+  productUpdateStateAtom,
+  serverUpdateStateAtom,
+  updateControllerAtom,
+  updatePreparationAtom,
+} from "../features/updates/atoms";
+import { mapCliUpdateState } from "../features/updates/controller";
+import { useUpdateController } from "../features/updates/use-update-controller";
 import {
   hydrateWorkspaceEditorState,
   normalizeWorkspaceEditorUiState,
@@ -221,6 +228,11 @@ function resetServerProjectedState(store: Store): void {
   for (const terminalId of terminalIds) {
     store.set(terminalMetaAtomFamily(terminalId), null);
   }
+
+  store.set(serverUpdateStateAtom, null);
+  store.set(productUpdateStateAtom, null);
+  store.set(updateControllerAtom, null);
+  store.set(updatePreparationAtom, null);
 }
 
 function ProviderListBootstrapper() {
@@ -324,11 +336,13 @@ export function AppProviders({ children }: AppProvidersProps) {
   // Supervisor state atoms
   const setSupervisors = useSetAtom(supervisorsAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
-  const setUpdateState = useSetAtom(updateStateAtom);
+  const serverUpdateState = useAtomValue(serverUpdateStateAtom);
+  const setServerUpdateState = useSetAtom(serverUpdateStateAtom);
 
   // Get Jotai store for writing to atomFamily atoms
   const store = useStore();
   const dispatch = useAtomValue(dispatchCommandAtom);
+  useUpdateController(connectionStatus === "connected" ? serverUpdateState : null, dispatch);
   const { claim } = useActivation();
 
   useSessionNotifications();
@@ -495,7 +509,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       if (cancelled || !result.ok || !result.data) {
         return;
       }
-      setUpdateState(result.data);
+      setServerUpdateState(result.data);
     };
 
     void hydrateUpdateState();
@@ -503,7 +517,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setUpdateState]);
+  }, [connectionStatus, dispatch, setServerUpdateState]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
@@ -713,6 +727,10 @@ export function AppProviders({ children }: AppProvidersProps) {
           workspaceId: null,
         };
         pendingReconnectRefreshRef.current = true;
+        store.set(serverUpdateStateAtom, null);
+        store.set(productUpdateStateAtom, null);
+        store.set(updateControllerAtom, null);
+        store.set(updatePreparationAtom, null);
       }
 
       // Reset writer status on disconnect
@@ -726,6 +744,10 @@ export function AppProviders({ children }: AppProvidersProps) {
         if (status === "disconnected") {
           pendingReconnectRefreshRef.current = true;
         }
+        store.set(serverUpdateStateAtom, null);
+        store.set(productUpdateStateAtom, null);
+        store.set(updateControllerAtom, null);
+        store.set(updatePreparationAtom, null);
       }
 
       if (status === "connected") {
@@ -1295,7 +1317,11 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
   }
 
   if (topic === "update.state.changed") {
-    store.set(updateStateAtom, payload as UpdateStateView);
+    const state = payload as UpdateStateView;
+    store.set(serverUpdateStateAtom, state);
+    if (store.get(updateControllerAtom)?.kind === "cli") {
+      store.set(productUpdateStateAtom, mapCliUpdateState(state));
+    }
     return;
   }
 

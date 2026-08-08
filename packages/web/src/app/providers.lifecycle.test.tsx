@@ -1,4 +1,8 @@
-import type { UpdateStateView, Workspace } from "@coder-studio/core";
+import {
+  createDefaultProductUpdateState,
+  type UpdateStateView,
+  type Workspace,
+} from "@coder-studio/core";
 import { act, render } from "@testing-library/react";
 import { createStore, Provider, useAtomValue } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +24,12 @@ import {
 import { toastsAtom } from "../features/notifications/atoms";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import { getGlobalRecoveryCoordinator } from "../features/terminal-panel/recovery-singleton";
-import { updateStateAtom } from "../features/updates/atoms";
+import {
+  productUpdateStateAtom,
+  serverUpdateStateAtom,
+  updateControllerAtom,
+  updateStateAtom,
+} from "../features/updates/atoms";
 import {
   expandedDirsAtomFamily,
   fileTreeAtomFamily,
@@ -176,6 +185,7 @@ describe("AppProviders lifecycle recovery", () => {
   const originalLegacyTheme = localStorage.getItem("ui.theme");
   const originalThemeId = localStorage.getItem("ui.themeId");
   const originalTerminalPreferences = localStorage.getItem("ui.terminalPreferences");
+  const originalDesktopBridge = Object.getOwnPropertyDescriptor(window, "coderStudioDesktop");
 
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
@@ -187,6 +197,7 @@ describe("AppProviders lifecycle recovery", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: false }),
     }) as unknown as typeof fetch;
+    Reflect.deleteProperty(window, "coderStudioDesktop");
 
     wsState.client = {
       connect: vi.fn().mockResolvedValue(undefined),
@@ -219,6 +230,11 @@ describe("AppProviders lifecycle recovery", () => {
     globalThis.fetch = originalFetch;
     vi.useRealTimers();
     vi.restoreAllMocks();
+    if (originalDesktopBridge) {
+      Object.defineProperty(window, "coderStudioDesktop", originalDesktopBridge);
+    } else {
+      Reflect.deleteProperty(window, "coderStudioDesktop");
+    }
     if (originalTerminalPreferences === null) {
       localStorage.removeItem("ui.terminalPreferences");
     } else {
@@ -276,9 +292,11 @@ describe("AppProviders lifecycle recovery", () => {
 
   it("hydrates update state after the websocket connects", async () => {
     const updateState: UpdateStateView = {
-      version: 1,
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: "0.5.0",
+      latestPublishedAt: null,
       availability: "update_available",
       updateStatus: "idle",
       lastCheckedAt: 123,
@@ -291,6 +309,12 @@ describe("AppProviders lifecycle recovery", () => {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     };
     wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
       if (op === "updates.getState") {
@@ -324,6 +348,72 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("hydrates Desktop-managed Server context before resolving the Desktop controller", async () => {
+    const runtimeContext = {
+      environment: "desktop-managed" as const,
+      authority: "desktop" as const,
+      supported: false,
+      unsupportedReason: "Managed by Coder Studio Desktop",
+    };
+    const updateState: UpdateStateView = {
+      version: 2,
+      currentVersion: "0.5.0",
+      currentPublishedAt: null,
+      latestVersion: null,
+      latestPublishedAt: null,
+      availability: "unknown",
+      updateStatus: "idle",
+      lastCheckedAt: null,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: false,
+      installKind: "unsupported",
+      unsupportedReason: runtimeContext.unsupportedReason,
+      runtimeContext,
+    };
+    const productState = createDefaultProductUpdateState(
+      {
+        environment: "desktop-native",
+        authority: "desktop",
+        supported: true,
+        unsupportedReason: null,
+      },
+      "0.5.0",
+      null
+    );
+    const getUpdateState = vi.fn(async () => productState);
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        updateApiVersion: 1,
+        getUpdateState,
+        onUpdateStateChanged: vi.fn(() => () => {}),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) =>
+      op === "updates.getState" ? updateState : undefined
+    );
+    const store = createStore();
+    setVisibilityState("visible");
+    renderProviders(store);
+
+    await vi.waitFor(() => expect(wsState.client?.connect).toHaveBeenCalled());
+    act(() => wsState.client?.statusHandler?.("connected"));
+
+    await vi.waitFor(() => expect(store.get(serverUpdateStateAtom)).toEqual(updateState));
+    await vi.waitFor(() => expect(store.get(updateControllerAtom)?.kind).toBe("desktop"));
+    expect(store.get(productUpdateStateAtom)).toEqual(productState);
+    expect(
+      wsState.client!.sendCommand!.mock.invocationCallOrder.find(
+        (_, index) => wsState.client!.sendCommand!.mock.calls[index]?.[0] === "updates.getState"
+      )
+    ).toBeLessThan(getUpdateState.mock.invocationCallOrder[0]!);
+  });
+
   it("subscribes to update topics so update events stream without a reconnect", async () => {
     const store = createStore();
     setVisibilityState("visible");
@@ -335,16 +425,19 @@ describe("AppProviders lifecycle recovery", () => {
       expect(wsState.client?.subscribe).toHaveBeenCalled();
     });
 
-    const topics = wsState.client?.subscribe.mock.calls.at(-1)?.[0];
+    const subscribeCalls = wsState.client?.subscribe.mock.calls ?? [];
+    const topics = subscribeCalls[subscribeCalls.length - 1]?.[0];
 
     expect(topics).toEqual(expect.arrayContaining(["update.*"]));
   });
 
   it("hydrates update state without emitting a toast when an update becomes available after connect", async () => {
     const updateState: UpdateStateView = {
-      version: 1,
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: "0.5.0",
+      latestPublishedAt: null,
       availability: "update_available",
       updateStatus: "idle",
       lastCheckedAt: 123,
@@ -357,6 +450,12 @@ describe("AppProviders lifecycle recovery", () => {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     };
     wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
       if (op === "updates.getState") {
