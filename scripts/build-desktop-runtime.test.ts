@@ -1,7 +1,9 @@
 import { generateKeyPairSync } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyRuntimeManifestSignature } from "../packages/desktop/src/runtime-manifest.js";
+import { buildDesktopShell, DESKTOP_DIST_DIR } from "./build-desktop.js";
 import {
   buildDesktopRuntime,
   createDesktopRuntimeBuildOptions,
@@ -77,5 +79,24 @@ describe("build-desktop-runtime", () => {
     await expect(
       buildDesktopRuntime({ includeWeb: false, packagePrefix: "coder-studio-test-runtime" })
     ).rejects.toThrow("CODER_STUDIO_RELEASE_PUBLISHED_AT");
+  }, 60_000);
+
+  it("writes packaged Shell build info with the shared release timestamp", async () => {
+    process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT = "2026-08-08T01:02:03.000Z";
+
+    await buildDesktopShell({ clean: true });
+
+    await expect(
+      readFile(resolve(DESKTOP_DIST_DIR, "build-info.json"), "utf8").then(JSON.parse)
+    ).resolves.toMatchObject({
+      schemaVersion: 1,
+      shellVersion: "0.1.0",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+      engineVersion: "2",
+      nodeVersion: "24.19.0",
+      runtimeHostApiVersion: 1,
+      apiProtocolVersion: 1,
+      dataSchemaVersion: 1,
+    });
   }, 60_000);
 });
