@@ -156,6 +156,11 @@
     "wsl": "WSL",
     "local_windows": "Local: Windows",
     "current_window": "Current window",
+    "current_window_environment": "Current window environment",
+    "open_another_from": "Open another environment from {environment}",
+    "opening_named": "Opening {environment}…",
+    "open_failed_named": "Could not open {environment}",
+    "retry_named": "Retry opening {environment}",
     "checking": "Checking environment…",
     "preparing": "Opening…",
     "status": {

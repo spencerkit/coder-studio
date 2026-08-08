@@ -156,6 +156,11 @@
     "wsl": "WSL",
     "local_windows": "本地：Windows",
     "current_window": "当前窗口",
+    "current_window_environment": "当前窗口环境",
+    "open_another_from": "从 {environment} 打开另一个运行环境",
+    "opening_named": "正在打开 {environment}…",
+    "open_failed_named": "未能打开 {environment}",
+    "retry_named": "重新尝试打开 {environment}",
     "checking": "正在检查环境…",
     "preparing": "正在打开…",
     "status": {

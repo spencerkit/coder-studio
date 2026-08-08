@@ -60,7 +60,7 @@ export const TopBar: FC<TopBarProps> = ({ fullscreenController }) => {
 
   return (
     <header className="app-topbar">
-      <EnvironmentSwitcher />
+      <EnvironmentSwitcher variant="topbar" />
       <div className="topbar-tabs">
         {workspaceList.length === 0 ? (
           <EmptyState

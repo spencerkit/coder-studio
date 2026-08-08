@@ -156,9 +156,111 @@
   animation: environment-spin 0.8s linear infinite;
 }
 
+.welcomeShell {
+  align-items: stretch;
+  background: var(--surface-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  display: flex;
+  min-height: 48px;
+  overflow: hidden;
+}
+
+.welcomeSelector {
+  flex: 1;
+  min-width: 0;
+}
+
+.welcomeSelector > span {
+  display: block;
+  height: 100%;
+}
+
+.welcomeTrigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--sp-2);
+  height: 100%;
+  min-height: 48px;
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  width: 100%;
+}
+
+.welcomeTrigger:hover {
+  background: var(--surface-hover);
+}
+
+.welcomeIcon {
+  align-items: center;
+  background: var(--surface-active);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.welcomeText {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.welcomeEyebrow,
+.welcomeAction {
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+}
+
+.welcomeEnvironment {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcomeAction,
+.retry {
+  flex: 0 0 auto;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retry {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--status-danger-border);
+  color: var(--status-danger-fg);
+  cursor: pointer;
+  padding: 0 var(--sp-3);
+}
+
+.welcomeTrigger:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
 @keyframes environment-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    opacity: 0.8;
   }
 }
 

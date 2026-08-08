@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createStore, Provider } from "jotai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localeAtom } from "../../../atoms/app-ui";
-import { EnvironmentSwitcher } from "./environment-switcher";
+import { EnvironmentSwitcher, type EnvironmentSwitcherVariant } from "./environment-switcher";
 
 const nativeEnvironment: DesktopEnvironmentSummary = {
   id: "native",
@@ -55,6 +55,7 @@ function installDesktopApi() {
     value: api,
   });
   return {
+    api,
     openEnvironment,
     emitProgress: (event: DesktopEnvironmentProgress) => progressListener?.(event),
   };
@@ -70,12 +71,15 @@ function deferred<T>() {
   return { promise, reject: rejectPromise, resolve: resolvePromise };
 }
 
-function renderSwitcher() {
+function renderSwitcher(
+  variant: EnvironmentSwitcherVariant = "topbar",
+  locale: "en" | "zh" = "en"
+) {
   const store = createStore();
-  store.set(localeAtom, "en");
+  store.set(localeAtom, locale);
   return render(
     <Provider store={store}>
-      <EnvironmentSwitcher />
+      <EnvironmentSwitcher variant={variant} />
     </Provider>
   );
 }
@@ -87,6 +91,120 @@ describe("EnvironmentSwitcher", () => {
 
   afterEach(() => {
     delete window.coderStudioDesktop;
+  });
+
+  it("renders the active environment as optional welcome-page context", async () => {
+    installDesktopApi();
+    renderSwitcher("welcome");
+
+    expect(await screen.findByText("Local: Windows")).toBeInTheDocument();
+    expect(screen.getByText("Current window environment")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Open another environment from Local: Windows",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("localizes the welcome environment context in Chinese", async () => {
+    installDesktopApi();
+    renderSwitcher("welcome", "zh");
+
+    expect(await screen.findByText("Local: Windows")).toBeInTheDocument();
+    expect(screen.getByText("当前窗口环境")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "从 Local: Windows 打开另一个运行环境",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("shows a stable checking state while welcome environment data loads", async () => {
+    const { api } = installDesktopApi();
+    const environments = deferred<DesktopEnvironmentSummary[]>();
+    const activeEnvironment = deferred<DesktopEnvironmentSummary>();
+    vi.mocked(api.listEnvironments).mockReturnValueOnce(environments.promise);
+    vi.mocked(api.getActiveEnvironment).mockReturnValueOnce(activeEnvironment.promise);
+
+    renderSwitcher("welcome");
+
+    expect(await screen.findByText("Checking environment…")).toBeInTheDocument();
+    expect(screen.getByTestId("welcome-environment-context")).toBeInTheDocument();
+
+    environments.resolve([nativeEnvironment, wslEnvironment]);
+    activeEnvironment.resolve(nativeEnvironment);
+    expect(await screen.findByText("Current window environment")).toBeInTheDocument();
+  });
+
+  it("keeps welcome launch feedback reachable after the popover closes", async () => {
+    const user = userEvent.setup();
+    const { openEnvironment } = installDesktopApi();
+    const opening = deferred<{ status: "opened" }>();
+    openEnvironment.mockReturnValueOnce(opening.promise);
+    renderSwitcher("welcome");
+
+    const trigger = await screen.findByRole("button", {
+      name: "Open another environment from Local: Windows",
+    });
+    await user.click(trigger);
+    await user.click(await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ }));
+    await user.click(trigger);
+
+    expect(screen.queryByRole("dialog", { name: "Coder Studio environment" })).toBeNull();
+    expect(screen.getByText("Opening WSL: Ubuntu-24.04…")).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Coder Studio environment" })).toBeInTheDocument();
+
+    opening.resolve({ status: "opened" });
+    await waitFor(() =>
+      expect(screen.queryByText("Opening WSL: Ubuntu-24.04…")).not.toBeInTheDocument()
+    );
+    expect(screen.getByText("Local: Windows")).toBeInTheDocument();
+  });
+
+  it("offers inline retry for the last failed environment", async () => {
+    const user = userEvent.setup();
+    const { openEnvironment } = installDesktopApi();
+    openEnvironment
+      .mockRejectedValueOnce(new Error("Unable to launch WSL instance"))
+      .mockResolvedValueOnce({ status: "opened" });
+    renderSwitcher("welcome");
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open another environment from Local: Windows",
+      })
+    );
+    await user.click(await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to launch WSL instance");
+    const trigger = screen.getByRole("button", {
+      name: "Open another environment from Local: Windows",
+    });
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to launch WSL instance");
+
+    const retry = await screen.findByRole("button", {
+      name: "Retry opening WSL: Ubuntu-24.04",
+    });
+    await user.click(retry);
+
+    expect(openEnvironment).toHaveBeenNthCalledWith(2, "wsl:ubuntu");
+  });
+
+  it("omits both variants outside Windows Desktop", () => {
+    const { container: missingBridge } = renderSwitcher("welcome");
+    expect(missingBridge).toBeEmptyDOMElement();
+
+    installDesktopApi();
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { ...window.coderStudioDesktop, platform: "linux" },
+    });
+    const { container: nonWindows } = renderSwitcher("welcome");
+    expect(nonWindows).toBeEmptyDOMElement();
   });
 
   it("keeps the current window and opens WSL as another environment instance", async () => {
