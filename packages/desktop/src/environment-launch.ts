@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { DesktopEnvironmentTarget } from "./protocol.js";
 
@@ -27,6 +27,7 @@ const REQUEST_ID_PATTERN =
 const TRANSITION_LOCK_TIMEOUT_MS = 250;
 const TRANSITION_LOCK_POLL_INTERVAL_MS = 10;
 const TRANSITION_LOCK_STALE_AFTER_MS = 30_000;
+const TRANSITION_FINALIZE_TIMEOUT_MS = 2_000;
 
 export function isEnvironmentLaunchRequestId(value: unknown): value is string {
   return typeof value === "string" && REQUEST_ID_PATTERN.test(value);
@@ -172,23 +173,27 @@ export class EnvironmentLaunchStore {
         if (boundaryResult.kind === "failure") throw new Error(boundaryResult.message);
 
         const message = `Timed out waiting for ${target.label} to open. It may still be starting; try again to focus it.`;
-        await this.transition(requestId, target.id, {
-          status: "timed-out",
-          message,
-          pid: undefined,
-        });
-        const afterTransition = await this.read(requestId);
-        if (!afterTransition)
-          throw new Error(`Environment launch request disappeared: ${requestId}`);
-        if (afterTransition && afterTransition.environmentId !== target.id) {
-          throw new Error(`Environment launch request does not match ${target.label}.`);
+        const finalizeDeadline = Date.now() + TRANSITION_FINALIZE_TIMEOUT_MS;
+        while (true) {
+          await this.transition(requestId, target.id, {
+            status: "timed-out",
+            message,
+            pid: undefined,
+          });
+          const afterTransition = await this.read(requestId);
+          if (!afterTransition)
+            throw new Error(`Environment launch request disappeared: ${requestId}`);
+          if (afterTransition.environmentId !== target.id) {
+            throw new Error(`Environment launch request does not match ${target.label}.`);
+          }
+          const afterResult = this.terminalResult(afterTransition, target);
+          if (afterResult.kind === "terminal") return afterResult.status;
+          if (afterResult.kind === "failure") throw new Error(afterResult.message);
+          if (Date.now() >= finalizeDeadline) {
+            throw new Error(`Unable to finalize environment launch request: ${requestId}`);
+          }
+          await wait(TRANSITION_LOCK_POLL_INTERVAL_MS);
         }
-        const afterResult = this.terminalResult(afterTransition, target);
-        if (afterResult.kind === "terminal") return afterResult.status;
-        if (afterResult.kind === "failure") throw new Error(afterResult.message);
-        // If the lock could not be acquired, do not keep the caller pending forever.
-        // A later cleanup pass can remove this still-pending request if needed.
-        throw new Error(message);
       }
 
       await wait(Math.min(pollIntervalMs, Math.max(1, timeoutMs - (Date.now() - startedAt))));
@@ -248,30 +253,96 @@ export class EnvironmentLaunchStore {
 
   private async acquireTransitionLock(requestId: string): Promise<(() => Promise<void>) | null> {
     const lockPath = `${this.getRequestPath(requestId)}.lock`;
-    const deadline = Date.now() + TRANSITION_LOCK_TIMEOUT_MS;
-    while (true) {
-      try {
-        await mkdir(lockPath);
-        return async () => {
-          await rm(lockPath, { force: true, recursive: true });
-        };
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "EEXIST") throw error;
-
+    const gatePath = `${lockPath}.gate`;
+    const releaseGate = await this.acquireLeaseDirectory(gatePath);
+    if (!releaseGate) return null;
+    let gateReleased = false;
+    try {
+      while (true) {
         try {
-          const details = await stat(lockPath);
-          if (Date.now() - details.mtimeMs > TRANSITION_LOCK_STALE_AFTER_MS) {
-            await rm(lockPath, { force: true, recursive: true });
-            continue;
+          await mkdir(lockPath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          let details;
+          try {
+            details = await stat(`${lockPath}/owner`);
+          } catch (lockError) {
+            if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
+            try {
+              details = await stat(lockPath);
+            } catch (directoryError) {
+              if ((directoryError as NodeJS.ErrnoException).code === "ENOENT") continue;
+              throw directoryError;
+            }
           }
-        } catch (lockError) {
-          if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
+          if (Date.now() - details.mtimeMs <= TRANSITION_LOCK_STALE_AFTER_MS) return null;
+          await rm(lockPath, { force: true, recursive: true });
           continue;
         }
-        if (Date.now() >= deadline) return null;
+        const ownerToken = randomUUID();
+        const ownerPath = `${lockPath}/owner`;
+        try {
+          await writeFile(ownerPath, ownerToken, { encoding: "utf8", flag: "wx" });
+        } catch (error) {
+          await rm(lockPath, { force: true, recursive: true });
+          throw error;
+        }
+        const heartbeat = setInterval(() => {
+          void utimes(ownerPath, new Date(), new Date()).catch(() => undefined);
+        }, TRANSITION_LOCK_STALE_AFTER_MS / 3);
+        heartbeat.unref?.();
+        await releaseGate();
+        gateReleased = true;
+        return async () => {
+          clearInterval(heartbeat);
+          await this.releaseTransitionLock(lockPath, ownerToken);
+        };
+      }
+    } finally {
+      if (!gateReleased) await releaseGate();
+    }
+  }
+
+  private async acquireLeaseDirectory(path: string): Promise<(() => Promise<void>) | null> {
+    const deadline = Date.now() + TRANSITION_LOCK_TIMEOUT_MS;
+    const ownerToken = randomUUID();
+    while (Date.now() < deadline) {
+      try {
+        await mkdir(path);
+        try {
+          await writeFile(`${path}/owner`, ownerToken, { encoding: "utf8", flag: "wx" });
+        } catch (error) {
+          await rm(path, { force: true, recursive: true });
+          throw error;
+        }
+        return async () => {
+          try {
+            if ((await readFile(`${path}/owner`, "utf8")) !== ownerToken) return;
+            await rm(path, { force: true, recursive: true });
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
         await wait(TRANSITION_LOCK_POLL_INTERVAL_MS);
       }
+    }
+    return null;
+  }
+
+  private async releaseTransitionLock(lockPath: string, ownerToken: string): Promise<void> {
+    const releaseGate = await this.acquireLeaseDirectory(`${lockPath}.gate`);
+    if (!releaseGate) return;
+    try {
+      try {
+        if ((await readFile(`${lockPath}/owner`, "utf8")) !== ownerToken) return;
+        await rm(lockPath, { force: true, recursive: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    } finally {
+      await releaseGate();
     }
   }
 

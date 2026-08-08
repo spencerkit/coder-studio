@@ -67,11 +67,12 @@ describe("EnvironmentLaunchStore", () => {
       pollIntervalMs: 2,
       timeoutMs: 250,
     });
+    const failure = expect(waiting).rejects.toThrow("The environment process exited.");
 
     await expect(
       store.markFailed(requestId, requestTarget.id, "The environment process exited.")
     ).resolves.toBe(true);
-    await expect(waiting).rejects.toThrow("The environment process exited.");
+    await failure;
   });
 
   it("times out atomically and rejects a late ready transition", async () => {
@@ -171,6 +172,61 @@ describe("EnvironmentLaunchStore", () => {
     ).rejects.toThrow("Timed out waiting for WSL: Ubuntu to open");
     await expect(targetStore.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
     await expect(waiter.read(requestId)).resolves.toMatchObject({ status: "timed-out" });
+  });
+
+  it("finalizes timeout after a blocked lock is released before rejecting", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
+    roots.push(root);
+    const waiter = new EnvironmentLaunchStore(root);
+    const targetStore = new EnvironmentLaunchStore(root);
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    const requestId = (await waiter.create(requestTarget)).requestId;
+    const lockPath = `${waiter.getRequestPath(requestId)}.lock`;
+    await mkdir(lockPath);
+    const releaseBlockedLock = new Promise<void>((resolveRelease) => {
+      setTimeout(() => {
+        void rm(lockPath, { recursive: true, force: true }).then(resolveRelease);
+      }, 350);
+    });
+
+    await expect(
+      waiter.waitForTerminal(requestId, requestTarget, { pollIntervalMs: 2, timeoutMs: 12 })
+    ).rejects.toThrow("Timed out waiting for WSL: Ubuntu to open");
+    await releaseBlockedLock;
+    await expect(waiter.read(requestId)).resolves.toMatchObject({ status: "timed-out" });
+    await expect(targetStore.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
+  });
+
+  it("does not let an old lock owner release a successor lock", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
+    roots.push(root);
+    const oldOwner = new EnvironmentLaunchStore(root);
+    const successor = new EnvironmentLaunchStore(root);
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await oldOwner.create(requestTarget)).requestId;
+    const acquire = (
+      oldOwner as unknown as {
+        acquireTransitionLock(id: string): Promise<(() => Promise<void>) | null>;
+      }
+    ).acquireTransitionLock;
+    const oldRelease = await acquire.call(oldOwner, requestId);
+    expect(oldRelease).not.toBeNull();
+    const lockPath = `${oldOwner.getRequestPath(requestId)}.lock`;
+    const staleTime = new Date(Date.now() - 60_000);
+    await utimes(`${lockPath}/owner`, staleTime, staleTime);
+
+    const successorAcquire = (
+      successor as unknown as {
+        acquireTransitionLock(id: string): Promise<(() => Promise<void>) | null>;
+      }
+    ).acquireTransitionLock;
+    const successorRelease = await successorAcquire.call(successor, requestId);
+    expect(successorRelease).not.toBeNull();
+    await oldRelease!();
+    await expect(stat(lockPath)).resolves.toBeDefined();
+    await successorRelease!();
+    await expect(successor.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(true);
+    await expect(oldOwner.read(requestId)).resolves.toMatchObject({ status: "ready", pid: 4321 });
   });
 
   it("bounds transition lock acquisition when an abandoned lock remains", async () => {
