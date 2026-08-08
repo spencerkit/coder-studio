@@ -24,6 +24,9 @@ export interface EnvironmentLaunchWaitOptions {
 
 const REQUEST_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TRANSITION_LOCK_TIMEOUT_MS = 250;
+const TRANSITION_LOCK_POLL_INTERVAL_MS = 10;
+const TRANSITION_LOCK_STALE_AFTER_MS = 30_000;
 
 export function isEnvironmentLaunchRequestId(value: unknown): value is string {
   return typeof value === "string" && REQUEST_ID_PATTERN.test(value);
@@ -82,7 +85,6 @@ async function wait(delayMs: number): Promise<void> {
 
 export class EnvironmentLaunchStore {
   private readonly launchesRoot: string;
-  private readonly transitions = new Map<string, Promise<void>>();
 
   constructor(rootUserDataDir: string) {
     this.launchesRoot = resolve(rootUserDataDir, "environment-launches");
@@ -170,7 +172,7 @@ export class EnvironmentLaunchStore {
         if (boundaryResult.kind === "failure") throw new Error(boundaryResult.message);
 
         const message = `Timed out waiting for ${target.label} to open. It may still be starting; try again to focus it.`;
-        const marked = await this.transition(requestId, target.id, {
+        await this.transition(requestId, target.id, {
           status: "timed-out",
           message,
           pid: undefined,
@@ -184,7 +186,9 @@ export class EnvironmentLaunchStore {
         const afterResult = this.terminalResult(afterTransition, target);
         if (afterResult.kind === "terminal") return afterResult.status;
         if (afterResult.kind === "failure") throw new Error(afterResult.message);
-        if (marked) throw new Error(message);
+        // If the lock could not be acquired, do not keep the caller pending forever.
+        // A later cleanup pass can remove this still-pending request if needed.
+        throw new Error(message);
       }
 
       await wait(Math.min(pollIntervalMs, Math.max(1, timeoutMs - (Date.now() - startedAt))));
@@ -225,7 +229,9 @@ export class EnvironmentLaunchStore {
     environmentId: string,
     update: Pick<EnvironmentLaunchStatus, "status" | "pid" | "message">
   ): Promise<boolean> {
-    return this.withTransitionLock(requestId, async () => {
+    const release = await this.acquireTransitionLock(requestId);
+    if (!release) return false;
+    try {
       const current = await this.read(requestId);
       if (!current || current.status !== "pending" || current.environmentId !== environmentId)
         return false;
@@ -235,23 +241,37 @@ export class EnvironmentLaunchStore {
         updatedAt: Date.now(),
       });
       return true;
-    });
+    } finally {
+      await release();
+    }
   }
 
-  private async withTransitionLock<T>(requestId: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.transitions.get(requestId) ?? Promise.resolve();
-    let release!: () => void;
-    const current = new Promise<void>((resolveRelease) => {
-      release = resolveRelease;
-    });
-    const queued = previous.then(() => current);
-    this.transitions.set(requestId, queued);
-    await previous;
-    try {
-      return await operation();
-    } finally {
-      release();
-      if (this.transitions.get(requestId) === queued) this.transitions.delete(requestId);
+  private async acquireTransitionLock(requestId: string): Promise<(() => Promise<void>) | null> {
+    const lockPath = `${this.getRequestPath(requestId)}.lock`;
+    const deadline = Date.now() + TRANSITION_LOCK_TIMEOUT_MS;
+    while (true) {
+      try {
+        await mkdir(lockPath);
+        return async () => {
+          await rm(lockPath, { force: true, recursive: true });
+        };
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EEXIST") throw error;
+
+        try {
+          const details = await stat(lockPath);
+          if (Date.now() - details.mtimeMs > TRANSITION_LOCK_STALE_AFTER_MS) {
+            await rm(lockPath, { force: true, recursive: true });
+            continue;
+          }
+        } catch (lockError) {
+          if ((lockError as NodeJS.ErrnoException).code !== "ENOENT") throw lockError;
+          continue;
+        }
+        if (Date.now() >= deadline) return null;
+        await wait(TRANSITION_LOCK_POLL_INTERVAL_MS);
+      }
     }
   }
 

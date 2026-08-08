@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -118,5 +118,71 @@ describe("EnvironmentLaunchStore", () => {
     await store.cleanupStale(2_000);
     await expect(stat(oldPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(currentPath)).resolves.toBeDefined();
+  });
+
+  it("waits through one store while an independent store marks ready", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
+    roots.push(root);
+    const writer = new EnvironmentLaunchStore(root);
+    const waiter = new EnvironmentLaunchStore(root);
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    const requestId = (await writer.create(requestTarget)).requestId;
+    const waiting = waiter.waitForTerminal(requestId, requestTarget, {
+      pollIntervalMs: 2,
+      timeoutMs: 250,
+    });
+
+    await expect(writer.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(true);
+    await expect(waiting).resolves.toMatchObject({ status: "ready", pid: 4321 });
+  });
+
+  it("allows exactly one terminal transition across independent stores", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
+    roots.push(root);
+    const readyStore = new EnvironmentLaunchStore(root);
+    const failedStore = new EnvironmentLaunchStore(root);
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    const requestId = (await readyStore.create(requestTarget)).requestId;
+
+    const outcomes = await Promise.all([
+      readyStore.markReady(requestId, requestTarget.id, 4321),
+      failedStore.markFailed(requestId, requestTarget.id, "startup failed"),
+    ]);
+
+    expect(outcomes.filter(Boolean)).toHaveLength(1);
+    await expect(readyStore.read(requestId)).resolves.toMatchObject({
+      status: expect.any(String),
+    });
+    await expect(readyStore.read(requestId)).resolves.toMatchObject({
+      status: expect.stringMatching(/^(ready|failed)$/),
+    });
+  });
+
+  it("keeps timed-out state when a different store sends a late ready", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
+    roots.push(root);
+    const waiter = new EnvironmentLaunchStore(root);
+    const targetStore = new EnvironmentLaunchStore(root);
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    const requestId = (await waiter.create(requestTarget)).requestId;
+
+    await expect(
+      waiter.waitForTerminal(requestId, requestTarget, { pollIntervalMs: 2, timeoutMs: 12 })
+    ).rejects.toThrow("Timed out waiting for WSL: Ubuntu to open");
+    await expect(targetStore.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
+    await expect(waiter.read(requestId)).resolves.toMatchObject({ status: "timed-out" });
+  });
+
+  it("bounds transition lock acquisition when an abandoned lock remains", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
+    roots.push(root);
+    const owner = new EnvironmentLaunchStore(root);
+    const contender = new EnvironmentLaunchStore(root);
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await owner.create(requestTarget)).requestId;
+    await mkdir(`${owner.getRequestPath(requestId)}.lock`);
+
+    await expect(contender.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
+    await expect(owner.read(requestId)).resolves.toMatchObject({ status: "pending" });
   });
 });
