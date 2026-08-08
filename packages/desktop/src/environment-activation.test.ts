@@ -282,6 +282,91 @@ describe("EnvironmentActivationCoordinator", () => {
     expect(markReady).not.toHaveBeenCalled();
   });
 
+  it("keeps duplicate late failure requests pending until their acknowledgement settles", async () => {
+    let releaseFirstFailure: (() => void) | undefined;
+    let releaseSecondFailure: (() => void) | undefined;
+    const markFailed = vi.fn(
+      (requestId: string) =>
+        new Promise<void>((resolve) => {
+          if (requestId === "request-1") {
+            releaseFirstFailure = resolve;
+          } else {
+            releaseSecondFailure = resolve;
+          }
+        })
+    );
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow: vi.fn(() => true),
+      markFailed,
+      markReady: vi.fn(async () => undefined),
+    });
+    await coordinator.request("request-1");
+
+    const firstFailure = coordinator.failPending("Target startup failed");
+    await Promise.resolve();
+    expect(markFailed).toHaveBeenCalledWith("request-1", "Target startup failed");
+
+    let secondRequestSettled = false;
+    let duplicateRequestSettled = false;
+    const secondRequest = coordinator.request("request-2").then(() => {
+      secondRequestSettled = true;
+    });
+    const duplicateRequest = coordinator.request("request-2").then(() => {
+      duplicateRequestSettled = true;
+    });
+    releaseFirstFailure?.();
+    await firstFailure;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(markFailed).toHaveBeenCalledWith("request-2", "Target startup failed");
+    expect(secondRequestSettled).toBe(false);
+    expect(duplicateRequestSettled).toBe(false);
+
+    releaseSecondFailure?.();
+    await Promise.all([secondRequest, duplicateRequest]);
+
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      1
+    );
+  });
+
+  it("shares a late failure rejection across duplicate requests without retrying", async () => {
+    const failureError = new Error("Failure acknowledgement failed");
+    let releaseFirstFailure: (() => void) | undefined;
+    let secondRequestAttempts = 0;
+    const markFailed = vi.fn((requestId: string) => {
+      if (requestId === "request-1") {
+        return new Promise<void>((resolve) => {
+          releaseFirstFailure = resolve;
+        });
+      }
+      if (secondRequestAttempts++ === 0) return Promise.reject(failureError);
+      return Promise.resolve();
+    });
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow: vi.fn(() => true),
+      markFailed,
+      markReady: vi.fn(async () => undefined),
+    });
+    await coordinator.request("request-1");
+
+    const firstFailure = coordinator.failPending("Target startup failed");
+    await Promise.resolve();
+
+    const secondRequest = coordinator.request("request-2");
+    const duplicateRequest = coordinator.request("request-2");
+    const secondOutcome = expect(secondRequest).rejects.toBe(failureError);
+    const duplicateOutcome = expect(duplicateRequest).rejects.toBe(failureError);
+    releaseFirstFailure?.();
+
+    await firstFailure;
+    await Promise.all([secondOutcome, duplicateOutcome]);
+
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      1
+    );
+  });
+
   it("fails requests received after startup failure handling completes", async () => {
     const { coordinator, markFailed, markReady } = createCoordinator();
     await coordinator.request("request-1");

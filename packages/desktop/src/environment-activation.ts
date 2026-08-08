@@ -6,6 +6,7 @@ export interface EnvironmentActivationOptions {
 
 export class EnvironmentActivationCoordinator {
   private readonly pendingRequestIds = new Set<string>();
+  private readonly failureRequestPromises = new Map<string, Promise<void>>();
   private focusRequested = false;
   private windowReady = false;
   private flushPromise: Promise<void> | null = null;
@@ -17,9 +18,14 @@ export class EnvironmentActivationCoordinator {
   request(requestId?: string): Promise<void> {
     const alreadyPending = requestId ? this.pendingRequestIds.has(requestId) : false;
     if (requestId && this.failureMessage !== null) {
-      if (!alreadyPending) this.pendingRequestIds.add(requestId);
-      if (alreadyPending && this.failurePromise) return this.failurePromise;
-      return this.scheduleFailureDrain();
+      if (alreadyPending) {
+        const failureRequestPromise = this.failureRequestPromises.get(requestId);
+        if (failureRequestPromise) return failureRequestPromise;
+        if (this.failurePromise) return this.failurePromise;
+      } else {
+        this.pendingRequestIds.add(requestId);
+      }
+      return this.trackFailureRequest(requestId, this.scheduleFailureDrain());
     }
     if (requestId && alreadyPending) {
       if (this.flushPromise) return this.flushPromise;
@@ -63,6 +69,16 @@ export class EnvironmentActivationCoordinator {
     return failurePromise.finally(() => {
       if (this.failurePromise === failurePromise) this.failurePromise = null;
     });
+  }
+
+  private trackFailureRequest(requestId: string, failurePromise: Promise<void>): Promise<void> {
+    const trackedPromise = failurePromise.finally(() => {
+      if (this.failureRequestPromises.get(requestId) === trackedPromise) {
+        this.failureRequestPromises.delete(requestId);
+      }
+    });
+    this.failureRequestPromises.set(requestId, trackedPromise);
+    return trackedPromise;
   }
 
   private scheduleFlush(): Promise<void> {
