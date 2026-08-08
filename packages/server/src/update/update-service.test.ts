@@ -34,6 +34,8 @@ function createDeps(overrides?: Partial<ConstructorParameters<typeof UpdateServi
     currentVersion: "0.4.0",
     cliCommand: "coder-studio",
     workerEntryPath: "/tmp/update-worker.mjs",
+    registryUrl: "https://registry.npmjs.org/",
+    distTag: "latest",
   };
 
   return {
@@ -179,6 +181,82 @@ describe("UpdateService", () => {
     expect(result.latestVersion).toBe("0.5.0");
     expect(result.availability).toBe("update_available");
     expect(result.updateStatus).toBe("idle");
+  });
+
+  it("persists authoritative npm publication times", async () => {
+    const deps = createDeps({
+      runReleaseMetadataLookup: vi.fn(async () => ({
+        version: "0.5.0",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        latestPublishedAt: "2026-08-08T00:00:00.000Z",
+      })),
+      runLatestVersionLookup: undefined,
+    });
+    const service = new UpdateService(deps);
+
+    await expect(service.checkForUpdates({ manual: true })).resolves.toMatchObject({
+      latestVersion: "0.5.0",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-08T00:00:00.000Z",
+    });
+  });
+
+  it("retains cached publication times when the registry check fails", async () => {
+    const deps = createDeps({
+      updateStateRepo: {
+        getFilePath: vi.fn(() => "/tmp/update-state.json"),
+        get: vi.fn(() => ({
+          version: 2 as const,
+          currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
+          latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
+          availability: "update_available" as const,
+          updateStatus: "idle" as const,
+          lastCheckedAt: 100,
+          targetVersion: null,
+          startedAt: null,
+          finishedAt: null,
+          requiresManualStep: false,
+          manualCommand: null,
+          errorSummary: null,
+        })),
+        update: vi.fn((patch: unknown) => {
+          const current = {
+            version: 2 as const,
+            currentVersion: "0.4.0",
+            currentPublishedAt: "2026-07-01T00:00:00.000Z",
+            latestVersion: "0.5.0",
+            latestPublishedAt: "2026-08-08T00:00:00.000Z",
+            availability: "update_available" as const,
+            updateStatus: "idle" as const,
+            lastCheckedAt: 100,
+            targetVersion: null,
+            startedAt: null,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+          };
+          const resolved =
+            typeof patch === "function"
+              ? (patch as (value: typeof current) => Partial<typeof current>)(current)
+              : patch;
+          return { ...current, ...(resolved as Partial<typeof current>) };
+        }),
+      },
+      runReleaseMetadataLookup: vi.fn(async () => {
+        throw new Error("registry down");
+      }),
+      runLatestVersionLookup: undefined,
+    });
+    const service = new UpdateService(deps);
+
+    await expect(service.checkForUpdates({ manual: true })).resolves.toMatchObject({
+      availability: "check_failed",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-08T00:00:00.000Z",
+    });
   });
 
   it("keeps check failures in availability while returning to idle", async () => {
