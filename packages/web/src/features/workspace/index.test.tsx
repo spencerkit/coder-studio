@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { lastViewedTargetAtom, localeAtom } from "../../atoms/app-ui";
 import { connectionStatusAtom, wsClientAtom } from "../../atoms/connection";
 import { activeWorkspaceIdAtom, workspaceOrderAtom, workspacesAtom } from "../../atoms/workspaces";
+import { seedCliUpdateState } from "../../test-utils/update-state";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import {
   activeEditorPaneIdAtomFamily,
@@ -12,7 +13,6 @@ import {
   getEditorPaneStateKey,
 } from "../agent-panes/atoms/editor-panes";
 import { paneLayoutAtomFamily } from "../agent-panes/atoms/pane-layout";
-import { updateStateAtom } from "../updates/atoms";
 import {
   activeFilePathAtomFamily,
   bottomPanelHeightAtom,
@@ -110,10 +110,12 @@ describe("WorkspacePage", () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(wsClientAtom, { sendCommand } as never);
-    store.set(updateStateAtom, {
-      version: 1,
+    seedCliUpdateState(store, {
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: "0.5.0",
+      latestPublishedAt: null,
       availability: "update_available",
       updateStatus: "idle",
       lastCheckedAt: 123,
@@ -126,6 +128,12 @@ describe("WorkspacePage", () => {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     });
     seedReadyWorkspaceState(store, {
       "ws-test": {

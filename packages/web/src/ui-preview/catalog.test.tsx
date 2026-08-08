@@ -577,7 +577,7 @@ describe("UI preview catalog", () => {
     renderScene("footer-update-rail-review");
 
     expect(await screen.findByText("New version detected v0.5.0")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update and restart/i })).toBeInTheDocument();
     expect(document.querySelector(".footer-update-rail-review .workspace-status-bar")).toBeTruthy();
   });
 
@@ -585,7 +585,7 @@ describe("UI preview catalog", () => {
     renderScene("footer-update-rail-review", "mobile");
 
     expect(await screen.findByText("New version detected v0.5.0")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /update and restart/i })).toBeInTheDocument();
     expect(document.querySelector(".footer-update-rail-review.mobile-shell")).toBeTruthy();
     expect(
       document.querySelector(
@@ -599,7 +599,7 @@ describe("UI preview catalog", () => {
 
     const dialog = await screen.findByRole("dialog", { name: /confirm update/i });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /restart and update/i })).toBeInTheDocument();
     expect(screen.getByText(/1 terminals, 2 sessions, and 3 supervisor tasks/)).toBeInTheDocument();
   });
 
@@ -608,7 +608,7 @@ describe("UI preview catalog", () => {
 
     const dialog = await screen.findByRole("dialog", { name: /confirm update/i });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /update now/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /restart and update/i })).toBeInTheDocument();
     expect(screen.getByText(/1 terminals, 2 sessions, and 3 supervisor tasks/)).toBeInTheDocument();
   });
 
