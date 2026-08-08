@@ -211,8 +211,12 @@ function readArgumentValue(argv: string[], index: number, option: string): strin
   return value;
 }
 
+export function normalizeDesktopChannelArgs(argv: string[]): string[] {
+  return argv[0] === "--" ? argv.slice(1) : argv;
+}
+
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
+  const argv = normalizeDesktopChannelArgs(process.argv.slice(2));
   let directory = "";
   let releaseTag = "";
   let channel: "stable" | "prerelease" | null = null;

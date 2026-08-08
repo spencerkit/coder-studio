@@ -8,7 +8,11 @@ import {
   canonicalSigningPayload,
   verifyEd25519Payload,
 } from "../packages/desktop/src/signed-json.js";
-import { buildDesktopChannel, carryForwardDesktopBase } from "./build-desktop-channel.js";
+import {
+  buildDesktopChannel,
+  carryForwardDesktopBase,
+  normalizeDesktopChannelArgs,
+} from "./build-desktop-channel.js";
 
 const releaseTime = "2026-08-08T01:02:03.000Z";
 const roots: string[] = [];
@@ -84,6 +88,12 @@ async function createChannelFixture() {
 }
 
 describe("build-desktop-channel", () => {
+  it("accepts pnpm's explicit argument separator", () => {
+    expect(
+      normalizeDesktopChannelArgs(["--", "--directory", "release/desktop-release-complete"])
+    ).toEqual(["--directory", "release/desktop-release-complete"]);
+  });
+
   it("signs a full channel from staged immutable metadata", async () => {
     const fixture = await createChannelFixture();
 
