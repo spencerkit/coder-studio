@@ -83,6 +83,26 @@ async function writeRuntime(root: string, id: string, runtimeVersion: string, so
 }
 
 describe("WslRuntimeStoreClient", () => {
+  it("reads only a valid quarantined Runtime version", async () => {
+    const dataRoot = await mkdtemp(resolve(tmpdir(), "coder-studio-wsl-runtime-store-test-"));
+    cleanupRoots.push(dataRoot);
+    const runtimeStoreRoot = resolve(dataRoot, "runtime-store");
+    await mkdir(runtimeStoreRoot, { recursive: true });
+    const client = new WslRuntimeStoreClient({
+      probe: createProbe(dataRoot),
+      runner: localNodeRunner,
+    });
+
+    await expect(client.readFailedVersion()).resolves.toBeNull();
+    await writeFile(
+      resolve(runtimeStoreRoot, "failed.json"),
+      JSON.stringify({ runtimeVersion: "0.6.0", ignored: "secret" })
+    );
+    await expect(client.readFailedVersion()).resolves.toBe("0.6.0");
+    await writeFile(resolve(runtimeStoreRoot, "failed.json"), "not-json");
+    await expect(client.readFailedVersion()).resolves.toBeNull();
+  });
+
   it("activates a verified pending Runtime and falls back when a newer pending copy is corrupt", async () => {
     const dataRoot = await mkdtemp(resolve(tmpdir(), "coder-studio-wsl-runtime-store-test-"));
     cleanupRoots.push(dataRoot);

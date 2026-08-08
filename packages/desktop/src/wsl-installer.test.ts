@@ -112,7 +112,8 @@ describe("WslInstaller", () => {
     const serverBytes = Buffer.from("console.log('server')");
     const runtimeManifest = signRuntime(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
+        publishedAt: "2026-08-08T01:02:03.000Z",
         runtimeVersion: "0.5.6",
         minShellVersion: "0.1.0",
         requiredEngineVersion: DESKTOP_ENGINE_VERSION,
@@ -164,7 +165,29 @@ describe("WslInstaller", () => {
       onProgress: progress,
     });
 
-    const installed = await installer.prepare(createProbe());
+    const metadata = await installer.checkRuntime(
+      createProbe(),
+      {
+        version: "0.5.6",
+        publishedAt: "2026-08-08T01:02:03.000Z",
+        manifest: "runtime.manifest.json",
+      },
+      "0.1.0"
+    );
+    expect(metadata).toMatchObject({
+      componentId: "runtime:linux-x64",
+      version: "0.5.6",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(runner).not.toHaveBeenCalled();
+    fetchMock.mockClear();
+
+    const installed = await installer.downloadAndStageRuntime(metadata, {
+      signal: new AbortController().signal,
+      onProgress: () => {},
+      explicitRetry: false,
+    });
     expect(installed).toMatchObject({
       engineRoot: `/home/alice/.local/share/coder-studio-desktop/engine/versions/${DESKTOP_ENGINE_VERSION}`,
       manifest: { runtimeVersion: "0.5.6" },
@@ -193,7 +216,8 @@ describe("WslInstaller", () => {
       "https://releases.example/engine.manifest.json",
       expect.anything()
     );
-    expect(runner).toHaveBeenCalledTimes(1);
-    expect(runner.mock.calls[0]?.[0]).toContain("runtime-store");
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(runner.mock.calls[1]?.[0]).toContain("runtime-store");
+    expect(runner.mock.calls.flat().join(" ")).not.toMatch(/npm|pnpm|yarn/);
   });
 });

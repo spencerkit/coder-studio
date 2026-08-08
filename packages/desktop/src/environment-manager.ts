@@ -12,9 +12,12 @@ import {
   RUNTIME_HOST_API_VERSION,
   type RuntimeManifest,
 } from "./runtime-manifest.js";
+import type { RuntimeUpdateAdapter } from "./runtime-update-manager.js";
+import type { WslCommandRunner } from "./wsl-command.js";
 import { WslDiscovery, type WslDistroProbe } from "./wsl-discovery.js";
 import { WslInstaller } from "./wsl-installer.js";
 import { type WslRuntimeCandidate, WslRuntimeStoreClient } from "./wsl-runtime-store.js";
+import { WslRuntimeUpdateAdapter } from "./wsl-runtime-update-adapter.js";
 
 export interface PreparedWslEnvironment {
   probe: WslDistroProbe;
@@ -31,6 +34,9 @@ export interface DesktopEnvironmentManagerOptions {
   publicKeyPem: string;
   releaseBaseUrl: string;
   enableWsl?: boolean;
+  fetch?: typeof fetch;
+  wslRunner?: WslCommandRunner;
+  nativeRuntimeUpdateAdapter?: RuntimeUpdateAdapter;
   onProgress?: (progress: DesktopEnvironmentProgress) => void;
 }
 
@@ -130,6 +136,59 @@ export class DesktopEnvironmentManager {
       );
     }
     return { probe, runtimeStore, runtime: installed };
+  }
+
+  async createRuntimeUpdateAdapter(
+    target: "win32-x64" | "linux-x64",
+    environmentId: string
+  ): Promise<RuntimeUpdateAdapter> {
+    const environment = (await this.listEnvironments()).find((entry) => entry.id === environmentId);
+    if (!environment) throw new Error(`Unknown Desktop environment: ${environmentId}`);
+    if (environment.status !== "ready") {
+      throw new Error(environment.message ?? `${environment.label} is unavailable`);
+    }
+    if (environment.kind === "native") {
+      if (target !== "win32-x64") {
+        throw new Error(`Runtime target ${target} does not match the native environment`);
+      }
+      if (!this.options.nativeRuntimeUpdateAdapter) {
+        throw new Error("The native Runtime update adapter is not configured");
+      }
+      return this.options.nativeRuntimeUpdateAdapter;
+    }
+    if (target !== "linux-x64" || environment.arch !== "x64") {
+      throw new Error(`Runtime target ${target} does not match ${environment.label}`);
+    }
+    if (!environment.distro) throw new Error(`${environment.label} has no WSL distribution name`);
+    const probe = await this.options.discovery.probe(environment.distro);
+    if (!probe.supported || probe.arch !== "x64") {
+      throw new Error(probe.message ?? `${environment.label} is unsupported`);
+    }
+    const runtimeStore = new WslRuntimeStoreClient({
+      probe,
+      runner: this.options.wslRunner,
+    });
+    const installer = new WslInstaller({
+      publicKeyPem: this.options.publicKeyPem,
+      shellVersion: this.options.shellVersion,
+      nodeVersion: this.options.nodeVersion,
+      runtimeVersion: this.options.runtimeVersion,
+      engineManifestUrl: (arch) =>
+        new URL(
+          `coder-studio-engine-linux-${arch}.manifest.json`,
+          this.options.releaseBaseUrl
+        ).toString(),
+      runtimeManifestUrl: (arch) =>
+        new URL(
+          `coder-studio-server-runtime-linux-${arch}.manifest.json`,
+          this.options.releaseBaseUrl
+        ).toString(),
+      fetch: this.options.fetch,
+      runner: this.options.wslRunner,
+      onProgress: (progress) =>
+        this.emit(environmentId, progress.phase, progress.message, progress.percent),
+    });
+    return new WslRuntimeUpdateAdapter({ probe, installer, runtimeStore });
   }
 
   async beginSwitch(target: DesktopEnvironmentTarget): Promise<void> {

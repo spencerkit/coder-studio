@@ -1,5 +1,5 @@
 import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { create } from "tar";
@@ -46,7 +46,8 @@ async function writeRuntime(
     }))
   );
   let manifest: RuntimeManifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    publishedAt: "2026-08-08T01:02:03.000Z",
     runtimeVersion: version,
     minShellVersion: "0.5.6",
     requiredEngineVersion: DESKTOP_ENGINE_VERSION,
@@ -77,6 +78,111 @@ async function writeRuntime(
 }
 
 describe("ProductRuntimeUpdateManager", () => {
+  it("checks signed metadata without downloading or staging the package", async () => {
+    const root = await temporaryRoot();
+    const factoryRoot = resolve(root, "factory");
+    const updateRoot = resolve(root, "update");
+    await writeRuntime(factoryRoot, "0.5.6", undefined);
+    const keys = generateKeyPairSync("ed25519");
+    const manifest = await writeRuntime(updateRoot, "0.6.0", "runtime.tgz", keys.privateKey);
+    if (manifest.schemaVersion !== 2) throw new Error("Expected schema 2 test manifest");
+    const store = new RuntimeStore({
+      root: resolve(root, "store"),
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json(manifest));
+    const manager = new ProductRuntimeUpdateManager({
+      store,
+      manifestUrl: "https://updates.example.test/channel.json",
+      getCurrentRuntime: () => null as never,
+      fetch: fetchMock,
+    });
+
+    await expect(
+      manager.checkMetadata(
+        {
+          version: "0.6.0",
+          publishedAt: "2026-08-08T01:02:03.000Z",
+          manifest: "runtime.manifest.json",
+        },
+        "0.6.0"
+      )
+    ).resolves.toMatchObject({
+      componentId: `runtime:${process.platform}-${process.arch}`,
+      version: "0.6.0",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+      plannedShellVersion: "0.6.0",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://updates.example.test/runtime.manifest.json"
+    );
+    await expect(store.readPendingVersion()).resolves.toBeNull();
+  });
+
+  it("rejects legacy network manifests and signed channel source drift", async () => {
+    const root = await temporaryRoot();
+    const factoryRoot = resolve(root, "factory");
+    const updateRoot = resolve(root, "update");
+    await writeRuntime(factoryRoot, "0.5.6", undefined);
+    const keys = generateKeyPairSync("ed25519");
+    const manifest = await writeRuntime(updateRoot, "0.6.0", "runtime.tgz", keys.privateKey);
+    if (manifest.schemaVersion !== 2) throw new Error("Expected schema 2 test manifest");
+    const store = new RuntimeStore({
+      root: resolve(root, "store"),
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+    const expected = {
+      version: "0.6.0",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+      manifest: "runtime.manifest.json",
+    } as const;
+    const createManager = (value: unknown) =>
+      new ProductRuntimeUpdateManager({
+        store,
+        manifestUrl: "https://updates.example.test/channel.json",
+        getCurrentRuntime: () => null as never,
+        fetch: vi.fn(async () => Response.json(value)),
+      });
+    const resign = (value: RuntimeManifest): RuntimeManifest => {
+      const unsigned = { ...value, signature: undefined };
+      return {
+        ...unsigned,
+        signature: {
+          algorithm: "ed25519",
+          value: sign(null, getRuntimeManifestSigningPayload(unsigned), keys.privateKey).toString(
+            "base64"
+          ),
+        },
+      };
+    };
+
+    await expect(
+      createManager({ ...manifest, schemaVersion: 1, publishedAt: undefined }).checkMetadata(
+        expected,
+        "0.6.0"
+      )
+    ).rejects.toThrow("must use schema 2");
+    await expect(
+      createManager(resign({ ...manifest, runtimeVersion: "0.7.0" })).checkMetadata(
+        expected,
+        "0.6.0"
+      )
+    ).rejects.toThrow("does not match signed Desktop channel");
+    await expect(
+      createManager(resign({ ...manifest, publishedAt: "2026-08-08T02:02:03.000Z" })).checkMetadata(
+        expected,
+        "0.6.0"
+      )
+    ).rejects.toThrow("does not match signed Desktop channel");
+  });
+
   it("downloads, extracts, verifies, and stages a signed Runtime package", async () => {
     const root = await temporaryRoot();
     const factoryRoot = resolve(root, "factory");
@@ -145,6 +251,132 @@ describe("ProductRuntimeUpdateManager", () => {
       pendingVersion: "0.5.7",
       status: "ready",
     });
+  });
+
+  it("requires an explicit retry for a quarantined Runtime and reports monotonic progress", async () => {
+    const root = await temporaryRoot();
+    const factoryRoot = resolve(root, "factory");
+    const updateRoot = resolve(root, "update");
+    await writeRuntime(factoryRoot, "0.5.6", undefined);
+    const keys = generateKeyPairSync("ed25519");
+    const manifest = await writeRuntime(updateRoot, "0.6.0", "runtime.tgz", keys.privateKey);
+    if (manifest.schemaVersion !== 2) throw new Error("Expected schema 2 test manifest");
+    const archivePath = resolve(root, "runtime.tgz");
+    await create({ cwd: updateRoot, file: archivePath, gzip: true }, [
+      "server.mjs",
+      "web",
+      "manifest.json",
+    ]);
+    const archive = await readFile(archivePath);
+    const store = new RuntimeStore({
+      root: resolve(root, "store"),
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+    const manager = new ProductRuntimeUpdateManager({
+      store,
+      manifestUrl: "https://updates.example.test/channel.json",
+      getCurrentRuntime: () => null as never,
+      fetch: vi.fn(async (input) =>
+        String(input).endsWith(".tgz")
+          ? new Response(archive, {
+              headers: { "content-length": String(archive.byteLength) },
+            })
+          : Response.json(manifest)
+      ),
+    });
+    const metadata = await manager.checkMetadata(
+      {
+        version: "0.6.0",
+        publishedAt: manifest.publishedAt,
+        manifest: "runtime.manifest.json",
+      },
+      "0.6.0"
+    );
+    const progress: number[] = [];
+    const staged = await manager.downloadAndStage(metadata, {
+      signal: new AbortController().signal,
+      onProgress: (percent) => progress.push(percent),
+      explicitRetry: false,
+    });
+    await store.fallbackAfterFailure(staged, new Error("health check failed"));
+
+    await expect(
+      manager.downloadAndStage(metadata, {
+        signal: new AbortController().signal,
+        onProgress: () => {},
+        explicitRetry: false,
+      })
+    ).rejects.toThrow("explicit retry");
+    progress.length = 0;
+    await expect(
+      manager.downloadAndStage(metadata, {
+        signal: new AbortController().signal,
+        onProgress: (percent) => progress.push(percent),
+        explicitRetry: true,
+      })
+    ).resolves.toMatchObject({ manifest: { runtimeVersion: "0.6.0" } });
+    expect(progress).toEqual([...progress].sort((left, right) => left - right));
+    await expect(store.readFailedVersion()).resolves.toBeNull();
+  });
+
+  it("cleans download work files and leaves no pending pointer when cancelled", async () => {
+    const root = await temporaryRoot();
+    const factoryRoot = resolve(root, "factory");
+    const updateRoot = resolve(root, "update");
+    await writeRuntime(factoryRoot, "0.5.6", undefined);
+    const keys = generateKeyPairSync("ed25519");
+    const manifest = await writeRuntime(updateRoot, "0.6.0", "runtime.tgz", keys.privateKey);
+    if (manifest.schemaVersion !== 2) throw new Error("Expected schema 2 test manifest");
+    const archivePath = resolve(root, "runtime.tgz");
+    await create({ cwd: updateRoot, file: archivePath, gzip: true }, [
+      "server.mjs",
+      "web",
+      "manifest.json",
+    ]);
+    const archive = await readFile(archivePath);
+    const store = new RuntimeStore({
+      root: resolve(root, "store"),
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+    const manager = new ProductRuntimeUpdateManager({
+      store,
+      manifestUrl: "https://updates.example.test/channel.json",
+      getCurrentRuntime: () => null as never,
+      fetch: vi.fn(async (input) =>
+        String(input).endsWith(".tgz")
+          ? new Response(archive, {
+              headers: { "content-length": String(archive.byteLength) },
+            })
+          : Response.json(manifest)
+      ),
+    });
+    const metadata = await manager.checkMetadata(
+      {
+        version: "0.6.0",
+        publishedAt: manifest.publishedAt,
+        manifest: "runtime.manifest.json",
+      },
+      "0.6.0"
+    );
+    const controller = new AbortController();
+
+    await expect(
+      manager.downloadAndStage(metadata, {
+        signal: controller.signal,
+        onProgress: (percent) => {
+          if (percent > 0) controller.abort();
+        },
+        explicitRetry: false,
+      })
+    ).rejects.toMatchObject({ name: "AbortError" });
+    await expect(store.readPendingVersion()).resolves.toBeNull();
+    await expect(readdir(store.downloadsRoot)).resolves.toEqual([]);
   });
 
   it("records a serializable error state when a Runtime check fails", async () => {

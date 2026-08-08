@@ -4,13 +4,16 @@ import { resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { extract } from "tar";
+import type { DesktopChannelRuntime } from "./desktop-channel.js";
+import { resolveChannelAsset } from "./desktop-channel.js";
 import type { DesktopRuntimeUpdateState, DesktopRuntimeUpdateStatus } from "./protocol.js";
 import {
   compareVersions,
   getRuntimeManifestSigningPayload,
   isSafeRuntimeRelativePath,
-  parseRuntimeManifest,
+  parseNetworkRuntimeManifest,
   type RuntimeManifest,
+  type RuntimeManifestV2,
   readRuntimeManifest,
 } from "./runtime-manifest.js";
 import { type ProductRuntime, RuntimeStore } from "./runtime-store.js";
@@ -37,6 +40,13 @@ const MAX_RUNTIME_PACKAGE_BYTES = 300 * 1024 * 1024;
 class ByteLimitTransform extends Transform {
   private total = 0;
 
+  constructor(
+    private readonly contentLength: number | null = null,
+    private readonly onProgress?: (percent: number) => void
+  ) {
+    super();
+  }
+
   override _transform(
     chunk: Buffer,
     _encoding: BufferEncoding,
@@ -46,6 +56,9 @@ class ByteLimitTransform extends Transform {
     if (this.total > MAX_RUNTIME_PACKAGE_BYTES) {
       callback(new Error("Product Runtime package exceeds the download limit"));
       return;
+    }
+    if (this.contentLength && this.contentLength > 0) {
+      this.onProgress?.(Math.min(99, (this.total / this.contentLength) * 100));
     }
     callback(null, chunk);
   }
@@ -61,6 +74,43 @@ function manifestsMatch(expected: RuntimeManifest, actual: RuntimeManifest): boo
     expected.signature?.algorithm === actual.signature?.algorithm &&
     expected.signature?.value === actual.signature?.value
   );
+}
+
+export type RuntimeUpdateComponentId = "runtime:win32-x64" | "runtime:linux-x64";
+
+export interface RuntimeUpdateMetadata {
+  componentId: RuntimeUpdateComponentId;
+  manifestUrl: string;
+  manifest: RuntimeManifestV2;
+  version: string;
+  publishedAt: string;
+  plannedShellVersion: string;
+}
+
+export interface RuntimeDownloadOptions {
+  signal: AbortSignal;
+  onProgress: (percent: number) => void;
+  explicitRetry: boolean;
+}
+
+export interface RuntimeUpdateAdapter {
+  checkMetadata(
+    expected: DesktopChannelRuntime,
+    plannedShellVersion: string
+  ): Promise<RuntimeUpdateMetadata>;
+  downloadAndStage(
+    metadata: RuntimeUpdateMetadata,
+    options: RuntimeDownloadOptions
+  ): Promise<unknown>;
+  getPendingVersion(): Promise<string | null>;
+}
+
+function componentIdForManifest(manifest: RuntimeManifestV2): RuntimeUpdateComponentId {
+  const target = `${manifest.platform}-${manifest.arch}`;
+  if (target !== "win32-x64" && target !== "linux-x64") {
+    throw new Error(`Desktop Runtime target ${target} is unsupported`);
+  }
+  return `runtime:${target}`;
 }
 
 export class ProductRuntimeUpdateManager {
@@ -128,6 +178,121 @@ export class ProductRuntimeUpdateManager {
     return this.options.store.readPendingVersion();
   }
 
+  async checkMetadata(
+    expected: DesktopChannelRuntime,
+    plannedShellVersion: string
+  ): Promise<RuntimeUpdateMetadata> {
+    if (!this.options.manifestUrl) {
+      throw new Error("No Product Runtime update channel is configured");
+    }
+    const manifestUrl = resolveChannelAsset(this.options.manifestUrl, expected.manifest);
+    const manifestResponse = await (this.options.fetch ?? fetch)(manifestUrl, {
+      cache: "no-store",
+    });
+    if (!manifestResponse.ok) {
+      throw new Error(`Product Runtime update check failed with ${manifestResponse.status}`);
+    }
+    const manifest = parseNetworkRuntimeManifest(await manifestResponse.json());
+    this.options.store.assertManifestCompatible(manifest, true, {
+      shellVersion: plannedShellVersion,
+    });
+    if (
+      manifest.runtimeVersion !== expected.version ||
+      manifest.publishedAt !== expected.publishedAt
+    ) {
+      throw new Error("Product Runtime manifest does not match signed Desktop channel");
+    }
+    return {
+      componentId: componentIdForManifest(manifest),
+      manifestUrl,
+      manifest,
+      version: manifest.runtimeVersion,
+      publishedAt: manifest.publishedAt,
+      plannedShellVersion,
+    };
+  }
+
+  async downloadAndStage(
+    metadata: RuntimeUpdateMetadata,
+    options: RuntimeDownloadOptions
+  ): Promise<ProductRuntime> {
+    if (
+      (await this.options.store.readFailedVersion()) === metadata.version &&
+      !options.explicitRetry
+    ) {
+      throw new Error(
+        `Product Runtime ${metadata.version} was quarantined; an explicit retry is required`
+      );
+    }
+    if (!metadata.manifest.packageFile) {
+      throw new Error("Runtime update manifest has no package file");
+    }
+    if (options.signal.aborted) throw options.signal.reason;
+
+    const packageUrl = new URL(metadata.manifest.packageFile, metadata.manifestUrl).toString();
+    await this.options.store.initialize();
+    const workRoot = await mkdtemp(resolve(this.options.store.downloadsRoot, "runtime-update-"));
+    const archivePath = resolve(workRoot, "runtime.tgz");
+    const extractedRoot = resolve(workRoot, "payload");
+    let lastProgress = -1;
+    const reportProgress = (percent: number) => {
+      const next = Math.max(lastProgress, Math.min(100, percent));
+      if (next === lastProgress) return;
+      lastProgress = next;
+      options.onProgress(next);
+    };
+    try {
+      reportProgress(0);
+      const packageResponse = await (this.options.fetch ?? fetch)(packageUrl, {
+        cache: "no-store",
+        signal: options.signal,
+      });
+      if (!packageResponse.ok || !packageResponse.body) {
+        throw new Error(`Product Runtime download failed with ${packageResponse.status}`);
+      }
+      const contentLength = Number(packageResponse.headers.get("content-length"));
+      if (Number.isFinite(contentLength) && contentLength > MAX_RUNTIME_PACKAGE_BYTES) {
+        throw new Error("Product Runtime package exceeds the download limit");
+      }
+      await pipeline(
+        Readable.fromWeb(packageResponse.body as never),
+        new ByteLimitTransform(
+          Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null,
+          reportProgress
+        ),
+        createWriteStream(archivePath, { flags: "wx" }),
+        { signal: options.signal }
+      );
+      await mkdir(extractedRoot, { recursive: true });
+      await extract({
+        cwd: extractedRoot,
+        file: archivePath,
+        strict: true,
+        preservePaths: false,
+        filter: (path) => {
+          const normalized = normalizeArchivePath(path);
+          return normalized === "" || isSafeRuntimeRelativePath(normalized);
+        },
+      });
+      if (options.signal.aborted) throw options.signal.reason;
+      const packagedManifest = await readRuntimeManifest(extractedRoot);
+      if (!manifestsMatch(metadata.manifest, packagedManifest)) {
+        throw new Error("Downloaded Runtime does not match the signed update manifest");
+      }
+      if (options.explicitRetry) {
+        await this.options.store.clearFailedVersion(metadata.version);
+      }
+      const runtime = await this.options.store.stageDownloadedRuntime(extractedRoot, {
+        shellVersion: metadata.plannedShellVersion,
+      });
+      reportProgress(100);
+      this.options.onUpdateReady?.(runtime);
+      return runtime;
+    } finally {
+      await rm(workRoot, { recursive: true, force: true });
+    }
+  }
+
   async getState(): Promise<DesktopRuntimeUpdateState> {
     const pendingVersion = await this.getPendingVersion();
     const pendingReady = Boolean(pendingVersion) && this.status !== "checking";
@@ -152,7 +317,7 @@ export class ProductRuntimeUpdateManager {
     if (!manifestResponse.ok) {
       throw new Error(`Product Runtime update check failed with ${manifestResponse.status}`);
     }
-    const manifest = parseRuntimeManifest(await manifestResponse.json());
+    const manifest = parseNetworkRuntimeManifest(await manifestResponse.json());
     this.options.store.assertManifestCompatible(manifest, true);
     this.latestVersion = manifest.runtimeVersion;
     const currentVersion = this.options.getCurrentRuntime().manifest.runtimeVersion;
@@ -163,47 +328,22 @@ export class ProductRuntimeUpdateManager {
     if ((await this.options.store.readFailedVersion()) === manifest.runtimeVersion) {
       return { status: "failed" };
     }
-    if (!manifest.packageFile) throw new Error("Runtime update manifest has no package file");
-
-    const packageUrl = new URL(manifest.packageFile, manifestUrl).toString();
-    const workRoot = await mkdtemp(resolve(this.options.store.downloadsRoot, "runtime-update-"));
-    const archivePath = resolve(workRoot, "runtime.tgz");
-    const extractedRoot = resolve(workRoot, "payload");
-    try {
-      const packageResponse = await fetchImpl(packageUrl, { cache: "no-store" });
-      if (!packageResponse.ok || !packageResponse.body) {
-        throw new Error(`Product Runtime download failed with ${packageResponse.status}`);
+    const runtime = await this.downloadAndStage(
+      {
+        componentId: componentIdForManifest(manifest),
+        manifestUrl,
+        manifest,
+        version: manifest.runtimeVersion,
+        publishedAt: manifest.publishedAt,
+        plannedShellVersion: manifest.minShellVersion,
+      },
+      {
+        signal: new AbortController().signal,
+        onProgress: () => {},
+        explicitRetry: false,
       }
-      const contentLength = Number(packageResponse.headers.get("content-length"));
-      if (Number.isFinite(contentLength) && contentLength > MAX_RUNTIME_PACKAGE_BYTES) {
-        throw new Error("Product Runtime package exceeds the download limit");
-      }
-      await pipeline(
-        Readable.fromWeb(packageResponse.body as never),
-        new ByteLimitTransform(),
-        createWriteStream(archivePath, { flags: "wx" })
-      );
-      await mkdir(extractedRoot, { recursive: true });
-      await extract({
-        cwd: extractedRoot,
-        file: archivePath,
-        strict: true,
-        preservePaths: false,
-        filter: (path) => {
-          const normalized = normalizeArchivePath(path);
-          return normalized === "" || isSafeRuntimeRelativePath(normalized);
-        },
-      });
-      const packagedManifest = await readRuntimeManifest(extractedRoot);
-      if (!manifestsMatch(manifest, packagedManifest)) {
-        throw new Error("Downloaded Runtime does not match the signed update manifest");
-      }
-      const runtime = await this.options.store.stageDownloadedRuntime(extractedRoot);
-      this.options.onUpdateReady?.(runtime);
-      return { status: "ready", runtime };
-    } finally {
-      await rm(workRoot, { recursive: true, force: true });
-    }
+    );
+    return { status: "ready", runtime };
   }
 
   private reportError(error: unknown): void {

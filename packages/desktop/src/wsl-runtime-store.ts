@@ -128,6 +128,34 @@ if (active?.previous) {
 fs.rmSync(activePath, { force: true });
 `;
 
+const READ_FAILED_VERSION_SCRIPT = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.argv[1];
+let value = null;
+try {
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, "runtime-store", "failed.json"), "utf8"));
+  if (typeof parsed?.runtimeVersion === "string" && parsed.runtimeVersion.length > 0) {
+    value = parsed.runtimeVersion;
+  }
+} catch {}
+process.stdout.write(JSON.stringify(value));
+`;
+
+const READ_PENDING_VERSION_SCRIPT = String.raw`
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.argv[1];
+let value = null;
+try {
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, "runtime-store", "pending.json"), "utf8"));
+  if (typeof parsed?.runtimeVersion === "string" && parsed.runtimeVersion.length > 0) {
+    value = parsed.runtimeVersion;
+  }
+} catch {}
+process.stdout.write(JSON.stringify(value));
+`;
+
 export class WslRuntimeStoreClient {
   constructor(
     private readonly options: {
@@ -177,5 +205,23 @@ export class WslRuntimeStoreClient {
       JSON.stringify(candidate),
       error instanceof Error ? error.message : String(error),
     ]);
+  }
+
+  async readFailedVersion(): Promise<string | null> {
+    try {
+      const value = JSON.parse(await this.execute(READ_FAILED_VERSION_SCRIPT)) as unknown;
+      return typeof value === "string" && value.length > 0 ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async readPendingVersion(): Promise<string | null> {
+    try {
+      const value = JSON.parse(await this.execute(READ_PENDING_VERSION_SCRIPT)) as unknown;
+      return typeof value === "string" && value.length > 0 ? value : null;
+    } catch {
+      return null;
+    }
   }
 }
