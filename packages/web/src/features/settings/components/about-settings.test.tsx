@@ -1,396 +1,283 @@
 // @vitest-environment jsdom
 
-import type { UpdatePrepareInstallResponse, UpdateStateView } from "@coder-studio/core";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ProductUpdatePreparation, ProductUpdateState } from "@coder-studio/core";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { serverInfoAtom, wsClientAtom } from "../../../atoms/connection";
-import { toastsAtom } from "../../notifications/atoms";
-import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
-import { AboutSettings } from "./about-settings";
+import { localeAtom } from "../../../atoms/app-ui";
+import { serverInfoAtom } from "../../../atoms/connection";
+import { productUpdateStateAtom, updateControllerAtom } from "../../updates/atoms";
+import type { UpdateController } from "../../updates/types";
+import { AboutSettings, formatReleaseTime } from "./about-settings";
 
-function createDesktopApi(overrides: Partial<CoderStudioDesktopApi> = {}): CoderStudioDesktopApi {
+const noActiveWork = {
+  runningTerminalCount: 0,
+  runningSessionCount: 0,
+  runningSupervisorCount: 0,
+  hasActiveWork: false,
+};
+
+function desktopState(overrides: Partial<ProductUpdateState> = {}): ProductUpdateState {
   return {
-    platform: "win32",
-    getAppVersion: vi.fn(async () => "0.1.0"),
-    selectWorkspaceDirectory: vi.fn(async () => null),
-    openExternal: vi.fn(async () => true),
-    getBackendStatus: vi.fn(async () => null),
-    listEnvironments: vi.fn(async () => []),
-    getActiveEnvironment: vi.fn(async () => ({
-      id: "native",
-      kind: "native",
-      label: "Local Windows",
-      active: true,
-      status: "ready",
-      platform: "win32",
-    })),
-    openEnvironment: vi.fn(async () => ({ status: "unchanged" })),
-    onEnvironmentProgress: vi.fn(() => () => {}),
-    getRuntimeUpdateState: vi.fn(async () => ({
+    schemaVersion: 1,
+    runtimeContext: {
+      environment: "desktop-native",
+      authority: "desktop",
       supported: true,
-      currentVersion: "0.5.6",
-      latestVersion: "0.5.6",
-      pendingVersion: null,
-      lastCheckedAt: 123,
-      status: "current",
-      errorSummary: null,
       unsupportedReason: null,
-    })),
-    checkRuntimeUpdate: vi.fn(async () => ({
-      supported: true,
-      currentVersion: "0.5.6",
-      latestVersion: "0.5.6",
-      pendingVersion: null,
-      lastCheckedAt: 123,
-      status: "current",
-      errorSummary: null,
-      unsupportedReason: null,
-    })),
-    restartForRuntimeUpdate: vi.fn(async () => false),
-    onRuntimeUpdateStateChanged: vi.fn(() => () => {}),
+    },
+    status: "available",
+    productVersion: "0.6.0",
+    productPublishedAt: "2026-08-08T01:02:03.000Z",
+    planId: "plan-1",
+    createdAt: "2026-08-08T01:03:00.000Z",
+    updatedAt: "2026-08-08T01:04:00.000Z",
+    lastCheckedAt: Date.parse("2026-08-08T01:04:00.000Z"),
+    components: [
+      {
+        id: "shell",
+        kind: "shell",
+        target: "win32-x64",
+        currentVersion: "0.2.0",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        targetVersion: "0.3.0",
+        targetPublishedAt: "2026-08-08T01:02:03.000Z",
+        status: "available",
+        progressPercent: null,
+        downloaded: false,
+        verified: false,
+        errorSummary: null,
+      },
+      {
+        id: "runtime:win32-x64",
+        kind: "runtime",
+        target: "win32-x64",
+        currentVersion: "0.6.0",
+        currentPublishedAt: "2026-07-20T00:00:00.000Z",
+        targetVersion: "0.7.0",
+        targetPublishedAt: "2026-08-08T01:02:03.000Z",
+        status: "available",
+        progressPercent: null,
+        downloaded: false,
+        verified: false,
+        errorSummary: null,
+      },
+    ],
+    compatibility: { compatible: true, code: null, summary: null },
+    diagnostics: {
+      failedComponentId: null,
+      failedPhase: null,
+      shellVersion: "0.2.0",
+      shellPublishedAt: "2026-07-01T00:00:00.000Z",
+      shellBuiltAt: "2026-06-30T23:50:00.000Z",
+      engineVersion: "2",
+      nodeVersion: "24.19.0",
+      runtimeHostApiVersion: 1,
+      apiProtocolVersion: 1,
+      dataSchemaVersion: 1,
+      logLocations: ["desktop-update.log"],
+      recoveryAction: null,
+    },
+    restartRequired: true,
+    requiresManualStep: false,
+    manualCommand: null,
+    errorSummary: null,
     ...overrides,
   };
 }
 
-function renderAboutSettings({
-  dispatch = vi.fn(),
-  updateState,
-  locale = "zh" as const,
-  autoCheckEnabled = true,
-  checkIntervalSec = 3600,
+function cliState(overrides: Partial<ProductUpdateState> = {}): ProductUpdateState {
+  const state = desktopState({
+    runtimeContext: {
+      environment: "cli-global-npm",
+      authority: "cli",
+      supported: true,
+      unsupportedReason: null,
+    },
+    components: [
+      {
+        id: "cli",
+        kind: "cli",
+        target: null,
+        currentVersion: "0.6.0",
+        currentPublishedAt: "2026-07-20T00:00:00.000Z",
+        targetVersion: "0.7.0",
+        targetPublishedAt: "2026-08-08T01:02:03.000Z",
+        status: "available",
+        progressPercent: null,
+        downloaded: false,
+        verified: false,
+        errorSummary: null,
+      },
+    ],
+    diagnostics: {
+      ...desktopState().diagnostics,
+      shellVersion: null,
+      shellPublishedAt: null,
+      shellBuiltAt: null,
+      engineVersion: null,
+      nodeVersion: null,
+      runtimeHostApiVersion: null,
+      apiProtocolVersion: null,
+      dataSchemaVersion: null,
+      logLocations: [],
+    },
+  });
+  return { ...state, ...overrides };
+}
+
+function createController(state: ProductUpdateState, kind: UpdateController["kind"] = "desktop") {
+  const prepared: ProductUpdatePreparation = {
+    state,
+    activity: noActiveWork,
+    canProceed: true,
+  };
+  return {
+    kind,
+    getState: vi.fn(() => state),
+    refresh: vi.fn(async () => state),
+    check: vi.fn(async () => state),
+    download: vi.fn(async () => state),
+    retry: vi.fn(async () => state),
+    cancelDownload: vi.fn(async () => state),
+    prepare: vi.fn(async () => prepared),
+    start: vi.fn(async () => state),
+    getSettings: vi.fn(async () => null),
+    setSettings: vi.fn(async () => null),
+    subscribe: vi.fn(() => () => {}),
+    dispose: vi.fn(),
+  } satisfies UpdateController;
+}
+
+function renderAbout({
+  state = desktopState(),
+  controller = createController(state),
   view = "all" as const,
-  onAutoCheckEnabledChange = vi.fn<(value: boolean) => void>(),
-  onCheckIntervalChange = vi.fn<(value: number) => void>(),
 }: {
-  dispatch?: ReturnType<typeof vi.fn>;
-  updateState?: UpdateStateView | null;
-  locale?: "zh" | "en";
-  autoCheckEnabled?: boolean;
-  checkIntervalSec?: number;
+  state?: ProductUpdateState;
+  controller?: UpdateController;
   view?: "all" | "product" | "update-status" | "auto-update";
-  onAutoCheckEnabledChange?: (value: boolean) => void;
-  onCheckIntervalChange?: (value: number) => void;
 } = {}) {
   const store = createStore();
-  store.set(wsClientAtom, { sendCommand: dispatch } as never);
-  store.set(serverInfoAtom, {
-    version: "0.4.0",
-    serverInstanceId: "server-123",
-  });
-  store.set(
-    updateStateAtom,
-    updateState ?? {
-      version: 1,
-      currentVersion: "0.4.0",
-      latestVersion: "0.5.0",
-      availability: "update_available",
-      updateStatus: "idle",
-      lastCheckedAt: 123,
-      targetVersion: null,
-      startedAt: null,
-      finishedAt: null,
-      requiresManualStep: false,
-      manualCommand: null,
-      errorSummary: null,
-      supported: true,
-      installKind: "global_npm",
-      unsupportedReason: null,
-    }
-  );
-
+  store.set(localeAtom, "en");
+  store.set(serverInfoAtom, { version: state.productVersion, serverInstanceId: "server-1" });
+  store.set(productUpdateStateAtom, state);
+  store.set(updateControllerAtom, controller);
   render(
     <Provider store={store}>
       <AboutSettings
-        autoCheckEnabled={autoCheckEnabled}
-        checkIntervalSec={checkIntervalSec}
-        onAutoCheckEnabledChange={onAutoCheckEnabledChange}
-        onCheckIntervalChange={onCheckIntervalChange}
-        locale={locale}
+        autoCheckEnabled
+        checkIntervalSec={21600}
+        locale="en"
+        onAutoCheckEnabledChange={vi.fn()}
+        onCheckIntervalChange={vi.fn()}
         view={view}
       />
     </Provider>
   );
-
-  return { store, dispatch, onAutoCheckEnabledChange, onCheckIntervalChange };
+  return { store, controller };
 }
 
-describe("AboutSettings", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    delete window.coderStudioDesktop;
+describe("AboutSettings unified updates", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("shows Runtime as the Desktop product version and Shell only in diagnostics", () => {
+    renderAbout();
+    expect(screen.getByTestId("product-version")).toHaveTextContent("v0.6.0");
+    expect(screen.queryByText("Shell v0.2.0 → v0.3.0")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Component diagnostics" }));
+    expect(screen.getByText("Shell v0.2.0 → v0.3.0")).toBeInTheDocument();
+    expect(screen.getByText(/Authority: desktop/)).toBeInTheDocument();
+    expect(screen.getByText(/Environment: desktop-native/)).toBeInTheDocument();
+    expect(screen.getByText(/Plan ID: plan-1/)).toBeInTheDocument();
   });
 
-  it("renders current and latest version info", () => {
-    renderAboutSettings();
-
-    expect(screen.getByTestId("about-settings")).toBeInTheDocument();
-    expect(screen.getByText("Coder Studio")).toBeInTheDocument();
-    expect(screen.getByText("v0.4.0")).toBeInTheDocument();
-    expect(screen.getByText("v0.5.0")).toBeInTheDocument();
+  it("renders trusted UTC release time locally and preserves unknown", () => {
+    const known = renderAbout();
+    expect(screen.getByTestId("product-release-time")).toHaveTextContent("2026");
+    act(() => known.store.set(productUpdateStateAtom, desktopState({ productPublishedAt: null })));
+    expect(screen.getByTestId("product-release-time")).toHaveTextContent("Release time unknown");
+    expect(formatReleaseTime("invalid", "en", "Release time unknown")).toBe("Release time unknown");
   });
 
-  it("does not render the auto-check section title or description copy", () => {
-    renderAboutSettings();
-
-    expect(screen.queryByRole("heading", { name: "自动检查" })).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("配置后台轮询 npm 的节奏。相关偏好会持久化到设置文件。")
-    ).not.toBeInTheDocument();
+  it.each([
+    ["desktop available", desktopState(), "desktop", "Download update", "download"],
+    [
+      "desktop ready",
+      desktopState({ status: "ready" }),
+      "desktop",
+      "Restart and update",
+      "prepare",
+    ],
+    ["desktop failed", desktopState({ status: "failed" }), "desktop", "Retry", "retry"],
+    ["CLI available", cliState(), "cli", "Update and restart", "prepare"],
+  ] as const)("routes the primary action for %s", async (_name, state, kind, label, method) => {
+    const controller = createController(state, kind);
+    renderAbout({ state, controller });
+    const actions = screen.getByTestId("update-primary-actions");
+    expect(within(actions).getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(within(actions).getByRole("button", { name: label }));
+    await waitFor(() => expect(controller[method]).toHaveBeenCalled());
   });
 
-  it("checks for updates and stores a toast when a newer version is returned", async () => {
-    const dispatch = vi.fn().mockResolvedValue({
-      version: 1,
-      currentVersion: "0.4.0",
-      latestVersion: "0.6.0",
-      availability: "update_available",
-      updateStatus: "idle",
-      lastCheckedAt: 321,
-      targetVersion: null,
-      startedAt: null,
-      finishedAt: null,
-      requiresManualStep: false,
-      manualCommand: null,
-      errorSummary: null,
-      supported: true,
-      installKind: "global_npm",
-      unsupportedReason: null,
-    } satisfies UpdateStateView);
-    const { store } = renderAboutSettings({ dispatch });
-
-    fireEvent.click(screen.getByRole("button", { name: "立即检查" }));
-
-    await waitFor(() => {
-      expect(dispatch).toHaveBeenCalledWith("updates.check", {}, undefined);
-    });
-
-    await waitFor(() => {
-      expect(store.get(updateStateAtom)?.latestVersion).toBe("0.6.0");
-    });
-    expect(store.get(toastsAtom)).toHaveLength(0);
-  });
-
-  it("uses the Product Runtime updater for Desktop checks", async () => {
-    const checkRuntimeUpdate = vi.fn(async () => ({
-      supported: true,
-      currentVersion: "0.5.6",
-      latestVersion: "0.5.7",
-      pendingVersion: "0.5.7",
-      lastCheckedAt: 321,
-      status: "ready" as const,
-      errorSummary: null,
-      unsupportedReason: null,
-    }));
-    window.coderStudioDesktop = createDesktopApi({ checkRuntimeUpdate });
-    const dispatch = vi.fn();
-    renderAboutSettings({ dispatch });
-
-    expect(await screen.findByText("App 版本")).toBeInTheDocument();
-    expect(screen.getByText("Runtime 版本")).toBeInTheDocument();
-    expect(screen.getByText("最新 Runtime 版本")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Runtime 更新" })).toBeInTheDocument();
-    expect(await screen.findByText("v0.1.0")).toBeInTheDocument();
-    expect(screen.getByText("v0.4.0")).toBeInTheDocument();
-    expect(screen.queryByText("当前版本")).not.toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "立即检查" })).toBeEnabled();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "立即检查" }));
-
-    await waitFor(() => {
-      expect(checkRuntimeUpdate).toHaveBeenCalledTimes(1);
-    });
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(await screen.findByText("v0.5.7")).toBeInTheDocument();
-  });
-
-  it("restarts Desktop to activate a staged Product Runtime", async () => {
-    const readyState: DesktopRuntimeUpdateState = {
-      supported: true,
-      currentVersion: "0.5.6",
-      latestVersion: "0.5.7",
-      pendingVersion: "0.5.7",
-      lastCheckedAt: 321,
-      status: "ready",
-      errorSummary: null,
-      unsupportedReason: null,
-    };
-    const restartForRuntimeUpdate = vi.fn(async () => true);
-    window.coderStudioDesktop = createDesktopApi({
-      getRuntimeUpdateState: vi.fn(async () => readyState),
-      restartForRuntimeUpdate,
-    });
-    const dispatch = vi.fn();
-    renderAboutSettings({ dispatch });
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "立即更新" })).toBeEnabled();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "立即更新" }));
-
-    await waitFor(() => {
-      expect(restartForRuntimeUpdate).toHaveBeenCalledTimes(1);
-    });
-    expect(dispatch).not.toHaveBeenCalled();
-  });
-
-  it("refreshes Desktop controls when an automatic Runtime check finishes", async () => {
-    let stateListener: ((state: DesktopRuntimeUpdateState) => void) | undefined;
-    window.coderStudioDesktop = createDesktopApi({
-      getRuntimeUpdateState: vi.fn(async () => ({
-        supported: true,
-        currentVersion: "0.5.6",
-        latestVersion: null,
-        pendingVersion: null,
-        lastCheckedAt: null,
-        status: "checking",
-        errorSummary: null,
-        unsupportedReason: null,
+  it("supports Desktop progress cancellation without exposing a second primary action", async () => {
+    const state = desktopState({
+      status: "downloading",
+      components: desktopState().components.map((component) => ({
+        ...component,
+        status: "downloading",
+        progressPercent: 42,
       })),
-      onRuntimeUpdateStateChanged: vi.fn((listener) => {
-        stateListener = listener;
-        return () => {
-          stateListener = undefined;
-        };
-      }),
     });
-    renderAboutSettings();
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "立即检查" })).toBeDisabled();
-    });
-    await act(async () => {
-      stateListener?.({
-        supported: true,
-        currentVersion: "0.5.6",
-        latestVersion: "0.5.6",
-        pendingVersion: null,
-        lastCheckedAt: 456,
-        status: "current",
-        errorSummary: null,
-        unsupportedReason: null,
-      });
-    });
-
-    expect(screen.getByRole("button", { name: "立即检查" })).toBeEnabled();
+    const controller = createController(state);
+    renderAbout({ state, controller });
+    expect(screen.getByText(/42%/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel download" }));
+    await waitFor(() => expect(controller.cancelDownload).toHaveBeenCalledTimes(1));
   });
 
-  it("opens confirmation when active work exists before install", async () => {
-    const prepareResponse: UpdatePrepareInstallResponse = {
-      version: 1,
-      currentVersion: "0.4.0",
-      latestVersion: "0.5.0",
-      availability: "update_available",
-      updateStatus: "idle",
-      lastCheckedAt: 123,
-      targetVersion: null,
-      startedAt: null,
-      finishedAt: null,
-      requiresManualStep: false,
-      manualCommand: null,
-      errorSummary: null,
-      supported: true,
-      installKind: "global_npm",
-      unsupportedReason: null,
-      canStartInstall: true,
-      activity: {
-        runningTerminalCount: 1,
-        runningSessionCount: 1,
-        runningSupervisorCount: 0,
-        hasActiveWork: true,
+  it("confirms active work and preserves the exact prepared state for a forced restart", async () => {
+    const state = desktopState({ status: "ready" });
+    const controller = createController(state);
+    vi.mocked(controller.prepare).mockResolvedValue({
+      state,
+      activity: { ...noActiveWork, runningTerminalCount: 1, hasActiveWork: true },
+      canProceed: true,
+    });
+    renderAbout({ state, controller });
+    fireEvent.click(screen.getByRole("button", { name: "Restart and update" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restart and update" }));
+    await waitFor(() => expect(controller.start).toHaveBeenCalledWith(expect.anything(), true));
+  });
+
+  it("keeps readonly sidecar updates non-mutating and shows Desktop guidance", () => {
+    const state = desktopState({
+      runtimeContext: {
+        environment: "desktop-managed",
+        authority: "desktop",
+        supported: false,
+        unsupportedReason: "Open this update in Coder Studio Desktop",
       },
-    };
-    const dispatch = vi.fn().mockImplementation(async (op: string) => {
-      if (op === "updates.prepareInstall") {
-        return prepareResponse;
-      }
-      throw new Error(`unexpected op: ${op}`);
+      status: "unsupported",
     });
-    const { store } = renderAboutSettings({ dispatch });
-
-    fireEvent.click(screen.getByRole("button", { name: "立即更新" }));
-
-    await waitFor(() => {
-      expect(dispatch).toHaveBeenCalledWith("updates.prepareInstall", {}, undefined);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("确认更新")).toBeInTheDocument();
-    });
-    expect(store.get(updatePrepareInstallAtom)?.activity.hasActiveWork).toBe(true);
+    const controller = createController(state, "readonly");
+    renderAbout({ state, controller });
+    expect(
+      screen.getByText("Open Coder Studio Desktop to manage this update.")
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("update-primary-actions")).not.toBeInTheDocument();
   });
 
-  it("calls preference change handlers for auto-check controls", () => {
-    const onAutoCheckEnabledChange = vi.fn();
-    const onCheckIntervalChange = vi.fn();
-
-    renderAboutSettings({
-      onAutoCheckEnabledChange,
-      onCheckIntervalChange,
+  it("shows manual CLI recovery without an install action", () => {
+    const state = cliState({
+      status: "manual_required",
+      requiresManualStep: true,
+      manualCommand: "npm install -g coder-studio@0.7.0",
+      errorSummary: "Automatic update unavailable",
     });
-
-    fireEvent.click(screen.getByRole("switch", { name: "自动检查更新" }));
-    fireEvent.click(screen.getByRole("tab", { name: "12 小时" }));
-
-    expect(onAutoCheckEnabledChange).toHaveBeenCalledWith(false);
-    expect(onCheckIntervalChange).toHaveBeenCalledWith(43200);
-  });
-
-  it("disables the interval control when auto-check is off", () => {
-    renderAboutSettings({
-      autoCheckEnabled: false,
-    });
-
-    expect(screen.getByRole("switch", { name: "自动检查更新" })).toHaveAttribute(
-      "aria-checked",
-      "false"
-    );
-    expect(screen.getByRole("tablist", { name: "检查间隔" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "1 小时" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "6 小时" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "12 小时" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "24 小时" })).toBeDisabled();
-  });
-
-  it("disables update actions while a check is already in progress", () => {
-    renderAboutSettings({
-      updateState: {
-        version: 1,
-        currentVersion: "0.4.0",
-        latestVersion: "0.5.0",
-        availability: "update_available",
-        updateStatus: "checking",
-        lastCheckedAt: 123,
-        targetVersion: null,
-        startedAt: null,
-        finishedAt: null,
-        requiresManualStep: false,
-        manualCommand: null,
-        errorSummary: null,
-        supported: true,
-        installKind: "global_npm",
-        unsupportedReason: null,
-      },
-    });
-
-    expect(screen.getByRole("button", { name: "立即检查" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "立即更新" })).toBeDisabled();
-  });
-
-  it("renders only update status details for the update-status subview", () => {
-    renderAboutSettings({ view: "update-status" });
-
-    expect(screen.getByText("最新版本")).toBeInTheDocument();
-    expect(screen.queryByText("产品名称")).not.toBeInTheDocument();
-    expect(screen.queryByRole("switch", { name: "自动检查更新" })).not.toBeInTheDocument();
-  });
-
-  it("renders only automatic update controls for the auto-update subview", () => {
-    renderAboutSettings({ view: "auto-update" });
-
-    expect(screen.getByRole("switch", { name: "自动检查更新" })).toBeInTheDocument();
-    expect(screen.queryByText("产品名称")).not.toBeInTheDocument();
-    expect(screen.queryByText("最新版本")).not.toBeInTheDocument();
+    renderAbout({ state, controller: createController(state, "cli") });
+    expect(screen.getByText("npm install -g coder-studio@0.7.0")).toBeInTheDocument();
+    expect(screen.queryByTestId("update-primary-actions")).not.toBeInTheDocument();
   });
 });

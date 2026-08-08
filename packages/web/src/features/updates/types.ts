@@ -47,7 +47,7 @@ export interface UpdateController {
   start(prepared: ProductUpdatePreparation, force: boolean): Promise<ProductUpdateState>;
   getSettings(): Promise<DesktopUpdateSettings | null>;
   setSettings(
-    patch: Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">
+    patch: Partial<Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">>
   ): Promise<DesktopUpdateSettings | null>;
   subscribe(listener: (state: ProductUpdateState) => void): () => void;
   dispose(): void;

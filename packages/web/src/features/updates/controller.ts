@@ -142,7 +142,7 @@ abstract class UpdateAdapterBase implements UpdateController {
   abstract start(prepared: ProductUpdatePreparation, force: boolean): Promise<ProductUpdateState>;
   abstract getSettings(): Promise<DesktopUpdateSettings | null>;
   abstract setSettings(
-    patch: Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">
+    patch: Partial<Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">>
   ): Promise<DesktopUpdateSettings | null>;
   abstract dispose(): void;
 }
@@ -205,10 +205,14 @@ class DesktopUpdateAdapter extends UpdateAdapterBase {
     return this.bridge.getUpdateSettings();
   }
 
-  setSettings(
-    patch: Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">
+  async setSettings(
+    patch: Partial<Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">>
   ): Promise<DesktopUpdateSettings> {
-    return this.bridge.setUpdateSettings(patch);
+    const current = await this.bridge.getUpdateSettings();
+    return this.bridge.setUpdateSettings({
+      autoCheckEnabled: patch.autoCheckEnabled ?? current.autoCheckEnabled,
+      checkIntervalSec: patch.checkIntervalSec ?? current.checkIntervalSec,
+    });
   }
 
   dispose(): void {
