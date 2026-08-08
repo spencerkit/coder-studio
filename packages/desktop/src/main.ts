@@ -49,6 +49,7 @@ declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
 
 const ENVIRONMENT_LAUNCH_DATA_KEY = "environmentLaunchRequestId";
 const ENVIRONMENT_LAUNCH_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+const ENVIRONMENT_SHUTDOWN_FAILURE_MESSAGE = "Coder Studio is shutting down";
 
 let mainWindow: BrowserWindow | null = null;
 let backendManager: BackendManager | null = null;
@@ -67,17 +68,18 @@ let releaseProductRuntimeLease: (() => Promise<void>) | null = null;
 let appOrigin: string | null = null;
 let shutdownComplete = false;
 let shutdownStarted = false;
+let shutdownActivationPromise: Promise<void> = Promise.resolve();
 const smokeResultPath = process.env.CODER_STUDIO_DESKTOP_SMOKE_RESULT?.trim() || null;
 const environmentActivation = new EnvironmentActivationCoordinator({
   focusWindow: () => {
-    if (!mainWindow) return false;
+    if (shutdownStarted || !mainWindow) return false;
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
     return true;
   },
   markReady: async (requestId) => {
-    if (!environmentLaunchStore) return;
+    if (shutdownStarted || !environmentLaunchStore) return;
     await environmentLaunchStore.markReady(requestId, activeEnvironmentTarget.id, process.pid);
   },
   markFailed: async (requestId, message) => {
@@ -90,6 +92,24 @@ function readLaunchRequestAdditionalData(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const requestId = (value as Record<string, unknown>)[ENVIRONMENT_LAUNCH_DATA_KEY];
   return isEnvironmentLaunchRequestId(requestId) ? requestId : undefined;
+}
+
+function trackShutdownActivation(promise: Promise<void>): Promise<void> {
+  const trackedPromise = promise.catch((error) => {
+    console.error("Unable to fail Desktop environment activation during shutdown", error);
+  });
+  shutdownActivationPromise = Promise.all([shutdownActivationPromise, trackedPromise]).then(
+    () => undefined
+  );
+  return trackedPromise;
+}
+
+async function waitForShutdownActivations(): Promise<void> {
+  for (;;) {
+    const pending = shutdownActivationPromise;
+    await pending;
+    if (pending === shutdownActivationPromise) return;
+  }
 }
 
 function getEnvironmentPartition(target: DesktopEnvironmentTarget): string {
@@ -370,11 +390,25 @@ async function handleStartupFailure(error: unknown): Promise<void> {
     defaultId: 0,
     cancelId: 2,
   });
-  if (result.response === 0) app.relaunch();
-  if (result.response === 1 && environmentInstanceRoot) {
-    await openEnvironmentInstance(environmentInstanceRoot, NATIVE_ENVIRONMENT);
+  try {
+    if (result.response === 0) app.relaunch();
+    if (result.response === 1) {
+      try {
+        if (!environmentInstanceRoot) {
+          throw new Error("Desktop environment root is not initialized");
+        }
+        await openEnvironmentInstance(environmentInstanceRoot, NATIVE_ENVIRONMENT);
+      } catch (fallbackError) {
+        const fallbackDetails =
+          fallbackError instanceof Error
+            ? fallbackError.stack || fallbackError.message
+            : String(fallbackError);
+        dialog.showErrorBox("Unable to open Local Windows", fallbackDetails);
+      }
+    }
+  } finally {
+    app.quit();
   }
-  app.quit();
 }
 
 function installApplicationMenu(): void {
@@ -473,6 +507,7 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
 
   if (!smokeResultPath) {
     window.once("ready-to-show", () => {
+      if (shutdownStarted) return;
       void environmentActivation
         .markWindowReady()
         .catch((error) =>
@@ -738,6 +773,12 @@ if (!hasSingleInstanceLock) {
   }
   app.on("second-instance", (_event, _argv, _workingDirectory, additionalData) => {
     const requestId = readLaunchRequestAdditionalData(additionalData);
+    if (shutdownStarted) {
+      if (requestId) {
+        void trackShutdownActivation(environmentActivation.request(requestId));
+      }
+      return;
+    }
     void environmentActivation.request(requestId).catch((error) => {
       console.error("Unable to activate Desktop environment window", error);
     });
@@ -758,6 +799,9 @@ app.on("before-quit", (event: Event) => {
   if (shutdownComplete || shutdownStarted) return;
   event.preventDefault();
   shutdownStarted = true;
+  const activationFailurePromise = trackShutdownActivation(
+    environmentActivation.failPending(ENVIRONMENT_SHUTDOWN_FAILURE_MESSAGE)
+  );
   updateManager?.stop();
   runtimeUpdateManager?.stop();
   void (desktopGateway?.stop() ?? Promise.resolve())
@@ -766,6 +810,8 @@ app.on("before-quit", (event: Event) => {
     .catch(() => undefined)
     .then(() => releaseProductRuntimeLease?.() ?? Promise.resolve())
     .catch(() => undefined)
+    .then(() => activationFailurePromise)
+    .then(waitForShutdownActivations)
     .finally(() => {
       shutdownComplete = true;
       app.quit();
