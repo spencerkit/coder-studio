@@ -22,6 +22,7 @@ import {
   getEnvironmentInstanceRoot,
   readEnvironmentInstanceTarget,
   readEnvironmentLaunchRequestId,
+  waitForEnvironmentInstanceReady,
 } from "./environment-instance.js";
 import { EnvironmentLaunchStore, isEnvironmentLaunchRequestId } from "./environment-launch.js";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
@@ -137,28 +138,23 @@ async function openEnvironmentInstance(
   const launchStore = environmentLaunchStore;
   const request = await launchStore.create(target);
   try {
-    await new Promise<void>((resolveOpened, rejectOpened) => {
-      const child = spawn(
-        process.execPath,
-        createEnvironmentInstanceArgs(rootUserDataDir, target, request.requestId),
-        {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-        }
-      );
-      child.once("error", rejectOpened);
-      child.once("spawn", () => {
-        child.unref();
-        resolveOpened();
-      });
-    });
+    const child = spawn(
+      process.execPath,
+      createEnvironmentInstanceArgs(rootUserDataDir, target, request.requestId),
+      {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      }
+    );
+    await waitForEnvironmentInstanceReady(child, () =>
+      launchStore.waitForTerminal(request.requestId, target).then(() => undefined)
+    );
   } catch (error) {
     const message = error instanceof Error ? error.stack || error.message : String(error);
     await launchStore.markFailed(request.requestId, target.id, message);
     throw error;
   }
-  await launchStore.waitForTerminal(request.requestId, target);
 }
 
 async function finishSmokeTest(result: Record<string, unknown>, exitCode = 0): Promise<void> {

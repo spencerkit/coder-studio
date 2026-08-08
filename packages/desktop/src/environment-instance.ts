@@ -13,6 +13,67 @@ export interface CommandLineSwitchReader {
   getSwitchValue(name: string): string;
 }
 
+interface EnvironmentInstanceProcess {
+  off(event: "error", listener: (error: Error) => void): unknown;
+  off(event: "spawn", listener: () => void): unknown;
+  off(
+    event: "exit",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void
+  ): unknown;
+  once(event: "error", listener: (error: Error) => void): unknown;
+  once(event: "spawn", listener: () => void): unknown;
+  once(
+    event: "exit",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void
+  ): unknown;
+  unref(): void;
+}
+
+export async function waitForEnvironmentInstanceReady(
+  child: EnvironmentInstanceProcess,
+  waitForReady: () => Promise<void>
+): Promise<void> {
+  let spawned = false;
+  let resolveSpawned!: () => void;
+  let rejectSpawned!: (error: Error) => void;
+  let rejectEarlyExit!: (error: Error) => void;
+  const spawnedPromise = new Promise<void>((resolve, reject) => {
+    resolveSpawned = resolve;
+    rejectSpawned = reject;
+  });
+  const earlyExitPromise = new Promise<never>((_resolve, reject) => {
+    rejectEarlyExit = reject;
+  });
+  const handleError = (error: Error) => {
+    if (spawned) rejectEarlyExit(error);
+    else rejectSpawned(error);
+  };
+  const handleSpawn = () => {
+    spawned = true;
+    child.unref();
+    resolveSpawned();
+  };
+  const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
+    // A secondary Electron process exits normally after forwarding its activation request to
+    // the existing primary process. Keep waiting for that primary process to acknowledge ready.
+    if (code === 0 && signal === null) return;
+    const result = code !== null ? `code ${code}` : signal ? `signal ${signal}` : "unknown status";
+    rejectEarlyExit(new Error(`Desktop environment process exited before readiness (${result})`));
+  };
+
+  child.once("error", handleError);
+  child.once("spawn", handleSpawn);
+  child.once("exit", handleExit);
+  try {
+    await spawnedPromise;
+    await Promise.race([waitForReady(), earlyExitPromise]);
+  } finally {
+    child.off("error", handleError);
+    child.off("spawn", handleSpawn);
+    child.off("exit", handleExit);
+  }
+}
+
 export function getEnvironmentInstanceRoot(
   commandLine: CommandLineSwitchReader,
   fallbackUserDataDir: string
