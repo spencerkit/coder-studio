@@ -1,11 +1,13 @@
 import { link, mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createEnvironmentLaunchingProgress,
   EnvironmentLaunchStore,
   type EnvironmentLaunchStoreOptions,
   isEnvironmentLaunchRequestId,
+  settleEnvironmentLaunchFailure,
 } from "./environment-launch.js";
 import type { DesktopEnvironmentTarget } from "./protocol.js";
 
@@ -28,6 +30,16 @@ function target(id: string, label = id): DesktopEnvironmentTarget {
 }
 
 describe("EnvironmentLaunchStore", () => {
+  it("uses indeterminate progress while waiting for the target window", () => {
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+
+    expect(createEnvironmentLaunchingProgress(requestTarget)).toEqual({
+      environmentId: requestTarget.id,
+      phase: "launching",
+      message: "Opening WSL: Ubuntu…",
+    });
+  });
+
   it("creates requests beneath the trusted root and rejects invalid request paths", async () => {
     const store = await createStore();
     const request = await store.create(target("native", "Local: Windows"));
@@ -65,6 +77,37 @@ describe("EnvironmentLaunchStore", () => {
     await expect(waiting).resolves.toMatchObject({ status: "ready", pid: 4321 });
   });
 
+  it("preserves ready when a late process failure loses the terminal claim", async () => {
+    const store = await createStore();
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    const request = await store.create(requestTarget);
+    const processError = new Error("Desktop environment process exited before readiness");
+
+    await expect(store.markReady(request.requestId, requestTarget.id, 4321)).resolves.toBe(true);
+    await expect(
+      settleEnvironmentLaunchFailure(store, request.requestId, requestTarget, processError)
+    ).resolves.toBeUndefined();
+    await expect(store.read(request.requestId)).resolves.toMatchObject({
+      status: "ready",
+      pid: 4321,
+    });
+  });
+
+  it("records and rethrows a process failure when no ready terminal won", async () => {
+    const store = await createStore();
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    const request = await store.create(requestTarget);
+    const processError = new Error("Desktop environment process exited before readiness");
+
+    await expect(
+      settleEnvironmentLaunchFailure(store, request.requestId, requestTarget, processError)
+    ).rejects.toBe(processError);
+    await expect(store.read(request.requestId)).resolves.toMatchObject({
+      status: "failed",
+      message: expect.stringContaining(processError.message),
+    });
+  });
+
   it("surfaces a matching failure message to the waiter", async () => {
     const store = await createStore();
     const requestTarget = target("native", "Local: Windows");
@@ -98,6 +141,37 @@ describe("EnvironmentLaunchStore", () => {
     });
     await expect(store.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
     await expect(store.read(requestId)).resolves.toMatchObject({ status: "timed-out" });
+  });
+
+  it("keeps the timeout bounded when the wall clock moves backwards", async () => {
+    const store = await createStore();
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
+    let wallTime = 100_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => wallTime);
+    const requestId = (await store.create(requestTarget)).requestId;
+    const waiting = store.waitForTerminal(requestId, requestTarget, {
+      pollIntervalMs: 2,
+      timeoutMs: 25,
+    });
+    wallTime = 0;
+
+    let observed: string;
+    try {
+      observed = await Promise.race([
+        waiting.then(
+          () => "resolved",
+          (error) => (error instanceof Error ? error.message : String(error))
+        ),
+        new Promise<string>((resolveWatchdog) =>
+          setTimeout(() => resolveWatchdog("watchdog expired"), 500)
+        ),
+      ]);
+    } finally {
+      dateNow.mockRestore();
+    }
+    await waiting.catch(() => undefined);
+
+    expect(observed).toContain("Timed out waiting for WSL: Ubuntu to open");
   });
 
   it("does not transition a request for a different environment", async () => {

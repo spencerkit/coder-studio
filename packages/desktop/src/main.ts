@@ -24,7 +24,12 @@ import {
   readEnvironmentLaunchRequestId,
   waitForEnvironmentInstanceReady,
 } from "./environment-instance.js";
-import { EnvironmentLaunchStore, isEnvironmentLaunchRequestId } from "./environment-launch.js";
+import {
+  createEnvironmentLaunchingProgress,
+  EnvironmentLaunchStore,
+  isEnvironmentLaunchRequestId,
+  settleEnvironmentLaunchFailure,
+} from "./environment-launch.js";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import { DesktopGateway } from "./gateway.js";
@@ -151,9 +156,7 @@ async function openEnvironmentInstance(
       launchStore.waitForTerminal(request.requestId, target).then(() => undefined)
     );
   } catch (error) {
-    const message = error instanceof Error ? error.stack || error.message : String(error);
-    await launchStore.markFailed(request.requestId, target.id, message);
-    throw error;
+    await settleEnvironmentLaunchFailure(launchStore, request.requestId, target, error);
   }
 }
 
@@ -343,12 +346,7 @@ function registerIpcHandlers(rootUserDataDir: string): void {
     environmentOpening = true;
     try {
       if (target.kind === "wsl") await environmentManager.prepareWsl(target);
-      emitEnvironmentProgress({
-        environmentId: target.id,
-        phase: "launching",
-        message: `Opening ${target.label}…`,
-        percent: 100,
-      });
+      emitEnvironmentProgress(createEnvironmentLaunchingProgress(target));
       await openEnvironmentInstance(rootUserDataDir, target);
       return { status: "opened" as const };
     } finally {

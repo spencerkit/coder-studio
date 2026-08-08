@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { link, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import type { DesktopEnvironmentTarget } from "./protocol.js";
+import { performance } from "node:perf_hooks";
+import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
 
 export const DEFAULT_ENVIRONMENT_LAUNCH_TIMEOUT_MS = 45_000;
 
@@ -35,6 +36,16 @@ const TRANSITION_FINALIZE_POLL_INTERVAL_MS = 10;
 
 export function isEnvironmentLaunchRequestId(value: unknown): value is string {
   return typeof value === "string" && REQUEST_ID_PATTERN.test(value);
+}
+
+export function createEnvironmentLaunchingProgress(
+  target: DesktopEnvironmentTarget
+): DesktopEnvironmentProgress {
+  return {
+    environmentId: target.id,
+    phase: "launching",
+    message: `Opening ${target.label}…`,
+  };
 }
 
 function isEnvironmentLaunchTarget(value: unknown): value is DesktopEnvironmentTarget {
@@ -236,7 +247,7 @@ export class EnvironmentLaunchStore {
     this.assertTarget(target);
     const pollIntervalMs = Math.max(1, options.pollIntervalMs ?? 100);
     const timeoutMs = Math.max(0, options.timeoutMs ?? DEFAULT_ENVIRONMENT_LAUNCH_TIMEOUT_MS);
-    const startedAt = Date.now();
+    const startedAt = performance.now();
 
     while (true) {
       const status = await this.read(requestId);
@@ -248,7 +259,7 @@ export class EnvironmentLaunchStore {
       if (result.kind === "terminal") return result.status;
       if (result.kind === "failure") throw new Error(result.message);
 
-      if (Date.now() - startedAt >= timeoutMs) {
+      if (performance.now() - startedAt >= timeoutMs) {
         // A ready notification may have landed at the timeout boundary. Reread before
         // attempting the timed-out transition so that it wins when it arrived first.
         const boundaryStatus = await this.read(requestId);
@@ -262,7 +273,7 @@ export class EnvironmentLaunchStore {
         if (boundaryResult.kind === "failure") throw new Error(boundaryResult.message);
 
         const message = `Timed out waiting for ${target.label} to open. It may still be starting; try again to focus it.`;
-        const finalizeDeadline = Date.now() + TRANSITION_FINALIZE_TIMEOUT_MS;
+        const finalizeDeadline = performance.now() + TRANSITION_FINALIZE_TIMEOUT_MS;
         while (true) {
           await this.transition(requestId, target.id, {
             status: "timed-out",
@@ -278,14 +289,16 @@ export class EnvironmentLaunchStore {
           const afterResult = this.terminalResult(afterTransition, target);
           if (afterResult.kind === "terminal") return afterResult.status;
           if (afterResult.kind === "failure") throw new Error(afterResult.message);
-          if (Date.now() >= finalizeDeadline) {
+          if (performance.now() >= finalizeDeadline) {
             throw new Error(`Unable to finalize environment launch request: ${requestId}`);
           }
           await wait(TRANSITION_FINALIZE_POLL_INTERVAL_MS);
         }
       }
 
-      await wait(Math.min(pollIntervalMs, Math.max(1, timeoutMs - (Date.now() - startedAt))));
+      await wait(
+        Math.min(pollIntervalMs, Math.max(1, timeoutMs - (performance.now() - startedAt)))
+      );
     }
   }
 
@@ -405,4 +418,17 @@ export class EnvironmentLaunchStore {
       message: status.message ?? `Timed out waiting for ${target.label} to open.`,
     };
   }
+}
+
+export async function settleEnvironmentLaunchFailure(
+  store: EnvironmentLaunchStore,
+  requestId: string,
+  target: DesktopEnvironmentTarget,
+  error: unknown
+): Promise<void> {
+  const message = error instanceof Error ? error.stack || error.message : String(error);
+  await store.markFailed(requestId, target.id, message);
+  const terminal = await store.read(requestId);
+  if (terminal?.environmentId === target.id && terminal.status === "ready") return;
+  throw error;
 }

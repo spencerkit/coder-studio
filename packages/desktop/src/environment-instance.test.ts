@@ -103,6 +103,31 @@ describe("Desktop environment instances", () => {
     expect(child.unref).toHaveBeenCalledOnce();
   });
 
+  it("surfaces a process error raised before spawn", async () => {
+    const child = createEnvironmentChild();
+    const processError = new Error("Unable to spawn Desktop environment process");
+    const waiting = waitForEnvironmentInstanceReady(child, () => Promise.resolve());
+
+    child.emit("error", processError);
+
+    await expect(waiting).rejects.toBe(processError);
+    expect(child.unref).not.toHaveBeenCalled();
+  });
+
+  it("fails when a spawned environment process exits from a signal", async () => {
+    const child = createEnvironmentChild();
+    const readiness = new Promise<void>(() => undefined);
+    const waiting = waitForEnvironmentInstanceReady(child, () => readiness);
+
+    child.emit("spawn");
+    child.emit("exit", null, "SIGTERM");
+
+    await expect(waiting).rejects.toThrow(
+      "Desktop environment process exited before readiness (signal SIGTERM)"
+    );
+    expect(child.unref).toHaveBeenCalledOnce();
+  });
+
   it("keeps waiting when a forwarding environment process exits normally", async () => {
     const child = createEnvironmentChild();
     let resolveReady!: () => void;
