@@ -10,11 +10,18 @@ export class EnvironmentActivationCoordinator {
   private windowReady = false;
   private flushPromise: Promise<void> | null = null;
   private failurePromise: Promise<void> | null = null;
+  private failureMessage: string | null = null;
 
   constructor(private readonly options: EnvironmentActivationOptions) {}
 
   request(requestId?: string): Promise<void> {
-    if (requestId && this.pendingRequestIds.has(requestId)) {
+    const alreadyPending = requestId ? this.pendingRequestIds.has(requestId) : false;
+    if (requestId && this.failureMessage !== null) {
+      if (!alreadyPending) this.pendingRequestIds.add(requestId);
+      if (alreadyPending && this.failurePromise) return this.failurePromise;
+      return this.scheduleFailureDrain();
+    }
+    if (requestId && alreadyPending) {
       if (this.flushPromise) return this.flushPromise;
       if (this.focusRequested) return this.scheduleFlush();
     }
@@ -24,6 +31,7 @@ export class EnvironmentActivationCoordinator {
   }
 
   markWindowReady(): Promise<void> {
+    this.failureMessage = null;
     this.windowReady = true;
     this.focusRequested = true;
     return this.scheduleFlush();
@@ -34,10 +42,22 @@ export class EnvironmentActivationCoordinator {
   }
 
   failPending(message: string): Promise<void> {
+    this.failureMessage = message;
     this.windowReady = false;
     this.focusRequested = false;
-    if (this.failurePromise) return this.failurePromise;
+    return this.scheduleFailureDrain();
+  }
 
+  private scheduleFailureDrain(): Promise<void> {
+    const message = this.failureMessage;
+    if (message === null) return this.scheduleFlush();
+    if (this.failurePromise) {
+      return this.failurePromise.then(
+        () => this.scheduleFailureDrain(),
+        () => this.scheduleFailureDrain()
+      );
+    }
+    if (this.pendingRequestIds.size === 0) return Promise.resolve();
     const failurePromise = Promise.resolve().then(() => this.failAfterFlush(message));
     this.failurePromise = failurePromise;
     return failurePromise.finally(() => {

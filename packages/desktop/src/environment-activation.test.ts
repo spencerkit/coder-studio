@@ -3,8 +3,8 @@ import { EnvironmentActivationCoordinator } from "./environment-activation.js";
 
 function createCoordinator() {
   const focusWindow = vi.fn(() => true);
-  const markReady = vi.fn(async () => undefined);
-  const markFailed = vi.fn(async () => undefined);
+  const markReady = vi.fn(async (_requestId: string) => undefined);
+  const markFailed = vi.fn(async (_requestId: string, _message: string) => undefined);
   return {
     coordinator: new EnvironmentActivationCoordinator({ focusWindow, markFailed, markReady }),
     focusWindow,
@@ -233,6 +233,87 @@ describe("EnvironmentActivationCoordinator", () => {
     );
     expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
       1
+    );
+  });
+
+  it("fails a request added after the active failure batch snapshots pending ids", async () => {
+    let releaseFirstFailure: (() => void) | undefined;
+    let releaseSecondFailure: (() => void) | undefined;
+    const markFailed = vi.fn(
+      (requestId: string) =>
+        new Promise<void>((resolve) => {
+          if (requestId === "request-1") {
+            releaseFirstFailure = resolve;
+          } else {
+            releaseSecondFailure = resolve;
+          }
+        })
+    );
+    const markReady = vi.fn(async () => undefined);
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow: vi.fn(() => true),
+      markFailed,
+      markReady,
+    });
+    await coordinator.request("request-1");
+
+    const firstFailure = coordinator.failPending("Target startup failed");
+    await Promise.resolve();
+    expect(markFailed).toHaveBeenCalledWith("request-1", "Target startup failed");
+
+    let secondRequestSettled = false;
+    const secondRequest = coordinator.request("request-2").then(() => {
+      secondRequestSettled = true;
+    });
+    releaseFirstFailure?.();
+    await firstFailure;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const secondRequestSettledBeforeFailure = secondRequestSettled;
+    releaseSecondFailure?.();
+    await secondRequest;
+
+    expect(secondRequestSettledBeforeFailure).toBe(false);
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-1")).toHaveLength(
+      1
+    );
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      1
+    );
+    expect(markReady).not.toHaveBeenCalled();
+  });
+
+  it("fails requests received after startup failure handling completes", async () => {
+    const { coordinator, markFailed, markReady } = createCoordinator();
+    await coordinator.request("request-1");
+    await coordinator.failPending("Target startup failed");
+
+    await coordinator.request("request-2");
+
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-1")).toHaveLength(
+      1
+    );
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      1
+    );
+    expect(markReady).not.toHaveBeenCalled();
+  });
+
+  it("resumes ready acknowledgements after window readiness clears startup failure", async () => {
+    const { coordinator, focusWindow, markFailed, markReady } = createCoordinator();
+    await coordinator.request("request-1");
+    await coordinator.failPending("Target startup failed");
+
+    await coordinator.markWindowReady();
+    focusWindow.mockClear();
+    markReady.mockClear();
+
+    await coordinator.request("request-2");
+
+    expect(focusWindow).toHaveBeenCalledOnce();
+    expect(markReady).toHaveBeenCalledOnce();
+    expect(markReady).toHaveBeenCalledWith("request-2");
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      0
     );
   });
 
