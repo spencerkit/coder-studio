@@ -498,7 +498,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [connectionStatus, dispatch, setTerminalPreferences, store]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
+    if (connectionStatus !== "connected" || activationStatus !== "active") {
       return;
     }
 
@@ -517,7 +517,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setServerUpdateState]);
+  }, [activationStatus, connectionStatus, dispatch, setServerUpdateState]);
 
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;

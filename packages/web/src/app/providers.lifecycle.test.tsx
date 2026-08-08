@@ -348,6 +348,119 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("waits for activation before hydrating update state", async () => {
+    const activationClaim = createDeferred<{
+      active: true;
+      generation: number;
+      recoveryMode: "fresh";
+    }>();
+    const updateState: UpdateStateView = {
+      version: 2,
+      currentVersion: "0.5.6",
+      currentPublishedAt: null,
+      latestVersion: null,
+      latestPublishedAt: null,
+      availability: "unknown",
+      updateStatus: "idle",
+      lastCheckedAt: null,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: false,
+      installKind: "unsupported",
+      unsupportedReason: "Managed by Coder Studio Desktop",
+      runtimeContext: {
+        environment: "desktop-managed",
+        authority: "desktop",
+        supported: true,
+        unsupportedReason: null,
+      },
+    };
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) => {
+      if (op === "activation.claim") return activationClaim.promise;
+      if (op === "updates.getState") return updateState;
+      return undefined;
+    });
+    const store = createStore();
+    renderProviders(store);
+
+    await vi.waitFor(() => expect(wsState.client?.connect).toHaveBeenCalled());
+    act(() => wsState.client?.statusHandler?.("connected"));
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith(
+        "activation.claim",
+        expect.anything()
+      );
+    });
+    expect(
+      wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "updates.getState")
+    ).toHaveLength(0);
+
+    await act(async () => {
+      activationClaim.resolve({ active: true, generation: 1, recoveryMode: "fresh" });
+      await activationClaim.promise;
+    });
+
+    await vi.waitFor(() => {
+      expect(wsState.client?.sendCommand).toHaveBeenCalledWith("updates.getState", {}, undefined);
+      expect(store.get(serverUpdateStateAtom)).toEqual(updateState);
+    });
+  });
+
+  it("hydrates update state again after reconnect activation", async () => {
+    const updateState: UpdateStateView = {
+      version: 2,
+      currentVersion: "0.5.6",
+      currentPublishedAt: null,
+      latestVersion: null,
+      latestPublishedAt: null,
+      availability: "unknown",
+      updateStatus: "idle",
+      lastCheckedAt: null,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: false,
+      installKind: "unsupported",
+      unsupportedReason: "Managed by Coder Studio Desktop",
+      runtimeContext: {
+        environment: "desktop-managed",
+        authority: "desktop",
+        supported: true,
+        unsupportedReason: null,
+      },
+    };
+    wsState.client!.sendCommand = createWsSendCommandMock(async (op) =>
+      op === "updates.getState" ? updateState : undefined
+    );
+    const store = createStore();
+    renderProviders(store);
+
+    await vi.waitFor(() => expect(wsState.client?.connect).toHaveBeenCalled());
+    act(() => wsState.client?.statusHandler?.("connected"));
+    await vi.waitFor(() => {
+      expect(
+        wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "updates.getState")
+      ).toHaveLength(1);
+    });
+
+    act(() => wsState.client?.statusHandler?.("reconnecting"));
+    await vi.waitFor(() => expect(store.get(activationStatusAtom)).toBe("idle"));
+    act(() => wsState.client?.statusHandler?.("connected"));
+
+    await vi.waitFor(() => {
+      expect(
+        wsState.client?.sendCommand?.mock.calls.filter(([op]) => op === "updates.getState")
+      ).toHaveLength(2);
+    });
+  });
+
   it("hydrates Desktop-managed Server context before resolving the Desktop controller", async () => {
     const runtimeContext = {
       environment: "desktop-managed" as const,
@@ -382,8 +495,8 @@ describe("AppProviders lifecycle recovery", () => {
         supported: true,
         unsupportedReason: null,
       },
-      "0.5.0",
-      null
+      "0.5.6",
+      "2026-08-08T15:41:11.000Z"
     );
     const getUpdateState = vi.fn(async () => productState);
     Object.defineProperty(window, "coderStudioDesktop", {
