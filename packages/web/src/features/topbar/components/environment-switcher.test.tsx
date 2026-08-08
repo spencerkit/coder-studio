@@ -121,14 +121,25 @@ describe("EnvironmentSwitcher", () => {
     expect(screen.getByText("Opening…")).toBeInTheDocument();
 
     await user.click(trigger);
-    expect(screen.queryByText("Open another environment")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Coder Studio environment" })
+    ).not.toBeInTheDocument();
     await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: "Coder Studio environment" })).toBeInTheDocument();
     expect(screen.getByText("Opening…")).toBeInTheDocument();
 
     opening.resolve({ status: "opened" });
     await waitFor(() =>
-      expect(screen.queryByText("Open another environment")).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("dialog", { name: "Coder Studio environment" })
+      ).not.toBeInTheDocument()
     );
+
+    await user.click(trigger);
+    const reopenedWslButton = await screen.findByRole("button", { name: /WSL: Ubuntu-24\.04/ });
+    expect(reopenedWslButton).toBeEnabled();
+    expect(screen.queryByText("Opening…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Checking environment…")).not.toBeInTheDocument();
   });
 
   it("renders installation progress reported by the Desktop host", async () => {
