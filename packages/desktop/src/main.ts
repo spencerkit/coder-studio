@@ -16,11 +16,14 @@ import {
   shell,
 } from "electron";
 import { BackendManager } from "./backend-manager.js";
+import { EnvironmentActivationCoordinator } from "./environment-activation.js";
 import {
   createEnvironmentInstanceArgs,
   getEnvironmentInstanceRoot,
   readEnvironmentInstanceTarget,
+  readEnvironmentLaunchRequestId,
 } from "./environment-instance.js";
+import { EnvironmentLaunchStore, isEnvironmentLaunchRequestId } from "./environment-launch.js";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import { DesktopGateway } from "./gateway.js";
@@ -44,6 +47,9 @@ declare const __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: string;
 declare const __CODER_STUDIO_RUNTIME_UPDATE_URL__: string;
 declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
 
+const ENVIRONMENT_LAUNCH_DATA_KEY = "environmentLaunchRequestId";
+const ENVIRONMENT_LAUNCH_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+
 let mainWindow: BrowserWindow | null = null;
 let backendManager: BackendManager | null = null;
 let desktopGateway: DesktopGateway | null = null;
@@ -56,11 +62,35 @@ let environmentManager: DesktopEnvironmentManager | null = null;
 let activeEnvironmentTarget: DesktopEnvironmentTarget = NATIVE_ENVIRONMENT;
 let environmentOpening = false;
 let environmentInstanceRoot: string | null = null;
+let environmentLaunchStore: EnvironmentLaunchStore | null = null;
 let releaseProductRuntimeLease: (() => Promise<void>) | null = null;
 let appOrigin: string | null = null;
 let shutdownComplete = false;
 let shutdownStarted = false;
 const smokeResultPath = process.env.CODER_STUDIO_DESKTOP_SMOKE_RESULT?.trim() || null;
+const environmentActivation = new EnvironmentActivationCoordinator({
+  focusWindow: () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    return true;
+  },
+  markReady: async (requestId) => {
+    if (!environmentLaunchStore) return;
+    await environmentLaunchStore.markReady(requestId, activeEnvironmentTarget.id, process.pid);
+  },
+  markFailed: async (requestId, message) => {
+    if (!environmentLaunchStore) return;
+    await environmentLaunchStore.markFailed(requestId, activeEnvironmentTarget.id, message);
+  },
+});
+
+function readLaunchRequestAdditionalData(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const requestId = (value as Record<string, unknown>)[ENVIRONMENT_LAUNCH_DATA_KEY];
+  return isEnvironmentLaunchRequestId(requestId) ? requestId : undefined;
+}
 
 function getEnvironmentPartition(target: DesktopEnvironmentTarget): string {
   const id = createHash("sha256").update(target.id).digest("hex").slice(0, 16);
@@ -81,18 +111,34 @@ async function openEnvironmentInstance(
   rootUserDataDir: string,
   target: DesktopEnvironmentTarget
 ): Promise<void> {
-  await new Promise<void>((resolveOpened, rejectOpened) => {
-    const child = spawn(process.execPath, createEnvironmentInstanceArgs(rootUserDataDir, target), {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
+  if (!environmentLaunchStore) {
+    throw new Error("Desktop environment launch store is not initialized");
+  }
+  const launchStore = environmentLaunchStore;
+  const request = await launchStore.create(target);
+  try {
+    await new Promise<void>((resolveOpened, rejectOpened) => {
+      const child = spawn(
+        process.execPath,
+        createEnvironmentInstanceArgs(rootUserDataDir, target, request.requestId),
+        {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true,
+        }
+      );
+      child.once("error", rejectOpened);
+      child.once("spawn", () => {
+        child.unref();
+        resolveOpened();
+      });
     });
-    child.once("error", rejectOpened);
-    child.once("spawn", () => {
-      child.unref();
-      resolveOpened();
-    });
-  });
+  } catch (error) {
+    const message = error instanceof Error ? error.stack || error.message : String(error);
+    await launchStore.markFailed(request.requestId, target.id, message);
+    throw error;
+  }
+  await launchStore.waitForTerminal(request.requestId, target);
 }
 
 async function finishSmokeTest(result: Record<string, unknown>, exitCode = 0): Promise<void> {
@@ -296,18 +342,19 @@ function registerIpcHandlers(rootUserDataDir: string): void {
 }
 
 async function handleStartupFailure(error: unknown): Promise<void> {
+  const details = error instanceof Error ? error.stack || error.message : String(error);
+  await environmentActivation.failPending(details).catch(() => undefined);
   if (smokeResultPath) {
     await finishSmokeTest(
       {
         loaded: false,
-        error: error instanceof Error ? error.stack || error.message : String(error),
+        error: details,
       },
       1
     );
     return;
   }
 
-  const details = error instanceof Error ? error.stack || error.message : String(error);
   if (activeEnvironmentTarget.kind !== "wsl" || !environmentManager) {
     dialog.showErrorBox("Unable to start Coder Studio", details);
     app.quit();
@@ -424,13 +471,24 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
     },
   });
 
-  if (!smokeResultPath) window.once("ready-to-show", () => window.show());
+  if (!smokeResultPath) {
+    window.once("ready-to-show", () => {
+      void environmentActivation
+        .markWindowReady()
+        .catch((error) =>
+          console.error("Unable to acknowledge environment window readiness", error)
+        );
+    });
+  }
   window.on("page-title-updated", (event) => {
     event.preventDefault();
     window.setTitle(`Coder Studio — ${activeEnvironmentTarget.label}`);
   });
   window.on("closed", () => {
-    if (mainWindow === window) mainWindow = null;
+    if (mainWindow === window) {
+      mainWindow = null;
+      environmentActivation.markWindowUnavailable();
+    }
   });
   window.webContents.setWindowOpenHandler(({ url: target }) => {
     void openExternal(target);
@@ -501,6 +559,11 @@ async function startApplication(): Promise<void> {
   const userDataDir = app.getPath("userData");
   const rootUserDataDir = getEnvironmentInstanceRoot(app.commandLine, userDataDir);
   environmentInstanceRoot = rootUserDataDir;
+  environmentLaunchStore = new EnvironmentLaunchStore(rootUserDataDir);
+  void environmentLaunchStore.cleanupStale(ENVIRONMENT_LAUNCH_MAX_AGE_MS).catch(() => undefined);
+  activeEnvironmentTarget = app.isPackaged
+    ? readEnvironmentInstanceTarget(app.commandLine)
+    : NATIVE_ENVIRONMENT;
   registerIpcHandlers(rootUserDataDir);
   const runtimePublicKey =
     typeof __CODER_STUDIO_RUNTIME_PUBLIC_KEY__ === "string"
@@ -540,9 +603,6 @@ async function startApplication(): Promise<void> {
     ),
     onProgress: emitEnvironmentProgress,
   });
-  activeEnvironmentTarget = app.isPackaged
-    ? readEnvironmentInstanceTarget(app.commandLine)
-    : NATIVE_ENVIRONMENT;
   environmentManager.setActiveTarget(activeEnvironmentTarget);
   activeSession = session.fromPartition(getEnvironmentPartition(activeEnvironmentTarget));
 
@@ -664,15 +724,23 @@ async function startApplication(): Promise<void> {
   installApplicationMenu();
 }
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const initialEnvironmentLaunchRequestId = readEnvironmentLaunchRequestId(app.commandLine);
+const hasSingleInstanceLock = app.requestSingleInstanceLock(
+  initialEnvironmentLaunchRequestId
+    ? { [ENVIRONMENT_LAUNCH_DATA_KEY]: initialEnvironmentLaunchRequestId }
+    : undefined
+);
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+  if (initialEnvironmentLaunchRequestId) {
+    void environmentActivation.request(initialEnvironmentLaunchRequestId);
+  }
+  app.on("second-instance", (_event, _argv, _workingDirectory, additionalData) => {
+    const requestId = readLaunchRequestAdditionalData(additionalData);
+    void environmentActivation.request(requestId).catch((error) => {
+      console.error("Unable to activate Desktop environment window", error);
+    });
   });
 
   app.whenReady().then(startApplication).catch(handleStartupFailure);
