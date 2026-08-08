@@ -11,6 +11,7 @@ import { ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
 import type { IconSemantic } from "../../theme";
+import { EnvironmentSwitcher } from "../desktop-environment";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
 
 interface FeatureItem {
@@ -81,6 +82,8 @@ export const WelcomePage: FC = () => {
 
                   <div className="welcome-step-card__title">{t("welcome.step_1_title")}</div>
                   <p className="welcome-step-detail meta-text">{t("welcome.step_1_detail")}</p>
+
+                  {!isMobile ? <EnvironmentSwitcher variant="welcome" /> : null}
 
                   <button className="welcome-btn" onClick={handleOpenWorkspace}>
                     <ThemedIcon semantic="nav.newWorkspace" size={18} />
