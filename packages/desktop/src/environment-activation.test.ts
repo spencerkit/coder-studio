@@ -47,6 +47,62 @@ describe("EnvironmentActivationCoordinator", () => {
     expect(markReady).toHaveBeenCalledTimes(1);
   });
 
+  it("deduplicates a request while its acknowledgement is in progress", async () => {
+    let releaseAcknowledgement: (() => void) | undefined;
+    const focusWindow = vi.fn(() => true);
+    const markReady = vi
+      .fn<(requestId: string) => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseAcknowledgement = resolve;
+          })
+      )
+      .mockResolvedValue(undefined);
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow,
+      markFailed: vi.fn(async () => undefined),
+      markReady,
+    });
+    await coordinator.markWindowReady();
+    focusWindow.mockClear();
+
+    const firstRequest = coordinator.request("request-1");
+    const duplicateRequest = coordinator.request("request-1");
+    releaseAcknowledgement?.();
+    await Promise.all([firstRequest, duplicateRequest]);
+
+    expect(focusWindow).toHaveBeenCalledOnce();
+    expect(markReady).toHaveBeenCalledOnce();
+  });
+
+  it("retains a request after acknowledgement failure for a later retry", async () => {
+    const acknowledgementError = new Error("Acknowledgement failed");
+    const focusWindow = vi.fn(() => true);
+    const markReady = vi
+      .fn<(requestId: string) => Promise<void>>()
+      .mockRejectedValueOnce(acknowledgementError)
+      .mockResolvedValue(undefined);
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow,
+      markFailed: vi.fn(async () => undefined),
+      markReady,
+    });
+    await coordinator.markWindowReady();
+    focusWindow.mockClear();
+
+    await expect(coordinator.request("request-1")).rejects.toBe(acknowledgementError);
+
+    expect(focusWindow).toHaveBeenCalledOnce();
+    expect(markReady).toHaveBeenCalledOnce();
+
+    await coordinator.markWindowReady();
+
+    expect(focusWindow).toHaveBeenCalledTimes(2);
+    expect(markReady).toHaveBeenCalledTimes(2);
+    expect(markReady).toHaveBeenLastCalledWith("request-1");
+  });
+
   it("queues ordinary focus requests that have no acknowledgement id", async () => {
     const { coordinator, focusWindow, markReady } = createCoordinator();
 

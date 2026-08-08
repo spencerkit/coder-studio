@@ -13,6 +13,10 @@ export class EnvironmentActivationCoordinator {
   constructor(private readonly options: EnvironmentActivationOptions) {}
 
   request(requestId?: string): Promise<void> {
+    if (requestId && this.pendingRequestIds.has(requestId)) {
+      if (this.flushPromise) return this.flushPromise;
+      if (this.focusRequested) return this.scheduleFlush();
+    }
     this.focusRequested = true;
     if (requestId) this.pendingRequestIds.add(requestId);
     return this.scheduleFlush();
@@ -37,12 +41,14 @@ export class EnvironmentActivationCoordinator {
 
   private scheduleFlush(): Promise<void> {
     if (!this.windowReady || !this.focusRequested) return Promise.resolve();
-    if (this.flushPromise) return this.flushPromise;
-    this.flushPromise = this.flush().finally(() => {
-      this.flushPromise = null;
-      if (this.windowReady && this.focusRequested) void this.scheduleFlush();
+    if (this.flushPromise) {
+      return this.flushPromise.then(() => this.scheduleFlush());
+    }
+    const flushPromise = this.flush();
+    this.flushPromise = flushPromise;
+    return flushPromise.finally(() => {
+      if (this.flushPromise === flushPromise) this.flushPromise = null;
     });
-    return this.flushPromise;
   }
 
   private async flush(): Promise<void> {
@@ -53,8 +59,18 @@ export class EnvironmentActivationCoordinator {
       }
       this.focusRequested = false;
       const requestIds = [...this.pendingRequestIds];
-      requestIds.forEach((requestId) => this.pendingRequestIds.delete(requestId));
-      await Promise.all(requestIds.map((requestId) => this.options.markReady(requestId)));
+      const results = await Promise.allSettled(
+        requestIds.map((requestId) => this.options.markReady(requestId))
+      );
+      let failure: PromiseRejectedResult | undefined;
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          this.pendingRequestIds.delete(requestIds[index]!);
+        } else {
+          failure ??= result;
+        }
+      });
+      if (failure) throw failure.reason;
     }
   }
 }
