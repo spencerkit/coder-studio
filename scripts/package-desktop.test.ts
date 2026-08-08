@@ -1,7 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createDesktopPackageArgs, readDesktopReleaseVersion } from "./package-desktop.js";
+import {
+  createDesktopPackageArgs,
+  readDesktopReleaseVersion,
+  stageDesktopBuildInfo,
+} from "./package-desktop.js";
 import { DESKTOP_DIR, ROOT_DIR } from "./shared/index.js";
 
 async function readVersion(packagePath: string): Promise<string> {
@@ -31,5 +36,23 @@ describe("readDesktopReleaseVersion", () => {
       "--config.directories.output",
       outputDirectory,
     ]);
+  });
+
+  it("stages build info next to the installer metadata after packaging", async () => {
+    const root = await mkdtemp(join(tmpdir(), "coder-studio-package-desktop-"));
+    const sourcePath = join(root, "dist", "build-info.json");
+    const outputDirectory = join(root, "release", "desktop");
+    const buildInfo = '{"schemaVersion":1,"shellVersion":"0.1.0"}\n';
+
+    try {
+      await mkdir(join(root, "dist"), { recursive: true });
+      await writeFile(sourcePath, buildInfo, "utf8");
+
+      await stageDesktopBuildInfo({ sourcePath, outputDirectory });
+
+      expect(await readFile(join(outputDirectory, "build-info.json"), "utf8")).toBe(buildInfo);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

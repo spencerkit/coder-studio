@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { DESKTOP_DIR, error, info, run, success } from "./shared/index.js";
+import { DESKTOP_DIR, error, info, ROOT_DIR, run, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
 export async function readDesktopReleaseVersion(
@@ -33,6 +33,14 @@ export function createDesktopPackageArgs(options: {
   ];
 }
 
+export async function stageDesktopBuildInfo(options: {
+  sourcePath: string;
+  outputDirectory: string;
+}): Promise<void> {
+  await mkdir(options.outputDirectory, { recursive: true });
+  await copyFile(options.sourcePath, resolve(options.outputDirectory, "build-info.json"));
+}
+
 export async function packageDesktop(options: {
   unpacked: boolean;
   outputDirectory?: string;
@@ -47,6 +55,10 @@ export async function packageDesktop(options: {
       cwd: DESKTOP_DIR,
     }
   );
+  await stageDesktopBuildInfo({
+    sourcePath: resolve(DESKTOP_DIR, "dist/build-info.json"),
+    outputDirectory: options.outputDirectory ?? resolve(ROOT_DIR, "release/desktop"),
+  });
   success(options.unpacked ? "Desktop unpacked directory created" : "Desktop installers created");
 }
 
