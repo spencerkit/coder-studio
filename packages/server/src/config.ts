@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { UpdateRuntimeContext } from "@coder-studio/core";
 import {
   IN_MEMORY_STATE_DIR,
   normalizeLegacyStateDir,
@@ -42,10 +43,13 @@ export interface ServerConfig {
   update: {
     supported: boolean;
     installKind: "global_npm" | "unsupported";
+    runtimeContext: UpdateRuntimeContext;
     packageName: string;
     cliCommand: string;
     workerEntryPath?: string;
     npmCommand: string;
+    registryUrl: string;
+    distTag: string;
     restartArgs: string[];
     installArgsPrefix: string[];
     unsupportedReason: string | null;
@@ -223,10 +227,18 @@ export function parseServerConfig(overrides?: ServerConfigInput): ServerConfig {
     update: overrides?.update ?? {
       supported: false,
       installKind: "unsupported",
+      runtimeContext: {
+        environment: "cli-unsupported",
+        authority: "none",
+        supported: false,
+        unsupportedReason: "In-app update is only supported for global npm installs",
+      },
       packageName: "@spencer-kit/coder-studio",
       cliCommand: "coder-studio",
       workerEntryPath: undefined,
       npmCommand: "npm",
+      registryUrl: "https://registry.npmjs.org/",
+      distTag: "latest",
       restartArgs: ["serve", "--restart"],
       installArgsPrefix: ["install", "-g"],
       unsupportedReason: "In-app update is only supported for global npm installs",

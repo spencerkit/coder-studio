@@ -51,9 +51,17 @@ async function run(): Promise<void> {
       update: {
         supported: false,
         installKind: "unsupported",
+        runtimeContext: {
+          environment: "desktop-managed",
+          authority: "desktop",
+          supported: true,
+          unsupportedReason: null,
+        },
         packageName: "@spencer-kit/coder-studio",
         cliCommand: "coder-studio",
         npmCommand: "npm",
+        registryUrl: "https://registry.npmjs.org/",
+        distTag: "latest",
         restartArgs: ["serve", "--restart"],
         installArgsPrefix: ["install", "-g"],
         unsupportedReason:
