@@ -72,6 +72,43 @@ function createDeps(overrides?: Partial<ConstructorParameters<typeof UpdateServi
 }
 
 describe("UpdateService", () => {
+  it("reports global npm CLI authority for a supported updater", () => {
+    const service = new UpdateService(createDeps());
+
+    expect(service.getStateView()).toMatchObject({
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
+    });
+  });
+
+  it("reports unsupported CLI authority when no updater is available", () => {
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: false,
+          installKind: "unsupported",
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+          unsupportedReason: "Source checkout cannot update itself",
+        },
+      })
+    );
+
+    expect(service.getStateView()).toMatchObject({
+      runtimeContext: {
+        environment: "cli-unsupported",
+        authority: "none",
+        supported: false,
+        unsupportedReason: "Source checkout cannot update itself",
+      },
+    });
+  });
+
   it("does not run an immediate startup check when auto checks are disabled", () => {
     const runLatestVersionLookup = vi.fn(async () => "0.5.0");
     const service = new UpdateService(

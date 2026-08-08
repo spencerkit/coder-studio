@@ -5,6 +5,7 @@ import {
   resolveUpdateCheckIntervalSec,
   type UpdateActivitySummary,
   type UpdatePrepareInstallResponse,
+  type UpdateRuntimeContext,
   type UpdateStateSnapshot,
   type UpdateStateView,
   type UpdateSupportInfo,
@@ -16,6 +17,7 @@ import type { Broadcaster } from "../ws/hub.js";
 export interface UpdateRuntimeConfig {
   supported: boolean;
   installKind: "global_npm" | "unsupported";
+  runtimeContext?: UpdateRuntimeContext;
   packageName: string;
   currentVersion: string;
   cliCommand: string;
@@ -339,18 +341,31 @@ export class UpdateService {
   }
 
   private getSupportInfo(): UpdateSupportInfo {
+    const unsupportedReason =
+      this.runtime.unsupportedReason ?? "Current install does not support in-app updates";
     if (!this.runtime.supported) {
       return {
         supported: false,
         installKind: "unsupported",
-        unsupportedReason:
-          this.runtime.unsupportedReason ?? "Current install does not support in-app updates",
+        unsupportedReason,
+        runtimeContext: this.runtime.runtimeContext ?? {
+          environment: "cli-unsupported",
+          authority: "none",
+          supported: false,
+          unsupportedReason,
+        },
       };
     }
     return {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: this.runtime.runtimeContext ?? {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     };
   }
 
