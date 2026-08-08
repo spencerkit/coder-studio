@@ -72,6 +72,7 @@ export interface DesktopRuntimeUpdateState {
 
 export interface DesktopApi {
   platform: NodeJS.Platform;
+  updateApiVersion: 1;
   getAppVersion(): Promise<string>;
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
@@ -80,8 +81,22 @@ export interface DesktopApi {
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<DesktopEnvironmentOpenResult>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
+  getUpdateState(): Promise<ProductUpdateState>;
+  checkForUpdates(): Promise<ProductUpdateState>;
+  downloadUpdate(): Promise<ProductUpdateState>;
+  retryUpdate(): Promise<ProductUpdateState>;
+  cancelUpdateDownload(): Promise<ProductUpdateState>;
+  prepareUpdateRestart(): Promise<ProductUpdateState>;
+  restartAndInstallUpdate(): Promise<boolean>;
+  getUpdateSettings(): Promise<DesktopUpdateSettings>;
+  setUpdateSettings(
+    patch: Pick<DesktopUpdateSettings, "autoCheckEnabled" | "checkIntervalSec">
+  ): Promise<DesktopUpdateSettings>;
+  onUpdateStateChanged(listener: (state: ProductUpdateState) => void): () => void;
   getRuntimeUpdateState(): Promise<DesktopRuntimeUpdateState>;
   checkRuntimeUpdate(): Promise<DesktopRuntimeUpdateState>;
   restartForRuntimeUpdate(): Promise<boolean>;
   onRuntimeUpdateStateChanged(listener: (state: DesktopRuntimeUpdateState) => void): () => void;
 }
+
+import type { DesktopUpdateSettings, ProductUpdateState } from "@coder-studio/core";
