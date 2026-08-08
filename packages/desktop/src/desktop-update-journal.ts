@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { UpdateCompatibilityResult, UpdateComponentId } from "@coder-studio/core";
+import { lock } from "proper-lockfile";
 import { writeJsonFileAtomic } from "./atomic-json-file.js";
 import { normalizeUtcTimestamp } from "./build-info.js";
 
@@ -38,18 +38,11 @@ export interface DesktopUpdateJournalOptions {
 
 export interface DesktopUpdateJournalMutation {
   expectedPlanId: string | null;
-  environmentId: string;
+  ownerId: string;
 }
 
-interface DesktopUpdateJournalLockRecord {
-  pid: number;
-  token: string;
-  startedAt: number;
-}
-
-const LOCK_RETRY_MS = 20;
-const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_STALE_MS = 30_000;
+export const DESKTOP_UPDATE_OWNER_STALE_MS = 10_000;
+const OWNER_HEARTBEAT_MS = DESKTOP_UPDATE_OWNER_STALE_MS / 2;
 
 const COMPONENT_IDS = new Set<UpdateComponentId>([
   "shell",
@@ -157,29 +150,73 @@ function parseJournal(value: unknown): DesktopUpdateJournalRecord {
   };
 }
 
-function isProcessRunning(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
-}
-
 function journalConflict(message: string): Error {
   return Object.assign(new Error(message), { code: "desktop_update_plan_conflict" });
 }
 
 export class DesktopUpdateJournal {
+  private activeOwnerId: string | null = null;
+  private ownerCompromised: Error | null = null;
+  private releaseOwnerLock: (() => Promise<void>) | null = null;
+
   constructor(private readonly options: DesktopUpdateJournalOptions) {}
 
   async read(): Promise<DesktopUpdateJournalRecord | null> {
     return this.readUnlocked();
+  }
+
+  async acquireOwner(ownerId: string): Promise<boolean> {
+    this.assertOwnerId(ownerId);
+    if (this.activeOwnerId) {
+      if (this.activeOwnerId !== ownerId) {
+        throw new Error("Desktop update journal already has a different local owner");
+      }
+      this.assertOwned(ownerId);
+      return true;
+    }
+    await mkdir(dirname(this.options.filePath), { recursive: true });
+    let compromised: Error | null = null;
+    try {
+      const release = await lock(this.options.filePath, {
+        realpath: false,
+        stale: DESKTOP_UPDATE_OWNER_STALE_MS,
+        update: OWNER_HEARTBEAT_MS,
+        retries: 0,
+        onCompromised: (error) => {
+          compromised = error;
+          this.ownerCompromised = error;
+          this.options.onWarning?.(`Desktop update owner lease was compromised: ${error.message}`);
+        },
+      });
+      this.activeOwnerId = ownerId;
+      this.ownerCompromised = compromised;
+      this.releaseOwnerLock = release;
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ELOCKED") return false;
+      throw journalConflict(
+        `Unable to acquire Desktop update owner lease: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  async releaseOwner(ownerId: string): Promise<void> {
+    this.assertOwnerId(ownerId);
+    if (this.activeOwnerId !== ownerId) return;
+    const release = this.releaseOwnerLock;
+    this.activeOwnerId = null;
+    this.ownerCompromised = null;
+    this.releaseOwnerLock = null;
+    if (!release) return;
+    await release().catch((error) => {
+      this.options.onWarning?.(
+        `Unable to release Desktop update owner lease: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }
+
+  isOwner(ownerId: string): boolean {
+    return this.activeOwnerId === ownerId && !this.ownerCompromised;
   }
 
   async write(
@@ -187,21 +224,23 @@ export class DesktopUpdateJournal {
     mutation: DesktopUpdateJournalMutation
   ): Promise<void> {
     const parsed = parseJournal(record);
-    this.assertMutation(mutation, parsed.environmentId);
-    await this.withExclusiveLock(async () => {
-      const current = await this.readUnlocked();
-      this.assertExpectedPlan(current, mutation);
-      await writeJsonFileAtomic(this.options.filePath, parsed);
-    });
+    this.assertMutation(mutation);
+    this.assertOwned(mutation.ownerId);
+    const current = await this.readUnlocked();
+    this.assertExpectedPlan(current, mutation);
+    this.assertOwned(mutation.ownerId);
+    await writeJsonFileAtomic(this.options.filePath, parsed);
+    this.assertOwned(mutation.ownerId);
   }
 
   async clear(mutation: DesktopUpdateJournalMutation): Promise<void> {
-    this.assertMutation(mutation, mutation.environmentId);
-    await this.withExclusiveLock(async () => {
-      const current = await this.readUnlocked();
-      this.assertExpectedPlan(current, mutation);
-      await rm(this.options.filePath, { force: true });
-    });
+    this.assertMutation(mutation);
+    this.assertOwned(mutation.ownerId);
+    const current = await this.readUnlocked();
+    this.assertExpectedPlan(current, mutation);
+    this.assertOwned(mutation.ownerId);
+    await rm(this.options.filePath, { force: true });
+    this.assertOwned(mutation.ownerId);
   }
 
   private async readUnlocked(): Promise<DesktopUpdateJournalRecord | null> {
@@ -218,20 +257,36 @@ export class DesktopUpdateJournal {
   }
 
   private assertMutation(
-    mutation: DesktopUpdateJournalMutation | undefined,
-    recordEnvironmentId: string
+    mutation: DesktopUpdateJournalMutation | undefined
   ): asserts mutation is DesktopUpdateJournalMutation {
     if (
       !mutation ||
       (mutation.expectedPlanId !== null &&
         (typeof mutation.expectedPlanId !== "string" || !mutation.expectedPlanId.trim())) ||
-      typeof mutation.environmentId !== "string" ||
-      !mutation.environmentId.trim()
+      typeof mutation.ownerId !== "string" ||
+      !mutation.ownerId.trim()
     ) {
       throw new Error("Desktop update journal mutation ownership is invalid");
     }
-    if (mutation.environmentId !== recordEnvironmentId) {
-      throw journalConflict("Desktop update journal owner does not match the update plan");
+  }
+
+  private assertOwnerId(ownerId: string): void {
+    if (typeof ownerId !== "string" || !ownerId.trim()) {
+      throw new Error("Desktop update journal owner ID is invalid");
+    }
+  }
+
+  private assertOwned(ownerId: string): void {
+    if (this.activeOwnerId !== ownerId || !this.releaseOwnerLock) {
+      throw Object.assign(new Error("Desktop update owner lease is held by another process"), {
+        code: "desktop_update_owner_unavailable",
+      });
+    }
+    if (this.ownerCompromised) {
+      throw Object.assign(
+        new Error(`Desktop update owner lease was compromised: ${this.ownerCompromised.message}`),
+        { code: "desktop_update_owner_unavailable" }
+      );
     }
   }
 
@@ -244,89 +299,6 @@ export class DesktopUpdateJournal {
       throw journalConflict(
         `Desktop update plan changed from ${mutation.expectedPlanId ?? "none"} to ${currentPlanId ?? "none"}`
       );
-    }
-    if (current && current.environmentId !== mutation.environmentId) {
-      throw journalConflict(
-        `Desktop update plan is owned by another environment: ${current.environmentId}`
-      );
-    }
-  }
-
-  private async withExclusiveLock<T>(operation: () => Promise<T>): Promise<T> {
-    const release = await this.acquireLock();
-    try {
-      return await operation();
-    } finally {
-      await release();
-    }
-  }
-
-  private async acquireLock(): Promise<() => Promise<void>> {
-    await mkdir(dirname(this.options.filePath), { recursive: true });
-    const lockPath = `${this.options.filePath}.lock`;
-    const startedWaitingAt = Date.now();
-    const record: DesktopUpdateJournalLockRecord = {
-      pid: process.pid,
-      token: randomUUID(),
-      startedAt: Date.now(),
-    };
-    while (Date.now() - startedWaitingAt < LOCK_TIMEOUT_MS) {
-      let createdLock = false;
-      try {
-        const handle = await open(lockPath, "wx", 0o600);
-        createdLock = true;
-        try {
-          await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-        return async () => {
-          const current = await this.readLock(lockPath);
-          if (current?.token === record.token) await rm(lockPath, { force: true });
-        };
-      } catch (error) {
-        if (createdLock) {
-          await rm(lockPath, { force: true });
-          throw error;
-        }
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        if (await this.isStaleLock(lockPath)) {
-          await rm(lockPath, { force: true });
-          continue;
-        }
-        await wait(LOCK_RETRY_MS);
-      }
-    }
-    throw journalConflict(`Timed out waiting for Desktop update journal lock: ${lockPath}`);
-  }
-
-  private async readLock(path: string): Promise<DesktopUpdateJournalLockRecord | null> {
-    try {
-      const candidate = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-      if (
-        !Number.isInteger(candidate.pid) ||
-        typeof candidate.token !== "string" ||
-        typeof candidate.startedAt !== "number"
-      ) {
-        return null;
-      }
-      return candidate as unknown as DesktopUpdateJournalLockRecord;
-    } catch {
-      return null;
-    }
-  }
-
-  private async isStaleLock(path: string): Promise<boolean> {
-    const record = await this.readLock(path);
-    if (record) {
-      return !isProcessRunning(record.pid) || Date.now() - record.startedAt > LOCK_STALE_MS;
-    }
-    try {
-      const metadata = await stat(path);
-      return Date.now() - metadata.mtimeMs > LOCK_STALE_MS;
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code === "ENOENT";
     }
   }
 }

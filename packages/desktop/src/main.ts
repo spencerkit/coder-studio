@@ -698,6 +698,7 @@ async function startApplication(): Promise<void> {
   ) {
     const buildInfo = await readDesktopBuildInfo(process.resourcesPath, app.getVersion());
     const updateJournalPath = join(rootUserDataDir, "desktop-update-plan.json");
+    const updateOwnerId = randomUUID();
     const shellUpdateAdapter = new DesktopShellUpdateAdapter({
       updater: autoUpdater as unknown as ShellUpdaterPort,
       currentVersion: app.getVersion(),
@@ -752,6 +753,7 @@ async function startApplication(): Promise<void> {
         onWarning: (message) => console.warn("[desktop-update]", message),
       }),
       journalLocation: updateJournalPath,
+      updateOwnerId,
       now: Date.now,
       randomId: randomUUID,
       onStateChanged: (state) => {
@@ -825,12 +827,14 @@ app.on("before-quit", (event: Event) => {
   const activationFailurePromise = trackShutdownActivation(
     environmentActivation.failPending(ENVIRONMENT_SHUTDOWN_FAILURE_MESSAGE)
   );
-  updateCoordinator?.stop();
+  const stopUpdateCoordinator = updateCoordinator?.stop() ?? Promise.resolve();
   void (desktopGateway?.stop() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => backendManager?.stop() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => releaseProductRuntimeLease?.() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => stopUpdateCoordinator)
     .catch(() => undefined)
     .then(() => activationFailurePromise)
     .then(waitForShutdownActivations)

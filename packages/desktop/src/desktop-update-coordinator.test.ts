@@ -1,12 +1,16 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { ProductUpdateState } from "@coder-studio/core";
 import { describe, expect, it, vi } from "vitest";
 import type { DesktopChannel } from "./desktop-channel.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
-import type { RuntimeUpdateMetadata } from "./runtime-update-manager.js";
+import type { RuntimeDownloadOptions, RuntimeUpdateMetadata } from "./runtime-update-manager.js";
+
+const execFileAsync = promisify(execFile);
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -48,10 +52,11 @@ const channel: DesktopChannel = {
   signature: { algorithm: "ed25519", value: "signed" },
 };
 
-function runtimeMetadata(): RuntimeUpdateMetadata {
+function runtimeMetadata(target: "win32-x64" | "linux-x64" = "win32-x64"): RuntimeUpdateMetadata {
+  const [platform, arch] = target.split("-") as ["win32" | "linux", "x64"];
   return {
-    componentId: "runtime:win32-x64",
-    manifestUrl: "https://releases.example/runtime-win32-x64.manifest.json",
+    componentId: `runtime:${target}`,
+    manifestUrl: `https://releases.example/runtime-${target}.manifest.json`,
     manifest: {
       schemaVersion: 2,
       publishedAt: "2026-08-08T01:02:03.000Z",
@@ -62,8 +67,8 @@ function runtimeMetadata(): RuntimeUpdateMetadata {
       runtimeHostApiVersion: 1,
       apiProtocolVersion: 1,
       dataSchemaVersion: 1,
-      platform: "win32",
-      arch: "x64",
+      platform,
+      arch,
       entrypoint: "server.mjs",
       packageFile: "runtime.tgz",
       files: [{ path: "server.mjs", sha256: "a".repeat(64), size: 1 }],
@@ -83,10 +88,15 @@ function createHarness(
     runtimeDownload?: Promise<unknown>;
     journalOverride?: unknown;
     planId?: string;
+    runtimeTarget?: "win32-x64" | "linux-x64";
+    environmentId?: string;
+    updateOwnerId?: string;
   } = {}
 ) {
   const shellVersion = options.shellVersion ?? "0.2.0";
   const runtimeVersion = options.runtimeVersion ?? "0.5.0";
+  const runtimeTarget = options.runtimeTarget ?? "win32-x64";
+  const environmentId = options.environmentId ?? "native";
   const shell = {
     checkMetadata: vi.fn(async () => ({
       componentId: "shell" as const,
@@ -105,14 +115,20 @@ function createHarness(
     quitAndInstall: vi.fn(),
   };
   const runtime = {
-    checkMetadata: vi.fn(async () => runtimeMetadata()),
-    downloadAndStage: vi.fn(async () => options.runtimeDownload),
+    checkMetadata: vi.fn(async () => runtimeMetadata(runtimeTarget)),
+    downloadAndStage: vi.fn(
+      async (_metadata: RuntimeUpdateMetadata, _downloadOptions: RuntimeDownloadOptions) =>
+        options.runtimeDownload
+    ),
     getCurrentVersion: vi.fn(async () => runtimeVersion),
     getPendingVersion: vi.fn(async () => null),
   };
   const journalRecord = { value: null as unknown };
   const journal = {
     read: vi.fn(async () => journalRecord.value),
+    acquireOwner: vi.fn(async () => true),
+    releaseOwner: vi.fn(async () => undefined),
+    isOwner: vi.fn(() => true),
     write: vi.fn(async (value) => {
       journalRecord.value = value;
     }),
@@ -133,9 +149,11 @@ function createHarness(
     })),
   };
   const states: ProductUpdateState[] = [];
+  const loadChannel = vi.fn(async () => channel);
+  const getRuntimeAdapter = vi.fn(async () => runtime as never);
   const coordinator = new DesktopUpdateCoordinator({
     runtimeContext: {
-      environment: "desktop-native",
+      environment: runtimeTarget === "linux-x64" ? "desktop-wsl" : "desktop-native",
       authority: "desktop",
       supported: true,
       unsupportedReason: null,
@@ -154,21 +172,31 @@ function createHarness(
       dataSchemaVersion: 1,
       metadataAvailable: true,
     }),
-    loadChannel: async () => channel,
+    loadChannel,
     shell: shell as never,
-    getRuntimeAdapter: async () => runtime as never,
-    initialRuntimeTarget: "win32-x64",
-    initialEnvironmentId: "native",
+    getRuntimeAdapter,
+    initialRuntimeTarget: runtimeTarget,
+    initialEnvironmentId: environmentId,
     settings: settings as never,
     journal: (options.journalOverride ?? journal) as never,
     journalLocation: "C:\\Coder Studio\\desktop-update-plan.json",
     now: () => Date.parse("2026-08-08T02:00:00.000Z"),
     randomId: () => options.planId ?? "plan-1",
+    updateOwnerId: options.updateOwnerId ?? "desktop-owner-1",
     onStateChanged: (state) => states.push(state),
     relaunch: vi.fn(),
     quit: vi.fn(),
   });
-  return { coordinator, shell, runtime, journal, settings, states };
+  return {
+    coordinator,
+    shell,
+    runtime,
+    journal,
+    settings,
+    states,
+    loadChannel,
+    getRuntimeAdapter,
+  };
 }
 
 describe("DesktopUpdateCoordinator", () => {
@@ -338,11 +366,13 @@ describe("DesktopUpdateCoordinator", () => {
         shellVersion: "0.3.0",
         planId: "plan-first",
         journalOverride: firstJournal,
+        updateOwnerId: "first-owner",
       });
       const second = createHarness({
         shellVersion: "0.3.0",
         planId: "plan-second",
         journalOverride: secondJournal,
+        updateOwnerId: "second-owner",
       });
 
       const results = await Promise.allSettled([
@@ -357,17 +387,206 @@ describe("DesktopUpdateCoordinator", () => {
         planId: expect.stringMatching(/^plan-(first|second)$/),
         environmentId: "native",
       });
-      await firstJournal.clear({
-        expectedPlanId: persisted?.planId ?? null,
-        environmentId: "native",
-      });
       const rejectedIndex = results.findIndex((result) => result.status === "rejected");
+      const fulfilledIndex = results.findIndex((result) => result.status === "fulfilled");
+      const fulfilledCoordinator = [first.coordinator, second.coordinator][fulfilledIndex];
       const rejectedCoordinator = [first.coordinator, second.coordinator][rejectedIndex];
+      await fulfilledCoordinator?.stop();
+      await rejectedCoordinator?.reconcileOnStartup({
+        shellVersion: "0.3.0",
+        runtimeVersion: "0.5.0",
+        pendingRuntimeVersion: null,
+      });
       await expect(rejectedCoordinator?.retryFailed()).resolves.toMatchObject({
         status: "ready",
         restartRequired: true,
       });
+      await rejectedCoordinator?.stop();
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lets the Desktop owner replace an orphaned plan from another environment", async () => {
+    const root = await mkdtemp(join(tmpdir(), "desktop-update-coordinator-"));
+    try {
+      const filePath = join(root, "desktop-update-plan.json");
+      const journal = new DesktopUpdateJournal({ filePath });
+      await journal.acquireOwner("seed-owner");
+      await journal.write(
+        {
+          schemaVersion: 1,
+          planId: "orphaned-wsl-plan",
+          status: "available",
+          createdAt: "2026-08-08T01:00:00.000Z",
+          updatedAt: "2026-08-08T01:02:00.000Z",
+          runtimeTarget: "linux-x64",
+          environmentId: "wsl:missing",
+          compatibility: { compatible: true, code: null, summary: null },
+          restartIntent: false,
+          components: [
+            {
+              id: "runtime:linux-x64",
+              currentVersion: "0.5.0",
+              targetVersion: "0.6.0",
+              currentPublishedAt: "2026-07-01T00:00:00.000Z",
+              targetPublishedAt: "2026-08-08T01:02:03.000Z",
+              downloaded: false,
+              verified: false,
+              installed: false,
+              errorSummary: null,
+            },
+          ],
+          lastError: null,
+        },
+        { expectedPlanId: null, ownerId: "seed-owner" }
+      );
+      await journal.releaseOwner("seed-owner");
+      const { coordinator } = createHarness({
+        shellVersion: "0.3.0",
+        planId: "native-plan",
+        journalOverride: journal,
+        updateOwnerId: "native-owner",
+      });
+
+      await expect(
+        coordinator.reconcileOnStartup({
+          shellVersion: "0.3.0",
+          runtimeVersion: "0.5.0",
+          pendingRuntimeVersion: null,
+        })
+      ).resolves.toMatchObject({
+        status: "failed",
+        diagnostics: { failedPhase: "recovering" },
+      });
+      await expect(coordinator.retryFailed()).resolves.toMatchObject({
+        status: "ready",
+        planId: "native-plan",
+      });
+      await expect(journal.read()).resolves.toMatchObject({
+        planId: "native-plan",
+        environmentId: "native",
+        runtimeTarget: "win32-x64",
+      });
+      await coordinator.stop();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps an active WSL restart plan read-only in a concurrent Native instance", async () => {
+    const root = await mkdtemp(join(tmpdir(), "desktop-update-coordinator-"));
+    const filePath = join(root, "desktop-update-plan.json");
+    const wslJournal = new DesktopUpdateJournal({ filePath });
+    const nativeJournal = new DesktopUpdateJournal({ filePath });
+    const wslOwnerId = "wsl-owner-1";
+    const nativeOwnerId = "native-owner-1";
+    try {
+      await expect(wslJournal.acquireOwner(wslOwnerId)).resolves.toBe(true);
+      const wsl = createHarness({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.5.0",
+        runtimeTarget: "linux-x64",
+        environmentId: "wsl:ubuntu",
+        planId: "wsl-plan",
+        journalOverride: wslJournal,
+        updateOwnerId: wslOwnerId,
+      });
+      await wsl.coordinator.check({ manual: true });
+      await wsl.coordinator.download();
+      await wsl.coordinator.prepareRestart();
+      expect(wsl.shell.armInstallOnQuit).toHaveBeenCalledTimes(1);
+
+      const native = createHarness({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.5.0",
+        runtimeTarget: "win32-x64",
+        environmentId: "native",
+        planId: "native-plan",
+        journalOverride: nativeJournal,
+        updateOwnerId: nativeOwnerId,
+      });
+      await expect(
+        native.coordinator.reconcileOnStartup({
+          shellVersion: "0.2.0",
+          runtimeVersion: "0.5.0",
+          pendingRuntimeVersion: null,
+        })
+      ).resolves.toMatchObject({
+        status: "failed",
+        errorSummary: expect.stringContaining("wsl:ubuntu"),
+      });
+      await expect(native.coordinator.check({ manual: true })).rejects.toMatchObject({
+        code: "desktop_update_owner_unavailable",
+      });
+      expect(native.loadChannel).not.toHaveBeenCalled();
+      expect(wsl.shell.disarmInstallOnQuit).not.toHaveBeenCalled();
+      await expect(wslJournal.read()).resolves.toMatchObject({
+        planId: "wsl-plan",
+        environmentId: "wsl:ubuntu",
+        status: "restarting",
+        restartIntent: true,
+      });
+
+      await Promise.resolve(native.coordinator.stop());
+      await Promise.resolve(wsl.coordinator.stop());
+    } finally {
+      await wslJournal.releaseOwner(wslOwnerId);
+      await nativeJournal.releaseOwner(nativeOwnerId);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refreshes the journal CAS when taking over after the previous owner exits", async () => {
+    const root = await mkdtemp(join(tmpdir(), "desktop-update-coordinator-"));
+    const filePath = join(root, "desktop-update-plan.json");
+    const wslJournal = new DesktopUpdateJournal({ filePath });
+    const nativeJournal = new DesktopUpdateJournal({ filePath });
+    const wslOwnerId = "late-plan-wsl-owner";
+    const nativeOwnerId = "late-plan-native-owner";
+    try {
+      await expect(wslJournal.acquireOwner(wslOwnerId)).resolves.toBe(true);
+      const native = createHarness({
+        shellVersion: "0.3.0",
+        runtimeVersion: "0.5.0",
+        planId: "native-takeover-plan",
+        journalOverride: nativeJournal,
+        updateOwnerId: nativeOwnerId,
+      });
+      await expect(
+        native.coordinator.reconcileOnStartup({
+          shellVersion: "0.3.0",
+          runtimeVersion: "0.5.0",
+          pendingRuntimeVersion: null,
+        })
+      ).resolves.toMatchObject({ status: "failed" });
+
+      const wsl = createHarness({
+        shellVersion: "0.3.0",
+        runtimeVersion: "0.5.0",
+        runtimeTarget: "linux-x64",
+        environmentId: "wsl:ubuntu",
+        planId: "late-wsl-plan",
+        journalOverride: wslJournal,
+        updateOwnerId: wslOwnerId,
+      });
+      await expect(wsl.coordinator.check({ manual: true })).resolves.toMatchObject({
+        planId: "late-wsl-plan",
+      });
+      await wsl.coordinator.stop();
+
+      await expect(native.coordinator.check({ manual: true })).resolves.toMatchObject({
+        planId: "native-takeover-plan",
+        status: "available",
+      });
+      await expect(nativeJournal.read()).resolves.toMatchObject({
+        planId: "native-takeover-plan",
+        environmentId: "native",
+      });
+      await native.coordinator.stop();
+    } finally {
+      await wslJournal.releaseOwner(wslOwnerId);
+      await nativeJournal.releaseOwner(nativeOwnerId);
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -425,6 +644,166 @@ describe("DesktopUpdateCoordinator", () => {
       expect.objectContaining({ componentId: "runtime:linux-x64", version: "0.6.0" }),
       expect.any(Object)
     );
+  });
+
+  it("skips target environment preparation without update ownership", async () => {
+    const { coordinator, journal, loadChannel, getRuntimeAdapter, runtime } = createHarness();
+    journal.isOwner.mockReturnValue(false);
+    journal.acquireOwner.mockResolvedValue(false);
+
+    await expect(
+      coordinator.prepareEnvironmentTarget("linux-x64", "wsl:ubuntu")
+    ).resolves.toBeUndefined();
+
+    expect(journal.acquireOwner).toHaveBeenCalledWith("desktop-owner-1");
+    expect(loadChannel).not.toHaveBeenCalled();
+    expect(getRuntimeAdapter).not.toHaveBeenCalled();
+    expect(runtime.checkMetadata).not.toHaveBeenCalled();
+    expect(runtime.downloadAndStage).not.toHaveBeenCalled();
+  });
+
+  it("retains ownership until target environment staging stops during shutdown", async () => {
+    const root = await mkdtemp(join(tmpdir(), "desktop-update-coordinator-"));
+    const filePath = join(root, "desktop-update-plan.json");
+    const ownerJournal = new DesktopUpdateJournal({ filePath });
+    const staging = deferred<unknown>();
+    const fixture = join(import.meta.dirname, "desktop-update-journal-child.fixture.ts");
+    try {
+      const { coordinator, runtime } = createHarness({
+        runtimeVersion: "0.6.0",
+        runtimeDownload: staging.promise,
+        journalOverride: ownerJournal,
+        updateOwnerId: "staging-owner",
+      });
+      runtime.getCurrentVersion.mockResolvedValueOnce("0.5.0");
+      runtime.checkMetadata.mockResolvedValueOnce(runtimeMetadata("linux-x64"));
+      const preparing = coordinator.prepareEnvironmentTarget("linux-x64", "wsl:ubuntu");
+      await vi.waitFor(() => expect(runtime.downloadAndStage).toHaveBeenCalledTimes(1));
+      const downloadOptions = runtime.downloadAndStage.mock.calls[0]?.[1] as
+        | { signal: AbortSignal }
+        | undefined;
+
+      let stopped = false;
+      const stopping = coordinator.stop().then(() => {
+        stopped = true;
+      });
+      await vi.waitFor(() => expect(downloadOptions?.signal.aborted).toBe(true));
+      expect(stopped).toBe(false);
+
+      const contender = await execFileAsync(process.execPath, [
+        "--import",
+        "tsx",
+        fixture,
+        filePath,
+        "shutdown-contender",
+      ]);
+      expect(JSON.parse(contender.stdout.trim())).toMatchObject({
+        ok: false,
+        code: "desktop_update_owner_unavailable",
+      });
+
+      staging.reject(downloadOptions?.signal.reason ?? new Error("staging aborted"));
+      await expect(preparing).rejects.toBeDefined();
+      await stopping;
+
+      const afterShutdown = await execFileAsync(process.execPath, [
+        "--import",
+        "tsx",
+        fixture,
+        filePath,
+        "post-shutdown-plan",
+      ]);
+      expect(JSON.parse(afterShutdown.stdout.trim())).toMatchObject({ ok: true });
+    } finally {
+      await ownerJournal.releaseOwner("staging-owner");
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it("does not start target environment staging after shutdown begins during metadata checks", async () => {
+    const metadata = deferred<RuntimeUpdateMetadata>();
+    const { coordinator, runtime } = createHarness({ runtimeVersion: "0.6.0" });
+    runtime.checkMetadata.mockReturnValueOnce(metadata.promise);
+    runtime.getCurrentVersion.mockResolvedValueOnce("0.5.0");
+    const preparing = coordinator.prepareEnvironmentTarget("linux-x64", "wsl:ubuntu");
+    await vi.waitFor(() => expect(runtime.checkMetadata).toHaveBeenCalledTimes(1));
+
+    const stopping = coordinator.stop();
+    metadata.resolve(runtimeMetadata("linux-x64"));
+
+    await expect(preparing).rejects.toMatchObject({
+      code: "desktop_update_owner_unavailable",
+    });
+    await stopping;
+    expect(runtime.downloadAndStage).not.toHaveBeenCalled();
+  });
+
+  it("does not start component downloads after shutdown begins during journal persistence", async () => {
+    const persistence = deferred<void>();
+    const { coordinator, shell, runtime, journal } = createHarness();
+    await coordinator.check({ manual: true });
+    journal.write.mockImplementationOnce(async () => persistence.promise);
+    const downloading = coordinator.download();
+    await vi.waitFor(() => expect(journal.write).toHaveBeenCalledTimes(2));
+
+    const stopping = coordinator.stop();
+    persistence.resolve();
+
+    await expect(downloading).rejects.toMatchObject({
+      code: "desktop_update_owner_unavailable",
+    });
+    await stopping;
+    expect(shell.download).not.toHaveBeenCalled();
+    expect(runtime.downloadAndStage).not.toHaveBeenCalled();
+  });
+
+  it("keeps restart ownership until process exit so another environment cannot replace the plan", async () => {
+    const root = await mkdtemp(join(tmpdir(), "desktop-update-coordinator-"));
+    const filePath = join(root, "desktop-update-plan.json");
+    const wslJournal = new DesktopUpdateJournal({ filePath });
+    const nativeJournal = new DesktopUpdateJournal({ filePath });
+    const wslOwnerId = "restarting-wsl-owner";
+    const nativeOwnerId = "waiting-native-owner";
+    try {
+      const wsl = createHarness({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.5.0",
+        runtimeTarget: "linux-x64",
+        environmentId: "wsl:ubuntu",
+        planId: "restarting-wsl-plan",
+        journalOverride: wslJournal,
+        updateOwnerId: wslOwnerId,
+      });
+      await wsl.coordinator.check({ manual: true });
+      await wsl.coordinator.download();
+      await wsl.coordinator.prepareRestart();
+      await wsl.coordinator.stop();
+
+      const native = createHarness({
+        shellVersion: "0.2.0",
+        runtimeVersion: "0.5.0",
+        runtimeTarget: "win32-x64",
+        environmentId: "native",
+        planId: "replacement-native-plan",
+        journalOverride: nativeJournal,
+        updateOwnerId: nativeOwnerId,
+      });
+      await expect(native.coordinator.check({ manual: true })).rejects.toMatchObject({
+        code: "desktop_update_owner_unavailable",
+      });
+      expect(native.loadChannel).not.toHaveBeenCalled();
+      await expect(wslJournal.read()).resolves.toMatchObject({
+        planId: "restarting-wsl-plan",
+        environmentId: "wsl:ubuntu",
+        status: "restarting",
+        restartIntent: true,
+      });
+      await native.coordinator.stop();
+    } finally {
+      await wslJournal.releaseOwner(wslOwnerId);
+      await nativeJournal.releaseOwner(nativeOwnerId);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("creates one durable restart intent and hands Shell installation off once", async () => {

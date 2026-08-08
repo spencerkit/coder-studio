@@ -30,6 +30,7 @@ export interface DesktopUpdateCoordinatorDeps {
   settings: DesktopUpdateSettingsRepo;
   journal: DesktopUpdateJournal;
   journalLocation: string;
+  updateOwnerId: string;
   now: () => number;
   randomId: () => string;
   onStateChanged: (state: ProductUpdateState) => void;
@@ -59,6 +60,7 @@ export class DesktopUpdateCoordinator {
   private shellMetadata: ShellUpdateMetadata | null = null;
   private busyPhase: BusyPhase | null = null;
   private controllers = new Map<UpdateComponentId, AbortController>();
+  private activeOperations = new Set<Promise<unknown>>();
   private cancelRequested = false;
   private restartIntent = false;
   private startupReconciled = false;
@@ -66,6 +68,7 @@ export class DesktopUpdateCoordinator {
   private intervalTimer: NodeJS.Timeout | null = null;
   private journalWriteQueue: Promise<void> = Promise.resolve();
   private journalPlanId: string | null = null;
+  private stopping = false;
 
   constructor(private readonly deps: DesktopUpdateCoordinatorDeps) {
     this.assertDesktopContext(deps.runtimeContext);
@@ -77,10 +80,19 @@ export class DesktopUpdateCoordinator {
 
   async start(): Promise<void> {
     if (!this.startupReconciled) {
+      const ownsUpdates = await this.ensureUpdateOwnership(false);
       const journal = await this.deps.journal.read();
-      if (journal?.environmentId === this.runtimeEnvironmentId) {
+      if (journal) {
         this.journalPlanId = journal.planId;
-        this.restoreJournal(journal);
+        if (!ownsUpdates) {
+          this.restoreReadOnlyJournal(journal);
+        } else if (journal.environmentId === this.runtimeEnvironmentId) {
+          this.restoreJournal(journal);
+        } else {
+          this.restoreForeignEnvironmentJournal(journal);
+        }
+      } else if (!ownsUpdates) {
+        this.restoreReadOnlyWithoutJournal();
       }
     }
     const settings = await this.deps.settings.get();
@@ -88,15 +100,21 @@ export class DesktopUpdateCoordinator {
     this.publish();
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
+    this.stopping = true;
     if (this.startupTimer) clearTimeout(this.startupTimer);
     if (this.intervalTimer) clearInterval(this.intervalTimer);
     this.startupTimer = null;
     this.intervalTimer = null;
     for (const controller of this.controllers.values()) controller.abort();
     if (this.busyPhase === "downloading") this.deps.shell.cancelDownload();
+    await Promise.allSettled([...this.activeOperations]);
     this.controllers.clear();
     if (!this.restartIntent) this.deps.shell.disarmInstallOnQuit();
+    await this.journalWriteQueue.catch(() => {});
+    if (!this.restartIntent) {
+      await this.deps.journal.releaseOwner(this.deps.updateOwnerId);
+    }
   }
 
   getState(): ProductUpdateState {
@@ -104,6 +122,7 @@ export class DesktopUpdateCoordinator {
   }
 
   async check(options: { manual: boolean }): Promise<ProductUpdateState> {
+    if (!(await this.ensureUpdateOwnership(options.manual))) return this.getState();
     if (
       !options.manual &&
       (this.state.status === "ready" ||
@@ -204,6 +223,7 @@ export class DesktopUpdateCoordinator {
   }
 
   async retryFailed(): Promise<ProductUpdateState> {
+    await this.ensureUpdateOwnership(true);
     const failedPlanNeedsRecheck =
       this.state.status === "failed" &&
       this.state.components.some((component) => component.status === "available");
@@ -240,6 +260,7 @@ export class DesktopUpdateCoordinator {
   }
 
   async prepareRestart(): Promise<ProductUpdateState> {
+    this.assertUpdateOwnership();
     this.assertNotBusy();
     if (
       this.state.status !== "ready" ||
@@ -277,6 +298,7 @@ export class DesktopUpdateCoordinator {
   async restartAndInstall(): Promise<boolean> {
     if (!this.restartIntent || this.state.status !== "restarting") return false;
     if (this.busyPhase) return false;
+    this.assertUpdateOwnership();
     this.busyPhase = "restarting";
     if (this.state.components.some((component) => component.id === "shell")) {
       this.deps.shell.quitAndInstall();
@@ -299,10 +321,18 @@ export class DesktopUpdateCoordinator {
     return settings;
   }
 
-  async prepareEnvironmentTarget(
+  prepareEnvironmentTarget(
     target: "win32-x64" | "linux-x64",
     environmentId: string
   ): Promise<void> {
+    return this.trackActiveOperation(this.prepareEnvironmentTargetInternal(target, environmentId));
+  }
+
+  private async prepareEnvironmentTargetInternal(
+    target: "win32-x64" | "linux-x64",
+    environmentId: string
+  ): Promise<void> {
+    if (!(await this.ensureUpdateOwnership(false))) return;
     this.assertNotBusy();
     this.busyPhase = "checking";
     try {
@@ -314,15 +344,21 @@ export class DesktopUpdateCoordinator {
       const expected = channel.runtimes[target];
       const metadata = await adapter.checkMetadata(expected, buildInfo.shellVersion);
       const currentVersion = await adapter.getCurrentVersion();
+      this.assertNotStopping();
       if (compareVersions(metadata.version, currentVersion) <= 0) return;
       this.assertSourceMatchesRuntime(expected, metadata, target);
       this.busyPhase = "downloading";
       const controller = new AbortController();
-      await adapter.downloadAndStage(metadata, {
-        signal: controller.signal,
-        onProgress: () => {},
-        explicitRetry: false,
-      });
+      this.controllers.set(metadata.componentId, controller);
+      try {
+        await adapter.downloadAndStage(metadata, {
+          signal: controller.signal,
+          onProgress: () => {},
+          explicitRetry: false,
+        });
+      } finally {
+        this.controllers.delete(metadata.componentId);
+      }
     } finally {
       this.busyPhase = null;
     }
@@ -353,19 +389,27 @@ export class DesktopUpdateCoordinator {
     runtimeVersion: string;
     pendingRuntimeVersion: string | null;
   }): Promise<ProductUpdateState> {
+    const ownsUpdates = await this.ensureUpdateOwnership(false);
     const journal = await this.deps.journal.read();
     this.startupReconciled = true;
     if (!journal) {
       this.journalPlanId = null;
-      this.state = this.createBaseState();
-      return this.publish();
-    }
-    if (journal.environmentId !== this.runtimeEnvironmentId) {
-      this.journalPlanId = null;
-      this.state = this.createBaseState();
+      if (ownsUpdates) {
+        this.state = this.createBaseState();
+      } else {
+        this.restoreReadOnlyWithoutJournal();
+      }
       return this.publish();
     }
     this.journalPlanId = journal.planId;
+    if (!ownsUpdates) {
+      this.restoreReadOnlyJournal(journal);
+      return this.publish();
+    }
+    if (journal.environmentId !== this.runtimeEnvironmentId) {
+      this.restoreForeignEnvironmentJournal(journal);
+      return this.publish();
+    }
     this.restoreJournal(journal, false);
     const components = this.state.components.map((component) => {
       const installed =
@@ -546,7 +590,12 @@ export class DesktopUpdateCoordinator {
     return this.publish();
   }
 
-  private async downloadComponents(explicitRetry: boolean): Promise<ProductUpdateState> {
+  private downloadComponents(explicitRetry: boolean): Promise<ProductUpdateState> {
+    return this.trackActiveOperation(this.downloadComponentsInternal(explicitRetry));
+  }
+
+  private async downloadComponentsInternal(explicitRetry: boolean): Promise<ProductUpdateState> {
+    this.assertUpdateOwnership();
     this.assertNotBusy();
     if (!this.state.compatibility.compatible) {
       throw updateError("update_incompatible", "The Desktop update plan is incompatible");
@@ -587,6 +636,7 @@ export class DesktopUpdateCoordinator {
     this.publish();
     try {
       await this.persistPlan();
+      this.assertNotStopping();
     } catch (error) {
       this.state = availableState;
       this.busyPhase = null;
@@ -897,7 +947,7 @@ export class DesktopUpdateCoordinator {
     const pending = this.journalWriteQueue.then(async () => {
       await this.deps.journal.write(record, {
         expectedPlanId: this.journalPlanId,
-        environmentId: this.runtimeEnvironmentId,
+        ownerId: this.deps.updateOwnerId,
       });
       this.journalPlanId = record.planId;
     });
@@ -909,7 +959,7 @@ export class DesktopUpdateCoordinator {
     const pending = this.journalWriteQueue.then(async () => {
       await this.deps.journal.clear({
         expectedPlanId: this.journalPlanId,
-        environmentId: this.runtimeEnvironmentId,
+        ownerId: this.deps.updateOwnerId,
       });
       this.journalPlanId = null;
     });
@@ -965,6 +1015,129 @@ export class DesktopUpdateCoordinator {
         this.deps.shell.armInstallOnQuit();
       }
     }
+  }
+
+  private restoreForeignEnvironmentJournal(journal: DesktopUpdateJournalRecord): void {
+    const activeRuntimeTarget = this.runtimeTarget;
+    this.restoreJournal(journal, false);
+    this.runtimeTarget = activeRuntimeTarget;
+    this.restartIntent = false;
+    if (journal.components.some((component) => component.id === "shell")) {
+      this.deps.shell.disarmInstallOnQuit();
+    }
+    const summary = `The previous Desktop update targeted unavailable environment ${journal.environmentId}`;
+    const failed = this.state.components.find((component) => component.kind === "runtime");
+    this.state = {
+      ...this.state,
+      status: "failed",
+      updatedAt: this.timestamp(),
+      components: this.state.components.map((component) => ({
+        ...component,
+        status: "failed",
+        progressPercent: null,
+        downloaded: false,
+        verified: false,
+        errorSummary: summary,
+      })),
+      restartRequired: false,
+      errorSummary: summary,
+      diagnostics: {
+        ...this.state.diagnostics,
+        failedComponentId: failed?.id ?? this.state.components[0]?.id ?? null,
+        failedPhase: "recovering",
+        recoveryAction: "Check for updates again to replace the unavailable environment plan.",
+      },
+    };
+  }
+
+  private restoreReadOnlyJournal(journal: DesktopUpdateJournalRecord): void {
+    const activeRuntimeTarget = this.runtimeTarget;
+    this.restoreJournal(journal, false);
+    this.runtimeTarget = activeRuntimeTarget;
+    this.restartIntent = false;
+    if (journal.components.some((component) => component.id === "shell")) {
+      this.deps.shell.disarmInstallOnQuit();
+    }
+    const summary = `Desktop updates are currently controlled by environment ${journal.environmentId} in another Desktop window`;
+    const failed = this.state.components.find((component) => component.kind === "runtime");
+    this.state = {
+      ...this.state,
+      status: "failed",
+      components: this.state.components.map((component) => ({
+        ...component,
+        status: "failed",
+        progressPercent: null,
+        errorSummary: summary,
+      })),
+      restartRequired: false,
+      errorSummary: summary,
+      diagnostics: {
+        ...this.state.diagnostics,
+        failedComponentId: failed?.id ?? this.state.components[0]?.id ?? null,
+        failedPhase: "recovering",
+        recoveryAction: "Finish or close the update-owning Desktop window, then check again.",
+      },
+    };
+  }
+
+  private restoreReadOnlyWithoutJournal(): void {
+    const summary = "Desktop updates are currently controlled by another Desktop window";
+    this.state = {
+      ...this.createBaseState(),
+      status: "failed",
+      errorSummary: summary,
+      diagnostics: {
+        ...this.createDiagnostics(this.deps.getBuildInfo()),
+        failedPhase: "recovering",
+        recoveryAction: "Finish or close the update-owning Desktop window, then check again.",
+      },
+    };
+  }
+
+  private async ensureUpdateOwnership(manual: boolean): Promise<boolean> {
+    if (this.stopping) {
+      if (manual) {
+        throw updateError("desktop_update_owner_unavailable", "Coder Studio is shutting down");
+      }
+      return false;
+    }
+    if (this.deps.journal.isOwner(this.deps.updateOwnerId)) return true;
+    if (await this.deps.journal.acquireOwner(this.deps.updateOwnerId)) {
+      this.journalPlanId = (await this.deps.journal.read())?.planId ?? null;
+      return true;
+    }
+    if (manual) {
+      throw updateError(
+        "desktop_update_owner_unavailable",
+        "Desktop updates are currently controlled by another Desktop window"
+      );
+    }
+    return false;
+  }
+
+  private assertUpdateOwnership(): void {
+    this.assertNotStopping();
+    if (!this.deps.journal.isOwner(this.deps.updateOwnerId)) {
+      throw updateError(
+        "desktop_update_owner_unavailable",
+        "Desktop updates are currently controlled by another Desktop window"
+      );
+    }
+  }
+
+  private assertNotStopping(): void {
+    if (this.stopping) {
+      throw updateError("desktop_update_owner_unavailable", "Coder Studio is shutting down");
+    }
+  }
+
+  private trackActiveOperation<T>(operation: Promise<T>): Promise<T> {
+    this.activeOperations.add(operation);
+    void operation.then(
+      () => this.activeOperations.delete(operation),
+      () => this.activeOperations.delete(operation)
+    );
+    return operation;
   }
 
   private schedule(settings: DesktopUpdateSettings): void {

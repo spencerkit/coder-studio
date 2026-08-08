@@ -201,6 +201,17 @@ jobs:
           if (required.size) throw new Error(`Desktop acceptance reports are missing: ${[...required].join(", ")}`);
           NODE
 
+      - name: Preserve Desktop update channel assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p desktop-channel-assets
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          test -n "${latest_tag}"
+          gh release download "${latest_tag}" --dir desktop-channel-assets --clobber
+          test -f desktop-channel-assets/desktop-channel.json
+          test -f desktop-channel-assets/build-info.json
+
       - name: Promote accepted CLI dist-tag
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -218,18 +229,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "${{ steps.release.outputs.tag }}"
           git push origin "${{ steps.release.outputs.tag }}"
-
-      - name: Preserve Desktop update channel assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p desktop-channel-assets
-          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || true)
-          if [ -n "${latest_tag}" ]; then
-            gh release download "${latest_tag}" --dir desktop-channel-assets --clobber
-            test -f desktop-channel-assets/desktop-channel.json
-            test -f desktop-channel-assets/build-info.json
-          fi
 
       - name: Create GitHub release
         env:
