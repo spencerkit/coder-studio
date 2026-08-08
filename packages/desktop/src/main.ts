@@ -46,6 +46,7 @@ import {
   createEnvironmentLaunchingProgress,
   EnvironmentLaunchStore,
   isEnvironmentLaunchRequestId,
+  prepareEnvironmentLaunch,
   settleEnvironmentLaunchFailure,
 } from "./environment-launch.js";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
@@ -267,21 +268,35 @@ function registerIpcHandlers(rootUserDataDir: string): void {
   });
   ipcMain.handle("desktop:open-environment", async (_event, environmentId: unknown) => {
     if (!environmentManager) throw new Error("Desktop environments are not initialized");
+    const manager = environmentManager;
     if (typeof environmentId !== "string") throw new Error("Invalid Desktop environment id");
     if (environmentOpening) throw new Error("A Desktop environment is already being opened");
-    const target = await environmentManager.resolveTarget(environmentId);
+    const target = await manager.resolveTarget(environmentId);
     if (target.id === activeEnvironmentTarget.id) return { status: "unchanged" as const };
 
     environmentOpening = true;
     try {
-      if (updateCoordinator) {
-        await updateCoordinator.prepareEnvironmentTarget(
-          target.kind === "wsl" ? "linux-x64" : "win32-x64",
-          target.id
-        );
-      } else if (target.kind === "wsl") {
-        await environmentManager.prepareWsl(target);
-      }
+      const coordinator = updateCoordinator;
+      await prepareEnvironmentLaunch({
+        prepareRequired: async () => {
+          if (target.kind === "wsl") await manager.prepareWsl(target);
+        },
+        ...(coordinator
+          ? {
+              prepareUpdate: () =>
+                coordinator.prepareEnvironmentTarget(
+                  target.kind === "wsl" ? "linux-x64" : "win32-x64",
+                  target.id
+                ),
+            }
+          : {}),
+        onUpdateFailure: (error) => {
+          console.warn(
+            `[desktop-update] Unable to prepare updates for ${target.label}; continuing with the compatible Runtime`,
+            error
+          );
+        },
+      });
       emitEnvironmentProgress(createEnvironmentLaunchingProgress(target));
       await openEnvironmentInstance(rootUserDataDir, target);
       return { status: "opened" as const };

@@ -48,6 +48,24 @@ export function createEnvironmentLaunchingProgress(
   };
 }
 
+export interface EnvironmentLaunchPreparationOptions {
+  prepareRequired: () => Promise<void>;
+  prepareUpdate?: () => Promise<void>;
+  onUpdateFailure: (error: Error) => void;
+}
+
+export async function prepareEnvironmentLaunch(
+  options: EnvironmentLaunchPreparationOptions
+): Promise<void> {
+  await options.prepareRequired();
+  if (!options.prepareUpdate) return;
+  try {
+    await options.prepareUpdate();
+  } catch (error) {
+    options.onUpdateFailure(error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
 function isEnvironmentLaunchTarget(value: unknown): value is DesktopEnvironmentTarget {
   if (!value || typeof value !== "object") return false;
   const target = value as Partial<DesktopEnvironmentTarget>;

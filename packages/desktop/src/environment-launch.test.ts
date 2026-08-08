@@ -7,6 +7,7 @@ import {
   EnvironmentLaunchStore,
   type EnvironmentLaunchStoreOptions,
   isEnvironmentLaunchRequestId,
+  prepareEnvironmentLaunch,
   settleEnvironmentLaunchFailure,
 } from "./environment-launch.js";
 import type { DesktopEnvironmentTarget } from "./protocol.js";
@@ -38,6 +39,47 @@ describe("EnvironmentLaunchStore", () => {
       phase: "launching",
       message: "Opening WSL: Ubuntu…",
     });
+  });
+
+  it("continues after optional update preparation fails", async () => {
+    const steps: string[] = [];
+    const updateFailure = new Error("Desktop update channel check failed with 404");
+    const onUpdateFailure = vi.fn();
+
+    await expect(
+      prepareEnvironmentLaunch({
+        prepareRequired: async () => {
+          steps.push("required");
+        },
+        prepareUpdate: async () => {
+          steps.push("update");
+          throw updateFailure;
+        },
+        onUpdateFailure,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(steps).toEqual(["required", "update"]);
+    expect(onUpdateFailure).toHaveBeenCalledWith(updateFailure);
+  });
+
+  it("propagates required preparation failures without checking for updates", async () => {
+    const requiredFailure = new Error("No valid WSL Server Runtime is installed");
+    const prepareUpdate = vi.fn(async () => {});
+    const onUpdateFailure = vi.fn();
+
+    await expect(
+      prepareEnvironmentLaunch({
+        prepareRequired: async () => {
+          throw requiredFailure;
+        },
+        prepareUpdate,
+        onUpdateFailure,
+      })
+    ).rejects.toBe(requiredFailure);
+
+    expect(prepareUpdate).not.toHaveBeenCalled();
+    expect(onUpdateFailure).not.toHaveBeenCalled();
   });
 
   it("creates requests beneath the trusted root and rejects invalid request paths", async () => {
