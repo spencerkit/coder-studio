@@ -113,11 +113,15 @@ describe("EnvironmentLaunchStore", () => {
     const currentId = (await store.create(target("current"))).requestId;
     const oldPath = store.getRequestPath(oldId);
     const currentPath = store.getRequestPath(currentId);
+    await expect(store.markReady(oldId, "old", 1234)).resolves.toBe(true);
+    const oldTerminalPath = `${oldPath}.terminal.json`;
     const old = new Date(Date.now() - 10_000);
     await utimes(oldPath, old, old);
+    await utimes(oldTerminalPath, old, old);
 
     await store.cleanupStale(2_000);
     await expect(stat(oldPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(oldTerminalPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(currentPath)).resolves.toBeDefined();
   });
 
@@ -174,71 +178,49 @@ describe("EnvironmentLaunchStore", () => {
     await expect(waiter.read(requestId)).resolves.toMatchObject({ status: "timed-out" });
   });
 
-  it("finalizes timeout after a blocked lock is released before rejecting", async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
-    roots.push(root);
-    const waiter = new EnvironmentLaunchStore(root);
-    const targetStore = new EnvironmentLaunchStore(root);
-    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
-    const requestId = (await waiter.create(requestTarget)).requestId;
-    const lockPath = `${waiter.getRequestPath(requestId)}.lock`;
-    await mkdir(lockPath);
-    const releaseBlockedLock = new Promise<void>((resolveRelease) => {
-      setTimeout(() => {
-        void rm(lockPath, { recursive: true, force: true }).then(resolveRelease);
-      }, 350);
-    });
-
-    await expect(
-      waiter.waitForTerminal(requestId, requestTarget, { pollIntervalMs: 2, timeoutMs: 12 })
-    ).rejects.toThrow("Timed out waiting for WSL: Ubuntu to open");
-    await releaseBlockedLock;
-    await expect(waiter.read(requestId)).resolves.toMatchObject({ status: "timed-out" });
-    await expect(targetStore.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
-  });
-
-  it("does not let an old lock owner release a successor lock", async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
-    roots.push(root);
-    const oldOwner = new EnvironmentLaunchStore(root);
-    const successor = new EnvironmentLaunchStore(root);
-    const requestTarget = target("native", "Local: Windows");
-    const requestId = (await oldOwner.create(requestTarget)).requestId;
-    const acquire = (
-      oldOwner as unknown as {
-        acquireTransitionLock(id: string): Promise<(() => Promise<void>) | null>;
-      }
-    ).acquireTransitionLock;
-    const oldRelease = await acquire.call(oldOwner, requestId);
-    expect(oldRelease).not.toBeNull();
-    const lockPath = `${oldOwner.getRequestPath(requestId)}.lock`;
-    const staleTime = new Date(Date.now() - 60_000);
-    await utimes(`${lockPath}/owner`, staleTime, staleTime);
-
-    const successorAcquire = (
-      successor as unknown as {
-        acquireTransitionLock(id: string): Promise<(() => Promise<void>) | null>;
-      }
-    ).acquireTransitionLock;
-    const successorRelease = await successorAcquire.call(successor, requestId);
-    expect(successorRelease).not.toBeNull();
-    await oldRelease!();
-    await expect(stat(lockPath)).resolves.toBeDefined();
-    await successorRelease!();
-    await expect(successor.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(true);
-    await expect(oldOwner.read(requestId)).resolves.toMatchObject({ status: "ready", pid: 4321 });
-  });
-
-  it("bounds transition lock acquisition when an abandoned lock remains", async () => {
+  it("commits terminal readiness without waiting on stale lock artifacts", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "coder-studio-environment-launch-pair-test-"));
     roots.push(root);
     const owner = new EnvironmentLaunchStore(root);
-    const contender = new EnvironmentLaunchStore(root);
-    const requestTarget = target("native", "Local: Windows");
+    const targetStore = new EnvironmentLaunchStore(root);
+    const requestTarget = target("wsl:ubuntu", "WSL: Ubuntu");
     const requestId = (await owner.create(requestTarget)).requestId;
-    await mkdir(`${owner.getRequestPath(requestId)}.lock`);
+    const lockPath = `${owner.getRequestPath(requestId)}.lock`;
+    await mkdir(lockPath);
+    await mkdir(`${lockPath}.gate`);
 
-    await expect(contender.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(false);
-    await expect(owner.read(requestId)).resolves.toMatchObject({ status: "pending" });
+    await expect(targetStore.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(true);
+    await expect(targetStore.read(requestId)).resolves.toMatchObject({
+      status: "ready",
+      pid: 4321,
+    });
+  });
+
+  it("reads a terminal claim even when the pending request file is gone", async () => {
+    const store = await createStore();
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await store.create(requestTarget)).requestId;
+    const requestPath = store.getRequestPath(requestId);
+
+    await expect(store.markReady(requestId, requestTarget.id, 4321)).resolves.toBe(true);
+    await rm(requestPath, { force: true });
+    await expect(store.read(requestId)).resolves.toMatchObject({ status: "ready", pid: 4321 });
+    await expect(stat(`${requestPath}.terminal.json`)).resolves.toBeDefined();
+  });
+
+  it("preserves a failed terminal claim independently of the pending request", async () => {
+    const store = await createStore();
+    const requestTarget = target("native", "Local: Windows");
+    const requestId = (await store.create(requestTarget)).requestId;
+    const requestPath = store.getRequestPath(requestId);
+
+    await expect(store.markFailed(requestId, requestTarget.id, "startup failed")).resolves.toBe(
+      true
+    );
+    await rm(requestPath, { force: true });
+    await expect(store.read(requestId)).resolves.toMatchObject({
+      status: "failed",
+      message: "startup failed",
+    });
   });
 });
