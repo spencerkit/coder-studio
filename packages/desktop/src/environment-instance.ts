@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
+import { isEnvironmentLaunchRequestId } from "./environment-launch.js";
 import { createWslEnvironmentTarget, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import type { DesktopEnvironmentTarget } from "./protocol.js";
 
 export const ENVIRONMENT_INSTANCE_ROOT_SWITCH = "coder-studio-environment-root";
 export const ENVIRONMENT_INSTANCE_TARGET_SWITCH = "coder-studio-environment-target";
 export const ENVIRONMENT_INSTANCE_DISTRO_SWITCH = "coder-studio-wsl-distro";
+export const ENVIRONMENT_LAUNCH_REQUEST_SWITCH = "coder-studio-environment-launch-request";
 
 export interface CommandLineSwitchReader {
   getSwitchValue(name: string): string;
@@ -31,6 +33,13 @@ export function readEnvironmentInstanceTarget(
   return createWslEnvironmentTarget(distro);
 }
 
+export function readEnvironmentLaunchRequestId(
+  commandLine: CommandLineSwitchReader
+): string | null {
+  const requestId = commandLine.getSwitchValue(ENVIRONMENT_LAUNCH_REQUEST_SWITCH).trim();
+  return isEnvironmentLaunchRequestId(requestId) ? requestId : null;
+}
+
 export function getEnvironmentInstanceUserDataDir(
   rootUserDataDir: string,
   target: DesktopEnvironmentTarget
@@ -43,7 +52,8 @@ export function getEnvironmentInstanceUserDataDir(
 
 export function createEnvironmentInstanceArgs(
   rootUserDataDir: string,
-  target: DesktopEnvironmentTarget
+  target: DesktopEnvironmentTarget,
+  launchRequestId?: string
 ): string[] {
   const root = resolve(rootUserDataDir);
   const args = [
@@ -54,6 +64,12 @@ export function createEnvironmentInstanceArgs(
   if (target.kind === "wsl") {
     if (!target.distro) throw new Error("A WSL Desktop instance requires a distribution name");
     args.push(`--${ENVIRONMENT_INSTANCE_DISTRO_SWITCH}=${target.distro}`);
+  }
+  if (launchRequestId !== undefined) {
+    if (!isEnvironmentLaunchRequestId(launchRequestId)) {
+      throw new Error("Invalid environment launch request id");
+    }
+    args.push(`--${ENVIRONMENT_LAUNCH_REQUEST_SWITCH}=${launchRequestId}`);
   }
   return args;
 }

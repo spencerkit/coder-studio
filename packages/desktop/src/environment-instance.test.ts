@@ -5,9 +5,11 @@ import {
   ENVIRONMENT_INSTANCE_DISTRO_SWITCH,
   ENVIRONMENT_INSTANCE_ROOT_SWITCH,
   ENVIRONMENT_INSTANCE_TARGET_SWITCH,
+  ENVIRONMENT_LAUNCH_REQUEST_SWITCH,
   getEnvironmentInstanceRoot,
   getEnvironmentInstanceUserDataDir,
   readEnvironmentInstanceTarget,
+  readEnvironmentLaunchRequestId,
 } from "./environment-instance.js";
 import { createWslEnvironmentTarget, NATIVE_ENVIRONMENT } from "./environment-state.js";
 
@@ -44,6 +46,38 @@ describe("Desktop environment instances", () => {
       `--${ENVIRONMENT_INSTANCE_TARGET_SWITCH}=wsl`,
       `--${ENVIRONMENT_INSTANCE_DISTRO_SWITCH}=Ubuntu-24.04`,
     ]);
+  });
+
+  it("carries a valid launch request across the environment process boundary", () => {
+    const root = resolve("C:/Users/test/AppData/Roaming/Coder Studio");
+    const target = createWslEnvironmentTarget("Ubuntu");
+    const requestId = "123e4567-e89b-42d3-a456-426614174000";
+
+    expect(createEnvironmentInstanceArgs(root, target, requestId)).toContain(
+      `--${ENVIRONMENT_LAUNCH_REQUEST_SWITCH}=${requestId}`
+    );
+    expect(
+      readEnvironmentLaunchRequestId(
+        commandLine({ [ENVIRONMENT_LAUNCH_REQUEST_SWITCH]: ` ${requestId} ` })
+      )
+    ).toBe(requestId);
+    expect(
+      readEnvironmentLaunchRequestId(commandLine({ [ENVIRONMENT_LAUNCH_REQUEST_SWITCH]: "../bad" }))
+    ).toBeNull();
+  });
+
+  it("omits absent launch requests and rejects invalid supplied request ids", () => {
+    const root = resolve("C:/Users/test/AppData/Roaming/Coder Studio");
+    const target = createWslEnvironmentTarget("Ubuntu");
+
+    expect(
+      createEnvironmentInstanceArgs(root, target).some((arg) =>
+        arg.startsWith(`--${ENVIRONMENT_LAUNCH_REQUEST_SWITCH}=`)
+      )
+    ).toBe(false);
+    expect(() => createEnvironmentInstanceArgs(root, target, "../bad")).toThrow(
+      "Invalid environment launch request id"
+    );
   });
 
   it("restores the requested target and canonical root from command-line switches", () => {
