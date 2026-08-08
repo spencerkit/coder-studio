@@ -126,6 +126,116 @@ describe("EnvironmentActivationCoordinator", () => {
     expect(markReady).not.toHaveBeenCalled();
   });
 
+  it("waits for a successful acknowledgement before failing pending requests", async () => {
+    let releaseAcknowledgement: (() => void) | undefined;
+    const markReady = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseAcknowledgement = resolve;
+        })
+    );
+    const markFailed = vi.fn(async () => undefined);
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow: vi.fn(() => true),
+      markFailed,
+      markReady,
+    });
+    await coordinator.markWindowReady();
+
+    const readyRequest = coordinator.request("request-1");
+    const failureRequest = coordinator.failPending("Target startup failed");
+    const failuresBeforeReadySettled = markFailed.mock.calls.length;
+    releaseAcknowledgement?.();
+    await readyRequest;
+    await failureRequest;
+
+    expect(failuresBeforeReadySettled).toBe(0);
+    expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it("fails a request only after its in-progress acknowledgement rejects", async () => {
+    const acknowledgementError = new Error("Acknowledgement failed");
+    let rejectAcknowledgement: ((reason: Error) => void) | undefined;
+    const markReady = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectAcknowledgement = reject;
+        })
+    );
+    const markFailed = vi.fn(async () => undefined);
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow: vi.fn(() => true),
+      markFailed,
+      markReady,
+    });
+    await coordinator.markWindowReady();
+
+    const readyRequest = coordinator.request("request-1");
+    const readyOutcome = expect(readyRequest).rejects.toBe(acknowledgementError);
+    const failureRequest = coordinator.failPending("Target startup failed");
+    const failuresBeforeReadySettled = markFailed.mock.calls.length;
+    rejectAcknowledgement?.(acknowledgementError);
+    await readyOutcome;
+    await failureRequest;
+
+    expect(failuresBeforeReadySettled).toBe(0);
+    expect(markFailed).toHaveBeenCalledOnce();
+    expect(markFailed).toHaveBeenCalledWith("request-1", "Target startup failed");
+  });
+
+  it("settles every failure callback and retains only rejected requests for retry", async () => {
+    const failureError = new Error("Failure acknowledgement failed");
+    let releaseSecondFailure: (() => void) | undefined;
+    let firstRequestAttempts = 0;
+    const markFailed = vi.fn((requestId: string) => {
+      if (requestId === "request-1" && firstRequestAttempts++ === 0) {
+        return Promise.reject(failureError);
+      }
+      if (requestId === "request-2") {
+        return new Promise<void>((resolve) => {
+          releaseSecondFailure = resolve;
+        });
+      }
+      return Promise.resolve();
+    });
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow: vi.fn(() => true),
+      markFailed,
+      markReady: vi.fn(async () => undefined),
+    });
+    await coordinator.request("request-1");
+    await coordinator.request("request-2");
+
+    let firstFailureSettled = false;
+    let observedFailure: unknown;
+    const firstFailure = coordinator.failPending("Target startup failed").catch((error) => {
+      firstFailureSettled = true;
+      observedFailure = error;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const settledBeforeSecondFailure = firstFailureSettled;
+    releaseSecondFailure?.();
+    await firstFailure;
+
+    expect(settledBeforeSecondFailure).toBe(false);
+    expect(observedFailure).toBe(failureError);
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-1")).toHaveLength(
+      1
+    );
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      1
+    );
+
+    await coordinator.failPending("Retry startup failure");
+
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-1")).toHaveLength(
+      2
+    );
+    expect(markFailed.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(
+      1
+    );
+  });
+
   it("keeps requests pending when the window cannot be focused", async () => {
     const { coordinator, focusWindow, markReady } = createCoordinator();
     focusWindow.mockReturnValueOnce(false).mockReturnValue(true);
@@ -189,5 +299,40 @@ describe("EnvironmentActivationCoordinator", () => {
     expect(focusWindow).toHaveBeenCalledTimes(2);
     expect(markReady).toHaveBeenCalledTimes(2);
     expect(markReady).toHaveBeenCalledWith("request-2");
+  });
+
+  it("drains a new request after an in-progress acknowledgement rejects", async () => {
+    const acknowledgementError = new Error("Acknowledgement failed");
+    let rejectFirstAcknowledgement: ((reason: Error) => void) | undefined;
+    let firstRequestAttempts = 0;
+    const focusWindow = vi.fn(() => true);
+    const markReady = vi.fn((requestId: string) => {
+      if (requestId === "request-1" && firstRequestAttempts++ === 0) {
+        return new Promise<void>((_resolve, reject) => {
+          rejectFirstAcknowledgement = reject;
+        });
+      }
+      return Promise.resolve();
+    });
+    const coordinator = new EnvironmentActivationCoordinator({
+      focusWindow,
+      markFailed: vi.fn(async () => undefined),
+      markReady,
+    });
+    await coordinator.markWindowReady();
+    focusWindow.mockClear();
+
+    const firstRequest = coordinator.request("request-1");
+    const secondRequest = coordinator.request("request-2");
+    const firstOutcome = expect(firstRequest).rejects.toBe(acknowledgementError);
+    const secondOutcome = expect(secondRequest).resolves.toBeUndefined();
+    rejectFirstAcknowledgement?.(acknowledgementError);
+
+    await firstOutcome;
+    await secondOutcome;
+
+    expect(focusWindow).toHaveBeenCalledTimes(2);
+    expect(markReady.mock.calls.filter(([requestId]) => requestId === "request-1")).toHaveLength(2);
+    expect(markReady.mock.calls.filter(([requestId]) => requestId === "request-2")).toHaveLength(1);
   });
 });

@@ -9,6 +9,7 @@ export class EnvironmentActivationCoordinator {
   private focusRequested = false;
   private windowReady = false;
   private flushPromise: Promise<void> | null = null;
+  private failurePromise: Promise<void> | null = null;
 
   constructor(private readonly options: EnvironmentActivationOptions) {}
 
@@ -32,17 +33,31 @@ export class EnvironmentActivationCoordinator {
     this.windowReady = false;
   }
 
-  async failPending(message: string): Promise<void> {
-    const requestIds = [...this.pendingRequestIds];
-    this.pendingRequestIds.clear();
+  failPending(message: string): Promise<void> {
+    this.windowReady = false;
     this.focusRequested = false;
-    await Promise.all(requestIds.map((requestId) => this.options.markFailed(requestId, message)));
+    if (this.failurePromise) return this.failurePromise;
+
+    const failurePromise = Promise.resolve().then(() => this.failAfterFlush(message));
+    this.failurePromise = failurePromise;
+    return failurePromise.finally(() => {
+      if (this.failurePromise === failurePromise) this.failurePromise = null;
+    });
   }
 
   private scheduleFlush(): Promise<void> {
+    if (this.failurePromise) {
+      return this.failurePromise.then(
+        () => this.scheduleFlush(),
+        () => this.scheduleFlush()
+      );
+    }
     if (!this.windowReady || !this.focusRequested) return Promise.resolve();
     if (this.flushPromise) {
-      return this.flushPromise.then(() => this.scheduleFlush());
+      return this.flushPromise.then(
+        () => this.scheduleFlush(),
+        () => this.scheduleFlush()
+      );
     }
     const flushPromise = this.flush();
     this.flushPromise = flushPromise;
@@ -59,18 +74,32 @@ export class EnvironmentActivationCoordinator {
       }
       this.focusRequested = false;
       const requestIds = [...this.pendingRequestIds];
-      const results = await Promise.allSettled(
-        requestIds.map((requestId) => this.options.markReady(requestId))
-      );
-      let failure: PromiseRejectedResult | undefined;
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          this.pendingRequestIds.delete(requestIds[index]!);
-        } else {
-          failure ??= result;
-        }
-      });
-      if (failure) throw failure.reason;
+      await this.settleRequestIds(requestIds, (requestId) => this.options.markReady(requestId));
     }
+  }
+
+  private async failAfterFlush(message: string): Promise<void> {
+    const flushPromise = this.flushPromise;
+    if (flushPromise) await flushPromise.catch(() => undefined);
+    const requestIds = [...this.pendingRequestIds];
+    await this.settleRequestIds(requestIds, (requestId) =>
+      this.options.markFailed(requestId, message)
+    );
+  }
+
+  private async settleRequestIds(
+    requestIds: string[],
+    settle: (requestId: string) => Promise<void>
+  ): Promise<void> {
+    const results = await Promise.allSettled(requestIds.map((requestId) => settle(requestId)));
+    let failure: PromiseRejectedResult | undefined;
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        this.pendingRequestIds.delete(requestIds[index]!);
+      } else {
+        failure ??= result;
+      }
+    });
+    if (failure) throw failure.reason;
   }
 }
