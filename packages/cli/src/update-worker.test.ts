@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runRestartHandoff, runUpdateWorker } from "./update-worker.js";
+import { runRestartHandoff, runUpdateCommand, runUpdateWorker } from "./update-worker.js";
 
 type UpdateWorkerDeps = NonNullable<Parameters<typeof runUpdateWorker>[1]>;
 type RestartHandoffDeps = NonNullable<Parameters<typeof runRestartHandoff>[1]>;
@@ -36,6 +36,16 @@ describe("update-worker", () => {
       installArgsPrefix: ["install", "-g"],
     };
   }
+
+  it("includes child stderr in command failures so permission fallback is deterministic", async () => {
+    await expect(
+      runUpdateCommand(
+        process.execPath,
+        ["-e", "console.error('permission scenario EACCES'); process.exit(17)"],
+        { env: process.env }
+      )
+    ).rejects.toThrow("permission scenario EACCES");
+  });
 
   it("writes restarting state and spawns a detached restart handoff after install success", async () => {
     const env = createEnv();

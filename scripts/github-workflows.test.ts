@@ -10,6 +10,7 @@ interface WorkflowJob {
   permissions?: Record<string, string>;
   outputs?: Record<string, string>;
   with?: Record<string, unknown>;
+  strategy?: { matrix?: Record<string, unknown> };
   steps?: Array<{
     id?: string;
     name?: string;
@@ -53,6 +54,7 @@ describe("GitHub workflow boundaries", () => {
     };
     const windowsJob = workflow.jobs["desktop-windows-verify"];
     const linuxJob = workflow.jobs["desktop-linux-assets-verify"];
+    const merged = workflow.jobs["desktop-channel-verify"];
     const windowsSteps = windowsJob.steps ?? [];
     const linuxSteps = linuxJob.steps ?? [];
     const windowsUpload = windowsSteps.find((step) => step.uses === "actions/upload-artifact@v4");
@@ -83,6 +85,7 @@ describe("GitHub workflow boundaries", () => {
       signed: { type: "boolean", required: false, default: false },
       signing_key_artifact: { type: "string", required: false, default: "" },
       runtime_update_url: { type: "string", required: false, default: "" },
+      release_tag: { type: "string", required: false, default: "" },
     });
     expect(workflowCall.outputs).toEqual({
       windows_artifact: {
@@ -93,6 +96,10 @@ describe("GitHub workflow boundaries", () => {
         description: "Linux Desktop verification artifact",
         value: "${{ jobs['desktop-linux-assets-verify'].outputs.artifact_name }}",
       },
+      complete_artifact: {
+        description: "Complete signed Desktop verification bundle",
+        value: "${{ jobs['desktop-channel-verify'].outputs.artifact_name }}",
+      },
     });
     expect(Object.keys(workflow.jobs)).toEqual([
       "prepare",
@@ -100,6 +107,9 @@ describe("GitHub workflow boundaries", () => {
       "desktop-linux-assets-verify",
       "desktop-channel-verify",
     ]);
+    expect(merged.outputs).toEqual({
+      artifact_name: "${{ steps.artifact_name.outputs.value }}",
+    });
     expect(windowsJob.outputs).toEqual({
       artifact_name: "${{ steps.artifact_name.outputs.value }}",
     });
@@ -170,7 +180,7 @@ describe("GitHub workflow boundaries", () => {
     );
     const artifactDownloads = publishSteps.filter(
       (step) =>
-        step.uses === "actions/download-artifact@v4" && step.name?.includes("acceptance assets")
+        step.uses === "actions/download-artifact@v4" && step.name?.includes("acceptance bundle")
     );
     const publicKeyDownload = publishSteps.find(
       (step) => step.name === "Download acceptance public key"
@@ -187,6 +197,7 @@ describe("GitHub workflow boundaries", () => {
       "repository-verify",
       "build-assets",
       "publish",
+      "installed-upgrades",
     ]);
     expect(prepare.permissions).toEqual({ contents: "read" });
     expect(prepare.outputs).toEqual({
@@ -233,6 +244,7 @@ describe("GitHub workflow boundaries", () => {
         signed: true,
         signing_key_artifact: "${{ needs.prepare.outputs.signing_key_artifact }}",
         runtime_update_url: "${{ needs.prepare.outputs.runtime_update_url }}",
+        release_tag: "${{ needs.prepare.outputs.release_tag }}",
       },
     });
     expect(publish.needs).toEqual(["prepare", "repository-verify", "build-assets"]);
@@ -241,8 +253,7 @@ describe("GitHub workflow boundaries", () => {
       if (name !== "publish") expect(job.permissions?.contents).not.toBe("write");
     }
     expect(artifactDownloads.map((step) => step.with?.name)).toEqual([
-      "${{ needs.build-assets.outputs.windows_artifact }}",
-      "${{ needs.build-assets.outputs.linux_artifact }}",
+      "${{ needs.build-assets.outputs.complete_artifact }}",
     ]);
     for (const download of artifactDownloads) {
       expect(download.with?.path).toBe("release/desktop-acceptance");
@@ -358,5 +369,73 @@ describe("GitHub workflow boundaries", () => {
     expect(releaseIndex).toBeGreaterThan(attestIndex);
     expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
     expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
+  });
+
+  it("gates Desktop and CLI promotion on immutable installed-upgrade reports", () => {
+    const acceptance = loadWorkflow("desktop-acceptance.yml");
+    const installed = acceptance.jobs["installed-upgrades"];
+    const installedSteps = installed.steps ?? [];
+    const runInstalled = installedSteps.find(
+      (step) => step.name === "Run installed Desktop update scenario"
+    );
+    expect(installed.needs).toEqual(["prepare", "publish"]);
+    expect(installed.strategy?.matrix?.scenario).toEqual([
+      "runtime-only",
+      "combined",
+      "wsl",
+      "runtime-health-rollback",
+      "interrupted-download",
+      "restart-journal-recovery",
+      "external-sidecar-browser",
+    ]);
+    expect(runInstalled?.run).toContain("pnpm acceptance:desktop:installed");
+    expect(runInstalled?.run).toContain("-CandidateInstaller");
+    expect(runInstalled?.run).toContain("-PublicKeyPath");
+    expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
+      true
+    );
+
+    const release = loadWorkflow("desktop-release.yml");
+    const releaseInstalled = release.jobs["installed-upgrade"];
+    const promotion = release.jobs.promote;
+    expect(releaseInstalled.needs).toEqual(["prepare", "publish"]);
+    expect(promotion.needs).toEqual(["prepare", "publish", "installed-upgrade"]);
+    const promotionSteps = promotion.steps ?? [];
+    const validateReports = promotionSteps.find(
+      (step) => step.name === "Validate promotion report identities"
+    );
+    const promote = promotionSteps.find((step) => step.name === "Promote existing prerelease");
+    expect(validateReports?.run).toContain("channelSignatureDigest");
+    expect(validateReports?.run).toContain("commitSha");
+    expect(promote?.run?.trim()).toBe(
+      'gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest'
+    );
+    const promotionText = JSON.stringify(promotion);
+    expect(promotionText).not.toMatch(/pnpm (build|dist)|gh release upload|--clobber/);
+
+    const cli = loadWorkflow("publish.yml");
+    const steps = cli.jobs.publish.steps ?? [];
+    const packIndex = steps.findIndex((step) => step.name === "Pack CLI candidate once");
+    const stageIndex = steps.findIndex(
+      (step) => step.name === "Publish or reuse immutable CLI candidate"
+    );
+    const acceptanceIndex = steps.findIndex(
+      (step) => step.name === "Run isolated packaged CLI acceptance"
+    );
+    const desktopReportIndex = steps.findIndex(
+      (step) => step.name === "Validate required Desktop acceptance report"
+    );
+    const promoteIndex = steps.findIndex((step) => step.name === "Promote accepted CLI dist-tag");
+    expect(packIndex).toBeGreaterThan(-1);
+    expect(stageIndex).toBeGreaterThan(packIndex);
+    expect(acceptanceIndex).toBeGreaterThan(stageIndex);
+    expect(desktopReportIndex).toBeGreaterThan(acceptanceIndex);
+    expect(promoteIndex).toBeGreaterThan(desktopReportIndex);
+    expect(steps[stageIndex]?.run).toContain("dist.integrity");
+    expect(steps[stageIndex]?.run).toContain('npm publish "${tarball}"');
+    expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
+    expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
+    expect(steps[promoteIndex]?.run).toContain("npm dist-tag rm");
+    expect(JSON.stringify(cli)).not.toContain("pnpm publish:cli -- --publish");
   });
 });

@@ -15,6 +15,10 @@ on:
         type: string
         required: false
         default: ""
+      release_tag:
+        type: string
+        required: false
+        default: ""
     outputs:
       windows_artifact:
         description: Windows Desktop verification artifact
@@ -22,6 +26,9 @@ on:
       linux_artifact:
         description: Linux Desktop verification artifact
         value: ${{ jobs['desktop-linux-assets-verify'].outputs.artifact_name }}
+      complete_artifact:
+        description: Complete signed Desktop verification bundle
+        value: ${{ jobs['desktop-channel-verify'].outputs.artifact_name }}
   workflow_dispatch:
   pull_request:
     paths:
@@ -250,7 +257,14 @@ jobs:
       - desktop-linux-assets-verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      artifact_name: ${{ steps.artifact_name.outputs.value }}
     steps:
+      - name: Resolve complete artifact name
+        id: artifact_name
+        shell: bash
+        run: echo "value=desktop-complete-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -288,10 +302,15 @@ jobs:
           path: release/desktop-ci-signing
 
       - name: Build signed Desktop channel
+        shell: bash
         run: |
+          release_tag="${{ inputs.release_tag }}"
+          if [[ -z "${release_tag}" ]]; then
+            release_tag="desktop-verify-${GITHUB_SHA}"
+          fi
           pnpm desktop:channel -- \
             --directory release/desktop-release-complete \
-            --release-tag "desktop-verify-${GITHUB_SHA}" \
+            --release-tag "${release_tag}" \
             --channel prerelease \
             --generated-at "${{ needs.prepare.outputs.published_at }}" \
             --private-key release/desktop-ci-signing/runtime-private.pem
@@ -309,7 +328,7 @@ jobs:
       - name: Upload complete Desktop verification bundle
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-complete-${{ github.sha }}
+          name: ${{ steps.artifact_name.outputs.value }}
           path: release/desktop-release-complete/
           if-no-files-found: error
           retention-days: 3

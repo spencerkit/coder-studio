@@ -27,6 +27,41 @@ export interface DesktopChannel {
   signature: RuntimeSignature;
 }
 
+export function resolveDesktopChannelUrl(env: NodeJS.ProcessEnv, compiledUrl: string): string {
+  const override = env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim();
+  if (env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1" && override) {
+    return new URL(override).toString();
+  }
+  const compiled = compiledUrl.trim();
+  return compiled ? new URL(compiled).toString() : "";
+}
+
+export function resolveDesktopRuntimePublicKey(
+  env: NodeJS.ProcessEnv,
+  compiledKey: string,
+  readKeyFile: (path: string) => string
+): string {
+  const keyPath = env.CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE?.trim();
+  if (env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1" || !keyPath) {
+    return compiledKey.trim();
+  }
+  const key = readKeyFile(keyPath).trim();
+  if (!key) throw new Error("Desktop acceptance public key file is empty");
+  return key;
+}
+
+export function shouldForceAcceptanceRuntimeHealthFailure(
+  env: NodeJS.ProcessEnv,
+  source: "factory" | "active" | "pending",
+  runtimeVersion: string
+): boolean {
+  return (
+    env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1" &&
+    source === "pending" &&
+    env.CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION?.trim() === runtimeVersion
+  );
+}
+
 function readString(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`Desktop channel ${label} must be a non-empty string`);

@@ -13,12 +13,14 @@ import {
 describe("config-store", () => {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
+  const originalCoderStudioHome = process.env.CODER_STUDIO_HOME;
   let testHomeDir: string;
 
   beforeEach(() => {
     testHomeDir = mkdtempSync(join(tmpdir(), "cs-cli-config-home-"));
     process.env.HOME = testHomeDir;
     process.env.USERPROFILE = testHomeDir;
+    delete process.env.CODER_STUDIO_HOME;
   });
 
   afterEach(() => {
@@ -37,6 +39,12 @@ describe("config-store", () => {
     } else {
       process.env.USERPROFILE = originalUserProfile;
     }
+
+    if (originalCoderStudioHome === undefined) {
+      delete process.env.CODER_STUDIO_HOME;
+    } else {
+      process.env.CODER_STUDIO_HOME = originalCoderStudioHome;
+    }
   });
 
   it("returns null when config file does not exist", () => {
@@ -54,6 +62,17 @@ describe("config-store", () => {
     writeCliConfig(config as CliConfig);
 
     expect(readCliConfig()).toEqual(config);
+  });
+
+  it("isolates config under an explicit Coder Studio home without replacing HOME", () => {
+    const isolatedHome = join(testHomeDir, "acceptance-home");
+    process.env.CODER_STUDIO_HOME = isolatedHome;
+
+    writeCliConfig({ host: "127.0.0.1", port: 43123 });
+
+    expect(getCliConfigPath()).toBe(join(isolatedHome, "config.json"));
+    expect(readCliConfig()).toEqual({ host: "127.0.0.1", port: 43123 });
+    expect(existsSync(join(testHomeDir, ".coder-studio", "config.json"))).toBe(false);
   });
 
   it("keeps a directory input as the state directory", () => {

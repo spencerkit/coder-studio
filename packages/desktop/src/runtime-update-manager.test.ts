@@ -187,8 +187,8 @@ describe("ProductRuntimeUpdateManager", () => {
     const root = await temporaryRoot();
     const factoryRoot = resolve(root, "factory");
     const updateRoot = resolve(root, "update");
-    await writeRuntime(factoryRoot, "0.5.6", undefined);
     const keys = generateKeyPairSync("ed25519");
+    await writeRuntime(factoryRoot, "0.5.6", undefined, keys.privateKey);
     const manifest = await writeRuntime(updateRoot, "0.5.7", "runtime.tgz", keys.privateKey);
     const archivePath = resolve(root, "runtime.tgz");
     await create({ cwd: updateRoot, file: archivePath, gzip: true }, [
@@ -228,6 +228,9 @@ describe("ProductRuntimeUpdateManager", () => {
       source: "pending",
       manifest: { runtimeVersion: "0.5.7" },
     });
+    await expect(
+      readFile(resolve(root, "store", "active.json"), "utf8").then(JSON.parse)
+    ).resolves.toMatchObject({ active: { runtimeVersion: "0.5.6" } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await expect(manager.getState()).resolves.toEqual({
       supported: true,

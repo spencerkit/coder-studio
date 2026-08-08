@@ -75,6 +75,7 @@ jobs:
       signed: true
       signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
       runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
+      release_tag: ${{ needs.prepare.outputs.release_tag }}
 
   publish:
     name: Publish signed Desktop acceptance channel
@@ -86,6 +87,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+    outputs:
+      complete_artifact: ${{ needs.build-assets.outputs.complete_artifact }}
 
     steps:
       - name: Checkout repository
@@ -106,16 +109,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download Windows acceptance assets
+      - name: Download complete acceptance bundle
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build-assets.outputs.windows_artifact }}
-          path: release/desktop-acceptance
-
-      - name: Download Linux acceptance assets
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build-assets.outputs.linux_artifact }}
+          name: ${{ needs.build-assets.outputs.complete_artifact }}
           path: release/desktop-acceptance
 
       - name: Download acceptance public key
@@ -134,7 +131,7 @@ jobs:
           } >> "${GITHUB_ENV}"
 
       - name: Validate complete signed acceptance channel
-        run: pnpm desktop:artifacts validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+        run: pnpm desktop:artifacts validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime' --release-kind full
 
       - name: Publish tag-pinned prerelease
         shell: bash
@@ -169,3 +166,216 @@ jobs:
             echo "- Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
             echo "- Runtime channel: ${{ needs.prepare.outputs.runtime_update_url }}"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  installed-upgrades:
+    name: Installed Desktop upgrade (${{ matrix.scenario }})
+    needs:
+      - prepare
+      - publish
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - runtime-only
+          - combined
+          - wsl
+          - runtime-health-rollback
+          - interrupted-download
+          - restart-journal-recovery
+          - external-sidecar-browser
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download complete candidate bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish.outputs.complete_artifact }}
+          path: release/desktop-installed-candidate
+
+      - name: Download acceptance signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Download previous stable Desktop release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path release/desktop-installed-previous -Force | Out-Null
+          $latestTag = gh api "repos/${env:GITHUB_REPOSITORY}/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0 -or -not $latestTag) {
+            throw 'A previous stable unified Desktop release is required for installed acceptance'
+          }
+          $patterns = @(
+            'latest.yml',
+            'Coder-Studio-Setup-*.exe',
+            '*.blockmap',
+            'build-info.json',
+            'desktop-channel.json',
+            'coder-studio-engine-linux-x64.manifest.json',
+            'coder-studio-engine-*-linux-x64.tgz',
+            'coder-studio-runtime-win32-x64.manifest.json',
+            'coder-studio-runtime-*-win32-x64.tgz',
+            'coder-studio-server-runtime-linux-x64.manifest.json',
+            'coder-studio-server-runtime-*-linux-x64.tgz'
+          )
+          foreach ($pattern in $patterns) {
+            gh release download $latestTag --pattern $pattern --dir release/desktop-installed-previous --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Previous Desktop asset is missing: $pattern" }
+          }
+
+      - name: Prepare scenario-specific signed channel
+        id: scenario
+        shell: pwsh
+        run: |
+          $candidate = 'release/desktop-installed-candidate'
+          $previous = 'release/desktop-installed-previous'
+          $scenario = '${{ matrix.scenario }}'
+          $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $generatedAt = $originalChannel.generatedAt
+          $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
+          if ($scenario -ne 'combined') {
+            pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to carry forward the previous Shell for the Runtime-only scenario' }
+          }
+          pnpm desktop:channel -- `
+            --directory $candidate `
+            --release-tag $scenarioTag `
+            --channel prerelease `
+            --generated-at $generatedAt `
+            --private-key release/desktop-ci-signing/runtime-private.pem
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
+          $validation = @(
+            'desktop:artifacts', '--', 'validate',
+            '--directory', $candidate,
+            '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
+          )
+          if ($scenario -eq 'combined') {
+            $validation += @('--release-kind', 'full')
+          } else {
+            $validation += @(
+              '--release-kind', 'runtime-only',
+              '--previous-release-directory', $previous
+            )
+          }
+          pnpm @validation
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario Desktop channel validation failed' }
+
+          $channel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $previousChannel = Get-Content (Join-Path $previous 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $candidateMetadata = Get-Content (Join-Path $candidate 'latest.yml') -Raw
+          $previousMetadata = Get-Content (Join-Path $previous 'latest.yml') -Raw
+          $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $components = if ($scenario -eq 'combined') {
+            'shell,runtime:win32-x64'
+          } elseif ($scenario -eq 'wsl') {
+            'runtime:linux-x64'
+          } elseif ($scenario -eq 'external-sidecar-browser') {
+            ''
+          } else {
+            'runtime:win32-x64'
+          }
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$channel.signature.value)
+          $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
+          $portListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+          $portListener.Start()
+          $port = ([Net.IPEndPoint]$portListener.LocalEndpoint).Port
+          $portListener.Stop()
+          $server = Start-Process python -ArgumentList @('-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $candidate) -PassThru -WindowStyle Hidden
+          $server.Id | Set-Content release/desktop-installed-http.pid
+          "channel_url=http://127.0.0.1:$port/desktop-channel.json" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate_installer=$candidate/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_installer=$previous/$previousInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_shell=$($previousChannel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$($previousChannel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_shell=$($channel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_runtime=$($channel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Prepare disposable WSL distribution
+        if: matrix.scenario == 'wsl'
+        id: wsl
+        shell: pwsh
+        run: |
+          $distro = "coder-studio-acceptance-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          wsl.exe --install -d Ubuntu --no-launch
+          wsl.exe -d Ubuntu -u root -- true
+          wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
+          wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable WSL acceptance distribution' }
+          "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run installed Desktop update scenario
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.scenario.outputs.previous_installer }}',
+            '-CandidateInstaller', '${{ steps.scenario.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ steps.scenario.outputs.scenario_tag }}',
+            '-ChannelUrl', '${{ steps.scenario.outputs.channel_url }}',
+            '-PreviousShellVersion', '${{ steps.scenario.outputs.previous_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
+            '-ExpectedComponents', '${{ steps.scenario.outputs.components }}',
+            '-PublicKeyPath', 'release/desktop-ci-signing/runtime-public.pem',
+            '-Scenario', '${{ matrix.scenario }}',
+            '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.scenario.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
+            $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
+          }
+          if ('${{ matrix.scenario }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed -- @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
+
+      - name: Upload installed-upgrade report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-installed-upgrade-${{ matrix.scenario }}-${{ github.sha }}
+          path: release/desktop-installed-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Clean up acceptance services
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path release/desktop-installed-http.pid) {
+            $serverPid = Get-Content release/desktop-installed-http.pid
+            Stop-Process -Id $serverPid -Force -ErrorAction SilentlyContinue
+          }
+          $distro = '${{ steps.wsl.outputs.name }}'
+          if ($distro) { wsl.exe --unregister $distro 2>$null }

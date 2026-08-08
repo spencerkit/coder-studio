@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  resolveDesktopChannelUrl,
+  resolveDesktopRuntimePublicKey,
+  shouldForceAcceptanceRuntimeHealthFailure,
+} from "./desktop-channel.js";
 import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
 
 const state = {
@@ -54,6 +59,68 @@ const state = {
 };
 
 describe("unified Desktop update IPC", () => {
+  it("accepts a tag-pinned channel override only for explicit acceptance launches", () => {
+    const compiled = "https://updates.example/stable/desktop-channel.json";
+    const override = "https://github.com/o/r/releases/download/candidate/desktop-channel.json";
+
+    expect(
+      resolveDesktopChannelUrl(
+        { CODER_STUDIO_DESKTOP_CHANNEL_URL: override } as NodeJS.ProcessEnv,
+        compiled
+      )
+    ).toBe(compiled);
+    expect(
+      resolveDesktopChannelUrl(
+        {
+          CODER_STUDIO_DESKTOP_ACCEPTANCE: "1",
+          CODER_STUDIO_DESKTOP_CHANNEL_URL: override,
+        } as NodeJS.ProcessEnv,
+        compiled
+      )
+    ).toBe(override);
+  });
+
+  it("accepts a test public key file only for explicit signed acceptance launches", () => {
+    const compiledKey = "compiled-production-key";
+    const readKey = vi.fn(() => "acceptance-public-key\n");
+
+    expect(
+      resolveDesktopRuntimePublicKey(
+        { CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE: "C:\\acceptance\\public.pem" },
+        compiledKey,
+        readKey
+      )
+    ).toBe(compiledKey);
+    expect(readKey).not.toHaveBeenCalled();
+    expect(
+      resolveDesktopRuntimePublicKey(
+        {
+          CODER_STUDIO_DESKTOP_ACCEPTANCE: "1",
+          CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE: "C:\\acceptance\\public.pem",
+        },
+        compiledKey,
+        readKey
+      )
+    ).toBe("acceptance-public-key");
+  });
+
+  it("injects a pending Runtime health failure only for the exact acceptance target", () => {
+    const env = {
+      CODER_STUDIO_DESKTOP_ACCEPTANCE: "1",
+      CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION: "0.6.0",
+    };
+    expect(shouldForceAcceptanceRuntimeHealthFailure(env, "pending", "0.6.0")).toBe(true);
+    expect(shouldForceAcceptanceRuntimeHealthFailure(env, "active", "0.6.0")).toBe(false);
+    expect(shouldForceAcceptanceRuntimeHealthFailure(env, "pending", "0.5.0")).toBe(false);
+    expect(
+      shouldForceAcceptanceRuntimeHealthFailure(
+        { CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION: "0.6.0" },
+        "pending",
+        "0.6.0"
+      )
+    ).toBe(false);
+  });
+
   it("registers one unified surface and delegates legacy Runtime calls", async () => {
     const handlers = new Map<string, (...args: unknown[]) => unknown>();
     const ipc = {

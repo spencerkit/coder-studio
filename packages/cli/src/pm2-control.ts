@@ -1,8 +1,8 @@
 import { deleteRuntimeConfig, readRuntimeConfig } from "@coder-studio/core/runtime";
 import { mkdirSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { getFileSize, readLogExcerpt } from "./log-excerpt.js";
+import { getCoderStudioHome } from "./paths.js";
 
 export const MANAGED_SERVER_NAME = "coder-studio-server";
 const PM2_RESTART_DELAY_MS = 2000;
@@ -356,12 +356,12 @@ const deleteManagedServerInSession = async (
 };
 
 const ensureLogDirectory = (): void => {
-  mkdirSync(join(homedir(), ".coder-studio", "logs"), { recursive: true });
+  mkdirSync(join(getCoderStudioHome(), "logs"), { recursive: true });
 };
 
 export const getLogPaths = () => ({
-  outFile: join(homedir(), ".coder-studio", "logs", "server.out.log"),
-  errFile: join(homedir(), ".coder-studio", "logs", "server.err.log"),
+  outFile: join(getCoderStudioHome(), "logs", "server.out.log"),
+  errFile: join(getCoderStudioHome(), "logs", "server.err.log"),
 });
 
 const captureStartupLogOffsets = (): StartupLogOffsets => {

@@ -52,6 +52,20 @@ describe("DesktopShellUpdateAdapter", () => {
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
+  it("allows GitHub prerelease discovery only when the caller explicitly enables acceptance", () => {
+    const updater = createUpdater();
+    const adapter = new DesktopShellUpdateAdapter({
+      updater,
+      currentVersion: "0.2.0",
+      isPackaged: true,
+      allowPrerelease: true,
+    });
+
+    adapter.start();
+
+    expect(updater.allowPrerelease).toBe(true);
+  });
+
   it("rejects updater source drift and carries an already installed Shell", async () => {
     const updater = createUpdater();
     updater.checkForUpdates.mockResolvedValueOnce({ updateInfo: { version: "0.4.0" } });

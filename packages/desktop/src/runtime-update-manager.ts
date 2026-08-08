@@ -282,6 +282,10 @@ export class ProductRuntimeUpdateManager {
       if (options.explicitRetry) {
         await this.options.store.clearFailedVersion(metadata.version);
       }
+      const currentRuntime = this.options.getCurrentRuntime();
+      if (currentRuntime) {
+        await this.options.store.preserveRollbackCandidate(currentRuntime);
+      }
       const runtime = await this.options.store.stageDownloadedRuntime(extractedRoot, {
         shellVersion: metadata.plannedShellVersion,
       });

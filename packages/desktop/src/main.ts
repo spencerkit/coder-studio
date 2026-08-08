@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -23,7 +24,12 @@ import {
 import { autoUpdater, CancellationToken } from "electron-updater";
 import { BackendManager } from "./backend-manager.js";
 import { readDesktopBuildInfo } from "./build-info.js";
-import { parseDesktopChannel } from "./desktop-channel.js";
+import {
+  parseDesktopChannel,
+  resolveDesktopChannelUrl,
+  resolveDesktopRuntimePublicKey,
+  shouldForceAcceptanceRuntimeHealthFailure,
+} from "./desktop-channel.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
@@ -526,16 +532,20 @@ async function startApplication(): Promise<void> {
     ? readEnvironmentInstanceTarget(app.commandLine)
     : NATIVE_ENVIRONMENT;
   registerIpcHandlers(rootUserDataDir);
-  const runtimePublicKey =
+  const compiledRuntimePublicKey =
     typeof __CODER_STUDIO_RUNTIME_PUBLIC_KEY__ === "string"
       ? __CODER_STUDIO_RUNTIME_PUBLIC_KEY__.trim()
       : "";
+  const runtimePublicKey = resolveDesktopRuntimePublicKey(
+    process.env,
+    compiledRuntimePublicKey,
+    (path) => readFileSync(path, "utf8")
+  );
   const compiledDesktopChannelUrl =
     typeof __CODER_STUDIO_DESKTOP_CHANNEL_URL__ === "string"
       ? __CODER_STUDIO_DESKTOP_CHANNEL_URL__.trim()
       : "";
-  const desktopChannelUrl =
-    process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim() || compiledDesktopChannelUrl;
+  const desktopChannelUrl = resolveDesktopChannelUrl(process.env, compiledDesktopChannelUrl);
   const productVersion =
     typeof __CODER_STUDIO_PRODUCT_VERSION__ === "string"
       ? __CODER_STUDIO_PRODUCT_VERSION__.trim()
@@ -623,6 +633,18 @@ async function startApplication(): Promise<void> {
   for (;;) {
     backendManager = createBackendManager();
     try {
+      if (
+        webRuntime &&
+        shouldForceAcceptanceRuntimeHealthFailure(
+          process.env,
+          webRuntime.source,
+          webRuntime.manifest.runtimeVersion
+        )
+      ) {
+        throw new Error(
+          `Acceptance-injected Runtime health failure for ${webRuntime.manifest.runtimeVersion}`
+        );
+      }
       status = await backendManager.start(activeSession);
       const developmentUrl = process.env.CODER_STUDIO_DESKTOP_DEV_URL?.trim();
       if (app.isPackaged && webRuntime && status.source === "managed") {
@@ -679,6 +701,7 @@ async function startApplication(): Promise<void> {
       updater: autoUpdater as unknown as ShellUpdaterPort,
       currentVersion: app.getVersion(),
       isPackaged: true,
+      allowPrerelease: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1",
       createCancellationToken: () => new CancellationToken(),
       logLocations: [join(app.getPath("logs"), "main.log")],
       manualInstallerUrl: "https://github.com/spencerkit/coder-studio/releases",

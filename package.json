@@ -38,6 +38,8 @@
     "acceptance:wsl:prepare": "tsx scripts/prepare-wsl-acceptance.ts",
     "acceptance:runtime:update": "tsx scripts/prepare-wsl-acceptance.ts --runtime-only",
     "acceptance:runtime:verify": "tsx scripts/verify-desktop-runtime-update.ts",
+    "acceptance:cli:update": "tsx scripts/verify-cli-update.ts",
+    "acceptance:desktop:installed": "powershell -NoProfile -File scripts/verify-desktop-installed-update.ps1",
     "acceptance:wsl:serve": "tsx scripts/serve-wsl-acceptance.ts",
     "e2e-ui": "tsx scripts/e2e-ui.ts",
     "lint": "biome lint .",

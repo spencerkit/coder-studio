@@ -35,6 +35,7 @@ describe("pm2-control", () => {
   const originalUserProfile = process.env.USERPROFILE;
   const originalRuntimeDir = process.env.CODER_STUDIO_RUNTIME_DIR;
   const originalRuntimeJsonPath = process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+  const originalCoderStudioHome = process.env.CODER_STUDIO_HOME;
   let testHomeDir: string;
 
   beforeEach(() => {
@@ -43,6 +44,7 @@ describe("pm2-control", () => {
     process.env.USERPROFILE = testHomeDir;
     process.env.CODER_STUDIO_RUNTIME_DIR = join(testHomeDir, ".coder-studio");
     delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
+    delete process.env.CODER_STUDIO_HOME;
 
     connect.mockImplementation((callback: (error: Error | null) => void) => callback(null));
     disconnect.mockImplementation((callback?: (error: Error | null) => void) => {
@@ -97,6 +99,12 @@ describe("pm2-control", () => {
       delete process.env.CODER_STUDIO_RUNTIME_JSON_PATH;
     } else {
       process.env.CODER_STUDIO_RUNTIME_JSON_PATH = originalRuntimeJsonPath;
+    }
+
+    if (originalCoderStudioHome === undefined) {
+      delete process.env.CODER_STUDIO_HOME;
+    } else {
+      process.env.CODER_STUDIO_HOME = originalCoderStudioHome;
     }
 
     if (existsSync(testHomeDir)) {
@@ -472,6 +480,16 @@ describe("pm2-control", () => {
     expect(getLogPaths()).toEqual({
       outFile: join(testHomeDir, ".coder-studio", "logs", "server.out.log"),
       errFile: join(testHomeDir, ".coder-studio", "logs", "server.err.log"),
+    });
+  });
+
+  it("isolates managed logs under an explicit Coder Studio home", () => {
+    const isolatedHome = join(testHomeDir, "acceptance-home");
+    process.env.CODER_STUDIO_HOME = isolatedHome;
+
+    expect(getLogPaths()).toEqual({
+      outFile: join(isolatedHome, "logs", "server.out.log"),
+      errFile: join(isolatedHome, "logs", "server.err.log"),
     });
   });
 });

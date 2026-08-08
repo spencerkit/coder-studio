@@ -303,6 +303,30 @@ export class RuntimeStore {
     return { root: destination, manifest, source: "pending", pointer };
   }
 
+  async preserveRollbackCandidate(runtime: ProductRuntime): Promise<void> {
+    if (runtime.source !== "factory") return;
+    await this.initialize();
+    const current = await this.readActiveState();
+    if (current?.active) return;
+    const manifest = await this.validateRuntimeRoot(runtime.root, false);
+    const pointer: RuntimePointer = {
+      id: createHash("sha256")
+        .update(getRuntimeManifestSigningPayload(manifest))
+        .digest("hex")
+        .slice(0, 24),
+      runtimeVersion: manifest.runtimeVersion,
+      installedAt: new Date().toISOString(),
+    };
+    const destination = resolve(this.versionsRoot, pointer.id);
+    await rm(destination, { recursive: true, force: true });
+    await cp(runtime.root, destination, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+    await writeJsonAtomic(this.activePath, { active: pointer });
+  }
+
   async markLaunchSuccessful(runtime: ProductRuntime): Promise<void> {
     if (runtime.source === "pending" && runtime.pointer) {
       const current = await this.readActiveState();

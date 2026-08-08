@@ -250,7 +250,7 @@ async function waitForProcessExit(pid: number, waitMs = RESTART_HANDOFF_WAIT_MS)
   }
 }
 
-function runCommand(
+export function runUpdateCommand(
   command: string,
   args: string[],
   options?: {
@@ -265,20 +265,27 @@ function runCommand(
       env: options?.env ?? process.env,
     });
 
+    let stderr = "";
     if (options?.logStream && child.stdout) {
       child.stdout.pipe(options.logStream, { end: false });
     }
-    if (options?.logStream && child.stderr) {
-      child.stderr.pipe(options.logStream, { end: false });
+    if (child.stderr) {
+      if (options?.logStream) child.stderr.pipe(options.logStream, { end: false });
+      child.stderr.on("data", (chunk) => {
+        stderr = `${stderr}${String(chunk)}`.slice(-8192);
+      });
     }
 
-    child.on("error", reject);
+    child.on("error", (error) => {
+      reject(error);
+    });
     child.on("exit", (code) => {
       if (code === 0) {
         resolve();
         return;
       }
-      reject(new Error(`${command} exited with code ${code ?? 1}`));
+      const detail = stderr.trim();
+      reject(new Error(`${command} exited with code ${code ?? 1}${detail ? `: ${detail}` : ""}`));
     });
   });
 }
@@ -286,7 +293,7 @@ function runCommand(
 export async function runUpdateWorker(
   input = readEnv(),
   deps?: {
-    runCommand?: typeof runCommand;
+    runCommand?: typeof runUpdateCommand;
     now?: () => number;
     processId?: number;
     spawnDetachedProcess?: typeof spawnDetachedProcess;
@@ -295,7 +302,7 @@ export async function runUpdateWorker(
   const now = deps?.now ?? Date.now;
   await mkdir(dirname(input.logFilePath), { recursive: true });
   const logStream = createWriteStream(input.logFilePath, { flags: "a" });
-  const execute = deps?.runCommand ?? runCommand;
+  const execute = deps?.runCommand ?? runUpdateCommand;
   const childEnv = buildChildProcessEnv(process.env);
   const processId = deps?.processId ?? process.pid;
   const spawnRestartHandoff = deps?.spawnDetachedProcess ?? spawnDetachedProcess;
@@ -362,7 +369,7 @@ export async function runUpdateWorker(
 export async function runRestartHandoff(
   input = readEnv(),
   deps?: {
-    runCommand?: typeof runCommand;
+    runCommand?: typeof runUpdateCommand;
     now?: () => number;
     waitForProcessExit?: typeof waitForProcessExit;
     restartParentPid?: number | null;
@@ -371,7 +378,7 @@ export async function runRestartHandoff(
   const now = deps?.now ?? Date.now;
   await mkdir(dirname(input.logFilePath), { recursive: true });
   const logStream = createWriteStream(input.logFilePath, { flags: "a" });
-  const execute = deps?.runCommand ?? runCommand;
+  const execute = deps?.runCommand ?? runUpdateCommand;
   const waitForParentExit = deps?.waitForProcessExit ?? waitForProcessExit;
   const childEnv = buildChildProcessEnv(process.env);
   const restartParentPid = deps?.restartParentPid ?? readRestartParentPid(process.env);

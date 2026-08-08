@@ -34,6 +34,7 @@ export interface DesktopShellUpdateAdapterOptions {
   updater: ShellUpdaterPort;
   currentVersion: string;
   isPackaged: boolean;
+  allowPrerelease?: boolean;
   createCancellationToken?: () => ShellCancellationToken;
   logLocations?: string[];
   manualInstallerUrl?: string | null;
@@ -81,7 +82,8 @@ export class DesktopShellUpdateAdapter {
     this.started = true;
     this.options.updater.autoDownload = false;
     this.options.updater.autoInstallOnAppQuit = false;
-    this.options.updater.allowPrerelease = this.options.currentVersion.includes("-");
+    this.options.updater.allowPrerelease =
+      this.options.allowPrerelease === true || this.options.currentVersion.includes("-");
     this.options.updater.on("download-progress", (progress: { percent?: number }) => {
       if (!this.activeDownload || typeof progress.percent !== "number") return;
       this.activeDownload.onProgress(Math.max(0, Math.min(100, progress.percent)));
