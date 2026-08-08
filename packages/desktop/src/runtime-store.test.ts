@@ -34,7 +34,7 @@ async function createRoot(): Promise<string> {
 async function createRuntime(
   root: string,
   runtimeVersion: string,
-  options: { signed?: boolean; packageFile?: string } = {}
+  options: { signed?: boolean; packageFile?: string; minShellVersion?: string } = {}
 ): Promise<RuntimeManifest> {
   await mkdir(resolve(root, "web"), { recursive: true });
   await Promise.all([
@@ -52,8 +52,9 @@ async function createRuntime(
   );
   let manifest: RuntimeManifest = {
     schemaVersion: RUNTIME_MANIFEST_SCHEMA_VERSION,
+    publishedAt: "2026-08-08T01:02:03.000Z",
     runtimeVersion,
-    minShellVersion: "0.5.0",
+    minShellVersion: options.minShellVersion ?? "0.5.0",
     requiredEngineVersion: DESKTOP_ENGINE_VERSION,
     requiredNodeVersion: "24.19.0",
     runtimeHostApiVersion: RUNTIME_HOST_API_VERSION,
@@ -176,6 +177,46 @@ describe("RuntimeStore", () => {
     await expect(store.stageDownloadedRuntime(downloadRoot)).rejects.toThrow(
       "requires Desktop 9.0.0"
     );
+  });
+
+  it("stages against the planned Shell but rechecks the actual Shell at launch", async () => {
+    const root = await createRoot();
+    const storeRoot = resolve(root, "store");
+    const factoryRoot = resolve(root, "factory");
+    const payloadRoot = resolve(root, "download");
+    await createRuntime(factoryRoot, "0.5.6");
+    await createRuntime(payloadRoot, "0.6.0", {
+      signed: true,
+      minShellVersion: "0.6.0",
+    });
+    const plannedStore = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+
+    await expect(
+      plannedStore.stageDownloadedRuntime(payloadRoot, { shellVersion: "0.6.0" })
+    ).resolves.toMatchObject({ manifest: { runtimeVersion: "0.6.0" } });
+    await expect(plannedStore.getLaunchCandidate()).resolves.toMatchObject({
+      source: "factory",
+      manifest: { runtimeVersion: "0.5.6" },
+    });
+    await expect(plannedStore.readPendingVersion()).resolves.toBe("0.6.0");
+
+    const upgradedStore = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.6.0",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+    await expect(upgradedStore.getLaunchCandidate()).resolves.toMatchObject({
+      source: "pending",
+      manifest: { runtimeVersion: "0.6.0" },
+    });
   });
 
   it("does not trust an unsigned downloaded Runtime", async () => {

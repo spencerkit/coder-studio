@@ -1,4 +1,8 @@
-import { createDefaultUpdateState, type UpdateStateSnapshot } from "@coder-studio/core";
+import {
+  createDefaultUpdateState,
+  type ReadableUpdateStateSnapshot,
+  type UpdateStateSnapshot,
+} from "@coder-studio/core";
 import { readJsonFile, writeJsonFileAtomic } from "./json-file-store.js";
 
 export interface UpdateStateRepoOptions {
@@ -10,6 +14,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function normalizePublishedAt(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
 function normalizeUpdateState(value: unknown, currentVersion: string): UpdateStateSnapshot {
   const defaults = createDefaultUpdateState(currentVersion);
   if (!isRecord(value)) {
@@ -17,10 +27,12 @@ function normalizeUpdateState(value: unknown, currentVersion: string): UpdateSta
   }
 
   return {
-    version: 1,
+    version: 2,
     currentVersion:
       typeof value.currentVersion === "string" ? value.currentVersion : defaults.currentVersion,
+    currentPublishedAt: normalizePublishedAt(value.currentPublishedAt),
     latestVersion: typeof value.latestVersion === "string" ? value.latestVersion : null,
+    latestPublishedAt: normalizePublishedAt(value.latestPublishedAt),
     availability:
       value.availability === "unknown" ||
       value.availability === "up_to_date" ||
@@ -59,7 +71,7 @@ export class UpdateStateRepo {
   }
 
   get(): UpdateStateSnapshot {
-    const parsed = readJsonFile<UpdateStateSnapshot>(this.filePath);
+    const parsed = readJsonFile<ReadableUpdateStateSnapshot>(this.filePath);
     return normalizeUpdateState(parsed, this.currentVersion);
   }
 
@@ -68,8 +80,9 @@ export class UpdateStateRepo {
   }
 
   set(next: UpdateStateSnapshot): UpdateStateSnapshot {
-    writeJsonFileAtomic(this.filePath, next);
-    return next;
+    const normalized = { ...next, version: 2 as const };
+    writeJsonFileAtomic(this.filePath, normalized);
+    return normalized;
   }
 
   update(
@@ -82,7 +95,7 @@ export class UpdateStateRepo {
     const next: UpdateStateSnapshot = {
       ...current,
       ...resolvedPatch,
-      version: 1,
+      version: 2,
     };
     writeJsonFileAtomic(this.filePath, next);
     return next;

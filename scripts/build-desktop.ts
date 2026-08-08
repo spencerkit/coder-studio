@@ -1,6 +1,14 @@
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import * as esbuild from "esbuild";
+import { normalizeUtcTimestamp } from "../packages/desktop/src/build-info.js";
+import {
+  API_PROTOCOL_VERSION,
+  DATA_SCHEMA_VERSION,
+  DESKTOP_ENGINE_VERSION,
+  DESKTOP_NODE_VERSION,
+  RUNTIME_HOST_API_VERSION,
+} from "../packages/desktop/src/runtime-manifest.js";
 import { buildDesktopRuntime } from "./build-desktop-runtime.js";
 import { ensureDir, error, info, log, ROOT_DIR, step, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
@@ -20,12 +28,26 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
   if (typeof cliManifest.version !== "string" || !cliManifest.version.trim()) {
     throw new Error("Unable to resolve the Product Runtime version");
   }
+  const desktopManifest = JSON.parse(
+    await readFile(resolve(DESKTOP_DIR, "package.json"), "utf8")
+  ) as { version?: unknown };
+  if (typeof desktopManifest.version !== "string" || !desktopManifest.version.trim()) {
+    throw new Error("Unable to resolve the Desktop Shell version");
+  }
+  const releasePublishedAtValue = process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT?.trim();
+  const releasePublishedAt = releasePublishedAtValue
+    ? normalizeUtcTimestamp(releasePublishedAtValue, "CODER_STUDIO_RELEASE_PUBLISHED_AT")
+    : null;
+  const desktopChannelUrl =
+    process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim() ??
+    "https://github.com/spencerkit/coder-studio/releases/latest/download/desktop-channel.json";
   const runtimeUpdateUrl =
     process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() ??
     `https://github.com/spencerkit/coder-studio/releases/latest/download/coder-studio-runtime-${process.platform}-${process.arch}.manifest.json`;
   const runtimeDefines = {
     __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: JSON.stringify(runtimePublicKey),
     __CODER_STUDIO_RUNTIME_UPDATE_URL__: JSON.stringify(runtimeUpdateUrl),
+    __CODER_STUDIO_DESKTOP_CHANNEL_URL__: JSON.stringify(desktopChannelUrl),
     __CODER_STUDIO_PRODUCT_VERSION__: JSON.stringify(cliManifest.version.trim()),
   };
 
@@ -53,6 +75,22 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
       sourcemap: false,
     }),
   ]);
+  const buildInfo = {
+    schemaVersion: 1,
+    shellVersion: desktopManifest.version.trim(),
+    builtAt: new Date().toISOString(),
+    publishedAt: releasePublishedAt,
+    engineVersion: DESKTOP_ENGINE_VERSION,
+    nodeVersion: DESKTOP_NODE_VERSION,
+    runtimeHostApiVersion: RUNTIME_HOST_API_VERSION,
+    apiProtocolVersion: API_PROTOCOL_VERSION,
+    dataSchemaVersion: DATA_SCHEMA_VERSION,
+  };
+  await writeFile(
+    resolve(DESKTOP_DIST_DIR, "build-info.json"),
+    `${JSON.stringify(buildInfo, null, 2)}\n`,
+    "utf8"
+  );
 }
 
 export async function buildDesktop(): Promise<void> {

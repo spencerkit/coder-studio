@@ -5,6 +5,7 @@ import {
   resolveUpdateCheckIntervalSec,
   type UpdateActivitySummary,
   type UpdatePrepareInstallResponse,
+  type UpdateRuntimeContext,
   type UpdateStateSnapshot,
   type UpdateStateView,
   type UpdateSupportInfo,
@@ -12,15 +13,19 @@ import {
 import type { SettingsRepo } from "../storage/repositories/settings-repo.js";
 import type { UpdateStateRepo } from "../storage/repositories/update-state-repo.js";
 import type { Broadcaster } from "../ws/hub.js";
+import { lookupNpmReleaseMetadata, type NpmReleaseMetadata } from "./npm-release-metadata.js";
 
 export interface UpdateRuntimeConfig {
   supported: boolean;
   installKind: "global_npm" | "unsupported";
+  runtimeContext?: UpdateRuntimeContext;
   packageName: string;
   currentVersion: string;
   cliCommand: string;
   workerEntryPath?: string;
   npmCommand?: string;
+  registryUrl?: string;
+  distTag?: string;
   restartArgs?: string[];
   installArgsPrefix?: string[];
   unsupportedReason?: string | null;
@@ -36,6 +41,12 @@ export interface UpdateServiceDeps {
   countRunningSessions: () => number;
   countActiveSupervisors: () => number;
   runLatestVersionLookup?: (packageName: string) => Promise<string>;
+  runReleaseMetadataLookup?: (input: {
+    packageName: string;
+    currentVersion: string;
+    distTag: string;
+    registryUrl: string;
+  }) => Promise<NpmReleaseMetadata>;
   now?: () => number;
   spawnDetachedWorker?: (input: {
     workerEntryPath: string;
@@ -45,6 +56,8 @@ export interface UpdateServiceDeps {
     targetVersion: string;
     cliCommand: string;
     currentVersion: string;
+    currentPublishedAt: string | null;
+    targetPublishedAt: string | null;
     npmCommand: string;
     restartArgs: string[];
     installArgsPrefix: string[];
@@ -100,7 +113,9 @@ export class UpdateService {
   private readonly now: () => number;
   private readonly runtime: UpdateRuntimeConfig;
   private readonly updateWorkerLogFilePath: string;
-  private readonly runLatestVersionLookup: (packageName: string) => Promise<string>;
+  private readonly runReleaseMetadataLookup: NonNullable<
+    UpdateServiceDeps["runReleaseMetadataLookup"]
+  >;
   private readonly spawnDetachedWorkerImpl: UpdateServiceDeps["spawnDetachedWorker"];
   private scheduleTimer: NodeJS.Timeout | null = null;
   private inFlightCheck: Promise<UpdateStateView> | null = null;
@@ -109,21 +124,16 @@ export class UpdateService {
     this.now = deps.now ?? Date.now;
     this.runtime = deps.runtime;
     this.updateWorkerLogFilePath = deps.updateWorkerLogFilePath;
-    this.runLatestVersionLookup =
-      deps.runLatestVersionLookup ??
-      (async (packageName) => {
-        const response = await fetch(
-          `https://registry.npmjs.org/-/package/${encodeURIComponent(packageName)}/dist-tags`
-        );
-        if (!response.ok) {
-          throw new Error(`npm registry request failed with ${response.status}`);
-        }
-        const data = (await response.json()) as { latest?: unknown };
-        if (typeof data.latest !== "string" || !data.latest.trim()) {
-          throw new Error("npm registry did not return a latest version");
-        }
-        return data.latest.trim();
-      });
+    const legacyLookup = deps.runLatestVersionLookup;
+    this.runReleaseMetadataLookup =
+      deps.runReleaseMetadataLookup ??
+      (legacyLookup
+        ? async (input) => ({
+            version: await legacyLookup(input.packageName),
+            currentPublishedAt: null,
+            latestPublishedAt: null,
+          })
+        : lookupNpmReleaseMetadata);
     this.spawnDetachedWorkerImpl = deps.spawnDetachedWorker;
   }
 
@@ -273,6 +283,8 @@ export class UpdateService {
         targetVersion,
         cliCommand: this.runtime.cliCommand,
         currentVersion: this.runtime.currentVersion,
+        currentPublishedAt: state.currentPublishedAt,
+        targetPublishedAt: state.latestPublishedAt,
         npmCommand: this.runtime.npmCommand ?? "npm",
         restartArgs: this.runtime.restartArgs ?? ["serve", "--restart"],
         installArgsPrefix: this.runtime.installArgsPrefix ?? ["install", "-g"],
@@ -293,7 +305,9 @@ export class UpdateService {
     if (current.targetVersion && current.targetVersion === this.runtime.currentVersion) {
       return this.persistAndBroadcast({
         currentVersion: this.runtime.currentVersion,
+        currentPublishedAt: current.latestPublishedAt,
         latestVersion: this.runtime.currentVersion,
+        latestPublishedAt: current.latestPublishedAt,
         availability: "up_to_date",
         updateStatus: "succeeded",
         finishedAt: this.now(),
@@ -339,18 +353,31 @@ export class UpdateService {
   }
 
   private getSupportInfo(): UpdateSupportInfo {
+    const unsupportedReason =
+      this.runtime.unsupportedReason ?? "Current install does not support in-app updates";
     if (!this.runtime.supported) {
       return {
         supported: false,
         installKind: "unsupported",
-        unsupportedReason:
-          this.runtime.unsupportedReason ?? "Current install does not support in-app updates",
+        unsupportedReason,
+        runtimeContext: this.runtime.runtimeContext ?? {
+          environment: "cli-unsupported",
+          authority: "none",
+          supported: false,
+          unsupportedReason,
+        },
       };
     }
     return {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: this.runtime.runtimeContext ?? {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     };
   }
 
@@ -394,6 +421,8 @@ export class UpdateService {
         CODER_STUDIO_UPDATE_CLI_COMMAND: input.cliCommand,
         CODER_STUDIO_UPDATE_NPM_COMMAND: input.npmCommand,
         CODER_STUDIO_UPDATE_CURRENT_VERSION: input.currentVersion,
+        CODER_STUDIO_UPDATE_CURRENT_PUBLISHED_AT: input.currentPublishedAt ?? "",
+        CODER_STUDIO_UPDATE_TARGET_PUBLISHED_AT: input.targetPublishedAt ?? "",
         CODER_STUDIO_UPDATE_RESTART_ARGS: JSON.stringify(input.restartArgs),
         CODER_STUDIO_UPDATE_INSTALL_ARGS_PREFIX: JSON.stringify(input.installArgsPrefix),
       },
@@ -442,18 +471,25 @@ export class UpdateService {
 
   private async runCheckForUpdates(): Promise<UpdateStateView> {
     try {
-      const latestVersion = await this.withCheckTimeout(
-        this.runLatestVersionLookup(this.runtime.packageName)
+      const release = await this.withCheckTimeout(
+        this.runReleaseMetadataLookup({
+          packageName: this.runtime.packageName,
+          currentVersion: this.runtime.currentVersion,
+          distTag: this.runtime.distTag ?? "latest",
+          registryUrl: this.runtime.registryUrl ?? "https://registry.npmjs.org/",
+        })
       );
       const availability =
-        compareVersions(latestVersion, this.runtime.currentVersion) > 0
+        compareVersions(release.version, this.runtime.currentVersion) > 0
           ? "update_available"
           : "up_to_date";
 
       return this.persistAndBroadcast(
         {
           currentVersion: this.runtime.currentVersion,
-          latestVersion,
+          currentPublishedAt: release.currentPublishedAt,
+          latestVersion: release.version,
+          latestPublishedAt: release.latestPublishedAt,
           availability,
           updateStatus: "idle",
           lastCheckedAt: this.now(),

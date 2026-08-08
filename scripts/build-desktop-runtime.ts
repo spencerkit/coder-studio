@@ -10,7 +10,6 @@ import {
   DESKTOP_NODE_VERSION,
   getRuntimeManifestSigningPayload,
   RUNTIME_HOST_API_VERSION,
-  RUNTIME_MANIFEST_SCHEMA_VERSION,
   type RuntimeFileEntry,
   type RuntimeManifest,
   verifyRuntimeManifestSignature,
@@ -146,6 +145,16 @@ function signManifest(manifest: RuntimeManifest): RuntimeManifest {
   return signedManifest;
 }
 
+function readOptionalReleaseTimestamp(): string | null {
+  const value = process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT?.trim();
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    throw new Error("CODER_STUDIO_RELEASE_PUBLISHED_AT must be a valid UTC timestamp");
+  }
+  return new Date(timestamp).toISOString();
+}
+
 export async function buildDesktopRuntime(
   options: { includeWeb?: boolean; packagePrefix?: string } = {}
 ): Promise<{
@@ -159,6 +168,10 @@ export async function buildDesktopRuntime(
   const minShellVersion =
     process.env.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION?.trim() ||
     (await readPackageVersion(resolve(DESKTOP_DIR, "package.json"), "Desktop Shell"));
+  const releasePublishedAt = readOptionalReleaseTimestamp();
+  if (process.env.CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY?.trim() && !releasePublishedAt) {
+    throw new Error("CODER_STUDIO_RELEASE_PUBLISHED_AT is required for signed Runtime artifacts");
+  }
   const includeWeb = options.includeWeb ?? true;
   const packagePrefix = options.packagePrefix ?? "coder-studio-runtime";
   const packageBaseName = `${packagePrefix}-${runtimeVersion}-${process.platform}-${process.arch}`;
@@ -178,8 +191,7 @@ export async function buildDesktopRuntime(
   ]);
   await removeSourcemaps(DESKTOP_FACTORY_RUNTIME_DIR);
 
-  const manifest = signManifest({
-    schemaVersion: RUNTIME_MANIFEST_SCHEMA_VERSION,
+  const manifestFields = {
     runtimeVersion,
     minShellVersion,
     requiredEngineVersion: DESKTOP_ENGINE_VERSION,
@@ -193,7 +205,18 @@ export async function buildDesktopRuntime(
     ...(includeWeb ? { webRoot: "web" } : {}),
     packageFile: `${packageBaseName}.tgz`,
     files: await createFileEntries(DESKTOP_FACTORY_RUNTIME_DIR),
-  });
+  };
+  const unsignedManifest: RuntimeManifest = releasePublishedAt
+    ? {
+        ...manifestFields,
+        schemaVersion: 2,
+        publishedAt: releasePublishedAt,
+      }
+    : {
+        ...manifestFields,
+        schemaVersion: 1,
+      };
+  const manifest = signManifest(unsignedManifest);
   await writeFile(
     resolve(DESKTOP_FACTORY_RUNTIME_DIR, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,

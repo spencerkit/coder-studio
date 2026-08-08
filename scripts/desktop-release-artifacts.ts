@@ -1,25 +1,33 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { extract } from "tar";
 import {
+  type DesktopBuildInfo,
+  parseDesktopBuildInfo,
+} from "../packages/desktop/src/build-info.js";
+import {
+  type DesktopChannel,
+  type DesktopChannelRuntime,
+  parseDesktopChannel,
+} from "../packages/desktop/src/desktop-channel.js";
+import {
+  type EngineManifest,
   parseEngineManifest,
   verifyEngineManifestSignature,
 } from "../packages/desktop/src/engine-manifest.js";
 import {
-  API_PROTOCOL_VERSION,
-  DATA_SCHEMA_VERSION,
-  DESKTOP_ENGINE_VERSION,
-  DESKTOP_NODE_VERSION,
+  compareVersions,
   getRuntimeManifestSigningPayload,
   hashRuntimeFile,
   isSafeRuntimeRelativePath,
-  parseRuntimeManifest,
-  RUNTIME_HOST_API_VERSION,
+  parseNetworkRuntimeManifest,
   type RuntimeFileEntry,
   type RuntimeManifest,
+  type RuntimeManifestV2,
   verifyRuntimeManifestSignature,
 } from "../packages/desktop/src/runtime-manifest.js";
 import { error, info, ROOT_DIR, success } from "./shared/index.js";
@@ -37,6 +45,8 @@ export interface StageDesktopReleaseOptions extends ArtifactOptions {}
 export interface ValidateDesktopReleaseOptions extends ArtifactOptions {
   allowUnsigned: boolean;
   publicKeyPem?: string;
+  previousReleaseDirectory?: string;
+  releaseKind?: "full" | "runtime-only";
 }
 
 export type DesktopReleaseCommand =
@@ -83,6 +93,8 @@ export function parseDesktopReleaseCommand(argv: string[]): DesktopReleaseComman
   let directory = "";
   let components: DesktopReleaseComponent[] = [];
   let allowUnsigned = false;
+  let previousReleaseDirectory: string | undefined;
+  let releaseKind: "full" | "runtime-only" = "full";
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     switch (argument) {
@@ -95,6 +107,19 @@ export function parseDesktopReleaseCommand(argv: string[]): DesktopReleaseComman
       case "--allow-unsigned":
         allowUnsigned = true;
         break;
+      case "--previous-release-directory":
+        previousReleaseDirectory = resolve(
+          readArgumentValue(args, ++index, "--previous-release-directory")
+        );
+        break;
+      case "--release-kind": {
+        const value = readArgumentValue(args, ++index, "--release-kind");
+        if (value !== "full" && value !== "runtime-only") {
+          throw new Error("--release-kind must be full or runtime-only");
+        }
+        releaseKind = value;
+        break;
+      }
       default:
         throw new Error(`Unknown desktop release artifacts option: ${argument}`);
     }
@@ -109,6 +134,8 @@ export function parseDesktopReleaseCommand(argv: string[]): DesktopReleaseComman
         components,
         allowUnsigned,
         publicKeyPem: process.env.CODER_STUDIO_RUNTIME_PUBLIC_KEY?.trim(),
+        previousReleaseDirectory,
+        releaseKind,
       };
 }
 
@@ -123,8 +150,16 @@ function assertSafeStageDirectory(directory: string): void {
   }
 }
 
+async function readRegularFile(path: string): Promise<Buffer> {
+  const metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error(`Release asset must be a regular file, not a symbolic link: ${path}`);
+  }
+  return readFile(path);
+}
+
 async function readJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(path, "utf8"));
+  return JSON.parse((await readRegularFile(path)).toString("utf8"));
 }
 
 function parseYamlScalar(value: string): string {
@@ -200,14 +235,22 @@ async function stageManifestArtifact(
 async function stageDesktop(destinationDirectory: string): Promise<void> {
   const sourceDirectory = resolve(RELEASE_ROOT, "desktop");
   const metadataPath = resolve(sourceDirectory, "latest.yml");
-  const metadata = parseUpdaterMetadata(await readFile(metadataPath, "utf8"));
-  await Promise.all(
-    [
-      metadataPath,
-      resolve(sourceDirectory, metadata.path),
-      resolve(sourceDirectory, `${metadata.path}.blockmap`),
-    ].map((path) => copyArtifact(path, destinationDirectory))
-  );
+  const metadata = parseUpdaterMetadata((await readRegularFile(metadataPath)).toString("utf8"));
+  const files = [
+    metadataPath,
+    resolve(sourceDirectory, metadata.path),
+    resolve(sourceDirectory, `${metadata.path}.blockmap`),
+    resolve(sourceDirectory, "build-info.json"),
+  ];
+  for (const optional of ["desktop-channel.json"]) {
+    const path = resolve(sourceDirectory, optional);
+    try {
+      if ((await stat(path)).isFile()) files.push(path);
+    } catch {
+      // The channel is built only after both platform bundles are merged.
+    }
+  }
+  await Promise.all(files.map((path) => copyArtifact(path, destinationDirectory)));
 }
 
 export async function stageDesktopReleaseArtifacts(
@@ -297,6 +340,7 @@ function assertRuntimeSignature(
   manifest: RuntimeManifest,
   options: ValidateDesktopReleaseOptions
 ): void {
+  if (options.allowUnsigned && !options.publicKeyPem) return;
   if (!manifest.signature) {
     if (options.allowUnsigned) return;
     throw new Error(`Runtime ${manifest.runtimeVersion} is unsigned`);
@@ -313,29 +357,36 @@ async function validateRuntime(
   expected: {
     platform: NodeJS.Platform;
     web: boolean;
-    packageFile: string;
-    runtimeVersion: string;
+    channel: DesktopChannelRuntime;
     shellVersion: string;
   }
-): Promise<void> {
+): Promise<RuntimeManifestV2> {
   const manifestPath = resolve(options.directory, manifestFilename);
-  const manifest = parseRuntimeManifest(await readJson(manifestPath));
+  const manifest = parseNetworkRuntimeManifest(await readJson(manifestPath));
   assertRuntimeSignature(manifest, options);
+  const packagePrefix = expected.web ? "coder-studio-runtime" : "coder-studio-server-runtime";
+  if (manifest.runtimeVersion !== expected.channel.version) {
+    throw new Error(`${manifestFilename} version does not match the signed Desktop channel`);
+  }
+  if (manifest.publishedAt !== expected.channel.publishedAt) {
+    throw new Error(`${manifestFilename} release time does not match the signed Desktop channel`);
+  }
+  if (manifest.platform !== expected.platform) {
+    throw new Error(`${manifestFilename} has the wrong platform`);
+  }
+  if (manifest.arch !== "x64") {
+    throw new Error(`${manifestFilename} has the wrong architecture; expected x64`);
+  }
   if (
-    manifest.platform !== expected.platform ||
-    manifest.arch !== "x64" ||
-    manifest.runtimeVersion !== expected.runtimeVersion ||
-    manifest.minShellVersion !== expected.shellVersion ||
-    manifest.requiredEngineVersion !== DESKTOP_ENGINE_VERSION ||
-    manifest.requiredNodeVersion !== DESKTOP_NODE_VERSION ||
-    manifest.runtimeHostApiVersion !== RUNTIME_HOST_API_VERSION ||
-    manifest.apiProtocolVersion !== API_PROTOCOL_VERSION ||
-    manifest.dataSchemaVersion !== DATA_SCHEMA_VERSION ||
     manifest.entrypoint !== "server.mjs" ||
     manifest.webRoot !== (expected.web ? "web" : undefined) ||
-    manifest.packageFile !== expected.packageFile
+    manifest.packageFile !==
+      `${packagePrefix}-${expected.channel.version}-${expected.platform}-x64.tgz`
   ) {
     throw new Error(`${manifestFilename} is incompatible with the release boundary`);
+  }
+  if (compareVersions(manifest.minShellVersion, expected.shellVersion) > 0) {
+    throw new Error(`${manifestFilename} minimum Shell exceeds the planned Shell`);
   }
   if (!manifest.packageFile || manifest.packageFile !== basename(manifest.packageFile)) {
     throw new Error(`${manifestFilename} has an invalid packageFile`);
@@ -346,8 +397,10 @@ async function validateRuntime(
 
   const extractionRoot = await mkdtemp(resolve(tmpdir(), "coder-studio-release-runtime-"));
   try {
-    await extractArchive(resolve(options.directory, manifest.packageFile), extractionRoot);
-    const embeddedManifest = parseRuntimeManifest(
+    const packagePath = resolve(options.directory, manifest.packageFile);
+    await readRegularFile(packagePath);
+    await extractArchive(packagePath, extractionRoot);
+    const embeddedManifest = parseNetworkRuntimeManifest(
       await readJson(resolve(extractionRoot, "manifest.json"))
     );
     if (!signaturesMatch(manifest, embeddedManifest)) {
@@ -363,14 +416,20 @@ async function validateRuntime(
   } finally {
     await rm(extractionRoot, { recursive: true, force: true });
   }
+  return manifest;
 }
 
-async function validateEngine(options: ValidateDesktopReleaseOptions): Promise<void> {
+async function validateEngine(
+  options: ValidateDesktopReleaseOptions,
+  shell: DesktopChannel["shell"]
+): Promise<EngineManifest> {
   const manifestFilename = "coder-studio-engine-linux-x64.manifest.json";
   const manifest = parseEngineManifest(
     await readJson(resolve(options.directory, manifestFilename))
   );
-  if (!manifest.signature) {
+  if (options.allowUnsigned && !options.publicKeyPem) {
+    // Local smoke validation still enforces every path, hash, timestamp, and capability below.
+  } else if (!manifest.signature) {
     if (!options.allowUnsigned) throw new Error("WSL Engine is unsigned");
   } else {
     if (!options.publicKeyPem) throw new Error("CODER_STUDIO_RUNTIME_PUBLIC_KEY is required");
@@ -379,17 +438,17 @@ async function validateEngine(options: ValidateDesktopReleaseOptions): Promise<v
     }
   }
   if (
-    manifest.engineVersion !== DESKTOP_ENGINE_VERSION ||
-    manifest.nodeVersion !== DESKTOP_NODE_VERSION ||
+    manifest.engineVersion !== shell.engineVersion ||
+    manifest.nodeVersion !== shell.nodeVersion ||
     manifest.platform !== "linux" ||
     manifest.arch !== "x64" ||
-    manifest.packageFile !== `coder-studio-engine-${DESKTOP_ENGINE_VERSION}-linux-x64.tgz` ||
+    manifest.packageFile !== `coder-studio-engine-${shell.engineVersion}-linux-x64.tgz` ||
     manifest.files.some((entry) => entry.path.endsWith(".map"))
   ) {
     throw new Error("WSL Engine is incompatible with the release boundary");
   }
   const packagePath = resolve(options.directory, manifest.packageFile);
-  const bytes = await readFile(packagePath);
+  const bytes = await readRegularFile(packagePath);
   if (
     bytes.byteLength !== manifest.packageSize ||
     createHash("sha256").update(bytes).digest("hex") !== manifest.packageSha256
@@ -404,27 +463,29 @@ async function validateEngine(options: ValidateDesktopReleaseOptions): Promise<v
   } finally {
     await rm(extractionRoot, { recursive: true, force: true });
   }
-}
-
-async function readPackageVersion(path: string): Promise<string> {
-  const manifest = (await readJson(path)) as { version?: unknown };
-  if (typeof manifest.version !== "string" || !manifest.version.trim()) {
-    throw new Error(`Package version is missing: ${path}`);
-  }
-  return manifest.version.trim();
+  return manifest;
 }
 
 async function validateDesktop(directory: string, desktopVersion: string): Promise<void> {
-  const metadata = parseUpdaterMetadata(await readFile(resolve(directory, "latest.yml"), "utf8"));
+  const metadata = parseUpdaterMetadata(
+    (await readRegularFile(resolve(directory, "latest.yml"))).toString("utf8")
+  );
   if (metadata.version !== desktopVersion) {
     throw new Error(`Desktop latest.yml version must be ${desktopVersion}`);
   }
   const installerPath = resolve(directory, metadata.path);
   const [installer, blockmap] = await Promise.all([
-    stat(installerPath),
-    stat(resolve(directory, `${metadata.path}.blockmap`)),
+    lstat(installerPath),
+    lstat(resolve(directory, `${metadata.path}.blockmap`)),
   ]);
-  if (!installer.isFile() || installer.size <= 0 || !blockmap.isFile() || blockmap.size <= 0) {
+  if (
+    !installer.isFile() ||
+    installer.isSymbolicLink() ||
+    installer.size <= 0 ||
+    !blockmap.isFile() ||
+    blockmap.isSymbolicLink() ||
+    blockmap.size <= 0
+  ) {
     throw new Error("Desktop installer or blockmap is empty");
   }
   if (installer.size !== metadata.size) {
@@ -437,41 +498,217 @@ async function validateDesktop(directory: string, desktopVersion: string): Promi
   }
 }
 
+function assertBuildInfoMatchesChannel(buildInfo: DesktopBuildInfo, channel: DesktopChannel): void {
+  const shell = channel.shell;
+  if (
+    buildInfo.shellVersion !== shell.version ||
+    buildInfo.publishedAt !== shell.publishedAt ||
+    buildInfo.engineVersion !== shell.engineVersion ||
+    buildInfo.nodeVersion !== shell.nodeVersion ||
+    buildInfo.runtimeHostApiVersion !== shell.runtimeHostApiVersion ||
+    buildInfo.apiProtocolVersion !== shell.apiProtocolVersion ||
+    buildInfo.dataSchemaVersion !== shell.dataSchemaVersion
+  ) {
+    throw new Error("Packaged Shell build info does not match the signed Desktop channel");
+  }
+}
+
+function assertRuntimeCapabilities(
+  manifest: RuntimeManifestV2,
+  shell: DesktopChannel["shell"],
+  label: string
+): void {
+  if (manifest.requiredEngineVersion !== shell.engineVersion) {
+    throw new Error(`${label} Engine ABI does not match the planned Shell`);
+  }
+  if (manifest.requiredNodeVersion !== shell.nodeVersion) {
+    throw new Error(`${label} Node version does not match the planned Shell`);
+  }
+  if (manifest.runtimeHostApiVersion !== shell.runtimeHostApiVersion) {
+    throw new Error(`${label} Runtime Host API does not match the planned Shell`);
+  }
+  if (manifest.apiProtocolVersion !== shell.apiProtocolVersion) {
+    throw new Error(`${label} API protocol does not match the planned Shell`);
+  }
+  if (manifest.dataSchemaVersion !== shell.dataSchemaVersion) {
+    throw new Error(`${label} data schema does not match the planned Shell`);
+  }
+}
+
+function assertRuntimePairMatchesChannel(
+  windows: RuntimeManifestV2,
+  linux: RuntimeManifestV2,
+  channel: DesktopChannel
+): void {
+  if (windows.runtimeVersion !== linux.runtimeVersion) {
+    throw new Error("Windows and WSL Runtimes must use the same product version");
+  }
+  const sharedFields = [
+    "publishedAt",
+    "minShellVersion",
+    "requiredEngineVersion",
+    "requiredNodeVersion",
+    "runtimeHostApiVersion",
+    "apiProtocolVersion",
+    "dataSchemaVersion",
+  ] as const;
+  if (sharedFields.some((field) => windows[field] !== linux[field])) {
+    throw new Error("Windows and WSL Runtime pair has mismatched shared capabilities");
+  }
+  assertRuntimeCapabilities(windows, channel.shell, "Windows Runtime");
+  assertRuntimeCapabilities(linux, channel.shell, "WSL Runtime");
+}
+
+async function fileSha256(path: string): Promise<string> {
+  return createHash("sha256")
+    .update(await readRegularFile(path))
+    .digest("hex");
+}
+
+async function readSignedChannel(directory: string, publicKeyPem: string): Promise<DesktopChannel> {
+  return parseDesktopChannel(
+    await readJson(resolve(directory, "desktop-channel.json")),
+    publicKeyPem,
+    pathToFileURL(resolve(directory, "desktop-channel.json")).toString()
+  );
+}
+
+async function readPreviousRuntimePair(
+  directory: string,
+  channel: DesktopChannel,
+  publicKeyPem: string
+): Promise<[RuntimeManifestV2, RuntimeManifestV2]> {
+  const windows = parseNetworkRuntimeManifest(
+    await readJson(resolve(directory, channel.runtimes["win32-x64"].manifest))
+  );
+  const linux = parseNetworkRuntimeManifest(
+    await readJson(resolve(directory, channel.runtimes["linux-x64"].manifest))
+  );
+  for (const manifest of [windows, linux]) {
+    if (!verifyRuntimeManifestSignature(manifest, publicKeyPem)) {
+      throw new Error("Previous unified channel has an invalid Runtime signature");
+    }
+  }
+  return [windows, linux];
+}
+
+async function assertTargetShellRunsPreviousRuntime(
+  targetChannel: DesktopChannel,
+  previousDirectory: string,
+  publicKeyPem: string
+): Promise<void> {
+  const previousChannel = await readSignedChannel(previousDirectory, publicKeyPem);
+  const [windows, linux] = await readPreviousRuntimePair(
+    previousDirectory,
+    previousChannel,
+    publicKeyPem
+  );
+  for (const [label, manifest] of [
+    ["previous Windows Runtime", windows],
+    ["previous WSL Runtime", linux],
+  ] as const) {
+    if (compareVersions(manifest.minShellVersion, targetChannel.shell.version) > 0) {
+      throw new Error(`Target Shell cannot run the ${label}`);
+    }
+    assertRuntimeCapabilities(manifest, targetChannel.shell, label);
+  }
+}
+
+async function validateRuntimeOnlyCarryForward(
+  options: ValidateDesktopReleaseOptions & { directory: string; publicKeyPem?: string },
+  channel: DesktopChannel,
+  previousDirectory: string
+): Promise<void> {
+  if (!options.publicKeyPem) {
+    throw new Error("Runtime-only release requires the Desktop channel public key");
+  }
+  const previousChannel = await readSignedChannel(previousDirectory, options.publicKeyPem);
+  if (JSON.stringify(previousChannel.shell) !== JSON.stringify(channel.shell)) {
+    throw new Error("Runtime-only release changed Shell or host capability metadata");
+  }
+  const previousUpdater = parseUpdaterMetadata(
+    (await readRegularFile(resolve(previousDirectory, "latest.yml"))).toString("utf8")
+  );
+  const previousEngine = parseEngineManifest(
+    await readJson(resolve(previousDirectory, "coder-studio-engine-linux-x64.manifest.json"))
+  );
+  const carriedFiles = [
+    "latest.yml",
+    previousUpdater.path,
+    `${previousUpdater.path}.blockmap`,
+    "build-info.json",
+    "coder-studio-engine-linux-x64.manifest.json",
+    previousEngine.packageFile,
+  ];
+  for (const filename of carriedFiles) {
+    const [previousHash, currentHash] = await Promise.all([
+      fileSha256(resolve(previousDirectory, filename)),
+      fileSha256(resolve(options.directory, filename)),
+    ]);
+    if (previousHash !== currentHash) {
+      throw new Error(`Runtime-only release changed carried-forward asset: ${filename}`);
+    }
+  }
+  await assertTargetShellRunsPreviousRuntime(channel, previousDirectory, options.publicKeyPem);
+}
+
 export async function validateDesktopReleaseArtifacts(
   options: ValidateDesktopReleaseOptions
 ): Promise<void> {
   const directory = resolve(options.directory);
-  const [desktopVersion, runtimeVersion] = await Promise.all([
-    readPackageVersion(resolve(ROOT_DIR, "packages/desktop/package.json")),
-    readPackageVersion(resolve(ROOT_DIR, "packages/cli/package.json")),
-  ]);
+  const requiredComponents = ["desktop", "win-runtime", "wsl-engine", "wsl-runtime"] as const;
+  if (requiredComponents.some((component) => !options.components.includes(component))) {
+    throw new Error("Unified Desktop release validation requires every release component");
+  }
+  if (!options.publicKeyPem && !options.allowUnsigned) {
+    throw new Error("CODER_STUDIO_RUNTIME_PUBLIC_KEY is required for the signed Desktop channel");
+  }
   const normalizedOptions = { ...options, directory };
-  for (const component of options.components) {
-    info(`Validating Desktop release component: ${component}`);
-    if (component === "desktop") await validateDesktop(directory, desktopVersion);
-    if (component === "win-runtime") {
-      await validateRuntime(normalizedOptions, "coder-studio-runtime-win32-x64.manifest.json", {
-        platform: "win32",
-        web: true,
-        packageFile: `coder-studio-runtime-${runtimeVersion}-win32-x64.tgz`,
-        runtimeVersion,
-        shellVersion: desktopVersion,
-      });
+  const channel = parseDesktopChannel(
+    await readJson(resolve(directory, "desktop-channel.json")),
+    options.publicKeyPem ?? "",
+    pathToFileURL(resolve(directory, "desktop-channel.json")).toString(),
+    { allowUnsigned: options.allowUnsigned && !options.publicKeyPem }
+  );
+  const buildInfo = parseDesktopBuildInfo(await readJson(resolve(directory, "build-info.json")));
+  assertBuildInfoMatchesChannel(buildInfo, channel);
+
+  info("Validating Desktop release component: desktop");
+  await validateDesktop(directory, channel.shell.version);
+  info("Validating Desktop release component: win-runtime");
+  const windows = await validateRuntime(normalizedOptions, channel.runtimes["win32-x64"].manifest, {
+    platform: "win32",
+    web: true,
+    channel: channel.runtimes["win32-x64"],
+    shellVersion: channel.shell.version,
+  });
+  info("Validating Desktop release component: wsl-runtime");
+  const linux = await validateRuntime(normalizedOptions, channel.runtimes["linux-x64"].manifest, {
+    platform: "linux",
+    web: false,
+    channel: channel.runtimes["linux-x64"],
+    shellVersion: channel.shell.version,
+  });
+  assertRuntimePairMatchesChannel(windows, linux, channel);
+  info("Validating Desktop release component: wsl-engine");
+  await validateEngine(normalizedOptions, channel.shell);
+
+  const releaseKind = options.releaseKind ?? "full";
+  if (releaseKind === "runtime-only") {
+    if (!options.previousReleaseDirectory) {
+      throw new Error("Runtime-only release requires a previous signed unified channel");
     }
-    if (component === "wsl-engine") await validateEngine(normalizedOptions);
-    if (component === "wsl-runtime") {
-      await validateRuntime(
-        normalizedOptions,
-        "coder-studio-server-runtime-linux-x64.manifest.json",
-        {
-          platform: "linux",
-          web: false,
-          packageFile: `coder-studio-server-runtime-${runtimeVersion}-linux-x64.tgz`,
-          runtimeVersion,
-          shellVersion: desktopVersion,
-        }
-      );
-    }
+    await validateRuntimeOnlyCarryForward(
+      normalizedOptions,
+      channel,
+      resolve(options.previousReleaseDirectory)
+    );
+  } else if (options.previousReleaseDirectory) {
+    await assertTargetShellRunsPreviousRuntime(
+      channel,
+      resolve(options.previousReleaseDirectory),
+      options.publicKeyPem
+    );
   }
   success(`Desktop release artifacts are valid: ${directory}`);
 }

@@ -12,7 +12,12 @@ import {
 import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
-import { updateStateAtom } from "../features/updates/atoms";
+import {
+  productUpdateStateAtom,
+  serverUpdateStateAtom,
+  updateControllerAtom,
+  updateStateAtom,
+} from "../features/updates/atoms";
 import {
   activeFilePathAtomFamily,
   fileTreeStaleAtomFamily,
@@ -84,9 +89,11 @@ describe("routeEventToAtom", () => {
     const store = createStore();
 
     const state: UpdateStateView = {
-      version: 1,
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: "0.5.0",
+      latestPublishedAt: null,
       availability: "update_available",
       updateStatus: "idle",
       lastCheckedAt: 123,
@@ -99,11 +106,90 @@ describe("routeEventToAtom", () => {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     };
 
     routeEventToAtom("update.state.changed", state, store);
 
     expect(store.get(updateStateAtom)).toEqual(state);
+  });
+
+  it("does not let Server events overwrite Desktop product update state", () => {
+    const store = createStore();
+    const desktopProductState = {
+      schemaVersion: 1 as const,
+      runtimeContext: {
+        environment: "desktop-native" as const,
+        authority: "desktop" as const,
+        supported: true,
+        unsupportedReason: null,
+      },
+      status: "available" as const,
+      productVersion: "0.5.0",
+      productPublishedAt: null,
+      planId: "desktop-plan",
+      createdAt: null,
+      updatedAt: null,
+      lastCheckedAt: null,
+      components: [],
+      compatibility: { compatible: true, code: null, summary: null },
+      diagnostics: {
+        failedComponentId: null,
+        failedPhase: null,
+        shellVersion: null,
+        shellPublishedAt: null,
+        shellBuiltAt: null,
+        engineVersion: null,
+        nodeVersion: null,
+        runtimeHostApiVersion: null,
+        apiProtocolVersion: null,
+        dataSchemaVersion: null,
+        logLocations: [],
+        recoveryAction: null,
+      },
+      restartRequired: false,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+    };
+    const serverState = {
+      ...store.get(serverUpdateStateAtom),
+      version: 2 as const,
+      currentVersion: "0.5.0",
+      currentPublishedAt: null,
+      latestVersion: "0.6.0",
+      latestPublishedAt: null,
+      availability: "update_available" as const,
+      updateStatus: "idle" as const,
+      lastCheckedAt: 123,
+      targetVersion: null,
+      startedAt: null,
+      finishedAt: null,
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: null,
+      supported: false,
+      installKind: "unsupported" as const,
+      unsupportedReason: "Managed by Desktop",
+      runtimeContext: {
+        environment: "desktop-managed" as const,
+        authority: "desktop" as const,
+        supported: false,
+        unsupportedReason: "Managed by Desktop",
+      },
+    };
+    store.set(productUpdateStateAtom, desktopProductState);
+    store.set(updateControllerAtom, { kind: "desktop" } as never);
+
+    routeEventToAtom("update.state.changed", serverState, store);
+
+    expect(store.get(serverUpdateStateAtom)).toEqual(serverState);
+    expect(store.get(productUpdateStateAtom)).toEqual(desktopProductState);
   });
 
   it("appends brand-new workspace meta events to workspace order without reordering existing entries", () => {

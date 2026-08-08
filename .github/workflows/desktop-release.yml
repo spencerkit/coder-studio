@@ -10,12 +10,22 @@ on:
         type: choice
         options:
           - full
-          - runtime
+          - runtime-only
       prerelease:
         description: "Publish as a GitHub prerelease"
         required: true
         default: false
         type: boolean
+      desktop_acceptance_run_id:
+        description: "Workflow run containing the complete installed Desktop acceptance matrix"
+        required: false
+        default: ""
+        type: string
+      cli_acceptance_run_id:
+        description: "Workflow run containing the accepted packaged CLI report"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: publish-release-channel
@@ -33,6 +43,8 @@ jobs:
       runtime_version: ${{ steps.release.outputs.runtime_version }}
       tag: ${{ steps.release.outputs.tag }}
       title: ${{ steps.release.outputs.title }}
+      published_at: ${{ steps.release.outputs.published_at }}
+      channel: ${{ steps.release.outputs.channel }}
 
     steps:
       - name: Checkout repository
@@ -54,6 +66,7 @@ jobs:
         run: |
           desktop_version=$(node -p "require('./packages/desktop/package.json').version")
           runtime_version=$(node -p "require('./packages/cli/package.json').version")
+          published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
           if [[ "${{ inputs.mode }}" == "full" ]]; then
             tag="desktop-v${desktop_version}"
             title="Coder Studio Desktop ${desktop_version}"
@@ -69,6 +82,12 @@ jobs:
           echo "runtime_version=${runtime_version}" >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "title=${title}" >> "${GITHUB_OUTPUT}"
+          echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
+            echo "channel=prerelease" >> "${GITHUB_OUTPUT}"
+          else
+            echo "channel=stable" >> "${GITHUB_OUTPUT}"
+          fi
 
   linux-assets:
     name: Build signed WSL assets
@@ -81,6 +100,7 @@ jobs:
     env:
       CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
 
     steps:
       - name: Checkout repository
@@ -117,7 +137,7 @@ jobs:
           fi
           pnpm build:wsl-runtime
 
-      - name: Stage and validate signed WSL assets
+      - name: Stage signed WSL assets
         shell: bash
         run: |
           components="wsl-runtime"
@@ -125,7 +145,6 @@ jobs:
             components="wsl-engine,wsl-runtime"
           fi
           pnpm desktop:artifacts stage --directory release/desktop-release-linux --components "${components}"
-          pnpm desktop:artifacts validate --directory release/desktop-release-linux --components "${components}"
 
       - name: Upload WSL assets
         uses: actions/upload-artifact@v4
@@ -148,6 +167,7 @@ jobs:
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
       CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
 
     steps:
       - name: Checkout repository
@@ -211,7 +231,7 @@ jobs:
             }
           }
 
-      - name: Stage and validate signed Windows assets
+      - name: Stage signed Windows assets
         shell: pwsh
         run: |
           $components = 'win-runtime'
@@ -219,7 +239,6 @@ jobs:
             $components = 'desktop,win-runtime'
           }
           pnpm desktop:artifacts stage --directory release/desktop-release-windows --components $components
-          pnpm desktop:artifacts validate --directory release/desktop-release-windows --components $components
 
       - name: Upload Windows assets
         uses: actions/upload-artifact@v4
@@ -244,6 +263,7 @@ jobs:
       id-token: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
 
     steps:
@@ -265,20 +285,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Carry forward Shell and Engine for Runtime-only releases
-        if: inputs.mode == 'runtime'
+      - name: Download previous immutable release
+        if: inputs.mode == 'runtime-only'
         shell: bash
         run: |
-          mkdir -p release/desktop-release-final
+          mkdir -p release/desktop-release-previous
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
           for pattern in \
             "latest.yml" \
             "Coder-Studio-Setup-*.exe" \
             "*.blockmap" \
+            "build-info.json" \
+            "desktop-channel.json" \
             "coder-studio-engine-linux-x64.manifest.json" \
-            "coder-studio-engine-*-linux-x64.tgz"; do
-            gh release download "${latest_tag}" --pattern "${pattern}" --dir release/desktop-release-final --clobber
+            "coder-studio-engine-*-linux-x64.tgz" \
+            "coder-studio-runtime-win32-x64.manifest.json" \
+            "coder-studio-server-runtime-linux-x64.manifest.json"; do
+            gh release download "${latest_tag}" --pattern "${pattern}" --dir release/desktop-release-previous --clobber
           done
+
+      - name: Carry forward immutable Shell and Engine
+        if: inputs.mode == 'runtime-only'
+        run: |
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-final \
+            --carry-forward-from release/desktop-release-previous
 
       - name: Download newly built release assets
         uses: actions/download-artifact@v4
@@ -287,25 +318,46 @@ jobs:
           path: release/desktop-release-final
           merge-multiple: true
 
+      - name: Build signed Desktop channel
+        shell: bash
+        run: |
+          key_file=$(mktemp)
+          trap 'shred -u "${key_file}"' EXIT
+          printf '%s' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" > "${key_file}"
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-final \
+            --release-tag "${{ needs.prepare.outputs.tag }}" \
+            --channel "${{ needs.prepare.outputs.channel }}" \
+            --generated-at "${{ needs.prepare.outputs.published_at }}" \
+            --private-key "${key_file}"
+
       - name: Validate complete production release
-        run: pnpm desktop:artifacts validate --directory release/desktop-release-final --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+        shell: bash
+        run: |
+          validation_args=(
+            validate
+            --directory release/desktop-release-final
+            --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+            --release-kind "${{ inputs.mode }}"
+          )
+          if [[ "${{ inputs.mode }}" == "runtime-only" ]]; then
+            validation_args+=(--previous-release-directory release/desktop-release-previous)
+          fi
+          pnpm desktop:artifacts "${validation_args[@]}"
 
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: release/desktop-release-final/*
 
-      - name: Publish release
+      - name: Publish immutable prerelease
         shell: bash
         run: |
-          release_flags=(--target "${GITHUB_SHA}" --title "${{ needs.prepare.outputs.title }}" --generate-notes)
-          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
-            release_flags+=(--prerelease)
-          else
-            release_flags+=(--latest)
-          fi
           gh release create "${{ needs.prepare.outputs.tag }}" \
-            "${release_flags[@]}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ needs.prepare.outputs.title }}" \
+            --generate-notes \
+            --prerelease --latest=false \
             release/desktop-release-final/*
 
       - name: Upload final release bundle
@@ -315,3 +367,268 @@ jobs:
           path: release/desktop-release-final/
           if-no-files-found: error
           retention-days: 30
+
+  installed-upgrade:
+    name: Production installed upgrade (${{ matrix.target }})
+    needs:
+      - prepare
+      - publish
+    runs-on: windows-latest
+    timeout-minutes: 90
+    environment: desktop-production
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - native
+          - wsl
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download immutable candidate release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path release/desktop-production-candidate -Force | Out-Null
+          gh release download '${{ needs.prepare.outputs.tag }}' --dir release/desktop-production-candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Desktop candidate release' }
+
+      - name: Download previous stable Desktop release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path release/desktop-production-previous -Force | Out-Null
+          $latestTag = gh api "repos/${env:GITHUB_REPOSITORY}/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0 -or -not $latestTag) {
+            throw 'A previous stable unified Desktop release is required'
+          }
+          $patterns = @(
+            'latest.yml',
+            'Coder-Studio-Setup-*.exe',
+            'desktop-channel.json'
+          )
+          foreach ($pattern in $patterns) {
+            gh release download $latestTag --pattern $pattern --dir release/desktop-production-previous --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Previous Desktop asset is missing: $pattern" }
+          }
+
+      - name: Resolve production installed-upgrade identity
+        id: identity
+        shell: pwsh
+        env:
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw 'Desktop Runtime public key is required for production acceptance'
+          }
+          New-Item -ItemType Directory -Path release/desktop-production-key -Force | Out-Null
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content release/desktop-production-key/runtime-public.pem -NoNewline
+          $candidateRoot = 'release/desktop-production-candidate'
+          $previousRoot = 'release/desktop-production-previous'
+          $channel = Get-Content (Join-Path $candidateRoot 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $previousChannel = Get-Content (Join-Path $previousRoot 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $candidateMetadata = Get-Content (Join-Path $candidateRoot 'latest.yml') -Raw
+          $previousMetadata = Get-Content (Join-Path $previousRoot 'latest.yml') -Raw
+          $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $isWsl = '${{ matrix.target }}' -eq 'wsl'
+          $scenario = if ($isWsl) { 'wsl' } elseif ('${{ inputs.mode }}' -eq 'full') { 'combined' } else { 'runtime-only' }
+          $components = if ($isWsl) {
+            if ('${{ inputs.mode }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:linux-x64' }
+          } elseif ('${{ inputs.mode }}' -eq 'full') {
+            'shell,runtime:win32-x64'
+          } else {
+            'runtime:win32-x64'
+          }
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$channel.signature.value)
+          $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
+          "scenario=$scenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate_installer=$candidateRoot/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_installer=$previousRoot/$previousInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_shell=$($previousChannel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$($previousChannel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_shell=$($channel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_runtime=$($channel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Prepare disposable production WSL distribution
+        if: matrix.target == 'wsl'
+        id: wsl
+        shell: pwsh
+        run: |
+          $distro = "coder-studio-acceptance-production-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          wsl.exe --install -d Ubuntu --no-launch
+          wsl.exe -d Ubuntu -u root -- true
+          wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
+          wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable production WSL distribution' }
+          "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run production installed Desktop update
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.previous_installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ needs.prepare.outputs.tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/desktop-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.previous_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-ExpectedComponents', '${{ steps.identity.outputs.components }}',
+            '-PublicKeyPath', 'release/desktop-production-key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.scenario }}',
+            '-ReportPath', 'release/desktop-production-report/${{ matrix.target }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed -- @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Production installed Desktop acceptance failed' }
+
+      - name: Upload production installed-upgrade report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-production-installed-${{ matrix.target }}-${{ needs.prepare.outputs.tag }}
+          path: release/desktop-production-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Clean up production WSL distribution
+        if: always() && matrix.target == 'wsl'
+        shell: pwsh
+        run: |
+          $distro = '${{ steps.wsl.outputs.name }}'
+          if ($distro) { wsl.exe --unregister $distro 2>$null }
+
+  promote:
+    name: Promote accepted Desktop release
+    if: inputs.prerelease == false
+    needs:
+      - prepare
+      - publish
+      - installed-upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: desktop-production
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Require acceptance report run identities
+        shell: bash
+        run: |
+          if [[ -z "${{ inputs.desktop_acceptance_run_id }}" || -z "${{ inputs.cli_acceptance_run_id }}" ]]; then
+            echo "Stable Desktop promotion requires Desktop matrix and CLI acceptance run IDs" >&2
+            exit 1
+          fi
+
+      - name: Download production installed reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-production-installed-*-${{ needs.prepare.outputs.tag }}
+          path: release/promotion-reports/production
+          merge-multiple: true
+
+      - name: Download complete Desktop acceptance reports
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.desktop_acceptance_run_id }}
+          pattern: desktop-installed-upgrade-*
+          path: release/promotion-reports/desktop-matrix
+          merge-multiple: true
+
+      - name: Download packaged CLI acceptance report
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.cli_acceptance_run_id }}
+          pattern: cli-update-acceptance-*
+          path: release/promotion-reports/cli
+          merge-multiple: true
+
+      - name: Download immutable channel identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release/promotion-reports/channel
+          gh release download "${{ needs.prepare.outputs.tag }}" \
+            --pattern desktop-channel.json \
+            --dir release/promotion-reports/channel
+
+      - name: Validate promotion report identities
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readdirSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+
+          const commitSha = process.env.GITHUB_SHA;
+          const releaseTag = "${{ needs.prepare.outputs.tag }}";
+          const productVersion = "${{ needs.prepare.outputs.runtime_version }}";
+          const channel = JSON.parse(readFileSync("release/promotion-reports/channel/desktop-channel.json", "utf8"));
+          const channelSignatureDigest = createHash("sha256")
+            .update(channel.signature.value, "utf8")
+            .digest("hex");
+          const readReports = (directory) => readdirSync(directory, { recursive: true })
+            .filter((name) => String(name).endsWith(".json"))
+            .map((name) => JSON.parse(readFileSync(join(directory, String(name)), "utf8")));
+          const production = readReports("release/promotion-reports/production");
+          if (production.length !== 2) throw new Error("Both native and WSL production reports are required");
+          for (const report of production) {
+            if (report.commitSha !== commitSha || report.releaseTag !== releaseTag) {
+              throw new Error("Production report commitSha or release tag does not match");
+            }
+            if (report.actualRuntimeVersion !== productVersion || report.channelSignatureDigest !== channelSignatureDigest) {
+              throw new Error("Production report product version or channelSignatureDigest does not match");
+            }
+          }
+          const matrix = readReports("release/promotion-reports/desktop-matrix");
+          const requiredScenarios = new Set(["runtime-only", "combined", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]);
+          for (const report of matrix) {
+            if (report.commitSha !== commitSha) throw new Error("Desktop matrix commitSha does not match");
+            requiredScenarios.delete(report.scenario);
+          }
+          if (requiredScenarios.size) throw new Error(`Desktop matrix reports are missing: ${[...requiredScenarios].join(", ")}`);
+          const cli = readReports("release/promotion-reports/cli");
+          if (cli.length !== 1 || cli[0].commitSha !== commitSha || cli[0].candidateVersion !== productVersion) {
+            throw new Error("CLI acceptance commitSha or product version does not match");
+          }
+          NODE
+
+      - name: Promote existing prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest

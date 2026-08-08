@@ -43,6 +43,17 @@ export interface RuntimeStoreOptions {
   arch?: NodeJS.Architecture;
 }
 
+export interface RuntimeCompatibilityHost {
+  shellVersion: string;
+}
+
+class RuntimeShellCompatibilityError extends Error {
+  constructor(requiredVersion: string) {
+    super(`Runtime requires Desktop ${requiredVersion} or newer`);
+    this.name = "RuntimeShellCompatibilityError";
+  }
+}
+
 const POINTER_ID_PATTERN = /^[a-f0-9]{24}$/;
 
 async function collectFiles(root: string, directory = root): Promise<string[]> {
@@ -121,15 +132,21 @@ export class RuntimeStore {
     ]);
   }
 
-  assertManifestCompatible(manifest: RuntimeManifest, requireSignature = true): void {
+  assertManifestCompatible(
+    manifest: RuntimeManifest,
+    requireSignature = true,
+    host?: RuntimeCompatibilityHost
+  ): void {
     if (manifest.platform !== (this.options.platform ?? process.platform)) {
       throw new Error(`Runtime platform ${manifest.platform} is incompatible`);
     }
     if (manifest.arch !== (this.options.arch ?? process.arch)) {
       throw new Error(`Runtime architecture ${manifest.arch} is incompatible`);
     }
-    if (compareVersions(this.options.shellVersion, manifest.minShellVersion) < 0) {
-      throw new Error(`Runtime requires Desktop ${manifest.minShellVersion} or newer`);
+    if (
+      compareVersions(host?.shellVersion ?? this.options.shellVersion, manifest.minShellVersion) < 0
+    ) {
+      throw new RuntimeShellCompatibilityError(manifest.minShellVersion);
     }
     if (manifest.requiredEngineVersion !== DESKTOP_ENGINE_VERSION) {
       throw new Error(`Runtime requires Engine ${manifest.requiredEngineVersion}`);
@@ -154,9 +171,13 @@ export class RuntimeStore {
     }
   }
 
-  async validateRuntimeRoot(root: string, trustedFactory = false): Promise<RuntimeManifest> {
+  async validateRuntimeRoot(
+    root: string,
+    trustedFactory = false,
+    host?: RuntimeCompatibilityHost
+  ): Promise<RuntimeManifest> {
     const manifest = await readRuntimeManifest(root);
-    this.assertManifestCompatible(manifest, !trustedFactory);
+    this.assertManifestCompatible(manifest, !trustedFactory, host);
     const expectedFiles = manifest.files.map((file) => file.path).sort();
     const actualFiles = (await collectFiles(root)).filter((path) => path !== "manifest.json");
     if (
@@ -179,11 +200,19 @@ export class RuntimeStore {
     const failedVersion = await this.readFailedVersion();
     const pendingPointer = await this.readPointerFile(this.pendingPath);
     let pending: ProductRuntime | null = null;
+    let preservePending = false;
     if (pendingPointer) {
-      pending = await this.resolveStoredRuntime(pendingPointer, "pending").catch(() => null);
-      if (pending?.manifest.runtimeVersion === failedVersion) pending = null;
+      try {
+        pending = await this.resolveStoredRuntime(pendingPointer, "pending");
+      } catch (error) {
+        preservePending = error instanceof RuntimeShellCompatibilityError;
+      }
+      if (pending?.manifest.runtimeVersion === failedVersion) {
+        pending = null;
+        preservePending = false;
+      }
     }
-    if (!pending) {
+    if (!pending && !preservePending) {
       await rm(this.pendingPath, { force: true });
     }
 
@@ -229,9 +258,14 @@ export class RuntimeStore {
     return candidates[0] as ProductRuntime;
   }
 
-  async stageDownloadedRuntime(sourceRoot: string): Promise<ProductRuntime> {
+  async stageDownloadedRuntime(
+    sourceRoot: string,
+    options?: { shellVersion?: string }
+  ): Promise<ProductRuntime> {
     await this.initialize();
-    const manifest = await this.validateRuntimeRoot(sourceRoot);
+    const manifest = await this.validateRuntimeRoot(sourceRoot, false, {
+      shellVersion: options?.shellVersion ?? this.options.shellVersion,
+    });
     const id = createHash("sha256")
       .update(getRuntimeManifestSigningPayload(manifest))
       .digest("hex")
@@ -267,6 +301,30 @@ export class RuntimeStore {
     }
     await writeJsonAtomic(this.pendingPath, pointer);
     return { root: destination, manifest, source: "pending", pointer };
+  }
+
+  async preserveRollbackCandidate(runtime: ProductRuntime): Promise<void> {
+    if (runtime.source !== "factory") return;
+    await this.initialize();
+    const current = await this.readActiveState();
+    if (current?.active) return;
+    const manifest = await this.validateRuntimeRoot(runtime.root, false);
+    const pointer: RuntimePointer = {
+      id: createHash("sha256")
+        .update(getRuntimeManifestSigningPayload(manifest))
+        .digest("hex")
+        .slice(0, 24),
+      runtimeVersion: manifest.runtimeVersion,
+      installedAt: new Date().toISOString(),
+    };
+    const destination = resolve(this.versionsRoot, pointer.id);
+    await rm(destination, { recursive: true, force: true });
+    await cp(runtime.root, destination, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+    });
+    await writeJsonAtomic(this.activePath, { active: pointer });
   }
 
   async markLaunchSuccessful(runtime: ProductRuntime): Promise<void> {
@@ -360,6 +418,12 @@ export class RuntimeStore {
       return typeof value.runtimeVersion === "string" ? value.runtimeVersion : null;
     } catch {
       return null;
+    }
+  }
+
+  async clearFailedVersion(runtimeVersion: string): Promise<void> {
+    if ((await this.readFailedVersion()) === runtimeVersion) {
+      await rm(this.failedPath, { force: true });
     }
   }
 

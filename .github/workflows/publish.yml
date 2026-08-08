@@ -8,6 +8,11 @@ on:
         required: true
         default: "latest"
         type: string
+      desktop_acceptance_run_id:
+        description: "Required for latest: workflow run containing Desktop installed-upgrade reports"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: publish-release-channel
@@ -18,6 +23,7 @@ jobs:
     name: Publish CLI package
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -63,14 +69,26 @@ jobs:
 
       - name: Read CLI version
         id: release
+        env:
+          FINAL_DIST_TAG: ${{ inputs.npm_tag }}
         run: |
-          version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('packages/cli/package.json', 'utf8')).version)")
-          if [ -z "${version}" ]; then
+          package_name=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('packages/cli/package.json', 'utf8')).name)")
+          candidate_version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; console.log(JSON.parse(readFileSync('packages/cli/package.json', 'utf8')).version)")
+          previous_version=$(npm view "${package_name}@${FINAL_DIST_TAG}" version --json | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d)))")
+          if [ -z "${package_name}" ] || [ -z "${candidate_version}" ] || [ -z "${previous_version}" ]; then
             echo "Failed to determine CLI version" >&2
             exit 1
           fi
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          echo "tag=v${version}" >> "${GITHUB_OUTPUT}"
+          if [ "${candidate_version}" = "${previous_version}" ]; then
+            echo "Candidate ${candidate_version} is already selected by ${FINAL_DIST_TAG}" >&2
+            exit 1
+          fi
+          acceptance_tag="coder-studio-accept-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "package_name=${package_name}" >> "${GITHUB_OUTPUT}"
+          echo "version=${candidate_version}" >> "${GITHUB_OUTPUT}"
+          echo "previous_version=${previous_version}" >> "${GITHUB_OUTPUT}"
+          echo "acceptance_tag=${acceptance_tag}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${candidate_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Ensure release tag does not already exist
         run: |
@@ -79,15 +97,131 @@ jobs:
             exit 1
           fi
 
-      - name: Publish CLI to npm
+      - name: Pack CLI candidate once
+        id: pack
+        shell: bash
+        run: |
+          mkdir -p release/cli-candidate
+          pack_json=$(npm pack --json ./packages/cli --pack-destination release/cli-candidate)
+          tarball_name=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d)[0].filename))")
+          integrity=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d)[0].integrity))")
+          tarball="release/cli-candidate/${tarball_name}"
+          if [ ! -f "${tarball}" ] || [ -z "${integrity}" ]; then
+            echo "npm pack did not produce one integrity-addressed candidate" >&2
+            exit 1
+          fi
+          echo "tarball=${tarball}" >> "${GITHUB_OUTPUT}"
+          echo "integrity=${integrity}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish or reuse immutable CLI candidate
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PACKAGE_NAME: ${{ steps.release.outputs.package_name }}
+          CANDIDATE_VERSION: ${{ steps.release.outputs.version }}
+          ACCEPTANCE_DIST_TAG: ${{ steps.release.outputs.acceptance_tag }}
+          PACKED_INTEGRITY: ${{ steps.pack.outputs.integrity }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
         run: |
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
             echo "NPM_TOKEN secret is required for publishing" >&2
             exit 1
           fi
-          pnpm publish:cli -- --publish --no-build --tag "${{ inputs.npm_tag }}"
+          tarball="${TARBALL}"
+          registry_integrity=$(npm view "${PACKAGE_NAME}@${CANDIDATE_VERSION}" dist.integrity --json 2>/dev/null | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { try { const v=JSON.parse(d); console.log(typeof v === 'string' ? v : '') } catch { console.log('') } })")
+          if [ -z "${registry_integrity}" ]; then
+            npm publish "${tarball}" --access public --tag "${ACCEPTANCE_DIST_TAG}"
+          elif [ "${registry_integrity}" != "${PACKED_INTEGRITY}" ]; then
+            echo "Registry dist.integrity differs from the packed candidate; refusing to republish different bytes" >&2
+            exit 1
+          else
+            npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${ACCEPTANCE_DIST_TAG}"
+          fi
+
+      - name: Run isolated packaged CLI acceptance
+        env:
+          PACKAGE_NAME: ${{ steps.release.outputs.package_name }}
+          PREVIOUS_VERSION: ${{ steps.release.outputs.previous_version }}
+          CANDIDATE_VERSION: ${{ steps.release.outputs.version }}
+          ACCEPTANCE_DIST_TAG: ${{ steps.release.outputs.acceptance_tag }}
+        run: |
+          pnpm acceptance:cli:update -- \
+            --package-name "${PACKAGE_NAME}" \
+            --previous-version "${PREVIOUS_VERSION}" \
+            --candidate-version "${CANDIDATE_VERSION}" \
+            --registry-url "https://registry.npmjs.org/" \
+            --dist-tag "${ACCEPTANCE_DIST_TAG}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --report "release/cli-update-acceptance/report.json"
+
+      - name: Upload packaged CLI acceptance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-update-acceptance-${{ github.sha }}
+          path: release/cli-update-acceptance/report.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Download required Desktop acceptance report
+        if: inputs.npm_tag == 'latest'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.desktop_acceptance_run_id }}
+          pattern: desktop-installed-upgrade-*
+          path: release/desktop-acceptance-reports
+          merge-multiple: true
+
+      - name: Validate required Desktop acceptance report
+        shell: bash
+        run: |
+          if [[ "${{ inputs.npm_tag }}" != "latest" ]]; then
+            exit 0
+          fi
+          if [[ -z "${{ inputs.desktop_acceptance_run_id }}" ]]; then
+            echo "latest promotion requires a Desktop acceptance workflow run ID" >&2
+            exit 1
+          fi
+          CANDIDATE_VERSION="${{ steps.release.outputs.version }}" node --input-type=module <<'NODE'
+          import { readdirSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+          const root = "release/desktop-acceptance-reports";
+          const reports = readdirSync(root, { recursive: true })
+            .filter((name) => String(name).endsWith(".json"))
+            .map((name) => JSON.parse(readFileSync(join(root, String(name)), "utf8")));
+          const required = new Set(["runtime-only", "combined", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]);
+          for (const report of reports) {
+            if (report.commitSha !== process.env.GITHUB_SHA) throw new Error("Desktop report commitSha does not match");
+            if (report.scenario !== "external-sidecar-browser" && report.actualRuntimeVersion !== process.env.CANDIDATE_VERSION) {
+              throw new Error("Desktop report product version does not match CLI candidate");
+            }
+            if (!report.channelSignatureDigest) throw new Error("Desktop report channelSignatureDigest is missing");
+            required.delete(report.scenario);
+          }
+          if (required.size) throw new Error(`Desktop acceptance reports are missing: ${[...required].join(", ")}`);
+          NODE
+
+      - name: Preserve Desktop update channel assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p desktop-channel-assets
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          test -n "${latest_tag}"
+          gh release download "${latest_tag}" --dir desktop-channel-assets --clobber
+          test -f desktop-channel-assets/desktop-channel.json
+          test -f desktop-channel-assets/build-info.json
+
+      - name: Promote accepted CLI dist-tag
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PACKAGE_NAME: ${{ steps.release.outputs.package_name }}
+          CANDIDATE_VERSION: ${{ steps.release.outputs.version }}
+          ACCEPTANCE_DIST_TAG: ${{ steps.release.outputs.acceptance_tag }}
+          FINAL_DIST_TAG: ${{ inputs.npm_tag }}
+        run: |
+          npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${FINAL_DIST_TAG}"
+          npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"
 
       - name: Create and push release tag
         run: |
@@ -95,30 +229,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "${{ steps.release.outputs.tag }}"
           git push origin "${{ steps.release.outputs.tag }}"
-
-      - name: Preserve Desktop update channel assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p desktop-channel-assets
-          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null || true)
-          if [ -n "${latest_tag}" ]; then
-            for pattern in \
-              "latest.yml" \
-              "Coder-Studio-Setup-*.exe" \
-              "*.blockmap" \
-              "coder-studio-runtime-win32-x64.manifest.json" \
-              "coder-studio-runtime-*-win32-x64.tgz" \
-              "coder-studio-engine-linux-x64.manifest.json" \
-              "coder-studio-engine-*-linux-x64.tgz" \
-              "coder-studio-server-runtime-linux-x64.manifest.json" \
-              "coder-studio-server-runtime-*-linux-x64.tgz"; do
-              gh release download "${latest_tag}" \
-                --pattern "${pattern}" \
-                --dir desktop-channel-assets \
-                --clobber 2>/dev/null || true
-            done
-          fi
 
       - name: Create GitHub release
         env:

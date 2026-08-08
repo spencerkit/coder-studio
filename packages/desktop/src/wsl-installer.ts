@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { relative, resolve } from "node:path";
 import { create, extract } from "tar";
+import type { DesktopChannelRuntime } from "./desktop-channel.js";
+import { resolveChannelAsset } from "./desktop-channel.js";
 import {
   type EngineManifest,
   parseEngineManifest,
@@ -16,14 +18,17 @@ import {
   getRuntimeManifestSigningPayload,
   hashRuntimeFile,
   isSafeRuntimeRelativePath,
-  parseRuntimeManifest,
+  parseInstalledRuntimeManifest,
+  parseNetworkRuntimeManifest,
   RUNTIME_HOST_API_VERSION,
   type RuntimeFileEntry,
   type RuntimeManifest,
+  type RuntimeManifestV2,
   verifyRuntimeManifestSignature,
 } from "./runtime-manifest.js";
 import { runWslCommand, runWslCommandChecked, type WslCommandRunner } from "./wsl-command.js";
 import type { WslDistroProbe } from "./wsl-discovery.js";
+import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
 
 export interface WslInstalledRuntime {
   engineRoot: string;
@@ -49,6 +54,23 @@ export interface WslInstallerOptions {
   onProgress?: (progress: WslInstallProgress) => void;
 }
 
+export interface WslRuntimeUpdateMetadata {
+  componentId: "runtime:linux-x64";
+  manifestUrl: string;
+  manifest: RuntimeManifestV2;
+  version: string;
+  publishedAt: string;
+  plannedShellVersion: string;
+  probe: WslDistroProbe;
+  engineManifest: EngineManifest | null;
+}
+
+export interface WslRuntimeDownloadOptions {
+  signal: AbortSignal;
+  onProgress: (percent: number) => void;
+  explicitRetry: boolean;
+}
+
 const MAX_ENGINE_PACKAGE_BYTES = 500 * 1024 * 1024;
 const MAX_RUNTIME_PACKAGE_BYTES = 300 * 1024 * 1024;
 
@@ -68,6 +90,7 @@ const INSTALL_SCRIPT = [
   'tar -xzf - -C "$staging"',
   'if test -e "$destination"; then rm -rf "$staging"; else mv "$staging" "$destination"; fi',
   'if test "$kind" = runtime-store; then',
+  '  rm -f "$root/runtime-store/failed.json"',
   '  printf \'{"id":"%s","runtimeVersion":"%s","installedAt":"%s"}\\n\' "$id" "$version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$root/runtime-store/pending.json.tmp"',
   '  mv "$root/runtime-store/pending.json.tmp" "$root/runtime-store/pending.json"',
   "fi",
@@ -95,8 +118,13 @@ function normalizeArchivePath(value: string): string {
   return value.replaceAll("\\", "/").replace(/^\.\//, "").replace(/\/$/, "");
 }
 
-async function download(url: string, maxBytes: number, fetchImpl: typeof fetch): Promise<Buffer> {
-  const response = await fetchImpl(url, { cache: "no-store" });
+async function download(
+  url: string,
+  maxBytes: number,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal
+): Promise<Buffer> {
+  const response = await fetchImpl(url, { cache: "no-store", signal });
   if (!response.ok) throw new Error(`Download failed with status ${response.status}: ${url}`);
   const contentLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
@@ -164,7 +192,7 @@ async function validateRuntimePackage(
   workRoot: string
 ): Promise<Buffer> {
   const payloadRoot = await extractArchive(archive, workRoot);
-  const embeddedManifest = parseRuntimeManifest(
+  const embeddedManifest = parseInstalledRuntimeManifest(
     JSON.parse(await readFile(resolve(payloadRoot, "manifest.json"), "utf8"))
   );
   if (!manifestsMatch(expectedManifest, embeddedManifest)) {
@@ -254,90 +282,61 @@ async function installArchive(
 export class WslInstaller {
   constructor(private readonly options: WslInstallerOptions) {}
 
-  async prepare(probe: WslDistroProbe): Promise<WslInstalledRuntime> {
+  async checkRuntime(
+    probe: WslDistroProbe,
+    expected: DesktopChannelRuntime,
+    plannedShellVersion: string
+  ): Promise<WslRuntimeUpdateMetadata> {
+    return this.loadMetadata(probe, plannedShellVersion, expected);
+  }
+
+  async downloadAndStageRuntime(
+    metadata: WslRuntimeUpdateMetadata,
+    options: WslRuntimeDownloadOptions
+  ): Promise<WslInstalledRuntime> {
+    const { probe, engineManifest, manifest: runtimeManifest } = metadata;
     if (!probe.supported) throw new Error(probe.message ?? "Unsupported WSL distribution");
     const distro = probe.target.distro;
     if (!distro) throw new Error("The WSL target has no distribution name");
-    if (!this.options.publicKeyPem.trim()) {
-      throw new Error("WSL Runtime installation requires a trusted release public key");
-    }
     const fetchImpl = this.options.fetch ?? fetch;
     const runner = this.options.runner ?? runWslCommand;
-    this.options.onProgress?.({ phase: "checking", message: "Checking WSL Runtime manifests…" });
+    if (probe.engineInstalled) {
+      const failedVersion = await new WslRuntimeStoreClient({ probe, runner }).readFailedVersion();
+      if (failedVersion === metadata.version && !options.explicitRetry) {
+        throw new Error(
+          `WSL Runtime ${metadata.version} was quarantined; an explicit retry is required`
+        );
+      }
+    }
+    if (options.signal.aborted) throw this.abortError(options.signal);
 
-    const [engineManifestResponse, runtimeManifestResponse] = await Promise.all([
+    const report = (phase: WslInstallProgress["phase"], message: string, percent: number) => {
+      options.onProgress(percent);
+      this.options.onProgress?.({ phase, message, percent });
+    };
+    report(
+      "downloading",
       probe.engineInstalled
-        ? Promise.resolve(null)
-        : fetchImpl(this.options.engineManifestUrl(probe.arch), { cache: "no-store" }),
-      fetchImpl(this.options.runtimeManifestUrl(probe.arch), { cache: "no-store" }),
-    ]);
-    if (engineManifestResponse && !engineManifestResponse.ok) {
-      throw new Error(`Engine manifest check failed with ${engineManifestResponse.status}`);
-    }
-    if (!runtimeManifestResponse.ok) {
-      throw new Error(`Runtime manifest check failed with ${runtimeManifestResponse.status}`);
-    }
-    const engineManifest = engineManifestResponse
-      ? parseEngineManifest(await engineManifestResponse.json())
-      : null;
-    const runtimeManifest = parseRuntimeManifest(await runtimeManifestResponse.json());
-    if (
-      engineManifest &&
-      !verifyEngineManifestSignature(engineManifest, this.options.publicKeyPem)
-    ) {
-      throw new Error("WSL Engine manifest signature is invalid");
-    }
-    if (!verifyRuntimeManifestSignature(runtimeManifest, this.options.publicKeyPem)) {
-      throw new Error("WSL Runtime manifest signature is invalid");
-    }
-    if (runtimeManifest.runtimeVersion !== this.options.runtimeVersion) {
-      throw new Error(
-        `WSL Runtime ${runtimeManifest.runtimeVersion} does not match shared Web ${this.options.runtimeVersion}`
-      );
-    }
-    if (
-      engineManifest &&
-      (engineManifest.arch !== probe.arch ||
-        engineManifest.nodeVersion !== this.options.nodeVersion)
-    ) {
-      throw new Error("WSL Engine manifest is incompatible with the selected distribution");
-    }
-    if (engineManifest && engineManifest.engineVersion !== DESKTOP_ENGINE_VERSION) {
-      throw new Error(`WSL Engine ${engineManifest.engineVersion} is incompatible`);
-    }
-    if (compareVersions(this.options.shellVersion, runtimeManifest.minShellVersion) < 0) {
-      throw new Error(`WSL Runtime requires Desktop ${runtimeManifest.minShellVersion} or newer`);
-    }
-
-    this.options.onProgress?.({
-      phase: "downloading",
-      message: probe.engineInstalled
         ? "Downloading WSL Server Runtime…"
         : "Downloading WSL Engine and Server Runtime…",
-      percent: 10,
-    });
+      10
+    );
     const enginePackageUrl = engineManifest
       ? new URL(engineManifest.packageFile, this.options.engineManifestUrl(probe.arch)).toString()
       : null;
     if (!runtimeManifest.packageFile) throw new Error("WSL Runtime manifest has no package file");
-    const runtimePackageUrl = new URL(
-      runtimeManifest.packageFile,
-      this.options.runtimeManifestUrl(probe.arch)
-    ).toString();
+    const runtimePackageUrl = new URL(runtimeManifest.packageFile, metadata.manifestUrl).toString();
     const [engineArchive, runtimeArchive] = await Promise.all([
       enginePackageUrl
-        ? download(enginePackageUrl, MAX_ENGINE_PACKAGE_BYTES, fetchImpl)
+        ? download(enginePackageUrl, MAX_ENGINE_PACKAGE_BYTES, fetchImpl, options.signal)
         : Promise.resolve(null),
-      download(runtimePackageUrl, MAX_RUNTIME_PACKAGE_BYTES, fetchImpl),
+      download(runtimePackageUrl, MAX_RUNTIME_PACKAGE_BYTES, fetchImpl, options.signal),
     ]);
+    if (options.signal.aborted) throw this.abortError(options.signal);
 
     const workRoot = await mkdtemp(resolve(tmpdir(), "coder-studio-wsl-install-"));
     try {
-      this.options.onProgress?.({
-        phase: "verifying",
-        message: "Verifying WSL packages…",
-        percent: 45,
-      });
+      report("verifying", "Verifying WSL packages…", 45);
       const engineWorkRoot = resolve(workRoot, "engine");
       const runtimeWorkRoot = resolve(workRoot, "runtime");
       await Promise.all([
@@ -365,13 +364,10 @@ export class WslInstaller {
         .update(getRuntimeManifestSigningPayload(runtimeManifest))
         .digest("hex")
         .slice(0, 24);
+      if (options.signal.aborted) throw this.abortError(options.signal);
 
       if (validatedEngine && engineManifest) {
-        this.options.onProgress?.({
-          phase: "installing",
-          message: "Installing WSL Engine…",
-          percent: 65,
-        });
+        report("installing", "Installing WSL Engine…", 65);
         await installArchive(
           distro,
           probe.dataRoot,
@@ -382,11 +378,7 @@ export class WslInstaller {
           runner
         );
       }
-      this.options.onProgress?.({
-        phase: "installing",
-        message: "Installing WSL Server Runtime…",
-        percent: 85,
-      });
+      report("installing", "Installing WSL Server Runtime…", 85);
       await installArchive(
         distro,
         probe.dataRoot,
@@ -396,11 +388,7 @@ export class WslInstaller {
         validatedRuntime,
         runner
       );
-      this.options.onProgress?.({
-        phase: "verifying",
-        message: "WSL environment is ready.",
-        percent: 100,
-      });
+      report("verifying", "WSL environment is ready.", 100);
       return {
         engineRoot: `${probe.dataRoot}/engine/versions/${DESKTOP_ENGINE_VERSION}`,
         runtimeRoot: `${probe.dataRoot}/runtime-store/versions/${runtimeId}`,
@@ -409,5 +397,111 @@ export class WslInstaller {
     } finally {
       await rm(workRoot, { recursive: true, force: true });
     }
+  }
+
+  async prepare(probe: WslDistroProbe): Promise<WslInstalledRuntime> {
+    const metadata = await this.loadMetadata(probe, this.options.shellVersion);
+    if (metadata.version !== this.options.runtimeVersion) {
+      throw new Error(
+        `WSL Runtime ${metadata.version} does not match shared Web ${this.options.runtimeVersion}`
+      );
+    }
+    return this.downloadAndStageRuntime(metadata, {
+      signal: new AbortController().signal,
+      onProgress: () => {},
+      explicitRetry: false,
+    });
+  }
+
+  private async loadMetadata(
+    probe: WslDistroProbe,
+    plannedShellVersion: string,
+    expected?: DesktopChannelRuntime
+  ): Promise<WslRuntimeUpdateMetadata> {
+    if (!probe.supported) throw new Error(probe.message ?? "Unsupported WSL distribution");
+    if (!probe.target.distro) throw new Error("The WSL target has no distribution name");
+    if (!this.options.publicKeyPem.trim()) {
+      throw new Error("WSL Runtime installation requires a trusted release public key");
+    }
+    const fetchImpl = this.options.fetch ?? fetch;
+    this.options.onProgress?.({ phase: "checking", message: "Checking WSL Runtime manifests…" });
+    const configuredRuntimeManifestUrl = this.options.runtimeManifestUrl(probe.arch);
+    const runtimeManifestUrl = expected
+      ? resolveChannelAsset(configuredRuntimeManifestUrl, expected.manifest)
+      : configuredRuntimeManifestUrl;
+    const [engineManifestResponse, runtimeManifestResponse] = await Promise.all([
+      probe.engineInstalled
+        ? Promise.resolve(null)
+        : fetchImpl(this.options.engineManifestUrl(probe.arch), { cache: "no-store" }),
+      fetchImpl(runtimeManifestUrl, { cache: "no-store" }),
+    ]);
+    if (engineManifestResponse && !engineManifestResponse.ok) {
+      throw new Error(`Engine manifest check failed with ${engineManifestResponse.status}`);
+    }
+    if (!runtimeManifestResponse.ok) {
+      throw new Error(`Runtime manifest check failed with ${runtimeManifestResponse.status}`);
+    }
+    const engineManifest = engineManifestResponse
+      ? parseEngineManifest(await engineManifestResponse.json())
+      : null;
+    const runtimeManifest = parseNetworkRuntimeManifest(await runtimeManifestResponse.json());
+    if (
+      engineManifest &&
+      !verifyEngineManifestSignature(engineManifest, this.options.publicKeyPem)
+    ) {
+      throw new Error("WSL Engine manifest signature is invalid");
+    }
+    if (!verifyRuntimeManifestSignature(runtimeManifest, this.options.publicKeyPem)) {
+      throw new Error("WSL Runtime manifest signature is invalid");
+    }
+    if (
+      expected &&
+      (runtimeManifest.runtimeVersion !== expected.version ||
+        runtimeManifest.publishedAt !== expected.publishedAt)
+    ) {
+      throw new Error("WSL Runtime manifest does not match signed Desktop channel");
+    }
+    if (
+      engineManifest &&
+      (engineManifest.arch !== probe.arch ||
+        engineManifest.nodeVersion !== this.options.nodeVersion)
+    ) {
+      throw new Error("WSL Engine manifest is incompatible with the selected distribution");
+    }
+    if (engineManifest && engineManifest.engineVersion !== DESKTOP_ENGINE_VERSION) {
+      throw new Error(`WSL Engine ${engineManifest.engineVersion} is incompatible`);
+    }
+    if (compareVersions(plannedShellVersion, runtimeManifest.minShellVersion) < 0) {
+      throw new Error(`WSL Runtime requires Desktop ${runtimeManifest.minShellVersion} or newer`);
+    }
+    if (
+      runtimeManifest.platform !== "linux" ||
+      runtimeManifest.arch !== probe.arch ||
+      runtimeManifest.webRoot ||
+      runtimeManifest.requiredEngineVersion !== DESKTOP_ENGINE_VERSION ||
+      runtimeManifest.requiredNodeVersion !== this.options.nodeVersion ||
+      runtimeManifest.runtimeHostApiVersion !== RUNTIME_HOST_API_VERSION ||
+      runtimeManifest.apiProtocolVersion !== API_PROTOCOL_VERSION ||
+      runtimeManifest.dataSchemaVersion !== DATA_SCHEMA_VERSION
+    ) {
+      throw new Error("WSL Runtime manifest is incompatible with the Desktop host");
+    }
+    return {
+      componentId: "runtime:linux-x64",
+      manifestUrl: runtimeManifestUrl,
+      manifest: runtimeManifest,
+      version: runtimeManifest.runtimeVersion,
+      publishedAt: runtimeManifest.publishedAt,
+      plannedShellVersion,
+      probe,
+      engineManifest,
+    };
+  }
+
+  private abortError(signal: AbortSignal): Error {
+    if (signal.reason instanceof Error) return signal.reason;
+    return Object.assign(new Error("WSL Runtime download was cancelled"), {
+      name: "AbortError",
+    });
   }
 }

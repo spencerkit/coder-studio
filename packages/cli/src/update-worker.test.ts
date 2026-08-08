@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runRestartHandoff, runUpdateWorker } from "./update-worker.js";
+import { runRestartHandoff, runUpdateCommand, runUpdateWorker } from "./update-worker.js";
 
 type UpdateWorkerDeps = NonNullable<Parameters<typeof runUpdateWorker>[1]>;
 type RestartHandoffDeps = NonNullable<Parameters<typeof runRestartHandoff>[1]>;
@@ -29,11 +29,23 @@ describe("update-worker", () => {
       targetVersion: "0.5.0",
       cliCommand: "coder-studio",
       currentVersion: "0.4.0",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      targetPublishedAt: "2026-08-08T00:00:00.000Z",
       npmCommand: "npm",
       restartArgs: ["serve", "--restart"],
       installArgsPrefix: ["install", "-g"],
     };
   }
+
+  it("includes child stderr in command failures so permission fallback is deterministic", async () => {
+    await expect(
+      runUpdateCommand(
+        process.execPath,
+        ["-e", "console.error('permission scenario EACCES'); process.exit(17)"],
+        { env: process.env }
+      )
+    ).rejects.toThrow("permission scenario EACCES");
+  });
 
   it("writes restarting state and spawns a detached restart handoff after install success", async () => {
     const env = createEnv();
@@ -49,6 +61,11 @@ describe("update-worker", () => {
 
     const state = JSON.parse(readFileSync(env.stateFilePath, "utf-8")) as { updateStatus: string };
     expect(state.updateStatus).toBe("restarting");
+    expect(state).toMatchObject({
+      version: 2,
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
     expect(runCommand).toHaveBeenNthCalledWith(
       1,
       "npm",
@@ -84,6 +101,58 @@ describe("update-worker", () => {
     expect(state.updateStatus).toBe("manual_required");
     expect(state.requiresManualStep).toBe(true);
     expect(state.manualCommand).toContain("npm install -g @spencer-kit/coder-studio@0.5.0");
+    expect(state).toMatchObject({
+      version: 2,
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
+  });
+
+  it("marks ordinary install errors as failed without unsafe manual fallback", async () => {
+    const env = createEnv();
+    const runCommand = vi.fn<RunCommandMock>(async () => {
+      throw new Error("registry checksum mismatch");
+    });
+
+    await runUpdateWorker(env, {
+      runCommand,
+      now: () => 1000,
+    });
+
+    expect(JSON.parse(readFileSync(env.stateFilePath, "utf-8"))).toMatchObject({
+      version: 2,
+      updateStatus: "failed",
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: "registry checksum mismatch",
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
+  });
+
+  it("reports a manual restart command when restart handoff cannot be spawned", async () => {
+    const env = createEnv();
+    const runCommand = vi.fn<RunCommandMock>(async () => {});
+    const spawnDetachedProcess = vi.fn<SpawnDetachedProcessMock>(async () => {
+      throw new Error("spawn denied");
+    });
+
+    await runUpdateWorker(env, {
+      runCommand,
+      now: () => 1000,
+      processId: 4242,
+      spawnDetachedProcess,
+    });
+
+    expect(JSON.parse(readFileSync(env.stateFilePath, "utf-8"))).toMatchObject({
+      version: 2,
+      updateStatus: "failed",
+      requiresManualStep: true,
+      manualCommand: "coder-studio serve --restart",
+      errorSummary: "new version installed but service restart failed: spawn denied",
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
   });
 
   it("marks restart failures with manual restart guidance", async () => {
@@ -108,6 +177,11 @@ describe("update-worker", () => {
     expect(state.updateStatus).toBe("failed");
     expect(state.manualCommand).toBe("coder-studio serve --restart");
     expect(state.errorSummary).toContain("restart failed");
+    expect(state).toMatchObject({
+      version: 2,
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
     expect(waitForProcessExit).toHaveBeenCalledWith(999);
   });
 

@@ -1,5 +1,30 @@
+import type { UpdateRuntimeContext, UpdateStateSnapshot } from "@coder-studio/core";
 import { describe, expect, it, vi } from "vitest";
 import { type UpdateRuntimeConfig, UpdateService } from "./update-service.js";
+
+const CLI_RUNTIME_CONTEXT = {
+  environment: "cli-global-npm",
+  authority: "cli",
+  supported: true,
+  unsupportedReason: null,
+} satisfies UpdateRuntimeContext;
+
+const BASE_UPDATE_STATE: UpdateStateSnapshot = {
+  version: 2,
+  currentVersion: "0.4.0",
+  currentPublishedAt: null,
+  latestVersion: null,
+  latestPublishedAt: null,
+  availability: "unknown",
+  updateStatus: "idle",
+  lastCheckedAt: null,
+  targetVersion: null,
+  startedAt: null,
+  finishedAt: null,
+  requiresManualStep: false,
+  manualCommand: null,
+  errorSummary: null,
+};
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -12,28 +37,22 @@ function createDeferred<T>() {
 }
 
 function createDeps(overrides?: Partial<ConstructorParameters<typeof UpdateService>[0]>) {
-  let state = {
-    version: 1 as const,
-    currentVersion: "0.4.0",
-    latestVersion: null as string | null,
-    availability: "unknown" as const,
-    updateStatus: "idle" as const,
-    lastCheckedAt: null as number | null,
-    targetVersion: null as string | null,
-    startedAt: null as number | null,
-    finishedAt: null as number | null,
-    requiresManualStep: false,
-    manualCommand: null as string | null,
-    errorSummary: null as string | null,
-  };
+  let state: UpdateStateSnapshot = { ...BASE_UPDATE_STATE };
 
   const runtime: UpdateRuntimeConfig = {
     supported: true,
     installKind: "global_npm",
+    runtimeContext: CLI_RUNTIME_CONTEXT,
     packageName: "@spencer-kit/coder-studio",
     currentVersion: "0.4.0",
     cliCommand: "coder-studio",
     workerEntryPath: "/tmp/update-worker.mjs",
+    npmCommand: "npm",
+    registryUrl: "https://registry.npmjs.org/",
+    distTag: "latest",
+    restartArgs: ["serve", "--restart"],
+    installArgsPrefix: ["install", "-g"],
+    unsupportedReason: null,
   };
 
   return {
@@ -72,6 +91,54 @@ function createDeps(overrides?: Partial<ConstructorParameters<typeof UpdateServi
 }
 
 describe("UpdateService", () => {
+  it("reports global npm CLI authority for a supported updater", () => {
+    const service = new UpdateService(createDeps());
+
+    expect(service.getStateView()).toMatchObject({
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
+    });
+  });
+
+  it("reports unsupported CLI authority when no updater is available", () => {
+    const service = new UpdateService(
+      createDeps({
+        runtime: {
+          supported: false,
+          installKind: "unsupported",
+          runtimeContext: {
+            environment: "cli-unsupported",
+            authority: "none",
+            supported: false,
+            unsupportedReason: "Source checkout cannot update itself",
+          },
+          packageName: "@spencer-kit/coder-studio",
+          currentVersion: "0.4.0",
+          cliCommand: "coder-studio",
+          npmCommand: "npm",
+          registryUrl: "https://registry.npmjs.org/",
+          distTag: "latest",
+          restartArgs: ["serve", "--restart"],
+          installArgsPrefix: ["install", "-g"],
+          unsupportedReason: "Source checkout cannot update itself",
+        },
+      })
+    );
+
+    expect(service.getStateView()).toMatchObject({
+      runtimeContext: {
+        environment: "cli-unsupported",
+        authority: "none",
+        supported: false,
+        unsupportedReason: "Source checkout cannot update itself",
+      },
+    });
+  });
+
   it("does not run an immediate startup check when auto checks are disabled", () => {
     const runLatestVersionLookup = vi.fn(async () => "0.5.0");
     const service = new UpdateService(
@@ -103,9 +170,20 @@ describe("UpdateService", () => {
           runtime: {
             supported: false,
             installKind: "unsupported",
+            runtimeContext: {
+              environment: "desktop-managed",
+              authority: "desktop",
+              supported: true,
+              unsupportedReason: null,
+            },
             packageName: "@spencer-kit/coder-studio",
             currentVersion: "0.4.0",
             cliCommand: "coder-studio",
+            npmCommand: "npm",
+            registryUrl: "https://registry.npmjs.org/",
+            distTag: "latest",
+            restartArgs: ["serve", "--restart"],
+            installArgsPrefix: ["install", "-g"],
             unsupportedReason: "Desktop uses the Product Runtime updater",
           },
           runLatestVersionLookup,
@@ -142,6 +220,139 @@ describe("UpdateService", () => {
     expect(result.latestVersion).toBe("0.5.0");
     expect(result.availability).toBe("update_available");
     expect(result.updateStatus).toBe("idle");
+  });
+
+  it("persists authoritative npm publication times", async () => {
+    const deps = createDeps({
+      runReleaseMetadataLookup: vi.fn(async () => ({
+        version: "0.5.0",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        latestPublishedAt: "2026-08-08T00:00:00.000Z",
+      })),
+      runLatestVersionLookup: undefined,
+    });
+    const service = new UpdateService(deps);
+
+    await expect(service.checkForUpdates({ manual: true })).resolves.toMatchObject({
+      latestVersion: "0.5.0",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-08T00:00:00.000Z",
+    });
+  });
+
+  it("preserves check, prepare, exact install handoff, restart, and reconcile", async () => {
+    const spawnDetachedWorker = vi.fn(async () => {});
+    const deps = createDeps({
+      runReleaseMetadataLookup: vi.fn(async () => ({
+        version: "0.5.0",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        latestPublishedAt: "2026-08-08T00:00:00.000Z",
+      })),
+      runLatestVersionLookup: undefined,
+      spawnDetachedWorker,
+    });
+    const service = new UpdateService(deps);
+
+    await expect(service.checkForUpdates({ manual: true })).resolves.toMatchObject({
+      version: 2,
+      availability: "update_available",
+      latestVersion: "0.5.0",
+      latestPublishedAt: "2026-08-08T00:00:00.000Z",
+    });
+    expect(service.prepareInstall()).toMatchObject({
+      canStartInstall: true,
+      activity: { hasActiveWork: false },
+    });
+    await expect(
+      service.startInstall({ targetVersion: "0.5.0", force: false })
+    ).resolves.toMatchObject({
+      updateStatus: "installing",
+      targetVersion: "0.5.0",
+    });
+    expect(spawnDetachedWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        packageName: "@spencer-kit/coder-studio",
+        targetVersion: "0.5.0",
+        installArgsPrefix: ["install", "-g"],
+        restartArgs: ["serve", "--restart"],
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        targetPublishedAt: "2026-08-08T00:00:00.000Z",
+      })
+    );
+
+    deps.updateStateRepo.update({ updateStatus: "restarting" });
+    const restartedService = new UpdateService({
+      ...deps,
+      runtime: {
+        ...deps.runtime,
+        currentVersion: "0.5.0",
+      },
+    });
+    expect(restartedService.reconcileOnStartup()).toMatchObject({
+      version: 2,
+      currentVersion: "0.5.0",
+      currentPublishedAt: "2026-08-08T00:00:00.000Z",
+      availability: "up_to_date",
+      updateStatus: "succeeded",
+    });
+  });
+
+  it("retains cached publication times when the registry check fails", async () => {
+    const deps = createDeps({
+      updateStateRepo: {
+        getFilePath: vi.fn(() => "/tmp/update-state.json"),
+        get: vi.fn(() => ({
+          version: 2 as const,
+          currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
+          latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
+          availability: "update_available" as const,
+          updateStatus: "idle" as const,
+          lastCheckedAt: 100,
+          targetVersion: null,
+          startedAt: null,
+          finishedAt: null,
+          requiresManualStep: false,
+          manualCommand: null,
+          errorSummary: null,
+        })),
+        update: vi.fn((patch: unknown) => {
+          const current = {
+            version: 2 as const,
+            currentVersion: "0.4.0",
+            currentPublishedAt: "2026-07-01T00:00:00.000Z",
+            latestVersion: "0.5.0",
+            latestPublishedAt: "2026-08-08T00:00:00.000Z",
+            availability: "update_available" as const,
+            updateStatus: "idle" as const,
+            lastCheckedAt: 100,
+            targetVersion: null,
+            startedAt: null,
+            finishedAt: null,
+            requiresManualStep: false,
+            manualCommand: null,
+            errorSummary: null,
+          };
+          const resolved =
+            typeof patch === "function"
+              ? (patch as (value: typeof current) => Partial<typeof current>)(current)
+              : patch;
+          return { ...current, ...(resolved as Partial<typeof current>) };
+        }),
+      },
+      runReleaseMetadataLookup: vi.fn(async () => {
+        throw new Error("registry down");
+      }),
+      runLatestVersionLookup: undefined,
+    });
+    const service = new UpdateService(deps);
+
+    await expect(service.checkForUpdates({ manual: true })).resolves.toMatchObject({
+      availability: "check_failed",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-08T00:00:00.000Z",
+    });
   });
 
   it("keeps check failures in availability while returning to idle", async () => {
@@ -201,19 +412,9 @@ describe("UpdateService", () => {
 
   it("does not persist checking while an update check is in progress", async () => {
     const lookupDeferred = createDeferred<string>();
-    let state = {
-      version: 1 as const,
-      currentVersion: "0.4.0",
-      latestVersion: null as string | null,
-      availability: "unknown" as const,
-      updateStatus: "idle" as const,
-      lastCheckedAt: null as number | null,
-      targetVersion: null as string | null,
-      startedAt: null as number | null,
-      finishedAt: null as number | null,
-      requiresManualStep: false,
-      manualCommand: null as string | null,
-      errorSummary: "previous failure" as string | null,
+    let state: UpdateStateSnapshot = {
+      ...BASE_UPDATE_STATE,
+      errorSummary: "previous failure",
     };
     const update = vi.fn((patch: unknown) => {
       const resolved =
@@ -274,9 +475,11 @@ describe("UpdateService", () => {
         updateStateRepo: {
           getFilePath: vi.fn(() => "/tmp/update-state.json"),
           get: vi.fn(() => ({
-            version: 1,
+            version: 2,
             currentVersion: "0.4.0",
+            currentPublishedAt: null,
             latestVersion: "0.5.0",
+            latestPublishedAt: null,
             availability: "update_available",
             updateStatus: "idle",
             lastCheckedAt: 5,
@@ -288,9 +491,11 @@ describe("UpdateService", () => {
             errorSummary: null,
           })),
           update: vi.fn((patch: unknown) => ({
-            version: 1,
+            version: 2,
             currentVersion: "0.4.0",
+            currentPublishedAt: null,
             latestVersion: "0.5.0",
+            latestPublishedAt: null,
             availability: "update_available",
             updateStatus: "idle",
             lastCheckedAt: 5,
@@ -325,9 +530,11 @@ describe("UpdateService", () => {
       countRunningSessions: vi.fn(() => 1),
       updateStateRepo: {
         get: vi.fn(() => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "idle",
           lastCheckedAt: 5,
@@ -354,18 +561,27 @@ describe("UpdateService", () => {
     const runtime: UpdateRuntimeConfig = {
       supported: true,
       installKind: "global_npm",
+      runtimeContext: CLI_RUNTIME_CONTEXT,
       packageName: "@spencer-kit/coder-studio",
       currentVersion: "0.5.0",
       cliCommand: "coder-studio",
       workerEntryPath: "/tmp/update-worker.mjs",
+      npmCommand: "npm",
+      registryUrl: "https://registry.npmjs.org/",
+      distTag: "latest",
+      restartArgs: ["serve", "--restart"],
+      installArgsPrefix: ["install", "-g"],
+      unsupportedReason: null,
     };
     const deps = createDeps({
       runtime,
       updateStateRepo: {
         get: vi.fn(() => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "restarting",
           lastCheckedAt: 5,
@@ -377,9 +593,11 @@ describe("UpdateService", () => {
           errorSummary: null,
         })),
         update: vi.fn((patch: unknown) => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.5.0",
+          currentPublishedAt: "2026-08-08T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "up_to_date",
           updateStatus: "succeeded",
           lastCheckedAt: 5,
@@ -404,9 +622,11 @@ describe("UpdateService", () => {
 
   it("reconciles a persisted checking state to failed on startup", () => {
     const update = vi.fn((patch: unknown) => ({
-      version: 1,
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: "0.5.0",
+      latestPublishedAt: null,
       availability: "check_failed",
       updateStatus: "failed",
       lastCheckedAt: 5,
@@ -422,9 +642,11 @@ describe("UpdateService", () => {
       createDeps({
         updateStateRepo: {
           get: vi.fn(() => ({
-            version: 1,
+            version: 2,
             currentVersion: "0.4.0",
+            currentPublishedAt: null,
             latestVersion: "0.5.0",
+            latestPublishedAt: null,
             availability: "update_available",
             updateStatus: "checking",
             lastCheckedAt: 5,
@@ -448,6 +670,47 @@ describe("UpdateService", () => {
     expect(update).toHaveBeenCalled();
   });
 
+  it.each([
+    "installing",
+    "restarting",
+  ] as const)("reconciles an interrupted %s state to failed on startup", (updateStatus) => {
+    let state: UpdateStateSnapshot = {
+      ...BASE_UPDATE_STATE,
+      latestVersion: "0.5.0",
+      latestPublishedAt: "2026-08-08T00:00:00.000Z",
+      availability: "update_available",
+      updateStatus,
+      lastCheckedAt: 5,
+      targetVersion: "0.5.0",
+      startedAt: 1,
+    };
+    const update = vi.fn((patch: unknown) => {
+      const resolved =
+        typeof patch === "function"
+          ? (patch as (current: UpdateStateSnapshot) => Partial<UpdateStateSnapshot>)(state)
+          : (patch as Partial<UpdateStateSnapshot>);
+      state = { ...state, ...resolved };
+      return state;
+    });
+    const service = new UpdateService(
+      createDeps({
+        updateStateRepo: {
+          getFilePath: vi.fn(() => "/tmp/update-state.json"),
+          get: vi.fn(() => state),
+          update,
+        },
+      })
+    );
+
+    expect(service.reconcileOnStartup()).toMatchObject({
+      version: 2,
+      updateStatus: "failed",
+      targetVersion: "0.5.0",
+      errorSummary: "Update did not complete before the service restarted",
+    });
+    expect(update).toHaveBeenCalled();
+  });
+
   it("passes the update state file path into the detached worker contract", async () => {
     const spawnDetachedWorker = vi.fn(async () => {});
     const deps = createDeps({
@@ -455,9 +718,11 @@ describe("UpdateService", () => {
       updateStateRepo: {
         getFilePath: vi.fn(() => "/tmp/update-state.json"),
         get: vi.fn(() => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "idle",
           lastCheckedAt: 5,
@@ -469,9 +734,11 @@ describe("UpdateService", () => {
           errorSummary: null,
         })),
         update: vi.fn((patch: unknown) => ({
-          version: 1,
+          version: 2,
           currentVersion: "0.4.0",
+          currentPublishedAt: "2026-07-01T00:00:00.000Z",
           latestVersion: "0.5.0",
+          latestPublishedAt: "2026-08-08T00:00:00.000Z",
           availability: "update_available",
           updateStatus: "installing",
           lastCheckedAt: 5,
@@ -492,6 +759,8 @@ describe("UpdateService", () => {
     expect(spawnDetachedWorker).toHaveBeenCalledWith(
       expect.objectContaining({
         stateFilePath: "/tmp/update-state.json",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        targetPublishedAt: "2026-08-08T00:00:00.000Z",
       })
     );
   });

@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { appendFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  createDefaultProductUpdateState,
+  type ProductUpdateState,
+  type UpdateRuntimeContext,
+} from "@coder-studio/core";
 import {
   app,
   BrowserWindow,
@@ -15,7 +21,19 @@ import {
   session,
   shell,
 } from "electron";
+import { autoUpdater, CancellationToken } from "electron-updater";
 import { BackendManager } from "./backend-manager.js";
+import { readDesktopBuildInfo } from "./build-info.js";
+import {
+  parseDesktopChannel,
+  resolveDesktopChannelUrl,
+  resolveDesktopRuntimePublicKey,
+  shouldForceAcceptanceRuntimeHealthFailure,
+} from "./desktop-channel.js";
+import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
+import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
+import { DesktopUpdateJournal } from "./desktop-update-journal.js";
+import { DesktopUpdateSettingsRepo } from "./desktop-update-settings.js";
 import { EnvironmentActivationCoordinator } from "./environment-activation.js";
 import {
   createEnvironmentInstanceArgs,
@@ -33,16 +51,12 @@ import {
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import { DesktopGateway } from "./gateway.js";
-import type {
-  DesktopEnvironmentProgress,
-  DesktopEnvironmentTarget,
-  DesktopRuntimeUpdateState,
-} from "./protocol.js";
-import { DESKTOP_NODE_VERSION } from "./runtime-manifest.js";
+import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
+import { DESKTOP_NODE_VERSION, getRuntimePublishedAt } from "./runtime-manifest.js";
 import type { ProductRuntime } from "./runtime-store.js";
 import { RuntimeStore } from "./runtime-store.js";
 import { ProductRuntimeUpdateManager } from "./runtime-update-manager.js";
-import { DesktopUpdateManager } from "./update-manager.js";
+import { DesktopShellUpdateAdapter, type ShellUpdaterPort } from "./update-manager.js";
 import { createWslBackendLaunch } from "./wsl-backend.js";
 import { WslDiscovery } from "./wsl-discovery.js";
 import { windowsWslPathToLinux } from "./wsl-path.js";
@@ -50,7 +64,7 @@ import type { WslRuntimeCandidate } from "./wsl-runtime-store.js";
 import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
 
 declare const __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: string;
-declare const __CODER_STUDIO_RUNTIME_UPDATE_URL__: string;
+declare const __CODER_STUDIO_DESKTOP_CHANNEL_URL__: string;
 declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
 
 const ENVIRONMENT_LAUNCH_DATA_KEY = "environmentLaunchRequestId";
@@ -62,8 +76,7 @@ let backendManager: BackendManager | null = null;
 let desktopGateway: DesktopGateway | null = null;
 let activeSession: Session | null = null;
 let activeGatewayUrl: string | null = null;
-let updateManager: DesktopUpdateManager | null = null;
-let runtimeUpdateManager: ProductRuntimeUpdateManager | null = null;
+let updateCoordinator: DesktopUpdateCoordinator | null = null;
 let activeProductRuntime: ProductRuntime | null = null;
 let environmentManager: DesktopEnvironmentManager | null = null;
 let activeEnvironmentTarget: DesktopEnvironmentTarget = NATIVE_ENVIRONMENT;
@@ -181,99 +194,28 @@ async function openExternal(value: string): Promise<boolean> {
   return true;
 }
 
-async function promptForRuntimeRestart(runtimeVersion: string): Promise<void> {
-  if (!mainWindow) return;
-  const result = await dialog.showMessageBox(mainWindow, {
-    type: "info",
-    title: "Coder Studio Runtime update ready",
-    message: `Runtime ${runtimeVersion} is ready to install.`,
-    detail: "Restart Coder Studio to activate the Server and Web update.",
-    buttons: ["Restart Now", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  if (result.response !== 0) return;
-  app.relaunch();
-  app.quit();
-}
-
-async function checkRuntimeUpdatesManually(): Promise<void> {
-  if (!mainWindow) return;
-  if (!runtimeUpdateManager || !activeProductRuntime) {
-    await dialog.showMessageBox(mainWindow, {
-      type: "info",
-      title: "Product Runtime updates unavailable",
-      message: "Runtime updates are not enabled for this Coder Studio instance.",
-      detail:
-        "Runtime updates require a packaged Local Windows instance with a trusted update channel.",
-    });
-    return;
-  }
-
-  try {
-    const result = await runtimeUpdateManager.check();
-    switch (result.status) {
-      case "ready":
-        // onUpdateReady owns the restart prompt for both automatic and manual checks.
-        return;
-      case "current":
-        await dialog.showMessageBox(mainWindow, {
-          type: "info",
-          title: "Product Runtime is up to date",
-          message: `Runtime ${activeProductRuntime.manifest.runtimeVersion} is the latest available version.`,
-        });
-        return;
-      case "already-staged": {
-        const pendingVersion = await runtimeUpdateManager.getPendingVersion();
-        await promptForRuntimeRestart(pendingVersion ?? "update");
-        return;
-      }
-      case "failed":
-        await dialog.showMessageBox(mainWindow, {
-          type: "warning",
-          title: "Product Runtime update quarantined",
-          message: "The latest Runtime was previously rolled back after a failed launch.",
-          detail: "Coder Studio will keep the current Runtime until a newer version is published.",
-        });
-        return;
-      case "disabled":
-        await dialog.showMessageBox(mainWindow, {
-          type: "info",
-          title: "Product Runtime updates unavailable",
-          message: "No Runtime update channel is configured.",
-        });
-    }
-  } catch (error) {
-    await dialog.showMessageBox(mainWindow, {
-      type: "error",
-      title: "Unable to check for Product Runtime updates",
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-function reportRuntimeUpdateError(error: Error): void {
-  console.warn("[runtime-update]", error.message);
-  const entry = `[${new Date().toISOString()}] ${error.stack || error.message}\n`;
-  void appendFile(join(app.getPath("logs"), "runtime-update.log"), entry, "utf8").catch(
-    (writeError) => console.warn("[runtime-update] unable to write update log", writeError)
-  );
-}
-
-async function getRuntimeUpdateState(): Promise<DesktopRuntimeUpdateState> {
-  if (runtimeUpdateManager) return runtimeUpdateManager.getState();
-  return {
+function getFallbackUpdateState(): ProductUpdateState {
+  const context: UpdateRuntimeContext = {
+    environment: activeEnvironmentTarget.kind === "wsl" ? "desktop-wsl" : "desktop-native",
+    authority: "none",
     supported: false,
-    currentVersion: activeProductRuntime?.manifest.runtimeVersion ?? "0.0.0",
-    latestVersion: null,
-    pendingVersion: null,
-    lastCheckedAt: null,
-    status: "disabled",
-    errorSummary: null,
     unsupportedReason:
-      activeEnvironmentTarget.kind === "wsl"
-        ? "Product Runtime updates are managed by the Local Windows instance"
-        : "Product Runtime updates are unavailable for this Desktop instance",
+      process.platform === "win32"
+        ? "Desktop updates require a packaged build with a trusted signed channel"
+        : "Installed Desktop updates are not yet supported on this platform",
+  };
+  const state = createDefaultProductUpdateState(
+    context,
+    activeProductRuntime?.manifest.runtimeVersion ?? "0.0.0",
+    activeProductRuntime ? getRuntimePublishedAt(activeProductRuntime.manifest) : null
+  );
+  return {
+    ...state,
+    diagnostics: {
+      ...state.diagnostics,
+      shellVersion: app.getVersion(),
+      nodeVersion: DESKTOP_NODE_VERSION,
+    },
   };
 }
 
@@ -292,6 +234,11 @@ async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
 }
 
 function registerIpcHandlers(rootUserDataDir: string): void {
+  registerDesktopUpdateIpc({
+    ipc: ipcMain,
+    getCoordinator: () => updateCoordinator,
+    getFallbackState: getFallbackUpdateState,
+  });
   ipcMain.handle("desktop:get-app-version", () => app.getVersion());
   ipcMain.handle("desktop:select-workspace-directory", async () => {
     if (!mainWindow) return null;
@@ -310,24 +257,6 @@ function registerIpcHandlers(rootUserDataDir: string): void {
     typeof value === "string" ? openExternal(value) : false
   );
   ipcMain.handle("desktop:get-backend-status", () => backendManager?.getStatus() ?? null);
-  ipcMain.handle("desktop:get-runtime-update-state", getRuntimeUpdateState);
-  ipcMain.handle("desktop:check-runtime-update", async () => {
-    if (!runtimeUpdateManager) return getRuntimeUpdateState();
-    try {
-      await runtimeUpdateManager.check();
-    } catch {
-      // The manager records a serializable error state for the renderer.
-    }
-    return runtimeUpdateManager.getState();
-  });
-  ipcMain.handle("desktop:restart-for-runtime-update", async () => {
-    if (!runtimeUpdateManager || !(await runtimeUpdateManager.getPendingVersion())) return false;
-    setImmediate(() => {
-      app.relaunch();
-      app.quit();
-    });
-    return true;
-  });
   ipcMain.handle("desktop:list-environments", async () => {
     if (!environmentManager) throw new Error("Desktop environments are not initialized");
     return environmentManager.listEnvironments();
@@ -345,7 +274,14 @@ function registerIpcHandlers(rootUserDataDir: string): void {
 
     environmentOpening = true;
     try {
-      if (target.kind === "wsl") await environmentManager.prepareWsl(target);
+      if (updateCoordinator) {
+        await updateCoordinator.prepareEnvironmentTarget(
+          target.kind === "wsl" ? "linux-x64" : "win32-x64",
+          target.id
+        );
+      } else if (target.kind === "wsl") {
+        await environmentManager.prepareWsl(target);
+      }
       emitEnvironmentProgress(createEnvironmentLaunchingProgress(target));
       await openEnvironmentInstance(rootUserDataDir, target);
       return { status: "opened" as const };
@@ -461,12 +397,8 @@ function installApplicationMenu(): void {
       label: "Help",
       submenu: [
         {
-          label: "Check for Desktop App Updates...",
-          click: () => void updateManager?.check(true),
-        },
-        {
-          label: "Check for Product Runtime Updates...",
-          click: () => void checkRuntimeUpdatesManually(),
+          label: "Check for Updates...",
+          click: () => void updateCoordinator?.check({ manual: true }),
         },
         { type: "separator" },
         {
@@ -594,14 +526,20 @@ async function startApplication(): Promise<void> {
     ? readEnvironmentInstanceTarget(app.commandLine)
     : NATIVE_ENVIRONMENT;
   registerIpcHandlers(rootUserDataDir);
-  const runtimePublicKey =
+  const compiledRuntimePublicKey =
     typeof __CODER_STUDIO_RUNTIME_PUBLIC_KEY__ === "string"
       ? __CODER_STUDIO_RUNTIME_PUBLIC_KEY__.trim()
       : "";
-  const compiledRuntimeUpdateUrl =
-    typeof __CODER_STUDIO_RUNTIME_UPDATE_URL__ === "string"
-      ? __CODER_STUDIO_RUNTIME_UPDATE_URL__.trim()
+  const runtimePublicKey = resolveDesktopRuntimePublicKey(
+    process.env,
+    compiledRuntimePublicKey,
+    (path) => readFileSync(path, "utf8")
+  );
+  const compiledDesktopChannelUrl =
+    typeof __CODER_STUDIO_DESKTOP_CHANNEL_URL__ === "string"
+      ? __CODER_STUDIO_DESKTOP_CHANNEL_URL__.trim()
       : "";
+  const desktopChannelUrl = resolveDesktopChannelUrl(process.env, compiledDesktopChannelUrl);
   const productVersion =
     typeof __CODER_STUDIO_PRODUCT_VERSION__ === "string"
       ? __CODER_STUDIO_PRODUCT_VERSION__.trim()
@@ -619,6 +557,15 @@ async function startApplication(): Promise<void> {
   releaseProductRuntimeLease =
     runtimeStore && webRuntime ? await runtimeStore.acquireLease(webRuntime) : null;
   const environmentStateStore = new EnvironmentStateStore(userDataDir);
+  const nativeRuntimeUpdateAdapter =
+    runtimeStore && webRuntime && runtimePublicKey && desktopChannelUrl
+      ? new ProductRuntimeUpdateManager({
+          store: runtimeStore,
+          manifestUrl: desktopChannelUrl,
+          getCurrentRuntime: () => activeProductRuntime ?? (webRuntime as ProductRuntime),
+          onError: (error) => console.warn("[runtime-update]", error.message),
+        })
+      : undefined;
   environmentManager = new DesktopEnvironmentManager({
     stateStore: environmentStateStore,
     discovery: new WslDiscovery(),
@@ -628,8 +575,9 @@ async function startApplication(): Promise<void> {
     publicKeyPem: runtimePublicKey,
     enableWsl: app.isPackaged && process.platform === "win32",
     releaseBaseUrl: getReleaseBaseUrl(
-      process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl
+      process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || desktopChannelUrl
     ),
+    nativeRuntimeUpdateAdapter,
     onProgress: emitEnvironmentProgress,
   });
   environmentManager.setActiveTarget(activeEnvironmentTarget);
@@ -679,6 +627,18 @@ async function startApplication(): Promise<void> {
   for (;;) {
     backendManager = createBackendManager();
     try {
+      if (
+        webRuntime &&
+        shouldForceAcceptanceRuntimeHealthFailure(
+          process.env,
+          webRuntime.source,
+          webRuntime.manifest.runtimeVersion
+        )
+      ) {
+        throw new Error(
+          `Acceptance-injected Runtime health failure for ${webRuntime.manifest.runtimeVersion}`
+        );
+      }
       status = await backendManager.start(activeSession);
       const developmentUrl = process.env.CODER_STUDIO_DESKTOP_DEV_URL?.trim();
       if (app.isPackaged && webRuntime && status.source === "managed") {
@@ -723,33 +683,98 @@ async function startApplication(): Promise<void> {
     }
   }
   if (
-    runtimeStore &&
-    activeProductRuntime &&
+    app.isPackaged &&
+    process.platform === "win32" &&
     runtimePublicKey &&
-    activeEnvironmentTarget.kind === "native" &&
+    desktopChannelUrl &&
+    nativeRuntimeUpdateAdapter &&
     !smokeResultPath
   ) {
-    runtimeUpdateManager = new ProductRuntimeUpdateManager({
-      store: runtimeStore,
-      manifestUrl: process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || compiledRuntimeUpdateUrl,
-      getCurrentRuntime: () => activeProductRuntime as ProductRuntime,
-      onError: reportRuntimeUpdateError,
-      onStateChanged: (state) => {
-        mainWindow?.webContents.send("desktop:runtime-update-state-changed", state);
-      },
-      onUpdateReady: (readyRuntime) => {
-        void promptForRuntimeRestart(readyRuntime.manifest.runtimeVersion);
-      },
+    const buildInfo = await readDesktopBuildInfo(process.resourcesPath, app.getVersion());
+    const updateJournalPath = join(rootUserDataDir, "desktop-update-plan.json");
+    const updateOwnerId = randomUUID();
+    const shellUpdateAdapter = new DesktopShellUpdateAdapter({
+      updater: autoUpdater as unknown as ShellUpdaterPort,
+      currentVersion: app.getVersion(),
+      isPackaged: true,
+      allowPrerelease: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1",
+      createCancellationToken: () => new CancellationToken(),
+      logLocations: [join(app.getPath("logs"), "main.log")],
+      manualInstallerUrl: "https://github.com/spencerkit/coder-studio/releases",
     });
+    shellUpdateAdapter.start();
+    const runtimeContext: UpdateRuntimeContext = {
+      environment: activeEnvironmentTarget.kind === "wsl" ? "desktop-wsl" : "desktop-native",
+      authority: "desktop",
+      supported: true,
+      unsupportedReason: null,
+    };
+    updateCoordinator = new DesktopUpdateCoordinator({
+      runtimeContext,
+      currentProductVersion: () =>
+        activeEnvironmentTarget.kind === "wsl"
+          ? (wslRuntime?.manifest.runtimeVersion ?? productVersion)
+          : (activeProductRuntime?.manifest.runtimeVersion ?? productVersion),
+      currentProductPublishedAt: () => {
+        const manifest =
+          activeEnvironmentTarget.kind === "wsl"
+            ? wslRuntime?.manifest
+            : activeProductRuntime?.manifest;
+        return manifest ? getRuntimePublishedAt(manifest) : null;
+      },
+      getBuildInfo: () => buildInfo,
+      loadChannel: async () => {
+        const response = await fetch(desktopChannelUrl, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Desktop update channel check failed with ${response.status}`);
+        }
+        return parseDesktopChannel(await response.json(), runtimePublicKey, desktopChannelUrl);
+      },
+      shell: shellUpdateAdapter,
+      getRuntimeAdapter: (target, environmentId) =>
+        (environmentManager as DesktopEnvironmentManager).createRuntimeUpdateAdapter(
+          target,
+          environmentId
+        ),
+      initialRuntimeTarget: activeEnvironmentTarget.kind === "wsl" ? "linux-x64" : "win32-x64",
+      initialEnvironmentId: activeEnvironmentTarget.id,
+      settings: new DesktopUpdateSettingsRepo({
+        filePath: join(rootUserDataDir, "desktop-update-settings.json"),
+        onWarning: (message) => console.warn("[desktop-update]", message),
+      }),
+      journal: new DesktopUpdateJournal({
+        filePath: updateJournalPath,
+        onWarning: (message) => console.warn("[desktop-update]", message),
+      }),
+      journalLocation: updateJournalPath,
+      updateOwnerId,
+      now: Date.now,
+      randomId: randomUUID,
+      onStateChanged: (state) => {
+        mainWindow?.webContents.send("desktop:update-state-changed", state);
+        mainWindow?.webContents.send(
+          "desktop:runtime-update-state-changed",
+          toLegacyRuntimeUpdateState(state)
+        );
+      },
+      relaunch: () => app.relaunch(),
+      quit: () => app.quit(),
+    });
+    const pendingRuntimeVersion =
+      activeEnvironmentTarget.kind === "wsl"
+        ? await wslRuntimeStore?.readPendingVersion()
+        : await runtimeStore?.readPendingVersion();
+    await updateCoordinator.reconcileOnStartup({
+      shellVersion: app.getVersion(),
+      runtimeVersion:
+        activeEnvironmentTarget.kind === "wsl"
+          ? (wslRuntime?.manifest.runtimeVersion ?? productVersion)
+          : (activeProductRuntime?.manifest.runtimeVersion ?? productVersion),
+      pendingRuntimeVersion: pendingRuntimeVersion ?? null,
+    });
+    await updateCoordinator.start();
   }
   mainWindow = createMainWindow(url);
-  updateManager = new DesktopUpdateManager({
-    currentVersion: app.getVersion(),
-    getWindow: () => mainWindow,
-    isPackaged: app.isPackaged && activeEnvironmentTarget.kind === "native" && !smokeResultPath,
-  });
-  updateManager.start();
-  runtimeUpdateManager?.start();
   installApplicationMenu();
 }
 
@@ -796,13 +821,14 @@ app.on("before-quit", (event: Event) => {
   const activationFailurePromise = trackShutdownActivation(
     environmentActivation.failPending(ENVIRONMENT_SHUTDOWN_FAILURE_MESSAGE)
   );
-  updateManager?.stop();
-  runtimeUpdateManager?.stop();
+  const stopUpdateCoordinator = updateCoordinator?.stop() ?? Promise.resolve();
   void (desktopGateway?.stop() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => backendManager?.stop() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => releaseProductRuntimeLease?.() ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => stopUpdateCoordinator)
     .catch(() => undefined)
     .then(() => activationFailurePromise)
     .then(waitForShutdownActivations)

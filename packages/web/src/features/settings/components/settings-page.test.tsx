@@ -21,6 +21,8 @@ import {
   DEFAULT_TERMINAL_FONT_SIZE,
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
+import { updateControllerAtom } from "../../updates/atoms";
+import type { UpdateController } from "../../updates/types";
 import type {
   WorkAnalysisDashboardProviderStatus,
   WorkAnalysisDashboardRecord,
@@ -113,6 +115,10 @@ function createConnectedStore(
   } as never);
 
   return store;
+}
+
+function createCliUpdateController(): UpdateController {
+  return { kind: "cli" } as UpdateController;
 }
 
 const DEFAULT_PROVIDER_LIST = [
@@ -2013,6 +2019,7 @@ describe("SettingsPage", () => {
       return {};
     });
     const store = createConnectedStore(sendCommand);
+    store.set(updateControllerAtom, createCliUpdateController());
 
     renderSettingsPage(store, { initialEntry: "/settings?section=about" });
 
@@ -2032,6 +2039,48 @@ describe("SettingsPage", () => {
         undefined
       );
     });
+  });
+
+  it("hydrates and saves Desktop update preferences through the Desktop controller", async () => {
+    const sendCommand = vi.fn().mockImplementation(async (op: string) => {
+      if (op === "settings.get") {
+        return {
+          "updates.autoCheckEnabled": true,
+          "updates.checkIntervalSec": 3600,
+        };
+      }
+      return {};
+    });
+    const updateController = {
+      kind: "desktop",
+      getSettings: vi.fn(async () => ({
+        schemaVersion: 1 as const,
+        autoCheckEnabled: false,
+        checkIntervalSec: 21600 as const,
+      })),
+      setSettings: vi.fn(async (patch) => ({
+        schemaVersion: 1 as const,
+        autoCheckEnabled: patch.autoCheckEnabled ?? false,
+        checkIntervalSec: patch.checkIntervalSec ?? 21600,
+      })),
+    } as unknown as UpdateController;
+    const store = createConnectedStore(sendCommand);
+    store.set(updateControllerAtom, updateController);
+
+    renderSettingsPage(store, { initialEntry: "/settings?section=about" });
+
+    const toggle = await screen.findByRole("switch", { name: "自动检查更新" });
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "false"));
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(updateController.setSettings).toHaveBeenCalledWith({ autoCheckEnabled: true })
+    );
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      "settings.update",
+      expect.objectContaining({ settings: { updates: expect.anything() } }),
+      undefined
+    );
   });
 
   it("opens the About section on load when section=about is present", async () => {
@@ -2061,6 +2110,7 @@ describe("SettingsPage", () => {
       return {};
     });
     const store = createConnectedStore(sendCommand);
+    store.set(updateControllerAtom, createCliUpdateController());
 
     renderSettingsPage(store, { initialEntry: "/settings?section=about" });
 

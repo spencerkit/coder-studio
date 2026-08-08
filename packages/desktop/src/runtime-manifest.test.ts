@@ -3,13 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   compareVersions,
   getRuntimeManifestSigningPayload,
+  getRuntimePublishedAt,
   isSafeRuntimeRelativePath,
-  parseRuntimeManifest,
-  type RuntimeManifest,
+  parseInstalledRuntimeManifest,
+  parseNetworkRuntimeManifest,
+  type RuntimeManifestV1,
+  type RuntimeManifestV2,
   verifyRuntimeManifestSignature,
 } from "./runtime-manifest.js";
 
-function manifest(): RuntimeManifest {
+function manifest(): RuntimeManifestV1 {
   return {
     schemaVersion: 1,
     runtimeVersion: "0.5.7",
@@ -53,7 +56,45 @@ describe("Runtime manifest", () => {
   it("validates hashed entrypoints", () => {
     const value = manifest();
     value.entrypoint = "missing.mjs";
-    expect(() => parseRuntimeManifest(value)).toThrow("entrypoint is not hashed");
+    expect(() => parseInstalledRuntimeManifest(value)).toThrow("entrypoint is not hashed");
+  });
+
+  it("signs publishedAt and requires schema v2 for network updates", () => {
+    const keys = generateKeyPairSync("ed25519");
+    const value: RuntimeManifestV2 = {
+      ...manifest(),
+      schemaVersion: 2,
+      publishedAt: "2026-08-08T01:02:03.000Z",
+    };
+    value.signature = {
+      algorithm: "ed25519",
+      value: sign(null, getRuntimeManifestSigningPayload(value), keys.privateKey).toString(
+        "base64"
+      ),
+    };
+    const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
+
+    expect(parseNetworkRuntimeManifest(value).publishedAt).toBe("2026-08-08T01:02:03.000Z");
+    value.publishedAt = "2026-08-09T01:02:03.000Z";
+    expect(verifyRuntimeManifestSignature(value, publicKey)).toBe(false);
+  });
+
+  it("reads installed schema v1 but rejects it as a network candidate", () => {
+    const legacy = manifest();
+
+    expect(parseInstalledRuntimeManifest(legacy).schemaVersion).toBe(1);
+    expect(getRuntimePublishedAt(legacy)).toBeNull();
+    expect(() => parseNetworkRuntimeManifest(legacy)).toThrow("schema 2");
+  });
+
+  it.each(["", "08/08/2026", "not-a-date"])("rejects invalid release time %j", (publishedAt) => {
+    expect(() =>
+      parseNetworkRuntimeManifest({
+        ...manifest(),
+        schemaVersion: 2,
+        publishedAt,
+      })
+    ).toThrow("publishedAt");
   });
 
   it("compares release versions numerically", () => {

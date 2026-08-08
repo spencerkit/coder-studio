@@ -7,6 +7,7 @@ import type {
   GitFileDiffPayload,
   GitStatus,
   MonitoringResponse,
+  ProductUpdateState,
   ProviderListItem,
   ProviderRuntimeStatusResponse,
   SearchSessionApplyResult,
@@ -67,7 +68,13 @@ import {
   terminalIdsAtomFamily,
   terminalMetaAtomFamily,
 } from "../features/terminal-panel/atoms";
-import { updateStateAtom } from "../features/updates/atoms";
+import {
+  productUpdateStateAtom,
+  updateControllerAtom,
+  updateStateAtom,
+} from "../features/updates/atoms";
+import { mapCliUpdateState } from "../features/updates/controller";
+import type { UpdateController } from "../features/updates/types";
 import {
   activeFilePathAtomFamily,
   branchQuickPickAtom,
@@ -241,6 +248,33 @@ export interface UiPreviewSeed {
   };
   updateState?: UpdateStateView | null;
   commands?: UiPreviewCommands;
+}
+
+function createPreviewCliUpdateController(state: ProductUpdateState): UpdateController {
+  return {
+    kind: "cli",
+    getState: () => state,
+    refresh: async () => state,
+    check: async () => state,
+    download: async () => state,
+    retry: async () => state,
+    cancelDownload: async () => state,
+    prepare: async () => ({
+      state,
+      activity: {
+        runningTerminalCount: 0,
+        runningSessionCount: 0,
+        runningSupervisorCount: 0,
+        hasActiveWork: false,
+      },
+      canProceed: true,
+    }),
+    start: async () => state,
+    getSettings: async () => null,
+    setSettings: async () => null,
+    subscribe: () => () => {},
+    dispose: () => {},
+  };
 }
 
 function ok<T>(data: T) {
@@ -1310,6 +1344,12 @@ export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
   store.set(terminalPanelVisibleAtom, seed.terminalPanelVisible ?? true);
   store.set(toastsAtom, seed.toasts ?? []);
   store.set(updateStateAtom, seed.updateState ?? null);
+  const productUpdateState = seed.updateState ? mapCliUpdateState(seed.updateState) : null;
+  store.set(productUpdateStateAtom, productUpdateState);
+  store.set(
+    updateControllerAtom,
+    productUpdateState ? createPreviewCliUpdateController(productUpdateState) : null
+  );
   store.set(
     supervisorDialogAtom,
     seed.supervisorDialog

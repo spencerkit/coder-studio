@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -12,6 +13,19 @@ import {
 
 const children = new Set<ChildProcessWithoutNullStreams>();
 const tempDirs = new Set<string>();
+const WS_CLIENT_INSTANCE_ID = "desktop-sidecar-update-test";
+const requireFromServer = createRequire(new URL("../../server/package.json", import.meta.url));
+const WebSocket = requireFromServer("ws") as new (
+  url: string,
+  options: { headers: Record<string, string> }
+) => {
+  once(event: "open", listener: () => void): void;
+  once(event: "error", listener: (error: Error) => void): void;
+  on(event: "message", listener: (data: unknown) => void): void;
+  send(data: string): void;
+  close(): void;
+  terminate(): void;
+};
 
 afterEach(async () => {
   for (const child of children) {
@@ -39,6 +53,62 @@ async function waitForReady(child: ChildProcessWithoutNullStreams): Promise<Desk
       clearTimeout(timeout);
       lines.close();
       resolveReady(JSON.parse(line.slice(DESKTOP_READY_PREFIX.length)) as DesktopReadyMessage);
+    });
+  });
+}
+
+async function callWs(
+  baseUrl: string,
+  cookie: string,
+  op: string,
+  args: Record<string, unknown> = {}
+): Promise<{ ok: boolean; data?: unknown; error?: { code?: string } }> {
+  const id = `${op}-${Date.now()}`;
+  const activationId = `activation-${Date.now()}`;
+  const socket = new WebSocket(`${baseUrl.replace("http", "ws")}/ws`, {
+    headers: { cookie },
+  });
+  return await new Promise((resolveResult, rejectResult) => {
+    const timeout = setTimeout(() => {
+      socket.terminate();
+      rejectResult(new Error(`Timed out waiting for ${op}`));
+    }, 5_000);
+    socket.once("open", () => {
+      socket.send(
+        JSON.stringify({
+          kind: "command",
+          id: activationId,
+          op: "activation.claim",
+          args: { clientInstanceId: WS_CLIENT_INSTANCE_ID },
+        })
+      );
+    });
+    socket.on("message", (data) => {
+      const message = JSON.parse(String(data)) as {
+        kind?: string;
+        id?: string;
+        ok: boolean;
+        data?: unknown;
+        error?: { code?: string };
+      };
+      if (message.kind === "result" && message.id === activationId) {
+        if (!message.ok) {
+          clearTimeout(timeout);
+          socket.close();
+          rejectResult(new Error(`Activation failed: ${message.error?.code ?? "unknown"}`));
+          return;
+        }
+        socket.send(JSON.stringify({ kind: "command", id, op, args }));
+        return;
+      }
+      if (message.kind !== "result" || message.id !== id) return;
+      clearTimeout(timeout);
+      socket.close();
+      resolveResult(message);
+    });
+    socket.once("error", (error) => {
+      clearTimeout(timeout);
+      rejectResult(error);
     });
   });
 }
@@ -94,6 +164,33 @@ describe("desktop sidecar", () => {
       headers: { cookie: cookie as string },
     }).then((response) => response.json());
     expect(afterLogin).toMatchObject({ authEnabled: true, authenticated: true });
+
+    const updateState = await callWs(url, cookie as string, "updates.getState");
+    expect(updateState).toMatchObject({
+      ok: true,
+      data: {
+        supported: false,
+        runtimeContext: {
+          environment: "desktop-managed",
+          authority: "desktop",
+          supported: true,
+          unsupportedReason: null,
+        },
+      },
+    });
+    await expect(callWs(url, cookie as string, "updates.check")).resolves.toMatchObject({
+      ok: false,
+      error: { code: "update_unsupported" },
+    });
+    await expect(
+      callWs(url, cookie as string, "updates.startInstall", {
+        targetVersion: "9.9.9",
+        force: true,
+      })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "update_unsupported" },
+    });
 
     const exited = new Promise<number | null>((resolveExit) =>
       child.once("exit", (code) => resolveExit(code))

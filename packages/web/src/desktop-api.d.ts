@@ -1,5 +1,6 @@
 interface CoderStudioDesktopApi {
   platform: string;
+  updateApiVersion: 1;
   getAppVersion(): Promise<string>;
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
@@ -12,6 +13,24 @@ interface CoderStudioDesktopApi {
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<{ status: "unchanged" | "opened" }>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
+  getUpdateState(): Promise<import("@coder-studio/core").ProductUpdateState>;
+  checkForUpdates(): Promise<import("@coder-studio/core").ProductUpdateState>;
+  downloadUpdate(): Promise<import("@coder-studio/core").ProductUpdateState>;
+  retryUpdate(): Promise<import("@coder-studio/core").ProductUpdateState>;
+  cancelUpdateDownload(): Promise<import("@coder-studio/core").ProductUpdateState>;
+  prepareUpdateRestart(): Promise<import("@coder-studio/core").ProductUpdateState>;
+  restartAndInstallUpdate(): Promise<boolean>;
+  getUpdateSettings(): Promise<import("@coder-studio/core").DesktopUpdateSettings>;
+  setUpdateSettings(
+    patch: Pick<
+      import("@coder-studio/core").DesktopUpdateSettings,
+      "autoCheckEnabled" | "checkIntervalSec"
+    >
+  ): Promise<import("@coder-studio/core").DesktopUpdateSettings>;
+  onUpdateStateChanged(
+    listener: (state: import("@coder-studio/core").ProductUpdateState) => void
+  ): () => void;
+  // Runtime-only members remain temporarily for compatibility with older Web bundles.
   getRuntimeUpdateState(): Promise<DesktopRuntimeUpdateState>;
   checkRuntimeUpdate(): Promise<DesktopRuntimeUpdateState>;
   restartForRuntimeUpdate(): Promise<boolean>;
