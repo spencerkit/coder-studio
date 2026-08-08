@@ -384,11 +384,16 @@ export class DesktopUpdateCoordinator {
         runtime.status === "succeeded" ||
         runtime.targetVersion === actual.pendingRuntimeVersion)
     ) {
+      const shellFailureSummary = "Desktop Shell installation did not reach the planned version";
       this.state = {
         ...this.state,
         status: "failed",
-        components,
-        errorSummary: "Desktop Shell installation did not reach the planned version",
+        components: components.map((component) =>
+          component.id === "shell"
+            ? { ...component, status: "failed", errorSummary: shellFailureSummary }
+            : component
+        ),
+        errorSummary: shellFailureSummary,
         diagnostics: {
           ...this.state.diagnostics,
           failedComponentId: "shell",

@@ -472,5 +472,17 @@ describe("DesktopUpdateCoordinator", () => {
       },
     });
     expect(shell.disarmInstallOnQuit).toHaveBeenCalledTimes(1);
+
+    await coordinator.start();
+    expect(coordinator.getState()).toMatchObject({
+      status: "failed",
+      errorSummary: "Desktop Shell installation did not reach the planned version",
+      diagnostics: {
+        failedComponentId: "shell",
+        failedPhase: "installing",
+        recoveryAction: "https://releases.example/manual-installer",
+      },
+    });
+    coordinator.stop();
   });
 });
