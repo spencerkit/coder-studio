@@ -98,6 +98,53 @@ describe("update-worker", () => {
     });
   });
 
+  it("marks ordinary install errors as failed without unsafe manual fallback", async () => {
+    const env = createEnv();
+    const runCommand = vi.fn<RunCommandMock>(async () => {
+      throw new Error("registry checksum mismatch");
+    });
+
+    await runUpdateWorker(env, {
+      runCommand,
+      now: () => 1000,
+    });
+
+    expect(JSON.parse(readFileSync(env.stateFilePath, "utf-8"))).toMatchObject({
+      version: 2,
+      updateStatus: "failed",
+      requiresManualStep: false,
+      manualCommand: null,
+      errorSummary: "registry checksum mismatch",
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
+  });
+
+  it("reports a manual restart command when restart handoff cannot be spawned", async () => {
+    const env = createEnv();
+    const runCommand = vi.fn<RunCommandMock>(async () => {});
+    const spawnDetachedProcess = vi.fn<SpawnDetachedProcessMock>(async () => {
+      throw new Error("spawn denied");
+    });
+
+    await runUpdateWorker(env, {
+      runCommand,
+      now: () => 1000,
+      processId: 4242,
+      spawnDetachedProcess,
+    });
+
+    expect(JSON.parse(readFileSync(env.stateFilePath, "utf-8"))).toMatchObject({
+      version: 2,
+      updateStatus: "failed",
+      requiresManualStep: true,
+      manualCommand: "coder-studio serve --restart",
+      errorSummary: "new version installed but service restart failed: spawn denied",
+      currentPublishedAt: env.currentPublishedAt,
+      latestPublishedAt: env.targetPublishedAt,
+    });
+  });
+
   it("marks restart failures with manual restart guidance", async () => {
     const env = createEnv();
     const runCommand = vi
