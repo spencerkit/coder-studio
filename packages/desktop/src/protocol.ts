@@ -14,6 +14,12 @@ export interface DesktopBackendStatus {
   pid: number | null;
 }
 
+export interface DesktopWindowActivityState {
+  focused: boolean;
+  visible: boolean;
+  minimized: boolean;
+}
+
 export type DesktopEnvironmentKind = "native" | "wsl";
 export type DesktopEnvironmentStatus =
   | "ready"
@@ -77,6 +83,8 @@ export interface DesktopApi {
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
   getBackendStatus(): Promise<DesktopBackendStatus | null>;
+  getWindowActivityState(): Promise<DesktopWindowActivityState>;
+  onWindowActivityStateChanged(listener: (state: DesktopWindowActivityState) => void): () => void;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<DesktopEnvironmentOpenResult>;

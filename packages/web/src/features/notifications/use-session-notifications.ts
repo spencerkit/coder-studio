@@ -18,10 +18,10 @@
  *  ding. The threshold is measured from the moment the session entered an
  *  active state.
  *
- *  Channel selection is automatic based on workspace focus + page visibility:
+ *  Channel selection is automatic based on workspace focus + app attention:
  *
  *    ┌────────────────────────────┬────────────────────────────────┐
- *    │ Page visible (document)    │ Page hidden (tab in background)│
+ *    │ App foreground            │ App background / unfocused     │
  *    ├────────────────────────────┼────────────────────────────────┤
  *    │ session.workspaceId is the │ Always send a system (browser) │
  *    │ active workspace           │ push notification              │
@@ -104,12 +104,12 @@ function shouldSuppressVisibleNotification(
 /**
  * Decide which delivery channel to use for a session-completion event.
  *
- * - If the page is hidden (`document.hidden`), use a system push so the
- *   user sees it from another tab/app.
- * - Otherwise, visible-page events that are not suppressed use an in-app toast.
+ * - If the page is hidden or the app window is unfocused, use a system push
+ *   so the user sees it from another tab/app.
+ * - Otherwise, foreground events that are not suppressed use an in-app toast.
  */
-function selectChannel(hidden: boolean, suppressed: boolean): NotificationChannel {
-  if (hidden) {
+function selectChannel(background: boolean, suppressed: boolean): NotificationChannel {
+  if (background) {
     return "system";
   }
   if (suppressed) {
@@ -118,11 +118,13 @@ function selectChannel(hidden: boolean, suppressed: boolean): NotificationChanne
   return "toast";
 }
 
-function isDocumentHidden(): boolean {
-  if (typeof document !== "undefined" && document.hidden) {
-    return true;
-  }
-  return false;
+function isAppBackground(windowActivity: DesktopWindowActivityState | null): boolean {
+  if (typeof document === "undefined") return false;
+  if (document.visibilityState !== "visible" || document.hidden) return true;
+  if (typeof document.hasFocus === "function" && !document.hasFocus()) return true;
+  if (!windowActivity) return false;
+
+  return !windowActivity.focused || !windowActivity.visible || windowActivity.minimized;
 }
 
 /**
@@ -246,12 +248,42 @@ export function useSessionNotifications(): void {
   // Read-on-demand handle for atoms we don't want to trigger re-renders for —
   // notably the workspaces map, which we snapshot only when a notification fires.
   const store = useStore();
+  const desktopWindowActivityRef = useRef<DesktopWindowActivityState | null>(null);
 
   // Per-session trace: previous state + when the current turn started + whether
   // we've already fired for this turn. Re-entering an active state resets the
   // notified flag, so a session that goes running→idle→running→idle gets two
   // notifications (one per turn).
   const tracesRef = useRef<Map<string, SessionTrace>>(new Map());
+
+  useEffect(() => {
+    const desktopApi = typeof window === "undefined" ? undefined : window.coderStudioDesktop;
+    if (!desktopApi?.getWindowActivityState || !desktopApi.onWindowActivityStateChanged) return;
+
+    let cancelled = false;
+    let receivedLiveState = false;
+    const unsubscribe = desktopApi.onWindowActivityStateChanged((state) => {
+      if (cancelled) return;
+      receivedLiveState = true;
+      desktopWindowActivityRef.current = state;
+    });
+
+    void desktopApi
+      .getWindowActivityState()
+      .then((state) => {
+        if (!cancelled && !receivedLiveState) {
+          desktopWindowActivityRef.current = state;
+        }
+      })
+      .catch(() => {
+        // Older or unavailable Desktop bridges fall back to standard Web APIs.
+      });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -329,8 +361,8 @@ export function useSessionNotifications(): void {
 
       next.notifiedForTurn = true;
 
-      const hidden = isDocumentHidden();
-      const suppressed = hidden
+      const background = isAppBackground(desktopWindowActivityRef.current);
+      const suppressed = background
         ? false
         : shouldSuppressVisibleNotification(
             session.workspaceId,
@@ -339,7 +371,7 @@ export function useSessionNotifications(): void {
             viewport,
             visibleMobileSessionId
           );
-      const channel = selectChannel(hidden, suppressed);
+      const channel = selectChannel(background, suppressed);
       if (channel === "none") continue;
 
       const sessionLabel = session.title?.trim() || formatSessionLabel(session.id);

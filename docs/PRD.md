@@ -1410,13 +1410,13 @@ Notifications currently fire only when **an agent finishes one round of work**, 
 And additionally:
 
 - Rounds shorter than `4s` do not notify
-- When the page is visible:
+- When the app is in the foreground (the page is visible and the window is focused):
   - If desktop is already on the workspace that owns the session
   - Or mobile is already showing that session
   - Then suppress the notification
-- When the page is visible but the user is not on that workspace / session:
+- When the app is in the foreground but the user is not on that workspace / session:
   - Send in-app toast
-- When the page is hidden:
+- When the page is hidden or the app window is unfocused, minimized, or not visible:
   - Send browser system notification
 
 If sound is enabled:

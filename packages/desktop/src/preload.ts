@@ -7,6 +7,7 @@ import type {
   DesktopEnvironmentProgress,
   DesktopEnvironmentSummary,
   DesktopRuntimeUpdateState,
+  DesktopWindowActivityState,
 } from "./protocol.js";
 
 const api: DesktopApi = {
@@ -17,6 +18,14 @@ const api: DesktopApi = {
   openExternal: (url: string) => ipcRenderer.invoke("desktop:open-external", url),
   getBackendStatus: () =>
     ipcRenderer.invoke("desktop:get-backend-status") as Promise<DesktopBackendStatus | null>,
+  getWindowActivityState: () =>
+    ipcRenderer.invoke("desktop:get-window-activity-state") as Promise<DesktopWindowActivityState>,
+  onWindowActivityStateChanged: (listener: (state: DesktopWindowActivityState) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: DesktopWindowActivityState) =>
+      listener(state);
+    ipcRenderer.on("desktop:window-activity-state-changed", handler);
+    return () => ipcRenderer.removeListener("desktop:window-activity-state-changed", handler);
+  },
   listEnvironments: () =>
     ipcRenderer.invoke("desktop:list-environments") as Promise<DesktopEnvironmentSummary[]>,
   getActiveEnvironment: () =>

@@ -9,6 +9,9 @@ interface CoderStudioDesktopApi {
     url: string;
     pid: number | null;
   } | null>;
+  // Optional while newer Web bundles can still be paired with an older Desktop shell.
+  getWindowActivityState?(): Promise<DesktopWindowActivityState>;
+  onWindowActivityStateChanged?(listener: (state: DesktopWindowActivityState) => void): () => void;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<{ status: "unchanged" | "opened" }>;
@@ -35,6 +38,12 @@ interface CoderStudioDesktopApi {
   checkRuntimeUpdate(): Promise<DesktopRuntimeUpdateState>;
   restartForRuntimeUpdate(): Promise<boolean>;
   onRuntimeUpdateStateChanged(listener: (state: DesktopRuntimeUpdateState) => void): () => void;
+}
+
+interface DesktopWindowActivityState {
+  focused: boolean;
+  visible: boolean;
+  minimized: boolean;
 }
 
 interface DesktopRuntimeUpdateState {

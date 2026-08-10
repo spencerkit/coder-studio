@@ -58,6 +58,7 @@ import type { ProductRuntime } from "./runtime-store.js";
 import { RuntimeStore } from "./runtime-store.js";
 import { ProductRuntimeUpdateManager } from "./runtime-update-manager.js";
 import { DesktopShellUpdateAdapter, type ShellUpdaterPort } from "./update-manager.js";
+import { readDesktopWindowActivityState } from "./window-activity.js";
 import { createWslBackendLaunch } from "./wsl-backend.js";
 import { WslDiscovery } from "./wsl-discovery.js";
 import { windowsWslPathToLinux } from "./wsl-path.js";
@@ -258,6 +259,9 @@ function registerIpcHandlers(rootUserDataDir: string): void {
     typeof value === "string" ? openExternal(value) : false
   );
   ipcMain.handle("desktop:get-backend-status", () => backendManager?.getStatus() ?? null);
+  ipcMain.handle("desktop:get-window-activity-state", () =>
+    readDesktopWindowActivityState(mainWindow)
+  );
   ipcMain.handle("desktop:list-environments", async () => {
     if (!environmentManager) throw new Error("Desktop environments are not initialized");
     return environmentManager.listEnvironments();
@@ -460,6 +464,19 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
     event.preventDefault();
     window.setTitle(`Coder Studio — ${activeEnvironmentTarget.label}`);
   });
+  const emitWindowActivityState = () => {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return;
+    window.webContents.send(
+      "desktop:window-activity-state-changed",
+      readDesktopWindowActivityState(window)
+    );
+  };
+  window.on("focus", emitWindowActivityState);
+  window.on("blur", emitWindowActivityState);
+  window.on("minimize", emitWindowActivityState);
+  window.on("restore", emitWindowActivityState);
+  window.on("show", emitWindowActivityState);
+  window.on("hide", emitWindowActivityState);
   window.on("closed", () => {
     if (mainWindow === window) {
       mainWindow = null;
