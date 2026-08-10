@@ -621,6 +621,7 @@ async function startApplication(): Promise<void> {
         activeEnvironmentTarget.kind === "wsl" ? wslRuntime?.root : webRuntime?.root,
       runtimeDir: join(userDataDir, "runtime"),
       stateDir: process.env.CODER_STUDIO_DESKTOP_STATE_DIR?.trim() || join(userDataDir, "data"),
+      toolsDir: join(userDataDir, "tools"),
       uploadsDir:
         process.env.CODER_STUDIO_DESKTOP_UPLOADS_DIR?.trim() || join(userDataDir, "uploads"),
       ...(activeEnvironmentTarget.kind === "wsl" && wslProbe && wslRuntime

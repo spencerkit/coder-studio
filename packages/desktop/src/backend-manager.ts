@@ -1,9 +1,9 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve, win32 } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import type { Session } from "electron";
@@ -44,6 +44,7 @@ interface BackendManagerOptions {
   productRuntimeDir?: string;
   runtimeDir: string;
   stateDir: string;
+  toolsDir: string;
   uploadsDir: string;
   createLaunch?: (
     context: ManagedBackendLaunchContext
@@ -53,7 +54,113 @@ interface BackendManagerOptions {
 
 const STARTUP_TIMEOUT_MS = 30_000;
 const SHUTDOWN_TIMEOUT_MS = 8_000;
+const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC";
 const execFileAsync = promisify(execFile);
+
+export interface SidecarToolchainOptions {
+  /** Directory holding the bundled Engine `node` and `npm`. */
+  engineDir: string;
+  userPath: string;
+  /** npm global prefix to fall back to when the user has no npm of their own. */
+  managedNpmPrefix: string;
+  platform?: NodeJS.Platform;
+  pathExt?: string;
+  fileExists?: (candidate: string) => boolean;
+}
+
+export interface SidecarToolchain {
+  path: string;
+  /** Set only when the sidecar has to fall back to the bundled Engine npm. */
+  managedNpmPrefix: string | null;
+}
+
+function pathDelimiterFor(platform: NodeJS.Platform): string {
+  return platform === "win32" ? ";" : ":";
+}
+
+function splitPathValue(value: string | undefined, platform: NodeJS.Platform): string[] {
+  return (value ?? "")
+    .split(pathDelimiterFor(platform))
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function joinPathValues(values: string[], platform: NodeJS.Platform): string {
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  for (const value of values) {
+    for (const entry of splitPathValue(value, platform)) {
+      const key = platform === "win32" ? entry.toLowerCase() : entry;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push(entry);
+    }
+  }
+  return entries.join(pathDelimiterFor(platform));
+}
+
+/** npm writes Windows command shims into the prefix root and POSIX ones into `prefix/bin`. */
+function resolveNpmPrefixBinDir(prefix: string, platform: NodeJS.Platform): string {
+  return platform === "win32" ? prefix : posix.join(prefix, "bin");
+}
+
+function hasCommandOnPath(
+  command: string,
+  pathValue: string,
+  options: { platform: NodeJS.Platform; pathExt: string; fileExists: (path: string) => boolean }
+): boolean {
+  const { platform, fileExists } = options;
+  const pathApi = platform === "win32" ? win32 : posix;
+  const candidateNames =
+    platform === "win32"
+      ? options.pathExt
+          .split(";")
+          .map((extension) => extension.trim().toLowerCase())
+          .filter((extension) => extension.length > 0)
+          .map((extension) => `${command}${extension}`)
+      : [command];
+
+  for (const directory of splitPathValue(pathValue, platform)) {
+    for (const name of candidateNames) {
+      if (fileExists(pathApi.join(directory, name))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Decide which Node toolchain the sidecar and everything it spawns should see.
+ *
+ * The bundled Engine lives inside the read-only application directory, and npm derives its
+ * default global prefix from the directory holding `node`. Putting the Engine first on PATH
+ * therefore makes every `npm install -g` — including the self-update that agent CLIs such as
+ * Codex trigger on their own — try to write into the install directory and fail with EPERM.
+ */
+export function resolveSidecarToolchain(options: SidecarToolchainOptions): SidecarToolchain {
+  const platform = options.platform ?? process.platform;
+  const pathExt = options.pathExt ?? process.env.PATHEXT ?? DEFAULT_PATHEXT;
+  const fileExists = options.fileExists ?? existsSync;
+  const managedBinDir = resolveNpmPrefixBinDir(options.managedNpmPrefix, platform);
+
+  if (hasCommandOnPath("npm", options.userPath, { platform, pathExt, fileExists })) {
+    // The user already has a Node toolchain whose npm has a writable global prefix, so let it
+    // win: provider CLIs then install exactly where the user's own terminal would put them,
+    // including version-manager prefixes that a hardcoded prefix would miss. The Engine stays
+    // last as a fallback, and the managed prefix stays reachable for earlier installs.
+    return {
+      path: joinPathValues([options.userPath, managedBinDir, options.engineDir], platform),
+      managedNpmPrefix: null,
+    };
+  }
+
+  // Without a user toolchain the Engine npm is the only one available. Redirect its global
+  // prefix to a per-user directory and keep that directory on PATH so freshly installed CLIs
+  // resolve without restarting the app.
+  return {
+    path: joinPathValues([options.engineDir, managedBinDir, options.userPath], platform),
+    managedNpmPrefix: options.managedNpmPrefix,
+  };
+}
 
 interface UserPathResolutionOptions {
   platform?: NodeJS.Platform;
@@ -266,7 +373,12 @@ export class BackendManager {
       : resolveLaunch(this.options);
     const executablePath = dirname(launch.command);
     const userPath = await resolveUserPath();
-    const sidecarPath = [executablePath, userPath].filter(Boolean).join(delimiter);
+    const toolchain = resolveSidecarToolchain({
+      engineDir: executablePath,
+      userPath,
+      managedNpmPrefix: join(this.options.toolsDir, "npm"),
+    });
+    const sidecarPath = toolchain.path;
     const logPath = join(this.options.logsDir, "backend.log");
     const logStream = createWriteStream(logPath, { flags: "a" });
 
@@ -281,6 +393,9 @@ export class BackendManager {
           : {
               PATH: sidecarPath,
               ...(process.platform === "win32" ? { Path: sidecarPath } : {}),
+              ...(toolchain.managedNpmPrefix
+                ? { NPM_CONFIG_PREFIX: toolchain.managedNpmPrefix }
+                : {}),
               NODE_ENV: "production",
               CODER_STUDIO_LOG_FORMAT: "json",
               CODER_STUDIO_RUNTIME_DIR: this.options.runtimeDir,

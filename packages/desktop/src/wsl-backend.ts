@@ -33,6 +33,16 @@ function safeUserPathEntries(userPath: string | undefined): string[] {
   return entries;
 }
 
+/**
+ * A user-managed npm already has a writable global prefix, so provider CLI installs and the
+ * self-updates those CLIs run on their own land where the user's own shell would put them.
+ * Anything resolved from inside the Desktop data root is ours, not theirs.
+ */
+function usesUserNodeToolchain(probe: WslDistroProbe): boolean {
+  const userNpm = probe.userNpm?.trim();
+  return Boolean(userNpm && userNpm.startsWith("/") && !userNpm.startsWith(`${probe.dataRoot}/`));
+}
+
 export function createWslBackendLaunch(
   probe: WslDistroProbe,
   runtime: WslRuntimeCandidate,
@@ -43,11 +53,14 @@ export function createWslBackendLaunch(
   if (!distro) throw new Error("WSL environment has no distribution name");
   const engineRoot = `${probe.dataRoot}/engine/versions/${runtime.manifest.requiredEngineVersion}`;
   const npmPrefix = `${probe.dataRoot}/tools/npm`;
-  const userPath = Array.from(
+  const managedToolEntries = [`${npmPrefix}/bin`, `${engineRoot}/bin`];
+  const deferToUserToolchain = usesUserNodeToolchain(probe);
+  const userEntries = safeUserPathEntries(probe.userPath);
+  const searchPath = Array.from(
     new Set([
-      `${npmPrefix}/bin`,
-      `${engineRoot}/bin`,
-      ...safeUserPathEntries(probe.userPath),
+      // The Engine only leads when it is the sole Node toolchain available; otherwise it trails
+      // the user's own so their npm, and its prefix, keep deciding where global CLIs go.
+      ...(deferToUserToolchain ? userEntries : [...managedToolEntries, ...userEntries]),
       `${probe.home}/.local/bin`,
       `${probe.home}/.local/share/pnpm`,
       `${probe.home}/.npm-global/bin`,
@@ -57,11 +70,12 @@ export function createWslBackendLaunch(
       "/usr/bin",
       "/sbin",
       "/bin",
+      ...(deferToUserToolchain ? managedToolEntries : []),
     ])
   ).join(":");
   const env = [
-    environmentArgument("PATH", userPath),
-    environmentArgument("NPM_CONFIG_PREFIX", npmPrefix),
+    environmentArgument("PATH", searchPath),
+    ...(deferToUserToolchain ? [] : [environmentArgument("NPM_CONFIG_PREFIX", npmPrefix)]),
     environmentArgument("NODE_ENV", "production"),
     environmentArgument("CODER_STUDIO_LOG_FORMAT", "json"),
     environmentArgument("CODER_STUDIO_RUNTIME_DIR", `${probe.dataRoot}/runtime`),

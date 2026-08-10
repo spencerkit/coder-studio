@@ -67,4 +67,82 @@ describe("createWslBackendLaunch", () => {
     expect(launch.args.at(-1)).toContain("/runtime-store/versions/abc/server.mjs");
     expect(launch.args).not.toContain("-c");
   });
+
+  it("defers to the distribution's own npm and keeps managed tools reachable as a fallback", () => {
+    const launch = createWslBackendLaunch(
+      {
+        target: {
+          id: "wsl:test",
+          kind: "wsl",
+          label: "WSL: Ubuntu-24.04",
+          distro: "Ubuntu-24.04",
+        },
+        home: "/home/alice",
+        dataRoot: "/home/alice/.local/share/coder-studio-desktop",
+        userPath: "/run/user/1000/fnm_multishells/42/bin:/usr/bin",
+        userNpm: "/run/user/1000/fnm_multishells/42/bin/npm",
+        arch: "x64",
+        kernel: "microsoft-standard-WSL2",
+        libc: "glibc 2.39",
+        engineInstalled: true,
+        installed: true,
+        supported: true,
+      },
+      {
+        root: "/home/alice/.local/share/coder-studio-desktop/runtime-store/versions/abc",
+        source: "active",
+        pointer: { id: "abcdefabcdefabcdefabcdef", runtimeVersion: "0.5.6", installedAt: "now" },
+        manifest,
+      },
+      { secret: "secret-value", appVersion: "0.1.0" },
+      "C:\\logs"
+    );
+
+    const pathArgument = launch.args.find((argument) => argument.startsWith("PATH="));
+    expect(pathArgument).toBe(
+      "PATH=/run/user/1000/fnm_multishells/42/bin:/usr/bin:/home/alice/.local/bin:/home/alice/.local/share/pnpm:/home/alice/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/bin:/home/alice/.local/share/coder-studio-desktop/tools/npm/bin:/home/alice/.local/share/coder-studio-desktop/engine/versions/2/bin"
+    );
+    expect(launch.args.some((argument) => argument.startsWith("NPM_CONFIG_PREFIX="))).toBe(false);
+  });
+
+  it("keeps the managed prefix when the only npm comes from the Desktop data root", () => {
+    const launch = createWslBackendLaunch(
+      {
+        target: {
+          id: "wsl:test",
+          kind: "wsl",
+          label: "WSL: Ubuntu-24.04",
+          distro: "Ubuntu-24.04",
+        },
+        home: "/home/alice",
+        dataRoot: "/home/alice/.local/share/coder-studio-desktop",
+        userPath: "/usr/bin",
+        userNpm: "/home/alice/.local/share/coder-studio-desktop/engine/versions/2/bin/npm",
+        arch: "x64",
+        kernel: "microsoft-standard-WSL2",
+        libc: "glibc 2.39",
+        engineInstalled: true,
+        installed: true,
+        supported: true,
+      },
+      {
+        root: "/home/alice/.local/share/coder-studio-desktop/runtime-store/versions/abc",
+        source: "active",
+        pointer: { id: "abcdefabcdefabcdefabcdef", runtimeVersion: "0.5.6", installedAt: "now" },
+        manifest,
+      },
+      { secret: "secret-value", appVersion: "0.1.0" },
+      "C:\\logs"
+    );
+
+    expect(launch.args).toContain(
+      "NPM_CONFIG_PREFIX=/home/alice/.local/share/coder-studio-desktop/tools/npm"
+    );
+    const pathArgument = launch.args.find((argument) => argument.startsWith("PATH="));
+    expect(
+      pathArgument?.startsWith(
+        "PATH=/home/alice/.local/share/coder-studio-desktop/tools/npm/bin:/home/alice/.local/share/coder-studio-desktop/engine/versions/2/bin:"
+      )
+    ).toBe(true);
+  });
 });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isExternalBackendReuseEnabled,
   isReusableExternalBackend,
+  resolveSidecarToolchain,
   resolveUserPath,
 } from "./backend-manager.js";
 
@@ -110,5 +111,74 @@ describe("resolveUserPath", () => {
       })
     ).resolves.toBe("C:\\managed-tools");
     expect(runShell).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveSidecarToolchain", () => {
+  const engineDir = "C:\\Program Files\\Coder Studio\\resources\\engine";
+  const managedNpmPrefix = "C:\\Users\\demo\\AppData\\Roaming\\Coder Studio\\tools\\npm";
+
+  it("defers to a user-installed npm so global installs keep their writable prefix", () => {
+    const toolchain = resolveSidecarToolchain({
+      engineDir,
+      userPath: "C:\\Program Files\\nodejs;C:\\Windows",
+      managedNpmPrefix,
+      platform: "win32",
+      pathExt: ".EXE;.CMD",
+      fileExists: (candidate) => candidate === "C:\\Program Files\\nodejs\\npm.cmd",
+    });
+
+    expect(toolchain.managedNpmPrefix).toBeNull();
+    expect(toolchain.path).toBe(
+      `C:\\Program Files\\nodejs;C:\\Windows;${managedNpmPrefix};${engineDir}`
+    );
+  });
+
+  it("keeps a version manager shim ahead of the bundled Engine", () => {
+    const toolchain = resolveSidecarToolchain({
+      engineDir,
+      userPath: "C:\\Users\\demo\\AppData\\Local\\fnm_multishells\\42;C:\\Windows",
+      managedNpmPrefix,
+      platform: "win32",
+      pathExt: ".EXE;.CMD",
+      fileExists: (candidate) =>
+        candidate === "C:\\Users\\demo\\AppData\\Local\\fnm_multishells\\42\\npm.cmd",
+    });
+
+    expect(toolchain.managedNpmPrefix).toBeNull();
+    expect(toolchain.path.startsWith("C:\\Users\\demo\\AppData\\Local\\fnm_multishells\\42;")).toBe(
+      true
+    );
+  });
+
+  it("redirects the bundled Engine npm to a per-user prefix when no npm is installed", () => {
+    const toolchain = resolveSidecarToolchain({
+      engineDir,
+      userPath: "C:\\Windows;C:\\Windows\\System32",
+      managedNpmPrefix,
+      platform: "win32",
+      pathExt: ".EXE;.CMD",
+      fileExists: () => false,
+    });
+
+    expect(toolchain.managedNpmPrefix).toBe(managedNpmPrefix);
+    expect(toolchain.path).toBe(
+      `${engineDir};${managedNpmPrefix};C:\\Windows;C:\\Windows\\System32`
+    );
+  });
+
+  it("appends bin to a POSIX prefix and drops duplicate path entries", () => {
+    const toolchain = resolveSidecarToolchain({
+      engineDir: "/opt/coder-studio/engine/bin",
+      userPath: "/usr/local/bin:/usr/bin:/usr/local/bin",
+      managedNpmPrefix: "/home/demo/.coder-studio/tools/npm",
+      platform: "linux",
+      fileExists: (candidate) => candidate === "/usr/local/bin/npm",
+    });
+
+    expect(toolchain.managedNpmPrefix).toBeNull();
+    expect(toolchain.path).toBe(
+      "/usr/local/bin:/usr/bin:/home/demo/.coder-studio/tools/npm/bin:/opt/coder-studio/engine/bin"
+    );
   });
 });

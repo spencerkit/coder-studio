@@ -14,6 +14,8 @@ export interface WslDistroProbe {
   dataRoot: string;
   /** PATH reported by the user's interactive WSL shell, before safety filtering. */
   userPath?: string;
+  /** `npm` resolved from the user's interactive WSL shell, when they manage their own Node. */
+  userNpm?: string;
   arch: "x64" | "arm64";
   kernel: string;
   libc: string;
@@ -39,16 +41,19 @@ const PROBE_SCRIPT = [
   'printf "%s\\n%s\\n" "$engine_installed" "$runtime_installed"',
   // Agent CLIs are spawned directly by the Server rather than through a shell. Capture the
   // interactive shell PATH so tools managed by fnm/nvm/asdf/etc. can be inherited as well.
+  // The same shell reports its own npm, which decides whether the Server defers to the user's
+  // Node toolchain or falls back to the bundled Engine npm.
   // Bound rc-file execution so a broken interactive shell cannot block Desktop startup.
-  'if test -x /usr/bin/timeout; then shell=${SHELL:-/bin/sh}; if test -x "$shell"; then /usr/bin/timeout 5s "$shell" -ic \'printf "\\n__CODER_STUDIO_USER_PATH__%s\\n" "$PATH"\' 2>/dev/null || true; fi; fi',
+  'if test -x /usr/bin/timeout; then shell=${SHELL:-/bin/sh}; if test -x "$shell"; then /usr/bin/timeout 5s "$shell" -ic \'printf "\\n__CODER_STUDIO_USER_PATH__%s\\n" "$PATH"; printf "__CODER_STUDIO_USER_NPM__%s\\n" "$(command -v npm 2>/dev/null || true)"\' 2>/dev/null || true; fi; fi',
 ].join("; ");
 
 const USER_PATH_MARKER = "__CODER_STUDIO_USER_PATH__";
+const USER_NPM_MARKER = "__CODER_STUDIO_USER_NPM__";
 
-function parseUserPath(output: string): string | undefined {
-  const markerLine = output.split(/\r?\n/).find((line) => line.startsWith(USER_PATH_MARKER));
-  const userPath = markerLine?.slice(USER_PATH_MARKER.length).trim();
-  return userPath || undefined;
+function parseMarkedLine(output: string, marker: string): string | undefined {
+  const markerLine = output.split(/\r?\n/).find((line) => line.startsWith(marker));
+  const value = markerLine?.slice(marker.length).trim();
+  return value || undefined;
 }
 
 function parseDistroList(output: Buffer): string[] {
@@ -95,7 +100,8 @@ export class WslDiscovery {
     const output = result.stdout.toString("utf8");
     const [home, dataRoot, rawArch, kernel, libc, engineInstalledValue, runtimeInstalledValue] =
       output.split(/\r?\n/);
-    const userPath = parseUserPath(output);
+    const userPath = parseMarkedLine(output, USER_PATH_MARKER);
+    const userNpm = parseMarkedLine(output, USER_NPM_MARKER);
     const engineInstalled = engineInstalledValue?.trim() === "true";
     const runtimeInstalled = runtimeInstalledValue?.trim() === "true";
     const arch = normalizeArch(rawArch?.trim() ?? "");
@@ -108,6 +114,7 @@ export class WslDiscovery {
         home: home?.trim() ?? "",
         dataRoot: dataRoot?.trim() ?? "",
         userPath,
+        userNpm,
         arch: arch ?? "x64",
         kernel: kernel?.trim() ?? "",
         libc: libc?.trim() ?? "",
@@ -123,6 +130,7 @@ export class WslDiscovery {
         home: home.trim(),
         dataRoot: dataRoot.trim(),
         userPath,
+        userNpm,
         arch,
         kernel: kernel?.trim() ?? "",
         libc: libc?.trim() ?? "",
@@ -139,6 +147,7 @@ export class WslDiscovery {
       home: home.trim(),
       dataRoot: dataRoot.trim(),
       userPath,
+      userNpm,
       arch,
       kernel: kernel?.trim() ?? "",
       libc: libc?.trim() ?? "",
