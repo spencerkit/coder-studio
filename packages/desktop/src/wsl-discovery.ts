@@ -124,7 +124,7 @@ export class WslDiscovery {
         message: "Coder Studio requires an x64 or arm64 WSL2 distribution.",
       };
     }
-    if (!isWsl2 || !isGlibc) {
+    if (!isWsl2 || !isGlibc || arch !== "x64") {
       return {
         target,
         home: home.trim(),
@@ -139,7 +139,9 @@ export class WslDiscovery {
         supported: false,
         message: !isWsl2
           ? "Coder Studio requires WSL2."
-          : "Coder Studio currently requires a glibc-based WSL distribution.",
+          : !isGlibc
+            ? "Coder Studio currently requires a glibc-based WSL distribution."
+            : "Coder Studio currently supports x64 WSL2 distributions only.",
       };
     }
     return {

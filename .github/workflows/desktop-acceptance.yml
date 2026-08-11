@@ -186,6 +186,7 @@ jobs:
           - runtime-only
           - combined
           - wsl
+          - wsl-combined
           - runtime-health-rollback
           - interrupted-download
           - restart-journal-recovery
@@ -260,7 +261,7 @@ jobs:
           $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
           $generatedAt = $originalChannel.generatedAt
           $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
-          if ($scenario -ne 'combined') {
+          if ($scenario -notin @('combined', 'wsl-combined')) {
             pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
             if ($LASTEXITCODE -ne 0) { throw 'Unable to carry forward the previous Shell for the Runtime-only scenario' }
           }
@@ -277,7 +278,7 @@ jobs:
             '--directory', $candidate,
             '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
           )
-          if ($scenario -eq 'combined') {
+          if ($scenario -in @('combined', 'wsl-combined')) {
             $validation += @('--release-kind', 'full')
           } else {
             $validation += @(
@@ -296,8 +297,10 @@ jobs:
           $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
           $components = if ($scenario -eq 'combined') {
             'shell,runtime:win32-x64'
+          } elseif ($scenario -eq 'wsl-combined') {
+            'shell,runtime:win32-x64'
           } elseif ($scenario -eq 'wsl') {
-            'runtime:linux-x64'
+            'runtime:win32-x64'
           } elseif ($scenario -eq 'external-sidecar-browser') {
             ''
           } else {
@@ -323,7 +326,7 @@ jobs:
           "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Prepare disposable WSL distribution
-        if: matrix.scenario == 'wsl'
+        if: matrix.scenario == 'wsl' || matrix.scenario == 'wsl-combined'
         id: wsl
         shell: pwsh
         run: |
@@ -357,7 +360,7 @@ jobs:
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
             $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
           }
-          if ('${{ matrix.scenario }}' -eq 'wsl') {
+          if ('${{ matrix.scenario }}' -in @('wsl', 'wsl-combined')) {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
           pnpm acceptance:desktop:installed -- @arguments

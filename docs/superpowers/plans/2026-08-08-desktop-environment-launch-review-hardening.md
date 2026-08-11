@@ -202,4 +202,3 @@ git status --short
 
 Expected: no whitespace errors; only scoped tracked changes and the user's pre-existing untracked
 documentation files are present.
-

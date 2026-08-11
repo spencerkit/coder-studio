@@ -1,3 +1,4 @@
+import type { DesktopChannel } from "./desktop-channel.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import type {
   DesktopEnvironmentProgress,
@@ -33,6 +34,8 @@ export interface DesktopEnvironmentManagerOptions {
   runtimeVersion: string;
   publicKeyPem: string;
   releaseBaseUrl: string;
+  factoryReleaseBaseUrl?: string;
+  loadChannel?: () => Promise<DesktopChannel>;
   enableWsl?: boolean;
   fetch?: typeof fetch;
   wslRunner?: WslCommandRunner;
@@ -104,8 +107,14 @@ export class DesktopEnvironmentManager {
     this.emit(target.id, "checking", `Checking ${target.label}…`);
     const probe = await this.options.discovery.probe(target.distro);
     if (!probe.supported) throw new Error(probe.message ?? `${target.label} is unsupported`);
-    const runtimeStore = new WslRuntimeStoreClient({ probe });
-    const existing = await runtimeStore.getLaunchCandidate().catch(() => null);
+    const runtimeStore = new WslRuntimeStoreClient({
+      probe,
+      runner: this.options.wslRunner,
+      publicKeyPem: this.options.publicKeyPem,
+    });
+    const existing = await runtimeStore
+      .getLaunchCandidate({ requiredRuntimeVersion: this.options.runtimeVersion })
+      .catch(() => null);
     if (existing && this.isRuntimeCompatible(existing.manifest)) {
       return { probe, runtimeStore, runtime: existing };
     }
@@ -125,11 +134,47 @@ export class DesktopEnvironmentManager {
           `coder-studio-server-runtime-linux-${arch}.manifest.json`,
           this.options.releaseBaseUrl
         ).toString(),
+      ...(this.options.factoryReleaseBaseUrl
+        ? {
+            factoryEngineManifestUrl: (arch: "x64" | "arm64") =>
+              new URL(
+                `coder-studio-engine-linux-${arch}.manifest.json`,
+                this.options.factoryReleaseBaseUrl
+              ).toString(),
+            factoryRuntimeManifestUrl: (arch: "x64" | "arm64") =>
+              new URL(
+                `coder-studio-server-runtime-linux-${arch}.manifest.json`,
+                this.options.factoryReleaseBaseUrl
+              ).toString(),
+          }
+        : {}),
+      fetch: this.options.fetch,
+      runner: this.options.wslRunner,
       onProgress: (progress) =>
         this.emit(target.id, progress.phase, progress.message, progress.percent),
     });
-    await installer.prepare(probe);
-    const installed = await runtimeStore.getLaunchCandidate();
+    let channel: DesktopChannel | null = null;
+    if (this.options.loadChannel) {
+      try {
+        channel = await this.options.loadChannel();
+      } catch {
+        // Factory Runtime remains the offline/bootstrap fallback.
+      }
+    }
+    const expected = channel?.runtimes["linux-x64"];
+    if (expected?.version === this.options.runtimeVersion) {
+      const metadata = await installer.checkRuntime(probe, expected, this.options.shellVersion);
+      await installer.downloadAndStageRuntime(metadata, {
+        signal: new AbortController().signal,
+        onProgress: () => {},
+        explicitRetry: false,
+      });
+    } else {
+      await installer.prepare(probe);
+    }
+    const installed = await runtimeStore.getLaunchCandidate({
+      requiredRuntimeVersion: this.options.runtimeVersion,
+    });
     if (!this.isRuntimeCompatible(installed.manifest)) {
       throw new Error(
         `WSL Runtime ${installed.manifest.runtimeVersion} does not match shared Web ${this.options.runtimeVersion}`
@@ -167,6 +212,7 @@ export class DesktopEnvironmentManager {
     const runtimeStore = new WslRuntimeStoreClient({
       probe,
       runner: this.options.wslRunner,
+      publicKeyPem: this.options.publicKeyPem,
     });
     const installer = new WslInstaller({
       publicKeyPem: this.options.publicKeyPem,
@@ -183,6 +229,20 @@ export class DesktopEnvironmentManager {
           `coder-studio-server-runtime-linux-${arch}.manifest.json`,
           this.options.releaseBaseUrl
         ).toString(),
+      ...(this.options.factoryReleaseBaseUrl
+        ? {
+            factoryEngineManifestUrl: (arch: "x64" | "arm64") =>
+              new URL(
+                `coder-studio-engine-linux-${arch}.manifest.json`,
+                this.options.factoryReleaseBaseUrl
+              ).toString(),
+            factoryRuntimeManifestUrl: (arch: "x64" | "arm64") =>
+              new URL(
+                `coder-studio-server-runtime-linux-${arch}.manifest.json`,
+                this.options.factoryReleaseBaseUrl
+              ).toString(),
+          }
+        : {}),
       fetch: this.options.fetch,
       runner: this.options.wslRunner,
       onProgress: (progress) =>

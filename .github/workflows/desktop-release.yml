@@ -168,6 +168,7 @@ jobs:
       CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_FACTORY_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/
 
     steps:
       - name: Checkout repository
@@ -455,7 +456,7 @@ jobs:
           $isWsl = '${{ matrix.target }}' -eq 'wsl'
           $scenario = if ($isWsl) { 'wsl' } elseif ('${{ inputs.mode }}' -eq 'full') { 'combined' } else { 'runtime-only' }
           $components = if ($isWsl) {
-            if ('${{ inputs.mode }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:linux-x64' }
+            if ('${{ inputs.mode }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:win32-x64' }
           } elseif ('${{ inputs.mode }}' -eq 'full') {
             'shell,runtime:win32-x64'
           } else {
@@ -614,11 +615,17 @@ jobs:
             if (report.actualRuntimeVersion !== productVersion || report.channelSignatureDigest !== channelSignatureDigest) {
               throw new Error("Production report product version or channelSignatureDigest does not match");
             }
+            if (report.scenario === "wsl" && report.wslRuntimeVersion !== productVersion) {
+              throw new Error("Production WSL report does not match the shared Web product version");
+            }
           }
           const matrix = readReports("release/promotion-reports/desktop-matrix");
-          const requiredScenarios = new Set(["runtime-only", "combined", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]);
+          const requiredScenarios = new Set(["runtime-only", "combined", "wsl", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]);
           for (const report of matrix) {
             if (report.commitSha !== commitSha) throw new Error("Desktop matrix commitSha does not match");
+            if ((report.scenario === "wsl" || report.scenario === "wsl-combined") && report.wslRuntimeVersion !== productVersion) {
+              throw new Error("Desktop matrix WSL report does not match the shared Web product version");
+            }
             requiredScenarios.delete(report.scenario);
           }
           if (requiredScenarios.size) throw new Error(`Desktop matrix reports are missing: ${[...requiredScenarios].join(", ")}`);

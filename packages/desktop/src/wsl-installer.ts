@@ -49,6 +49,8 @@ export interface WslInstallerOptions {
   runtimeVersion: string;
   engineManifestUrl: (arch: "x64" | "arm64") => string;
   runtimeManifestUrl: (arch: "x64" | "arm64") => string;
+  factoryEngineManifestUrl?: (arch: "x64" | "arm64") => string;
+  factoryRuntimeManifestUrl?: (arch: "x64" | "arm64") => string;
   fetch?: typeof fetch;
   runner?: WslCommandRunner;
   onProgress?: (progress: WslInstallProgress) => void;
@@ -62,6 +64,7 @@ export interface WslRuntimeUpdateMetadata {
   publishedAt: string;
   plannedShellVersion: string;
   probe: WslDistroProbe;
+  engineManifestUrl: string;
   engineManifest: EngineManifest | null;
 }
 
@@ -74,13 +77,60 @@ export interface WslRuntimeDownloadOptions {
 const MAX_ENGINE_PACKAGE_BYTES = 500 * 1024 * 1024;
 const MAX_RUNTIME_PACKAGE_BYTES = 300 * 1024 * 1024;
 
-const INSTALL_SCRIPT = [
+export const WSL_INSTALL_SCRIPT = [
   "set -eu",
   "root=$1; kind=$2; version=$3; id=$4",
   'mkdir -p "$root"',
   'lock="$root/install.lock"',
-  'if ! mkdir "$lock" 2>/dev/null; then echo "Coder Studio environment installation is already running" >&2; exit 73; fi',
-  "trap 'rmdir \"$lock\" 2>/dev/null || true' EXIT INT TERM",
+  'started="$(cut -d " " -f 22 /proc/$$/stat)"',
+  'if test -z "$started"; then echo "Unable to identify the WSL installer process" >&2; exit 74; fi',
+  'owner="$$-$started-$kind-$id"',
+  'owner_file="$root/.install.lock.owner.$owner"',
+  "read_lock() {",
+  '  lock_pid=""; lock_started=""; lock_owner=""',
+  '  if test -d "$lock"; then',
+  '    lock_pid="$(cat "$lock/pid" 2>/dev/null || true)"',
+  '    lock_started="$(cat "$lock/started" 2>/dev/null || true)"',
+  '    lock_owner="$(cat "$lock/owner" 2>/dev/null || true)"',
+  '  elif test -f "$lock"; then',
+  '    lock_pid="$(sed -n \'1s/^pid=//p\' "$lock" 2>/dev/null || true)"',
+  '    lock_started="$(sed -n \'2s/^started=//p\' "$lock" 2>/dev/null || true)"',
+  '    lock_owner="$(sed -n \'3s/^owner=//p\' "$lock" 2>/dev/null || true)"',
+  "  fi",
+  "}",
+  "cleanup_lock() {",
+  "  read_lock",
+  '  if test "$lock_owner" = "$owner"; then',
+  '    if test -d "$lock"; then rm -rf "$lock"; else rm -f "$lock"; fi',
+  "  fi",
+  '  rm -f "$owner_file"',
+  "}",
+  "trap cleanup_lock EXIT INT TERM",
+  'printf "pid=%s\\nstarted=%s\\nowner=%s\\n" "$$" "$started" "$owner" > "$owner_file"',
+  "acquired=0",
+  'if ln "$owner_file" "$lock" 2>/dev/null; then',
+  "  acquired=1",
+  "else",
+  "  read_lock",
+  '  if test -d "$lock" && { test -z "$lock_pid" || test -z "$lock_started"; }; then',
+  "    sleep 1",
+  "    read_lock",
+  "  fi",
+  '  current_started=""',
+  '  case "$lock_pid" in ""|*[!0-9]*) ;; *) current_started="$(cut -d " " -f 22 "/proc/$lock_pid/stat" 2>/dev/null || true)" ;; esac',
+  '  if test -n "$lock_started" && test "$lock_started" = "$current_started"; then',
+  '    echo "Coder Studio environment installation is already running" >&2',
+  "    exit 73",
+  "  fi",
+  '  stale="$root/.install.lock.stale.$owner"',
+  '  rm -rf "$stale"',
+  '  if mv "$lock" "$stale" 2>/dev/null; then',
+  '    rm -rf "$stale"',
+  '    if ln "$owner_file" "$lock" 2>/dev/null; then acquired=1; fi',
+  "  fi",
+  "fi",
+  'if test "$acquired" != 1; then echo "Coder Studio environment installation is already running" >&2; exit 73; fi',
+  'rm -f "$owner_file"',
   'versions="$root/$kind/versions"',
   'staging="$versions/.staging-$id"',
   'destination="$versions/$id"',
@@ -267,7 +317,7 @@ async function installArchive(
       "--exec",
       "/bin/sh",
       "-c",
-      INSTALL_SCRIPT,
+      WSL_INSTALL_SCRIPT,
       "coder-studio-install",
       dataRoot,
       kind,
@@ -322,7 +372,7 @@ export class WslInstaller {
       10
     );
     const enginePackageUrl = engineManifest
-      ? new URL(engineManifest.packageFile, this.options.engineManifestUrl(probe.arch)).toString()
+      ? new URL(engineManifest.packageFile, metadata.engineManifestUrl).toString()
       : null;
     if (!runtimeManifest.packageFile) throw new Error("WSL Runtime manifest has no package file");
     const runtimePackageUrl = new URL(runtimeManifest.packageFile, metadata.manifestUrl).toString();
@@ -425,14 +475,21 @@ export class WslInstaller {
     }
     const fetchImpl = this.options.fetch ?? fetch;
     this.options.onProgress?.({ phase: "checking", message: "Checking WSL Runtime manifests…" });
-    const configuredRuntimeManifestUrl = this.options.runtimeManifestUrl(probe.arch);
+    const configuredEngineManifestUrl = expected
+      ? this.options.engineManifestUrl(probe.arch)
+      : (this.options.factoryEngineManifestUrl?.(probe.arch) ??
+        this.options.engineManifestUrl(probe.arch));
+    const configuredRuntimeManifestUrl = expected
+      ? this.options.runtimeManifestUrl(probe.arch)
+      : (this.options.factoryRuntimeManifestUrl?.(probe.arch) ??
+        this.options.runtimeManifestUrl(probe.arch));
     const runtimeManifestUrl = expected
       ? resolveChannelAsset(configuredRuntimeManifestUrl, expected.manifest)
       : configuredRuntimeManifestUrl;
     const [engineManifestResponse, runtimeManifestResponse] = await Promise.all([
       probe.engineInstalled
         ? Promise.resolve(null)
-        : fetchImpl(this.options.engineManifestUrl(probe.arch), { cache: "no-store" }),
+        : fetchImpl(configuredEngineManifestUrl, { cache: "no-store" }),
       fetchImpl(runtimeManifestUrl, { cache: "no-store" }),
     ]);
     if (engineManifestResponse && !engineManifestResponse.ok) {
@@ -494,6 +551,7 @@ export class WslInstaller {
       publishedAt: runtimeManifest.publishedAt,
       plannedShellVersion,
       probe,
+      engineManifestUrl: configuredEngineManifestUrl,
       engineManifest,
     };
   }

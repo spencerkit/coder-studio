@@ -16,6 +16,22 @@ import { isDirectExecution } from "./shared/process.js";
 export const DESKTOP_DIR = resolve(ROOT_DIR, "packages/desktop");
 export const DESKTOP_DIST_DIR = resolve(DESKTOP_DIR, "dist");
 
+export function resolveDesktopRuntimeUrls(
+  env: NodeJS.ProcessEnv,
+  platform = process.platform,
+  arch = process.arch
+): { runtimeUpdateUrl: string; factoryReleaseBaseUrl: string } {
+  const runtimeUpdateUrl =
+    env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() ||
+    `https://github.com/spencerkit/coder-studio/releases/latest/download/coder-studio-runtime-${platform}-${arch}.manifest.json`;
+  return {
+    runtimeUpdateUrl,
+    factoryReleaseBaseUrl:
+      env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL?.trim() ||
+      new URL(".", runtimeUpdateUrl).toString(),
+  };
+}
+
 export async function buildDesktopShell(options: { clean?: boolean } = {}): Promise<void> {
   if (options.clean) {
     await rm(DESKTOP_DIST_DIR, { recursive: true, force: true });
@@ -41,13 +57,12 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
   const desktopChannelUrl =
     process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim() ??
     "https://github.com/spencerkit/coder-studio/releases/latest/download/desktop-channel.json";
-  const runtimeUpdateUrl =
-    process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() ??
-    `https://github.com/spencerkit/coder-studio/releases/latest/download/coder-studio-runtime-${process.platform}-${process.arch}.manifest.json`;
+  const { runtimeUpdateUrl, factoryReleaseBaseUrl } = resolveDesktopRuntimeUrls(process.env);
   const runtimeDefines = {
     __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: JSON.stringify(runtimePublicKey),
     __CODER_STUDIO_RUNTIME_UPDATE_URL__: JSON.stringify(runtimeUpdateUrl),
     __CODER_STUDIO_DESKTOP_CHANNEL_URL__: JSON.stringify(desktopChannelUrl),
+    __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__: JSON.stringify(factoryReleaseBaseUrl),
     __CODER_STUDIO_PRODUCT_VERSION__: JSON.stringify(cliManifest.version.trim()),
   };
 

@@ -100,5 +100,11 @@ describe("Runtime manifest", () => {
   it("compares release versions numerically", () => {
     expect(compareVersions("0.5.10", "0.5.9")).toBeGreaterThan(0);
     expect(compareVersions("1.0.0", "1.0.0")).toBe(0);
+    expect(compareVersions("1.0.0-alpha", "1.0.0-beta")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-beta", "1.0.0-rc.1")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-rc.1", "1.0.0")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-1", "1.0.0-alpha")).toBeLessThan(0);
+    expect(compareVersions("1.0.0-alpha.2", "1.0.0-alpha.10")).toBeLessThan(0);
+    expect(compareVersions("1.0.0+build.1", "1.0.0+build.2")).toBe(0);
   });
 });

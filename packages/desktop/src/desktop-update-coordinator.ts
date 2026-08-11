@@ -17,6 +17,7 @@ import type { DesktopShellUpdateAdapter, ShellUpdateMetadata } from "./update-ma
 export interface DesktopUpdateCoordinatorDeps {
   runtimeContext: UpdateRuntimeContext;
   currentProductVersion: () => string;
+  currentSharedWebVersion: () => string;
   currentProductPublishedAt: () => string | null;
   getBuildInfo: () => DesktopBuildInfo;
   loadChannel: () => Promise<DesktopChannel>;
@@ -165,6 +166,7 @@ export class DesktopUpdateCoordinator {
       this.shellMetadata = shellMetadata;
       this.runtimeMetadata = runtimeMetadata;
       const components = this.createNeededComponents(
+        channel,
         buildInfo,
         runtimeEntry,
         shellMetadata,
@@ -347,6 +349,9 @@ export class DesktopUpdateCoordinator {
       this.assertNotStopping();
       if (compareVersions(metadata.version, currentVersion) <= 0) return;
       this.assertSourceMatchesRuntime(expected, metadata, target);
+      if (target === "linux-x64" && metadata.version !== this.deps.currentSharedWebVersion()) {
+        return;
+      }
       this.busyPhase = "downloading";
       const controller = new AbortController();
       this.controllers.set(metadata.componentId, controller);
@@ -417,7 +422,14 @@ export class DesktopUpdateCoordinator {
           ? actual.shellVersion === component.targetVersion
           : actual.runtimeVersion === component.targetVersion;
       return installed
-        ? { ...component, status: "succeeded" as const, downloaded: true, verified: true }
+        ? {
+            ...component,
+            currentVersion: component.id === "shell" ? actual.shellVersion : actual.runtimeVersion,
+            currentPublishedAt: component.targetPublishedAt,
+            status: "succeeded" as const,
+            downloaded: true,
+            verified: true,
+          }
         : component;
     });
     if (components.every((component) => component.status === "succeeded")) {
@@ -724,6 +736,7 @@ export class DesktopUpdateCoordinator {
   }
 
   private createNeededComponents(
+    channel: DesktopChannel,
     buildInfo: DesktopBuildInfo,
     runtimeEntry: DesktopChannelRuntime,
     shellMetadata: ShellUpdateMetadata,
@@ -746,7 +759,15 @@ export class DesktopUpdateCoordinator {
         errorSummary: null,
       });
     }
-    if (compareVersions(runtimeMetadata.version, this.deps.currentProductVersion()) > 0) {
+    const webVersionAfterRestart = shellMetadata.updateNeeded
+      ? channel.runtimes["win32-x64"].version
+      : this.deps.currentSharedWebVersion();
+    const runtimeCanFollowSharedWeb =
+      this.runtimeTarget !== "linux-x64" || runtimeMetadata.version === webVersionAfterRestart;
+    if (
+      runtimeCanFollowSharedWeb &&
+      compareVersions(runtimeMetadata.version, this.deps.currentProductVersion()) > 0
+    ) {
       components.push({
         id: runtimeMetadata.componentId,
         kind: "runtime",
@@ -795,6 +816,21 @@ export class DesktopUpdateCoordinator {
         code: "runtime_host_incompatible",
         summary: "The selected Runtime is incompatible with the planned Desktop Shell",
       };
+    }
+    if (this.runtimeTarget === "linux-x64") {
+      const effectiveWebVersion = shellIncluded
+        ? channel.runtimes["win32-x64"].version
+        : this.deps.currentSharedWebVersion();
+      const effectiveRuntimeVersion = runtimeIncluded
+        ? runtime.version
+        : this.deps.currentProductVersion();
+      if (effectiveRuntimeVersion !== effectiveWebVersion) {
+        return {
+          compatible: false,
+          code: "shared_web_update_required",
+          summary: `WSL Runtime ${effectiveRuntimeVersion} requires shared Web ${effectiveRuntimeVersion}, but this restart would use shared Web ${effectiveWebVersion}`,
+        };
+      }
     }
     if (shellIncluded && !runtimeIncluded) {
       const currentCapabilities = [

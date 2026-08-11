@@ -364,6 +364,10 @@ describe("GitHub workflow boundaries", () => {
     expect(windowsBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
       "${{ needs.prepare.outputs.published_at }}"
     );
+    expect(windowsBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBe(
+      "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/"
+    );
+    expect(linuxBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBeUndefined();
     const publishSteps = release.jobs.publish.steps ?? [];
     const previousIndex = publishSteps.findIndex(
       (step) => step.name === "Download previous immutable release"
@@ -398,11 +402,15 @@ describe("GitHub workflow boundaries", () => {
     const runInstalled = installedSteps.find(
       (step) => step.name === "Run installed Desktop update scenario"
     );
+    const prepareScenario = installedSteps.find(
+      (step) => step.name === "Prepare scenario-specific signed channel"
+    );
     expect(installed.needs).toEqual(["prepare", "publish"]);
     expect(installed.strategy?.matrix?.scenario).toEqual([
       "runtime-only",
       "combined",
       "wsl",
+      "wsl-combined",
       "runtime-health-rollback",
       "interrupted-download",
       "restart-journal-recovery",
@@ -411,6 +419,9 @@ describe("GitHub workflow boundaries", () => {
     expect(runInstalled?.run).toContain("pnpm acceptance:desktop:installed");
     expect(runInstalled?.run).toContain("-CandidateInstaller");
     expect(runInstalled?.run).toContain("-PublicKeyPath");
+    expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
+    expect(prepareScenario?.run).toContain("'wsl-combined'");
+    expect(runInstalled?.run).toContain("@('wsl', 'wsl-combined')");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
     );
@@ -427,6 +438,8 @@ describe("GitHub workflow boundaries", () => {
     const promote = promotionSteps.find((step) => step.name === "Promote existing prerelease");
     expect(validateReports?.run).toContain("channelSignatureDigest");
     expect(validateReports?.run).toContain("commitSha");
+    expect(validateReports?.run).toContain("wslRuntimeVersion");
+    expect(validateReports?.run).toContain("wsl-combined");
     expect(promote?.run?.trim()).toBe(
       'gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest'
     );
@@ -464,6 +477,7 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[stageIndex]?.run).toContain("dist.integrity");
     expect(steps[stageIndex]?.run).toContain('npm publish "${tarball}"');
     expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
+    expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag rm");
     expect(preserveDesktop?.run).toContain(

@@ -1,5 +1,6 @@
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, type KeyObject, sign } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { create } from "tar";
@@ -12,7 +13,7 @@ import {
 } from "./runtime-manifest.js";
 import type { WslCommandRunner } from "./wsl-command.js";
 import type { WslDistroProbe } from "./wsl-discovery.js";
-import { WslInstaller } from "./wsl-installer.js";
+import { WSL_INSTALL_SCRIPT, WslInstaller } from "./wsl-installer.js";
 
 const cleanupRoots: string[] = [];
 
@@ -66,6 +67,30 @@ async function createArchive(root: string, name: string, files: Record<string, B
   return readFile(archivePath);
 }
 
+async function waitForPath(path: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    try {
+      await access(path);
+      return;
+    } catch {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    }
+  }
+  throw new Error(`Timed out waiting for ${path}`);
+}
+
+function finishInstall(child: ChildProcessWithoutNullStreams, archive: Buffer): Promise<number> {
+  child.stdout.resume();
+  child.stderr.resume();
+  child.stdin.on("error", () => undefined);
+  child.stdin.end(archive);
+  return new Promise((resolveExit, rejectExit) => {
+    child.once("error", rejectExit);
+    child.once("exit", (code) => resolveExit(code ?? -1));
+  });
+}
+
 function createProbe(): WslDistroProbe {
   return {
     target: {
@@ -86,6 +111,43 @@ function createProbe(): WslDistroProbe {
 }
 
 describe("WslInstaller", () => {
+  it.runIf(process.platform !== "win32")(
+    "publishes complete lock ownership before rejecting a concurrent installer",
+    async () => {
+      const root = await mkdtemp(resolve(tmpdir(), "coder-studio-wsl-lock-test-"));
+      cleanupRoots.push(root);
+      const archive = await createArchive(root, "lock-runtime", {
+        "server.mjs": "console.log('lock')",
+      });
+      const dataRoot = resolve(root, "data");
+      const args = [
+        "-c",
+        WSL_INSTALL_SCRIPT,
+        "coder-studio-install",
+        dataRoot,
+        "runtime-store",
+        "0.5.6",
+        "a".repeat(24),
+      ];
+      const first = spawn("/bin/sh", args, { stdio: ["pipe", "pipe", "pipe"] });
+      let second: ChildProcessWithoutNullStreams | null = null;
+      try {
+        await waitForPath(resolve(dataRoot, "install.lock"));
+        await expect(readFile(resolve(dataRoot, "install.lock"), "utf8")).resolves.toMatch(
+          /^pid=\d+\nstarted=\d+\nowner=.+\n$/
+        );
+
+        second = spawn("/bin/sh", args, { stdio: ["pipe", "pipe", "pipe"] });
+        await expect(finishInstall(second, archive)).resolves.toBe(73);
+        await expect(finishInstall(first, archive)).resolves.toBe(0);
+      } finally {
+        if (first.exitCode === null) first.kill("SIGKILL");
+        if (second?.exitCode === null) second.kill("SIGKILL");
+      }
+    },
+    15_000
+  );
+
   it("verifies signed Engine and Server Runtime packages before streaming them to WSL", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "coder-studio-wsl-installer-test-"));
     cleanupRoots.push(root);
@@ -137,8 +199,12 @@ describe("WslInstaller", () => {
     const responses = new Map<string, Response>([
       ["https://releases.example/engine.manifest.json", Response.json(engineManifest)],
       ["https://releases.example/runtime.manifest.json", Response.json(runtimeManifest)],
+      ["https://immutable.example/engine.manifest.json", Response.json(engineManifest)],
+      ["https://immutable.example/runtime.manifest.json", Response.json(runtimeManifest)],
       ["https://releases.example/engine.tgz", new Response(engineArchive)],
       ["https://releases.example/runtime.tgz", new Response(runtimeArchive)],
+      ["https://immutable.example/engine.tgz", new Response(engineArchive)],
+      ["https://immutable.example/runtime.tgz", new Response(runtimeArchive)],
     ]);
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const response = responses.get(String(input));
@@ -160,6 +226,8 @@ describe("WslInstaller", () => {
       runtimeVersion: "0.5.6",
       engineManifestUrl: () => "https://releases.example/engine.manifest.json",
       runtimeManifestUrl: () => "https://releases.example/runtime.manifest.json",
+      factoryEngineManifestUrl: () => "https://immutable.example/engine.manifest.json",
+      factoryRuntimeManifestUrl: () => "https://immutable.example/runtime.manifest.json",
       fetch: fetchImpl,
       runner,
       onProgress: progress,
@@ -178,6 +246,7 @@ describe("WslInstaller", () => {
       componentId: "runtime:linux-x64",
       version: "0.5.6",
       publishedAt: "2026-08-08T01:02:03.000Z",
+      engineManifestUrl: "https://releases.example/engine.manifest.json",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(runner).not.toHaveBeenCalled();
@@ -199,9 +268,14 @@ describe("WslInstaller", () => {
     const installArgs = runner.mock.calls[0]?.[0] ?? [];
     const installScript = installArgs[installArgs.indexOf("-c") + 1] ?? "";
     expect(installScript.indexOf('mkdir -p "$root"')).toBeGreaterThanOrEqual(0);
-    expect(installScript.indexOf('mkdir -p "$root"')).toBeLessThan(
-      installScript.indexOf('mkdir "$lock"')
+    expect(installScript.indexOf('> "$owner_file"')).toBeLessThan(
+      installScript.indexOf('ln "$owner_file" "$lock"')
     );
+    expect(installScript).not.toContain('mkdir "$lock"');
+    expect(installScript).toContain('current_started="$(cut -d " " -f 22');
+    expect(installScript).toContain('mv "$lock" "$stale"');
+    expect(installScript).toContain('if test -d "$lock"');
+    expect(installScript).toContain("sleep 1");
     expect(runner.mock.calls[1]?.[0]).toContain("runtime-store");
     expect(progress).toHaveBeenLastCalledWith({
       phase: "verifying",
@@ -211,9 +285,29 @@ describe("WslInstaller", () => {
 
     runner.mockClear();
     fetchMock.mockClear();
-    await installer.prepare({ ...createProbe(), engineInstalled: true });
+    await installer.prepare(createProbe());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://immutable.example/engine.manifest.json",
+      expect.anything()
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://immutable.example/runtime.manifest.json",
+      expect.anything()
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://immutable.example/engine.tgz",
+      expect.anything()
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://immutable.example/runtime.tgz",
+      expect.anything()
+    );
     expect(fetchMock).not.toHaveBeenCalledWith(
       "https://releases.example/engine.manifest.json",
+      expect.anything()
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "https://releases.example/runtime.manifest.json",
       expect.anything()
     );
     expect(runner).toHaveBeenCalledTimes(2);

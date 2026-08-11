@@ -32,6 +32,7 @@ function installDesktopApi() {
   const openEnvironment = vi.fn().mockResolvedValue({ status: "opened" as const });
   const api: CoderStudioDesktopApi = {
     platform: "win32",
+    updateApiVersion: 1,
     getAppVersion: vi.fn().mockResolvedValue("0.1.0"),
     selectWorkspaceDirectory: vi.fn().mockResolvedValue(null),
     openExternal: vi.fn().mockResolvedValue(true),
@@ -45,6 +46,16 @@ function installDesktopApi() {
         progressListener = undefined;
       };
     }),
+    getUpdateState: vi.fn(),
+    checkForUpdates: vi.fn(),
+    downloadUpdate: vi.fn(),
+    retryUpdate: vi.fn(),
+    cancelUpdateDownload: vi.fn(),
+    prepareUpdateRestart: vi.fn(),
+    restartAndInstallUpdate: vi.fn(),
+    getUpdateSettings: vi.fn(),
+    setUpdateSettings: vi.fn(),
+    onUpdateStateChanged: vi.fn(() => () => {}),
     getRuntimeUpdateState: vi.fn(),
     checkRuntimeUpdate: vi.fn(),
     restartForRuntimeUpdate: vi.fn(),

@@ -75,4 +75,3 @@ copy until the IPC promise settles.
 - Genuine non-zero and signal exits still fail promptly.
 - Timeout behavior is independent of wall-clock corrections.
 - The target-window wait is displayed as indeterminate progress.
-

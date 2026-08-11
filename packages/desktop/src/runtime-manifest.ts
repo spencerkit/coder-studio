@@ -197,18 +197,57 @@ export async function hashRuntimeFile(path: string): Promise<{ sha256: string; s
   };
 }
 
-function parseNumericVersion(value: string): number[] | null {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(value);
-  return match ? match.slice(1).map(Number) : null;
+interface ParsedSemanticVersion {
+  core: [bigint, bigint, bigint];
+  prerelease: string[] | null;
+}
+
+function parseSemanticVersion(value: string): ParsedSemanticVersion | null {
+  const match =
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(
+      value
+    );
+  if (!match) return null;
+  const prerelease = match[4]?.split(".") ?? null;
+  if (prerelease?.some((identifier) => /^\d+$/.test(identifier) && /^0\d+/.test(identifier))) {
+    return null;
+  }
+  return {
+    core: [BigInt(match[1] ?? 0), BigInt(match[2] ?? 0), BigInt(match[3] ?? 0)],
+    prerelease,
+  };
 }
 
 export function compareVersions(left: string, right: string): number {
-  const leftParts = parseNumericVersion(left);
-  const rightParts = parseNumericVersion(right);
-  if (!leftParts || !rightParts) return left.localeCompare(right);
+  const leftVersion = parseSemanticVersion(left);
+  const rightVersion = parseSemanticVersion(right);
+  if (!leftVersion || !rightVersion) return left.localeCompare(right);
   for (let index = 0; index < 3; index += 1) {
-    const difference = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
-    if (difference !== 0) return difference;
+    const leftPart = leftVersion.core[index] ?? 0n;
+    const rightPart = rightVersion.core[index] ?? 0n;
+    if (leftPart !== rightPart) return leftPart < rightPart ? -1 : 1;
+  }
+  const leftPrerelease = leftVersion.prerelease;
+  const rightPrerelease = rightVersion.prerelease;
+  if (!leftPrerelease || !rightPrerelease) {
+    if (!leftPrerelease && !rightPrerelease) return 0;
+    return leftPrerelease ? -1 : 1;
+  }
+  const length = Math.max(leftPrerelease.length, rightPrerelease.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftIdentifier = leftPrerelease[index];
+    const rightIdentifier = rightPrerelease[index];
+    if (leftIdentifier === undefined || rightIdentifier === undefined) {
+      return leftIdentifier === undefined ? -1 : 1;
+    }
+    if (leftIdentifier === rightIdentifier) continue;
+    const leftNumeric = /^\d+$/.test(leftIdentifier);
+    const rightNumeric = /^\d+$/.test(rightIdentifier);
+    if (leftNumeric && rightNumeric) {
+      return BigInt(leftIdentifier) < BigInt(rightIdentifier) ? -1 : 1;
+    }
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    return leftIdentifier < rightIdentifier ? -1 : 1;
   }
   return 0;
 }

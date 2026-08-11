@@ -15,6 +15,7 @@ export type InstalledDesktopScenarioName =
   | "runtime-only"
   | "combined"
   | "wsl"
+  | "wsl-combined"
   | "runtime-health-rollback"
   | "interrupted-download"
   | "restart-journal-recovery"
@@ -31,6 +32,7 @@ export interface InstalledDesktopScenario {
 }
 
 type DesktopBridgeMethod =
+  | "getAppVersion"
   | "getUpdateState"
   | "checkForUpdates"
   | "downloadUpdate"
@@ -52,7 +54,7 @@ export interface VerifyInstalledDesktopDeps {
   invoke(method: DesktopBridgeMethod): Promise<unknown>;
   waitForState(status: ProductUpdateState["status"]): Promise<unknown>;
   prepareActivity(): Promise<Pick<UpdatePrepareInstallResponse, "hasActiveWork">>;
-  interruptAtPhase(phase: "downloading" | "restart-journal"): Promise<void>;
+  interruptAtPhase(phase: "downloading" | "restart-journal" | "wsl-follow"): Promise<void>;
   verifyExternalSidecar(): Promise<{
     preloadAvailable: boolean;
     updateOperations: string[];
@@ -88,6 +90,10 @@ function assertPlanComponents(state: ProductUpdateState, expected: string[]): vo
   }
 }
 
+function isWslScenario(name: InstalledDesktopScenarioName): boolean {
+  return name === "wsl" || name === "wsl-combined";
+}
+
 export async function verifyInstalledDesktopScenario(
   scenario: InstalledDesktopScenario,
   deps: VerifyInstalledDesktopDeps
@@ -119,6 +125,8 @@ export async function verifyInstalledDesktopScenario(
     };
   }
 
+  const stagedWslFollow =
+    isWslScenario(scenario.name) && scenario.expectedComponentIds.includes("runtime:win32-x64");
   let checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates");
   assertPlanComponents(checked, scenario.expectedComponentIds);
   await deps.invoke("downloadUpdate");
@@ -152,6 +160,10 @@ export async function verifyInstalledDesktopScenario(
   if (finalState.status !== "succeeded" && finalState.status !== "idle") {
     throw new Error(`Installed Desktop did not reconcile after restart: ${finalState.status}`);
   }
+  if (stagedWslFollow) {
+    await deps.interruptAtPhase("wsl-follow");
+    await deps.reconnectAfterRestart();
+  }
   const evidence = await deps.readEvidence();
   const expectedRuntime = scenario.expectedRuntimeAfterRestart ?? scenario.targetRuntimeVersion;
   if (
@@ -160,7 +172,7 @@ export async function verifyInstalledDesktopScenario(
   ) {
     throw new Error("Installed component versions do not match the accepted candidate");
   }
-  if (scenario.name === "wsl") {
+  if (isWslScenario(scenario.name)) {
     if (evidence.wslRuntimeVersion !== scenario.targetRuntimeVersion) {
       throw new Error("WSL Runtime did not activate the host-staged target");
     }
@@ -311,7 +323,7 @@ async function readEvidenceFile(path: string | undefined): Promise<Partial<Insta
 
 async function requestInterruption(
   path: string | undefined,
-  phase: "downloading" | "restart-journal"
+  phase: "downloading" | "restart-journal" | "wsl-follow"
 ): Promise<boolean> {
   if (!path) throw new Error(`Installed Desktop interruption control is required for ${phase}`);
   const controlPath = resolve(path);
@@ -340,6 +352,28 @@ async function readActiveRuntimeVersion(userDataDir: string | undefined): Promis
     const active = JSON.parse(
       await readFile(resolve(userDataDir, "runtime-store", "active.json"), "utf8")
     ) as { active?: { runtimeVersion?: unknown } };
+    return typeof active.active?.runtimeVersion === "string" ? active.active.runtimeVersion : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readWslActiveRuntimeVersion(distro: string | undefined): Promise<string | null> {
+  if (!distro) return null;
+  try {
+    const result = await execFileAsync(
+      "wsl.exe",
+      [
+        "-d",
+        distro,
+        "--exec",
+        "sh",
+        "-lc",
+        'cat "$HOME/.local/share/coder-studio-desktop/runtime-store/active.json"',
+      ],
+      { windowsHide: true, encoding: "utf8" }
+    );
+    const active = JSON.parse(result.stdout) as { active?: { runtimeVersion?: unknown } };
     return typeof active.active?.runtimeVersion === "string" ? active.active.runtimeVersion : null;
   } catch {
     return null;
@@ -423,17 +457,13 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
       },
       readEvidence: async () => {
         const state = asState(await invoke("getUpdateState"), "getUpdateState");
-        const shell = state.components.find((component) => component.kind === "shell");
-        const runtime = state.components.find(
-          (component) => component.kind === "runtime" && component.target === "win32-x64"
-        );
-        const wsl = state.components.find(
-          (component) => component.kind === "runtime" && component.target === "linux-x64"
-        );
+        const observedShellVersion = await invoke("getAppVersion").catch(() => null);
+        const observedRuntimeVersion = await readActiveRuntimeVersion(options.userDataDir);
+        const observedWslRuntimeVersion = await readWslActiveRuntimeVersion(options.wslDistro);
         const external = await readEvidenceFile(options.evidencePath);
         const observedWslMarker = await wslMarkerExists(options.wslDistro, options.wslMarkerPath);
         if (
-          options.scenario.name === "wsl" &&
+          isWslScenario(options.scenario.name) &&
           typeof external.wslNpmMarkerExists !== "boolean" &&
           observedWslMarker === null
         ) {
@@ -448,13 +478,13 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         }
         return {
           actualShellVersion:
+            (typeof observedShellVersion === "string" ? observedShellVersion : null) ??
             external.actualShellVersion ??
-            shell?.currentVersion ??
             state.diagnostics.shellVersion ??
             "",
           actualRuntimeVersion:
-            external.actualRuntimeVersion ?? runtime?.currentVersion ?? state.productVersion,
-          wslRuntimeVersion: external.wslRuntimeVersion ?? wsl?.currentVersion ?? null,
+            observedRuntimeVersion ?? external.actualRuntimeVersion ?? state.productVersion,
+          wslRuntimeVersion: observedWslRuntimeVersion ?? external.wslRuntimeVersion ?? null,
           wslNpmMarkerExists: external.wslNpmMarkerExists ?? observedWslMarker ?? false,
           journalRecovered: external.journalRecovered ?? journalRecovered,
           rollbackRuntimeVersion:

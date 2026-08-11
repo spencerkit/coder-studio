@@ -75,6 +75,10 @@ describe("verify-desktop-installed-update", () => {
     );
 
     expect(runner).toContain("function Preserve-AcceptanceEvidence");
+    expect(runner).toContain("$initialScenario");
+    expect(runner).toContain("'runtime:win32-x64'");
+    expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
+    expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("$report.logPaths = @($preservedPaths)");
     expect(runner.indexOf("Preserve-AcceptanceEvidence")).toBeLessThan(
       runner.lastIndexOf("Remove-Item -LiteralPath $runRoot -Recurse")
@@ -157,11 +161,11 @@ describe("verify-desktop-installed-update", () => {
     expect(report.rollbackRuntimeVersion).toBe("0.5.0");
   });
 
-  it("proves WSL staging never invokes npm inside the distro", async () => {
+  it("updates shared Web before following it with the WSL Runtime", async () => {
     const deps = createDeps({
       invoke: vi.fn(async (method) => {
         if (method === "checkForUpdates") {
-          return { status: "available", components: [{ id: "runtime:linux-x64" }] };
+          return { status: "available", components: [{ id: "runtime:win32-x64" }] };
         }
         if (method === "restartAndInstallUpdate") return true;
         return state(method === "getUpdateState" ? "succeeded" : "ready");
@@ -177,13 +181,42 @@ describe("verify-desktop-installed-update", () => {
     const scenario: InstalledDesktopScenario = {
       ...combinedScenario,
       name: "wsl",
-      expectedComponentIds: ["runtime:linux-x64"],
+      expectedComponentIds: ["runtime:win32-x64"],
     };
 
     const report = await verifyInstalledDesktopScenario(scenario, deps);
 
     expect(report.wslRuntimeVersion).toBe("0.6.0");
     expect(report.wslNpmMarkerExists).toBe(false);
+    expect(deps.interruptAtPhase).toHaveBeenCalledWith("wsl-follow");
+    expect(deps.reconnectAfterRestart).toHaveBeenCalledTimes(2);
+  });
+
+  it("installs the candidate Shell before exercising factory WSL bootstrap", async () => {
+    const deps = createDeps({
+      readEvidence: vi.fn(async () => ({
+        actualShellVersion: "0.3.0",
+        actualRuntimeVersion: "0.6.0",
+        wslRuntimeVersion: "0.6.0",
+        wslNpmMarkerExists: false,
+        journalRecovered: true,
+      })),
+    });
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "wsl-combined",
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps);
+
+    expect(report).toMatchObject({
+      scenario: "wsl-combined",
+      actualShellVersion: "0.3.0",
+      actualRuntimeVersion: "0.6.0",
+      wslRuntimeVersion: "0.6.0",
+    });
+    expect(deps.interruptAtPhase).toHaveBeenCalledWith("wsl-follow");
+    expect(deps.reconnectAfterRestart).toHaveBeenCalledTimes(2);
   });
 
   it("rejects a plan whose component identities do not match the requested scenario", async () => {

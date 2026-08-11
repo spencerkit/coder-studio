@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { DESKTOP_ENGINE_VERSION, type RuntimeManifest } from "./runtime-manifest.js";
+import { WslInstaller } from "./wsl-installer.js";
+import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
 import { WslRuntimeUpdateAdapter } from "./wsl-runtime-update-adapter.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 const compatibleManifest: RuntimeManifest = {
   schemaVersion: 1,
@@ -88,5 +92,69 @@ describe("DesktopEnvironmentManager Runtime compatibility", () => {
     await expect(manager.createRuntimeUpdateAdapter("win32-x64", "wsl:ubuntu")).rejects.toThrow(
       "does not match"
     );
+  });
+
+  it("downloads a matching signed channel Runtime when shared Web has advanced", async () => {
+    const target = {
+      id: "wsl:ubuntu",
+      kind: "wsl" as const,
+      label: "WSL: Ubuntu",
+      distro: "Ubuntu",
+    };
+    const probe = {
+      target,
+      home: "/home/alice",
+      dataRoot: "/home/alice/.local/share/coder-studio-desktop",
+      arch: "x64" as const,
+      kernel: "microsoft-standard-WSL2",
+      libc: "glibc 2.39",
+      engineInstalled: true,
+      installed: true,
+      supported: true,
+    };
+    const candidate = {
+      root: `${probe.dataRoot}/runtime-store/versions/${"a".repeat(24)}`,
+      source: "pending" as const,
+      pointer: {
+        id: "a".repeat(24),
+        runtimeVersion: "0.5.6",
+        installedAt: "2026-08-08T01:02:03.000Z",
+      },
+      manifest: compatibleManifest,
+    };
+    vi.spyOn(WslRuntimeStoreClient.prototype, "getLaunchCandidate")
+      .mockRejectedValueOnce(new Error("missing"))
+      .mockResolvedValueOnce(candidate);
+    const metadata = { version: "0.5.6" } as never;
+    const checkRuntime = vi
+      .spyOn(WslInstaller.prototype, "checkRuntime")
+      .mockResolvedValue(metadata);
+    const download = vi
+      .spyOn(WslInstaller.prototype, "downloadAndStageRuntime")
+      .mockResolvedValue({} as never);
+    const prepare = vi.spyOn(WslInstaller.prototype, "prepare").mockResolvedValue({} as never);
+    const expected = {
+      version: "0.5.6",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+      manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
+    };
+    const manager = new DesktopEnvironmentManager({
+      stateStore: null as never,
+      discovery: { probe: vi.fn(async () => probe) } as never,
+      shellVersion: "0.1.0",
+      nodeVersion: "24.19.0",
+      runtimeVersion: "0.5.6",
+      publicKeyPem: "test-key",
+      releaseBaseUrl: "https://releases.example/",
+      factoryReleaseBaseUrl: "https://factory.example/",
+      loadChannel: vi.fn(async () => ({
+        runtimes: { "linux-x64": expected },
+      })) as never,
+    });
+
+    await expect(manager.prepareWsl(target)).resolves.toMatchObject({ runtime: candidate });
+    expect(checkRuntime).toHaveBeenCalledWith(probe, expected, "0.1.0");
+    expect(download).toHaveBeenCalledOnce();
+    expect(prepare).not.toHaveBeenCalled();
   });
 });

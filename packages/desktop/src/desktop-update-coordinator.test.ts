@@ -84,6 +84,7 @@ function createHarness(
   options: {
     shellVersion?: string;
     runtimeVersion?: string;
+    sharedWebVersion?: string;
     shellDownload?: Promise<void>;
     runtimeDownload?: Promise<unknown>;
     journalOverride?: unknown;
@@ -159,6 +160,7 @@ function createHarness(
       unsupportedReason: null,
     },
     currentProductVersion: () => runtimeVersion,
+    currentSharedWebVersion: () => options.sharedWebVersion ?? runtimeVersion,
     currentProductPublishedAt: () => "2026-07-01T00:00:00.000Z",
     getBuildInfo: () => ({
       schemaVersion: 1,
@@ -219,6 +221,44 @@ describe("DesktopUpdateCoordinator", () => {
     expect(state.status).toBe(status);
     expect(state.components.map((component) => component.id)).toEqual(ids);
     expect(state.components.every((component) => component.targetPublishedAt !== null)).toBe(true);
+  });
+
+  it("skips a WSL Runtime-only update that would outrun the shared Web Runtime", async () => {
+    const { coordinator, runtime } = createHarness({
+      shellVersion: "0.3.0",
+      runtimeVersion: "0.5.0",
+      sharedWebVersion: "0.5.0",
+      runtimeTarget: "linux-x64",
+      environmentId: "wsl:ubuntu",
+    });
+
+    const state = await coordinator.check({ manual: true });
+
+    expect(state).toMatchObject({
+      status: "idle",
+      components: [],
+      compatibility: { compatible: true, code: null },
+    });
+    expect(runtime.downloadAndStage).not.toHaveBeenCalled();
+  });
+
+  it("allows a combined WSL update when the target Shell carries matching shared Web", async () => {
+    const { coordinator } = createHarness({
+      shellVersion: "0.2.0",
+      runtimeVersion: "0.5.0",
+      sharedWebVersion: "0.5.0",
+      runtimeTarget: "linux-x64",
+      environmentId: "wsl:ubuntu",
+    });
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "available",
+      compatibility: { compatible: true },
+      components: [
+        expect.objectContaining({ id: "shell" }),
+        expect.objectContaining({ id: "runtime:linux-x64" }),
+      ],
+    });
   });
 
   it("starts Shell and Runtime downloads concurrently and journals one ready plan", async () => {
@@ -564,6 +604,7 @@ describe("DesktopUpdateCoordinator", () => {
       const wsl = createHarness({
         shellVersion: "0.3.0",
         runtimeVersion: "0.5.0",
+        sharedWebVersion: "0.6.0",
         runtimeTarget: "linux-x64",
         environmentId: "wsl:ubuntu",
         planId: "late-wsl-plan",

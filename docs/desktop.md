@@ -128,7 +128,7 @@ packaged Desktop 提供签名后的 WSL Engine、WSL Server Runtime 和 Windows 
 
 前置条件：
 
-- Windows 已启用 WSL2，并安装一个 x64/arm64、glibc-based distribution；
+- Windows 已启用 WSL2，并安装一个 x64、glibc-based distribution；
 - distribution 中有 `curl`、`tar`、`xz`、`sha256sum`、`python3`、`make` 和 `g++`；
 - 工作树已经提交且干净。验收构建固定使用 committed `HEAD`，并把 commit 写入验收报告。
 
@@ -318,5 +318,5 @@ Windows 未签名包会触发 SmartScreen；macOS 未签名、未公证包不应
 - Provider CLI 可执行文件、登录状态和技能目录仍是系统用户级资源；桌面与 CLI 的 backend 状态隔离不代表 Provider home 完全隔离；
 - 没有托盘常驻，退出桌面应用会停止它托管的 backend；
 - 当前 WSL 通信依赖 WSL2 localhost forwarding，尚未实现 guest IP fallback；
-- WSL 仅支持 x64/arm64、glibc-based WSL2 distribution；
+- WSL 仅支持 x64、glibc-based WSL2 distribution；
 - Windows x64 已具备本地自动化验证链路；WSL Linux 产物、macOS 和 Linux Desktop 仍必须在对应平台 runner 和干净机器上做最终验收。

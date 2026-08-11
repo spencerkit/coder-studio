@@ -97,7 +97,7 @@ describe("WorkspaceLaunchModal", () => {
       writable: true,
       value: originalFocus,
     });
-    delete (document as Document & { activeElement?: Element }).activeElement;
+    Reflect.deleteProperty(document, "activeElement");
     delete window.coderStudioDesktop;
     vi.restoreAllMocks();
   });

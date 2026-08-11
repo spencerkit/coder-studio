@@ -93,4 +93,30 @@ describe("WslDiscovery", () => {
       message: "Coder Studio currently requires a glibc-based WSL distribution.",
     });
   });
+
+  it("detects arm64 distributions but keeps them unavailable until release assets exist", async () => {
+    const runner = vi
+      .fn<WslCommandRunner>()
+      .mockResolvedValue(
+        result(
+          [
+            "/home/alice",
+            "/home/alice/.local/share/coder-studio-desktop",
+            "aarch64",
+            "5.15.153.1-microsoft-standard-WSL2",
+            "glibc 2.39",
+            "false",
+            "false",
+            "",
+          ].join("\n")
+        )
+      );
+    const discovery = new WslDiscovery({ runner, platform: "win32" });
+
+    await expect(discovery.probe("Ubuntu-ARM")).resolves.toMatchObject({
+      arch: "arm64",
+      supported: false,
+      message: "Coder Studio currently supports x64 WSL2 distributions only.",
+    });
+  });
 });

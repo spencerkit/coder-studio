@@ -15,6 +15,7 @@ param(
     'runtime-only',
     'combined',
     'wsl',
+    'wsl-combined',
     'runtime-health-rollback',
     'interrupted-download',
     'restart-journal-recovery',
@@ -101,7 +102,7 @@ function Start-AcceptanceDesktop(
     "--user-data-dir=$UserDataDirectory",
     "--coder-studio-environment-root=$UserDataDirectory"
   )
-  if ($ScenarioName -eq 'wsl') {
+  if ($ScenarioName -in @('wsl', 'wsl-combined')) {
     $arguments += '--coder-studio-environment-target=wsl'
     $arguments += "--coder-studio-wsl-distro=$Distro"
   } else {
@@ -218,7 +219,7 @@ try {
   }
   Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
 
-  if ($Scenario -eq 'wsl') {
+  if ($Scenario -in @('wsl', 'wsl-combined')) {
     if (-not $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
       throw 'WSL installed acceptance requires a disposable distro named coder-studio-acceptance-*'
     }
@@ -230,6 +231,7 @@ try {
 
   $env:CODER_STUDIO_DESKTOP_ACCEPTANCE = '1'
   $env:CODER_STUDIO_DESKTOP_CHANNEL_URL = ([Uri]$ChannelUrl).AbsoluteUri
+  $env:CODER_STUDIO_FACTORY_RELEASE_BASE_URL = ([Uri]::new([Uri]$ChannelUrl, '.')).AbsoluteUri
   $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE = $publicKeyFile
   $env:CODER_STUDIO_DESKTOP_STATE_DIR = Join-Path $userDataDirectory 'data'
   $env:CODER_STUDIO_DESKTOP_UPLOADS_DIR = Join-Path $userDataDirectory 'uploads'
@@ -239,7 +241,15 @@ try {
     Remove-Item Env:CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION -ErrorAction SilentlyContinue
   }
 
-  $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $Scenario $WslDistro
+  $initialScenario = if (
+    $Scenario -in @('wsl', 'wsl-combined') -and
+    @($ExpectedComponents.Split(',')) -contains 'runtime:win32-x64'
+  ) {
+    'runtime-only'
+  } else {
+    $Scenario
+  }
+  $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro
   $pages = Wait-Cdp $cdpPort
   $sidecarUrl = ''
   foreach ($page in $pages) {
@@ -275,20 +285,31 @@ try {
   if ($sidecarUrl) {
     $driverArgs += @('--sidecar-url', $sidecarUrl)
   }
-  if ($Scenario -eq 'wsl') {
+  if ($Scenario -in @('wsl', 'wsl-combined')) {
     $driverArgs += @('--wsl-distro', $WslDistro, '--wsl-marker-path', $wslMarkerPath)
   }
 
   $driverProcess = Start-Process -FilePath 'pnpm.cmd' -ArgumentList $driverArgs -PassThru -NoNewWindow -RedirectStandardOutput $driverOut -RedirectStandardError $driverErr
-  $handledInterruption = $false
+  $handledInterruptions = [System.Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::Ordinal
+  )
   while (-not $driverProcess.HasExited) {
-    if (-not $handledInterruption -and (Test-Path -LiteralPath $controlPath -PathType Leaf)) {
+    if (Test-Path -LiteralPath $controlPath -PathType Leaf) {
       try {
         $control = Get-Content -LiteralPath $controlPath -Raw | ConvertFrom-Json
-        if ($control.status -eq 'requested') {
+        $phase = [string]$control.phase
+        if ($control.status -eq 'requested' -and -not $handledInterruptions.Contains($phase)) {
           $journalBefore = Read-JournalIdentity $journalPath
           Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
-          $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $Scenario $WslDistro
+          $restartScenario = if ($phase -eq 'wsl-follow') {
+            if ($Scenario -eq 'wsl-combined') {
+              $env:CODER_STUDIO_DESKTOP_CHANNEL_URL = 'http://127.0.0.1:1/desktop-channel.json'
+            }
+            'wsl'
+          } else {
+            $Scenario
+          }
+          $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro
           Wait-Cdp $cdpPort | Out-Null
           $journalAfter = Read-JournalIdentity $journalPath
           Write-JsonAtomic $controlPath @{
@@ -297,7 +318,7 @@ try {
             status = 'relaunched'
             journalRecovered = ($null -ne $journalBefore -and $journalBefore -eq $journalAfter)
           }
-          $handledInterruption = $true
+          $handledInterruptions.Add($phase) | Out-Null
         }
       } catch {
         # The driver replaces this file atomically; retry partial observations.
@@ -326,7 +347,7 @@ try {
   if (Test-Path -LiteralPath (Join-Path $installDirectory 'Uninstall Coder Studio.exe')) {
     Start-Process -FilePath (Join-Path $installDirectory 'Uninstall Coder Studio.exe') -ArgumentList '/S' -Wait -ErrorAction SilentlyContinue | Out-Null
   }
-  if ($Scenario -eq 'wsl' -and $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
+  if ($Scenario -in @('wsl', 'wsl-combined') -and $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
     & wsl.exe -d $WslDistro -u root -- sh -lc "rm -f '$wslMarkerPath' /usr/local/bin/npm" 2>$null
   }
   if (-not ($failed -and $KeepOnFailure)) {

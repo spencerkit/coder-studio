@@ -67,6 +67,7 @@ import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
 
 declare const __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: string;
 declare const __CODER_STUDIO_DESKTOP_CHANNEL_URL__: string;
+declare const __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__: string;
 declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
 
 const ENVIRONMENT_LAUNCH_DATA_KEY = "environmentLaunchRequestId";
@@ -572,6 +573,20 @@ async function startApplication(): Promise<void> {
       ? __CODER_STUDIO_DESKTOP_CHANNEL_URL__.trim()
       : "";
   const desktopChannelUrl = resolveDesktopChannelUrl(process.env, compiledDesktopChannelUrl);
+  const loadDesktopChannel = async () => {
+    if (!desktopChannelUrl || !runtimePublicKey) {
+      throw new Error("Desktop update channel is not configured");
+    }
+    const response = await fetch(desktopChannelUrl, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Desktop update channel check failed with ${response.status}`);
+    }
+    return parseDesktopChannel(await response.json(), runtimePublicKey, desktopChannelUrl);
+  };
+  const compiledFactoryReleaseBaseUrl =
+    typeof __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__ === "string"
+      ? __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__.trim()
+      : "";
   const productVersion =
     typeof __CODER_STUDIO_PRODUCT_VERSION__ === "string"
       ? __CODER_STUDIO_PRODUCT_VERSION__.trim()
@@ -609,6 +624,11 @@ async function startApplication(): Promise<void> {
     releaseBaseUrl: getReleaseBaseUrl(
       process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || desktopChannelUrl
     ),
+    factoryReleaseBaseUrl:
+      process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL?.trim() ||
+      compiledFactoryReleaseBaseUrl ||
+      undefined,
+    loadChannel: desktopChannelUrl && runtimePublicKey ? loadDesktopChannel : undefined,
     nativeRuntimeUpdateAdapter,
     onProgress: emitEnvironmentProgress,
   });
@@ -705,7 +725,9 @@ async function startApplication(): Promise<void> {
       if (activeEnvironmentTarget.kind === "wsl") {
         if (!wslRuntimeStore || !wslRuntime) throw error;
         await wslRuntimeStore.fallbackAfterFailure(wslRuntime, error);
-        wslRuntime = await wslRuntimeStore.getLaunchCandidate();
+        wslRuntime = await wslRuntimeStore.getLaunchCandidate({
+          requiredRuntimeVersion: webRuntime?.manifest.runtimeVersion ?? productVersion,
+        });
         if (!environmentManager.isRuntimeCompatible(wslRuntime.manifest)) throw error;
       } else {
         if (!runtimeStore || !webRuntime) throw error;
@@ -748,6 +770,10 @@ async function startApplication(): Promise<void> {
         activeEnvironmentTarget.kind === "wsl"
           ? (wslRuntime?.manifest.runtimeVersion ?? productVersion)
           : (activeProductRuntime?.manifest.runtimeVersion ?? productVersion),
+      currentSharedWebVersion: () =>
+        activeProductRuntime?.manifest.runtimeVersion ??
+        webRuntime?.manifest.runtimeVersion ??
+        productVersion,
       currentProductPublishedAt: () => {
         const manifest =
           activeEnvironmentTarget.kind === "wsl"
@@ -756,13 +782,7 @@ async function startApplication(): Promise<void> {
         return manifest ? getRuntimePublishedAt(manifest) : null;
       },
       getBuildInfo: () => buildInfo,
-      loadChannel: async () => {
-        const response = await fetch(desktopChannelUrl, { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error(`Desktop update channel check failed with ${response.status}`);
-        }
-        return parseDesktopChannel(await response.json(), runtimePublicKey, desktopChannelUrl);
-      },
+      loadChannel: loadDesktopChannel,
       shell: shellUpdateAdapter,
       getRuntimeAdapter: (target, environmentId) =>
         (environmentManager as DesktopEnvironmentManager).createRuntimeUpdateAdapter(
