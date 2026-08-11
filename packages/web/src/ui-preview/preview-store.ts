@@ -25,7 +25,7 @@ import type {
   WorkspaceHistoryEntry,
   WorktreeInfo,
 } from "@coder-studio/core";
-import { createStore, type Store } from "jotai";
+import { createStore } from "jotai";
 import {
   applyAppearancePersonalizationToDocument,
   applyResolvedTheme,
@@ -756,7 +756,10 @@ function err(message: string) {
   };
 }
 
-function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCommand {
+function createPreviewDispatcher(
+  seed: UiPreviewSeed,
+  store: ReturnType<typeof createStore>
+): DispatchCommand {
   const previewSkillsState = createPreviewSkillsState(seed.commands);
 
   return async <T>(op: string, args: unknown) => {
@@ -1296,7 +1299,7 @@ function createPreviewDispatcher(seed: UiPreviewSeed, store: Store): DispatchCom
   };
 }
 
-export function buildUiPreviewStore(seed: UiPreviewSeed): Store {
+export function buildUiPreviewStore(seed: UiPreviewSeed): ReturnType<typeof createStore> {
   const store = createStore();
   const dispatch = createPreviewDispatcher(seed, store);
   const workspaces = seed.workspaces ?? [];

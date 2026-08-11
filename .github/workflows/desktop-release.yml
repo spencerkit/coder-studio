@@ -199,10 +199,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test and type-check Desktop
+      - name: Test Desktop and type-check repository
         run: |
           pnpm --filter @coder-studio/desktop test
-          pnpm --filter @coder-studio/desktop typecheck
+          pnpm ci:typecheck
 
       - name: Build signed Windows assets
         shell: pwsh

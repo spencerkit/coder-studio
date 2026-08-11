@@ -43,6 +43,10 @@ describe("GitHub workflow boundaries", () => {
       push: { branches: ["main"] },
     });
     expect(Object.keys(workflow.jobs).sort()).toEqual(["verify", "windows-runtime-verify"].sort());
+    const verifySteps = workflow.jobs.verify.steps ?? [];
+    expect(verifySteps.find((step) => step.name === "Run type checks")?.run).toBe(
+      "pnpm ci:typecheck"
+    );
   });
 
   it("runs Desktop integration for relevant changes and reusable signed builds", () => {
@@ -63,6 +67,9 @@ describe("GitHub workflow boundaries", () => {
     const linuxUpload = linuxSteps.find((step) => step.uses === "actions/upload-artifact@v4");
     const windowsStage = windowsSteps.find((step) => step.name === "Stage Windows release assets");
     const linuxStage = linuxSteps.find((step) => step.name === "Stage WSL release assets");
+    const windowsTypecheck = windowsSteps.find(
+      (step) => step.name === "Test Desktop and type-check repository"
+    );
 
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(push).toEqual({ branches: ["main"] });
@@ -144,6 +151,7 @@ describe("GitHub workflow boundaries", () => {
     expect(authenticode?.if).toBe("inputs.signed");
     expect(authenticode?.run).toContain("Get-AuthenticodeSignature");
     expect(authenticode?.run).toContain("release/desktop/latest.yml");
+    expect(windowsTypecheck?.run).toContain("pnpm ci:typecheck");
     expect(linuxUpload?.with).toMatchObject({
       name: "${{ steps.artifact_name.outputs.value }}",
       overwrite: true,
@@ -358,6 +366,9 @@ describe("GitHub workflow boundaries", () => {
     });
     const linuxBuild = release.jobs["linux-assets"];
     const windowsBuild = release.jobs["windows-assets"];
+    const releaseTypecheck = (windowsBuild.steps ?? []).find(
+      (step) => step.name === "Test Desktop and type-check repository"
+    );
     expect(linuxBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
       "${{ needs.prepare.outputs.published_at }}"
     );
@@ -368,6 +379,7 @@ describe("GitHub workflow boundaries", () => {
       "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/"
     );
     expect(linuxBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBeUndefined();
+    expect(releaseTypecheck?.run).toContain("pnpm ci:typecheck");
     const publishSteps = release.jobs.publish.steps ?? [];
     const previousIndex = publishSteps.findIndex(
       (step) => step.name === "Download previous immutable release"

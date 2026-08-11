@@ -1,5 +1,5 @@
 import type { UpdateStateView } from "@coder-studio/core";
-import type { Store } from "jotai";
+import type { createStore } from "jotai";
 import {
   productUpdateStateAtom,
   updateControllerAtom,
@@ -8,7 +8,10 @@ import {
 import { mapCliUpdateState } from "../features/updates/controller";
 import type { UpdateController } from "../features/updates/types";
 
-export function seedCliUpdateState(store: Store, state: UpdateStateView): void {
+export function seedCliUpdateState(
+  store: ReturnType<typeof createStore>,
+  state: UpdateStateView
+): void {
   const productState = mapCliUpdateState(state);
   const controller: UpdateController = {
     kind: "cli",

@@ -164,10 +164,10 @@ jobs:
           CODER_STUDIO_RUNTIME_UPDATE_URL=${{ inputs.runtime_update_url }}
           "@ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Test and type-check Desktop
+      - name: Test Desktop and type-check repository
         run: |
           pnpm --filter @coder-studio/desktop test
-          pnpm --filter @coder-studio/desktop typecheck
+          pnpm ci:typecheck
 
       - name: Require acceptance Authenticode credentials
         if: inputs.signed
