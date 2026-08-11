@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, relative, resolve, win32 } from "node:path";
 import ts from "typescript";
 import { error, ROOT_DIR, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
@@ -31,6 +31,14 @@ function normalizePath(path: string): string {
   return path.replaceAll("\\", "/");
 }
 
+function relativeDiagnosticPath(projectRoot: string, fileName: string): string {
+  const pathRelative =
+    win32.isAbsolute(projectRoot) && win32.isAbsolute(fileName)
+      ? win32.relative(projectRoot, fileName)
+      : relative(projectRoot, fileName);
+  return normalizePath(pathRelative);
+}
+
 function normalizeMessage(message: string, projectRoot: string): string {
   const normalizedRoot = normalizePath(resolve(projectRoot));
   return normalizePath(message).replaceAll(normalizedRoot, "<project>").replaceAll("\r\n", "\n");
@@ -49,7 +57,7 @@ export function aggregateTypeDiagnostics(
   for (const diagnostic of diagnostics) {
     const entry = {
       file: diagnostic.file
-        ? normalizePath(relative(projectRoot, diagnostic.file.fileName))
+        ? relativeDiagnosticPath(projectRoot, diagnostic.file.fileName)
         : "<global>",
       code: diagnostic.code,
       message: normalizeMessage(
