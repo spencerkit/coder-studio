@@ -30,6 +30,7 @@ import {
   resolveDesktopRuntimePublicKey,
   shouldForceAcceptanceRuntimeHealthFailure,
 } from "./desktop-channel.js";
+import { installDesktopContextMenu } from "./desktop-context-menu.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
@@ -488,6 +489,7 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
     void openExternal(target);
     return { action: "deny" };
   });
+  installDesktopContextMenu(window, Menu);
   window.webContents.on("will-navigate", (event, target) => {
     if (new URL(target).origin === appOrigin) return;
     event.preventDefault();
