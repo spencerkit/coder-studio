@@ -254,7 +254,9 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
   快速 CI 与可复用 Desktop 验证 workflow 的签名构建；发布阶段等待 `prepare`、通用 CI 和完整签名
   Desktop 资产全部成功，再创建独立的
   `desktop-ci-<run-id>-<attempt>` prerelease。只有这一层会发布测试资产；该通道固定到对应 tag，永远不会
-  更新 GitHub `latest`，也不能晋升为生产发布。
+  更新 GitHub `latest`，也不能晋升为生产发布。仓库没有稳定 `desktop-channel.json` 时，它自动执行
+  `fresh-native` 与 `fresh-wsl` 候选安装验收；建立首个稳定 Desktop 通道后，自动切换为完整的安装升级、
+  回滚、中断恢复和外部浏览器权限矩阵。
 - `.github/workflows/desktop-release.yml` 保持生产发布边界不变：只能手动从 `main` 触发，并受
   `desktop-production` environment 审批保护。工作流比较当前 `packages/desktop/package.json` 与最新稳定
   `desktop-channel.json` 的 Shell 版本：Shell 版本提升或尚无稳定 Desktop 通道时发布 Shell、Windows
@@ -294,6 +296,17 @@ Runtime-only release 使用 `desktop-runtime-v<runtime-version>` 标签；标签
 元数据、Windows Runtime、WSL Engine 和 WSL Runtime 复制到新的 CLI Release。这样 CLI 发布成为
 latest 后，已安装 Desktop 的强更新与 Runtime 热更新地址仍然有效。CLI 与 Desktop 发布还会共用一个
 concurrency group，避免两个 Release 同时更新稳定通道。
+
+首次联合发布按以下顺序执行，以避免 CLI 与 Desktop 的验收报告互相依赖：
+
+1. 合并 Changesets 生成的版本 PR；
+2. 运行 `Publish Desktop acceptance`，取得 `fresh-native` 与 `fresh-wsl` 报告的 run ID；
+3. 运行 `Publish CLI`，设置 `promote=false`，只发布不可变 npm 候选并取得 CLI 验收 run ID；
+4. 运行 `Publish Desktop`，传入上述两个 run ID，发布并晋升首个稳定 Desktop 通道；
+5. 再次运行 `Publish CLI`，设置 `promote=true` 且传入 Desktop acceptance run ID，将同一 npm 候选晋升为
+   `latest`，并把稳定 Desktop 资产复制到 CLI GitHub Release。
+
+建立稳定 Desktop 通道后不再使用 bootstrap 顺序；验收和生产发布会自动要求从上一稳定安装包升级。
 
 Windows 未签名包会触发 SmartScreen；macOS 未签名、未公证包不应作为正式下载发布。自动更新也应只在签名链稳定后启用生产发布。
 

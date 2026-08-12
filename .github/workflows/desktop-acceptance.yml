@@ -18,11 +18,15 @@ jobs:
       runtime_update_url: ${{ steps.channel.outputs.runtime_update_url }}
       signing_key_artifact: ${{ steps.channel.outputs.signing_key_artifact }}
       public_key_artifact: ${{ steps.channel.outputs.public_key_artifact }}
+      has_previous_desktop: ${{ steps.channel.outputs.has_previous_desktop }}
+      acceptance_scenarios: ${{ steps.channel.outputs.acceptance_scenarios }}
 
     steps:
       - name: Resolve acceptance channel
         id: channel
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
@@ -34,6 +38,22 @@ jobs:
           echo "runtime_update_url=${runtime_update_url}" >> "${GITHUB_OUTPUT}"
           echo "signing_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
           echo "public_key_artifact=${public_key_artifact}" >> "${GITHUB_OUTPUT}"
+          latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
+          latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
+          has_previous_desktop=false
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
+            has_previous_desktop=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
+          elif ! grep -q '(HTTP 404)' "${latest_release_error}"; then
+            cat "${latest_release_error}" >&2
+            exit 1
+          fi
+          if [[ "${has_previous_desktop}" == "true" ]]; then
+            acceptance_scenarios='["runtime-only","combined","wsl","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
+          else
+            acceptance_scenarios='["fresh-native","fresh-wsl"]'
+          fi
+          echo "has_previous_desktop=${has_previous_desktop}" >> "${GITHUB_OUTPUT}"
+          echo "acceptance_scenarios=${acceptance_scenarios}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate ephemeral Runtime signing key
         shell: bash
@@ -182,15 +202,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario:
-          - runtime-only
-          - combined
-          - wsl
-          - wsl-combined
-          - runtime-health-rollback
-          - interrupted-download
-          - restart-journal-recovery
-          - external-sidecar-browser
+        scenario: ${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}
 
     steps:
       - name: Checkout repository
@@ -224,6 +236,7 @@ jobs:
           path: release/desktop-ci-signing
 
       - name: Download previous stable Desktop release
+        if: needs.prepare.outputs.has_previous_desktop == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -258,10 +271,11 @@ jobs:
           $candidate = 'release/desktop-installed-candidate'
           $previous = 'release/desktop-installed-previous'
           $scenario = '${{ matrix.scenario }}'
+          $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
           $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
           $generatedAt = $originalChannel.generatedAt
           $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
-          if ($scenario -notin @('combined', 'wsl-combined')) {
+          if ($hasPreviousDesktop -and $scenario -notin @('combined', 'wsl-combined')) {
             pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
             if ($LASTEXITCODE -ne 0) { throw 'Unable to carry forward the previous Shell for the Runtime-only scenario' }
           }
@@ -278,7 +292,7 @@ jobs:
             '--directory', $candidate,
             '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
           )
-          if ($scenario -in @('combined', 'wsl-combined')) {
+          if (-not $hasPreviousDesktop -or $scenario -in @('combined', 'wsl-combined')) {
             $validation += @('--release-kind', 'full')
           } else {
             $validation += @(
@@ -290,12 +304,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Scenario Desktop channel validation failed' }
 
           $channel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
-          $previousChannel = Get-Content (Join-Path $previous 'desktop-channel.json') -Raw | ConvertFrom-Json
           $candidateMetadata = Get-Content (Join-Path $candidate 'latest.yml') -Raw
-          $previousMetadata = Get-Content (Join-Path $previous 'latest.yml') -Raw
           $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
-          $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
-          $components = if ($scenario -eq 'combined') {
+          if ($hasPreviousDesktop) {
+            $previousChannel = Get-Content (Join-Path $previous 'desktop-channel.json') -Raw | ConvertFrom-Json
+            $previousMetadata = Get-Content (Join-Path $previous 'latest.yml') -Raw
+            $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+            $previousInstaller = "$previous/$previousInstallerName"
+            $previousShell = $previousChannel.shell.version
+            $previousRuntime = $previousChannel.runtimes.'win32-x64'.version
+          } else {
+            $previousInstaller = "$candidate/$candidateInstallerName"
+            $previousShell = $channel.shell.version
+            $previousRuntime = $channel.runtimes.'win32-x64'.version
+          }
+          $components = if ($scenario -in @('fresh-native', 'fresh-wsl')) {
+            ''
+          } elseif ($scenario -eq 'combined') {
             'shell,runtime:win32-x64'
           } elseif ($scenario -eq 'wsl-combined') {
             'shell,runtime:win32-x64'
@@ -317,16 +342,16 @@ jobs:
           "channel_url=http://127.0.0.1:$port/desktop-channel.json" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "candidate_installer=$candidate/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_installer=$previous/$previousInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_shell=$($previousChannel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_runtime=$($previousChannel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_shell=$previousShell" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$previousRuntime" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "target_shell=$($channel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "target_runtime=$($channel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Prepare disposable WSL distribution
-        if: matrix.scenario == 'wsl' || matrix.scenario == 'wsl-combined'
+        if: matrix.scenario == 'fresh-wsl' || matrix.scenario == 'wsl' || matrix.scenario == 'wsl-combined'
         id: wsl
         shell: pwsh
         run: |
@@ -360,7 +385,7 @@ jobs:
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
             $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
           }
-          if ('${{ matrix.scenario }}' -in @('wsl', 'wsl-combined')) {
+          if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'wsl', 'wsl-combined')) {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
           pnpm acceptance:desktop:installed -- @arguments

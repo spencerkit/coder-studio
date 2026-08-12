@@ -103,6 +103,53 @@ describe("verify-desktop-installed-update", () => {
     });
   });
 
+  it("validates a fresh native install without invoking update operations", async () => {
+    const deps = createDeps();
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "fresh-native",
+      expectedComponentIds: [],
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps);
+
+    expect(deps.readEvidence).toHaveBeenCalledOnce();
+    expect(deps.invoke).not.toHaveBeenCalled();
+    expect(report).toMatchObject({
+      scenario: "fresh-native",
+      confirmationCount: 0,
+      restartCount: 0,
+      actualShellVersion: "0.3.0",
+      actualRuntimeVersion: "0.6.0",
+    });
+  });
+
+  it("requires the candidate Runtime to bootstrap in a fresh WSL install", async () => {
+    const deps = createDeps({
+      readEvidence: vi.fn(async () => ({
+        actualShellVersion: "0.3.0",
+        actualRuntimeVersion: "0.6.0",
+        wslRuntimeVersion: "0.6.0",
+        wslNpmMarkerExists: false,
+        journalRecovered: false,
+      })),
+    });
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "fresh-wsl",
+      expectedComponentIds: [],
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps);
+
+    expect(report).toMatchObject({
+      scenario: "fresh-wsl",
+      wslRuntimeVersion: "0.6.0",
+      wslNpmMarkerExists: false,
+    });
+    expect(deps.invoke).not.toHaveBeenCalled();
+  });
+
   it("keeps an external sidecar browser read-only without invoking Desktop mutation methods", async () => {
     const deps = createDeps();
     const scenario: InstalledDesktopScenario = {

@@ -12,6 +12,8 @@ param(
   [Parameter(Mandatory = $true)][string]$PublicKeyPath,
   [Parameter(Mandatory = $true)]
   [ValidateSet(
+    'fresh-native',
+    'fresh-wsl',
     'runtime-only',
     'combined',
     'wsl',
@@ -102,7 +104,7 @@ function Start-AcceptanceDesktop(
     "--user-data-dir=$UserDataDirectory",
     "--coder-studio-environment-root=$UserDataDirectory"
   )
-  if ($ScenarioName -in @('wsl', 'wsl-combined')) {
+  if ($ScenarioName -in @('fresh-wsl', 'wsl', 'wsl-combined')) {
     $arguments += '--coder-studio-environment-target=wsl'
     $arguments += "--coder-studio-wsl-distro=$Distro"
   } else {
@@ -189,6 +191,8 @@ $candidateInstallerPath = Resolve-RequiredFile $CandidateInstaller 'Candidate in
 $publicKeyFile = Resolve-RequiredFile $PublicKeyPath 'Desktop acceptance public key'
 Assert-Authenticode $previousInstallerPath 'Previous installer'
 Assert-Authenticode $candidateInstallerPath 'Candidate installer'
+$isFreshInstall = $Scenario -in @('fresh-native', 'fresh-wsl')
+$isWslScenario = $Scenario -in @('fresh-wsl', 'wsl', 'wsl-combined')
 
 $runId = "coder-studio-installed-acceptance-$([Guid]::NewGuid().ToString('N'))"
 $runRoot = Join-Path ([System.IO.Path]::GetTempPath()) $runId
@@ -210,16 +214,17 @@ try {
   New-Item -ItemType Directory -Path $userDataDirectory -Force | Out-Null
 
   $installArguments = @('/S', "/D=$installDirectory")
-  $installer = Start-Process -FilePath $previousInstallerPath -ArgumentList $installArguments -Wait -PassThru
+  $bootstrapInstallerPath = if ($isFreshInstall) { $candidateInstallerPath } else { $previousInstallerPath }
+  $installer = Start-Process -FilePath $bootstrapInstallerPath -ArgumentList $installArguments -Wait -PassThru
   if ($installer.ExitCode -ne 0) {
-    throw "Previous NSIS installer exited with $($installer.ExitCode)"
+    throw "Bootstrap NSIS installer exited with $($installer.ExitCode)"
   }
   if (-not (Test-Path -LiteralPath $desktopExecutable -PathType Leaf)) {
     throw "Installed Desktop executable is missing: $desktopExecutable"
   }
   Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
 
-  if ($Scenario -in @('wsl', 'wsl-combined')) {
+  if ($isWslScenario) {
     if (-not $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
       throw 'WSL installed acceptance requires a disposable distro named coder-studio-acceptance-*'
     }
@@ -235,6 +240,12 @@ try {
   $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE = $publicKeyFile
   $env:CODER_STUDIO_DESKTOP_STATE_DIR = Join-Path $userDataDirectory 'data'
   $env:CODER_STUDIO_DESKTOP_UPLOADS_DIR = Join-Path $userDataDirectory 'uploads'
+  if ($isFreshInstall) {
+    $factoryRuntime = Join-Path $installDirectory 'resources/factory-runtime'
+    $factoryEvidence = Join-Path $userDataDirectory 'factory-runtime'
+    New-Item -ItemType Directory -Path $factoryEvidence -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $factoryRuntime 'runtime.manifest.json') -Destination (Join-Path $factoryEvidence 'runtime.manifest.json') -Force
+  }
   if ($Scenario -eq 'runtime-health-rollback') {
     $env:CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION = $ExpectedRuntimeVersion
   } else {
@@ -242,7 +253,7 @@ try {
   }
 
   $initialScenario = if (
-    $Scenario -in @('wsl', 'wsl-combined') -and
+    $isWslScenario -and
     @($ExpectedComponents.Split(',')) -contains 'runtime:win32-x64'
   ) {
     'runtime-only'
@@ -285,7 +296,7 @@ try {
   if ($sidecarUrl) {
     $driverArgs += @('--sidecar-url', $sidecarUrl)
   }
-  if ($Scenario -in @('wsl', 'wsl-combined')) {
+  if ($isWslScenario) {
     $driverArgs += @('--wsl-distro', $WslDistro, '--wsl-marker-path', $wslMarkerPath)
   }
 
@@ -347,7 +358,7 @@ try {
   if (Test-Path -LiteralPath (Join-Path $installDirectory 'Uninstall Coder Studio.exe')) {
     Start-Process -FilePath (Join-Path $installDirectory 'Uninstall Coder Studio.exe') -ArgumentList '/S' -Wait -ErrorAction SilentlyContinue | Out-Null
   }
-  if ($Scenario -in @('wsl', 'wsl-combined') -and $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
+  if ($isWslScenario -and $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
     & wsl.exe -d $WslDistro -u root -- sh -lc "rm -f '$wslMarkerPath' /usr/local/bin/npm" 2>$null
   }
   if (-not ($failed -and $KeepOnFailure)) {

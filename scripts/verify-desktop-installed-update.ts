@@ -12,6 +12,8 @@ import { isDirectExecution } from "./shared/process.js";
 const execFileAsync = promisify(execFile);
 
 export type InstalledDesktopScenarioName =
+  | "fresh-native"
+  | "fresh-wsl"
   | "runtime-only"
   | "combined"
   | "wsl"
@@ -91,13 +93,42 @@ function assertPlanComponents(state: ProductUpdateState, expected: string[]): vo
 }
 
 function isWslScenario(name: InstalledDesktopScenarioName): boolean {
-  return name === "wsl" || name === "wsl-combined";
+  return name === "fresh-wsl" || name === "wsl" || name === "wsl-combined";
 }
 
 export async function verifyInstalledDesktopScenario(
   scenario: InstalledDesktopScenario,
   deps: VerifyInstalledDesktopDeps
 ): Promise<InstalledDesktopScenarioReport> {
+  if (scenario.name === "fresh-native" || scenario.name === "fresh-wsl") {
+    const evidence = await deps.readEvidence();
+    if (
+      evidence.actualShellVersion !== scenario.targetShellVersion ||
+      evidence.actualRuntimeVersion !== scenario.targetRuntimeVersion
+    ) {
+      throw new Error("Freshly installed component versions do not match the candidate");
+    }
+    if (scenario.name === "fresh-wsl") {
+      if (evidence.wslRuntimeVersion !== scenario.targetRuntimeVersion) {
+        throw new Error("Fresh WSL Runtime did not activate the candidate");
+      }
+      if (evidence.wslNpmMarkerExists) {
+        throw new Error("WSL npm marker was invoked during fresh host-managed installation");
+      }
+    }
+    return {
+      schemaVersion: 1,
+      scenario: scenario.name,
+      confirmationCount: 0,
+      restartCount: 0,
+      expectedComponentIds: [],
+      ...evidence,
+      rollbackRuntimeVersion: evidence.rollbackRuntimeVersion ?? null,
+      externalSidecarReadOnly: evidence.externalSidecarReadOnly ?? false,
+      logPaths: evidence.logPaths ?? [],
+    };
+  }
+
   if (scenario.name === "external-sidecar-browser") {
     const evidence = await deps.verifyExternalSidecar();
     const forbidden = evidence.updateOperations.filter(
@@ -358,6 +389,18 @@ async function readActiveRuntimeVersion(userDataDir: string | undefined): Promis
   }
 }
 
+async function readFactoryRuntimeVersion(userDataDir: string | undefined): Promise<string | null> {
+  if (!userDataDir) return null;
+  try {
+    const manifest = JSON.parse(
+      await readFile(resolve(userDataDir, "factory-runtime", "runtime.manifest.json"), "utf8")
+    ) as { runtimeVersion?: unknown };
+    return typeof manifest.runtimeVersion === "string" ? manifest.runtimeVersion : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readWslActiveRuntimeVersion(distro: string | undefined): Promise<string | null> {
   if (!distro) return null;
   try {
@@ -459,6 +502,7 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         const state = asState(await invoke("getUpdateState"), "getUpdateState");
         const observedShellVersion = await invoke("getAppVersion").catch(() => null);
         const observedRuntimeVersion = await readActiveRuntimeVersion(options.userDataDir);
+        const observedFactoryRuntimeVersion = await readFactoryRuntimeVersion(options.userDataDir);
         const observedWslRuntimeVersion = await readWslActiveRuntimeVersion(options.wslDistro);
         const external = await readEvidenceFile(options.evidencePath);
         const observedWslMarker = await wslMarkerExists(options.wslDistro, options.wslMarkerPath);
@@ -483,7 +527,10 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
             state.diagnostics.shellVersion ??
             "",
           actualRuntimeVersion:
-            observedRuntimeVersion ?? external.actualRuntimeVersion ?? state.productVersion,
+            observedRuntimeVersion ??
+            external.actualRuntimeVersion ??
+            observedFactoryRuntimeVersion ??
+            state.productVersion,
           wslRuntimeVersion: observedWslRuntimeVersion ?? external.wslRuntimeVersion ?? null,
           wslNpmMarkerExists: external.wslNpmMarkerExists ?? observedWslMarker ?? false,
           journalRecovered: external.journalRecovered ?? journalRecovered,

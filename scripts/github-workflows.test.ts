@@ -230,6 +230,8 @@ describe("GitHub workflow boundaries", () => {
       runtime_update_url: "${{ steps.channel.outputs.runtime_update_url }}",
       signing_key_artifact: "${{ steps.channel.outputs.signing_key_artifact }}",
       public_key_artifact: "${{ steps.channel.outputs.public_key_artifact }}",
+      has_previous_desktop: "${{ steps.channel.outputs.has_previous_desktop }}",
+      acceptance_scenarios: "${{ steps.channel.outputs.acceptance_scenarios }}",
     });
     expect(resolveChannel?.run).toContain(
       'release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
@@ -246,6 +248,8 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain(
       'public_key_artifact="desktop-acceptance-public-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
     );
+    expect(resolveChannel?.run).toContain("has_previous_desktop=false");
+    expect(resolveChannel?.run).toContain('acceptance_scenarios=\'["fresh-native","fresh-wsl"]\'');
     expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
     expect(signingKeyUpload?.with).toMatchObject({
       name: "${{ steps.channel.outputs.signing_key_artifact }}",
@@ -364,6 +368,7 @@ describe("GitHub workflow boundaries", () => {
     expect(release.jobs.prepare.outputs).toMatchObject({
       published_at: "${{ steps.release.outputs.published_at }}",
       release_kind: "${{ steps.release.outputs.release_kind }}",
+      has_previous_desktop: "${{ steps.release.outputs.has_previous_desktop }}",
     });
     const resolveRelease = (release.jobs.prepare.steps ?? []).find(
       (step) => step.name === "Resolve versions and release tag"
@@ -432,22 +437,15 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Prepare scenario-specific signed channel"
     );
     expect(installed.needs).toEqual(["prepare", "publish"]);
-    expect(installed.strategy?.matrix?.scenario).toEqual([
-      "runtime-only",
-      "combined",
-      "wsl",
-      "wsl-combined",
-      "runtime-health-rollback",
-      "interrupted-download",
-      "restart-journal-recovery",
-      "external-sidecar-browser",
-    ]);
+    expect(installed.strategy?.matrix?.scenario).toBe(
+      "${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}"
+    );
     expect(runInstalled?.run).toContain("pnpm acceptance:desktop:installed");
     expect(runInstalled?.run).toContain("-CandidateInstaller");
     expect(runInstalled?.run).toContain("-PublicKeyPath");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
-    expect(runInstalled?.run).toContain("@('wsl', 'wsl-combined')");
+    expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
     );
@@ -473,6 +471,8 @@ describe("GitHub workflow boundaries", () => {
     expect(promotionText).not.toMatch(/pnpm (build|dist)|gh release upload|--clobber/);
 
     const cli = loadWorkflow("publish.yml");
+    const cliInputs = (cli.on.workflow_dispatch as { inputs: Record<string, unknown> }).inputs;
+    expect(cliInputs.promote).toMatchObject({ default: true, type: "boolean" });
     const steps = cli.jobs.publish.steps ?? [];
     const packIndex = steps.findIndex((step) => step.name === "Pack CLI candidate once");
     const stageIndex = steps.findIndex(
@@ -504,6 +504,9 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[stageIndex]?.run).toContain('npm publish "${tarball}"');
     expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
     expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
+    expect(steps[desktopReportIndex]?.run).toContain("fresh-native");
+    expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
+    expect(steps[preserveDesktopIndex]?.if).toBe("inputs.promote");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag rm");
     expect(preserveDesktop?.run).toContain(
