@@ -284,7 +284,10 @@ try {
   }
   $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
   $desktopProcess.Handle | Out-Null
-  $pages = Wait-Cdp $cdpPort
+  # A fresh WSL launch downloads, verifies, and installs both Engine and Runtime before it
+  # creates a page. Keep native and subsequent restart checks at the stricter default.
+  $startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }
+  $pages = Wait-Cdp $cdpPort $startupTimeoutSeconds
   $sidecarUrl = ''
   foreach ($page in $pages) {
     if ($page.type -eq 'page' -and $page.url -match '^https?://') {
