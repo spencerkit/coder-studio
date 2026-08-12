@@ -86,6 +86,7 @@ describe("verify-desktop-installed-update", () => {
     expect(runner.indexOf("$driverProcess.WaitForExit()")).toBeLessThan(
       runner.indexOf("if ($driverProcess.ExitCode -ne 0)")
     );
+    expect(runner).toContain("$_.Name -in @('main.log', 'backend.log')");
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");

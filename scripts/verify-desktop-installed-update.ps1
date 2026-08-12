@@ -148,7 +148,8 @@ function Preserve-AcceptanceEvidence(
   }
   if (Test-Path -LiteralPath $UserDataDirectory -PathType Container) {
     Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File | Where-Object {
-      $_.Name -match '(?i)(update|electron).*\.log$'
+      $_.Name -match '(?i)(update|electron).*\.log$' -or
+      $_.Name -in @('main.log', 'backend.log')
     } | ForEach-Object {
       $sources.Add($_.FullName)
     }
