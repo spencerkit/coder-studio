@@ -100,6 +100,9 @@ describe("build-desktop-runtime", () => {
     process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT = "2026-08-08T01:02:03.000Z";
     process.env.CODER_STUDIO_RUNTIME_UPDATE_URL = "";
     process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL = "";
+    const desktopPackage = JSON.parse(
+      await readFile(resolve(DESKTOP_DIR, "package.json"), "utf8")
+    ) as { version: string };
 
     await buildDesktopShell({ clean: true });
 
@@ -107,7 +110,7 @@ describe("build-desktop-runtime", () => {
       readFile(resolve(DESKTOP_DIST_DIR, "build-info.json"), "utf8").then(JSON.parse)
     ).resolves.toMatchObject({
       schemaVersion: 1,
-      shellVersion: "0.1.0",
+      shellVersion: desktopPackage.version,
       publishedAt: "2026-08-08T01:02:03.000Z",
       engineVersion: "2",
       nodeVersion: "24.19.0",
