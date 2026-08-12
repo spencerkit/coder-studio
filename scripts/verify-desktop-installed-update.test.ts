@@ -102,6 +102,9 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("-RedirectStandardOutput $StandardOut");
     expect(desktopMain).toContain('console.error("Unable to start Coder Studio", details)');
     expect(desktopMain).toContain("[desktop-acceptance:environment]");
+    expect(desktopMain).toContain(
+      'probeUserShell: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1"'
+    );
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");

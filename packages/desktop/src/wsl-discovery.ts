@@ -25,7 +25,7 @@ export interface WslDistroProbe {
   message?: string;
 }
 
-export const WSL_PROBE_SCRIPT = [
+const BASE_PROBE_SCRIPT = [
   "set -eu",
   "home=${HOME:?}",
   'data_root=${XDG_DATA_HOME:-"$home/.local/share"}/coder-studio-desktop',
@@ -39,13 +39,21 @@ export const WSL_PROBE_SCRIPT = [
   'if test -f "$data_root/runtime-store/active.json"; then runtime_installed=true; fi',
   'printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$home" "$data_root" "$arch" "$kernel" "$libc"',
   'printf "%s\\n%s\\n" "$engine_installed" "$runtime_installed"',
-  // Agent CLIs are spawned directly by the Server rather than through a shell. Capture the
-  // interactive shell PATH so tools managed by fnm/nvm/asdf/etc. can be inherited as well.
-  // The same shell reports its own npm, which decides whether the Server defers to the user's
-  // Node toolchain or falls back to the bundled Engine npm.
-  // Bound rc-file execution so a broken interactive shell cannot block Desktop startup.
-  'if test -x /usr/bin/timeout; then shell=${SHELL:-/bin/sh}; if test -x "$shell"; then probe_file="/tmp/coder-studio-shell-probe-$$"; /usr/bin/timeout --kill-after=1s 5s "$shell" -ic \'printf "\\n__CODER_STUDIO_USER_PATH__%s\\n" "$PATH"; printf "__CODER_STUDIO_USER_NPM__%s\\n" "$(command -v npm 2>/dev/null || true)"\' >"$probe_file" 2>/dev/null || true; cat "$probe_file" 2>/dev/null || true; rm -f "$probe_file"; fi; fi',
-].join("; ");
+];
+
+// Agent CLIs are spawned directly by the Server rather than through a shell. Capture the
+// interactive shell PATH so tools managed by fnm/nvm/asdf/etc. can be inherited as well.
+// The same shell reports its own npm, which decides whether the Server defers to the user's
+// Node toolchain or falls back to the bundled Engine npm. Bound rc-file execution so a broken
+// interactive shell cannot block Desktop startup.
+const USER_SHELL_PROBE_SCRIPT =
+  'if test -x /usr/bin/timeout; then shell=${SHELL:-/bin/sh}; if test -x "$shell"; then probe_file="/tmp/coder-studio-shell-probe-$$"; /usr/bin/timeout --kill-after=1s 5s "$shell" -ic \'printf "\\n__CODER_STUDIO_USER_PATH__%s\\n" "$PATH"; printf "__CODER_STUDIO_USER_NPM__%s\\n" "$(command -v npm 2>/dev/null || true)"\' >"$probe_file" 2>/dev/null || true; cat "$probe_file" 2>/dev/null || true; rm -f "$probe_file"; fi; fi';
+
+export function createWslProbeScript(probeUserShell = true): string {
+  return [...BASE_PROBE_SCRIPT, ...(probeUserShell ? [USER_SHELL_PROBE_SCRIPT] : [])].join("; ");
+}
+
+export const WSL_PROBE_SCRIPT = createWslProbeScript();
 
 const USER_PATH_MARKER = "__CODER_STUDIO_USER_PATH__";
 const USER_NPM_MARKER = "__CODER_STUDIO_USER_NPM__";
@@ -74,6 +82,7 @@ export class WslDiscovery {
     private readonly options: {
       runner?: WslCommandRunner;
       platform?: NodeJS.Platform;
+      probeUserShell?: boolean;
     } = {}
   ) {}
 
@@ -93,7 +102,14 @@ export class WslDiscovery {
 
   async probe(distro: string): Promise<WslDistroProbe> {
     const result = await runWslCommandChecked(
-      ["--distribution", distro, "--exec", "/bin/sh", "-c", WSL_PROBE_SCRIPT],
+      [
+        "--distribution",
+        distro,
+        "--exec",
+        "/bin/sh",
+        "-c",
+        createWslProbeScript(this.options.probeUserShell ?? true),
+      ],
       undefined,
       this.options.runner ?? runWslCommand
     );

@@ -618,7 +618,9 @@ async function startApplication(): Promise<void> {
       : undefined;
   environmentManager = new DesktopEnvironmentManager({
     stateStore: environmentStateStore,
-    discovery: new WslDiscovery(),
+    discovery: new WslDiscovery({
+      probeUserShell: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1",
+    }),
     shellVersion: app.getVersion(),
     nodeVersion: DESKTOP_NODE_VERSION,
     runtimeVersion: webRuntime?.manifest.runtimeVersion ?? productVersion,

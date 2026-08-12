@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WslCommandRunner } from "./wsl-command.js";
-import { WSL_PROBE_SCRIPT, WslDiscovery } from "./wsl-discovery.js";
+import { createWslProbeScript, WSL_PROBE_SCRIPT, WslDiscovery } from "./wsl-discovery.js";
 
 function result(stdout: string | Buffer, exitCode = 0) {
   return {
@@ -17,6 +17,35 @@ describe("WslDiscovery", () => {
     expect(WSL_PROBE_SCRIPT).toContain('>"$probe_file" 2>/dev/null');
     expect(WSL_PROBE_SCRIPT).toContain('cat "$probe_file"');
     expect(WSL_PROBE_SCRIPT).toContain('rm -f "$probe_file"');
+  });
+
+  it("can skip the optional user shell probe for host-managed acceptance", async () => {
+    const runner = vi
+      .fn<WslCommandRunner>()
+      .mockResolvedValue(
+        result(
+          [
+            "/home/coderstudio",
+            "/home/coderstudio/.local/share/coder-studio-desktop",
+            "x86_64",
+            "6.6.87.2-microsoft-standard-WSL2",
+            "glibc 2.39",
+            "false",
+            "false",
+            "",
+          ].join("\n")
+        )
+      );
+    const discovery = new WslDiscovery({
+      runner,
+      platform: "win32",
+      probeUserShell: false,
+    });
+
+    await expect(discovery.probe("Acceptance")).resolves.toMatchObject({ supported: true });
+    const script = runner.mock.calls[0]?.[0].at(-1);
+    expect(script).toBe(createWslProbeScript(false));
+    expect(script).not.toContain("__CODER_STUDIO_USER_PATH__");
   });
 
   it("decodes Windows UTF-16 distro output", async () => {
