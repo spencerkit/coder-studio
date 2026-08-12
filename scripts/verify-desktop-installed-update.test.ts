@@ -73,6 +73,10 @@ describe("verify-desktop-installed-update", () => {
       resolve(import.meta.dirname, "verify-desktop-installed-update.ps1"),
       "utf8"
     );
+    const desktopMain = await readFile(
+      resolve(import.meta.dirname, "../packages/desktop/src/main.ts"),
+      "utf8"
+    );
 
     expect(runner).toContain("function Preserve-AcceptanceEvidence");
     expect(runner).toContain("[string]$ExpectedComponents = ''");
@@ -93,6 +97,10 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("$_.Name -in @('main.log', 'backend.log')");
     expect(runner).toContain("'acceptance.failure.log'");
     expect(runner).toContain("$failureDetails | Set-Content");
+    expect(runner).toContain("'desktop.stdout.log'");
+    expect(runner).toContain("'desktop.stderr.log'");
+    expect(runner).toContain("-RedirectStandardOutput $StandardOut");
+    expect(desktopMain).toContain('console.error("Unable to start Coder Studio", details)');
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");

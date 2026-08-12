@@ -98,7 +98,9 @@ function Start-AcceptanceDesktop(
   [string]$UserDataDirectory,
   [int]$CdpPort,
   [string]$ScenarioName,
-  [string]$Distro
+  [string]$Distro,
+  [string]$StandardOut,
+  [string]$StandardError
 ) {
   $arguments = @(
     "--remote-debugging-port=$CdpPort",
@@ -111,7 +113,8 @@ function Start-AcceptanceDesktop(
   } else {
     $arguments += '--coder-studio-environment-target=native'
   }
-  return Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru
+  return Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru `
+    -RedirectStandardOutput $StandardOut -RedirectStandardError $StandardError
 }
 
 function Write-JsonAtomic([string]$Path, [object]$Value) {
@@ -133,7 +136,9 @@ function Preserve-AcceptanceEvidence(
   [string]$DriverStandardError,
   [string]$UserDataDirectory,
   [string]$JournalFile,
-  [string]$FailureFile
+  [string]$FailureFile,
+  [string]$DesktopStandardOut,
+  [string]$DesktopStandardError
 ) {
   $resolvedReport = [System.IO.Path]::GetFullPath($ReportFile)
   $reportDirectory = Split-Path -Parent $resolvedReport
@@ -142,7 +147,14 @@ function Preserve-AcceptanceEvidence(
   New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
 
   $sources = [System.Collections.Generic.List[string]]::new()
-  foreach ($source in @($DriverStandardOut, $DriverStandardError, $JournalFile, $FailureFile)) {
+  foreach ($source in @(
+    $DriverStandardOut,
+    $DriverStandardError,
+    $JournalFile,
+    $FailureFile,
+    $DesktopStandardOut,
+    $DesktopStandardError
+  )) {
     if ($source -and (Test-Path -LiteralPath $source -PathType Leaf)) {
       $sources.Add([System.IO.Path]::GetFullPath($source))
     }
@@ -206,6 +218,8 @@ $userDataDirectory = Join-Path $runRoot 'user-data'
 $controlPath = Join-Path $runRoot 'interruption-control.json'
 $driverOut = Join-Path $runRoot 'driver.stdout.log'
 $driverErr = Join-Path $runRoot 'driver.stderr.log'
+$desktopOut = Join-Path $runRoot 'desktop.stdout.log'
+$desktopErr = Join-Path $runRoot 'desktop.stderr.log'
 $failurePath = Join-Path $runRoot 'acceptance.failure.log'
 $journalPath = Join-Path $userDataDirectory 'desktop-update-plan.json'
 $wslMarkerPath = "/tmp/$runId-npm-invoked"
@@ -268,7 +282,8 @@ try {
   } else {
     $Scenario
   }
-  $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro
+  $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
+  $desktopProcess.Handle | Out-Null
   $pages = Wait-Cdp $cdpPort
   $sidecarUrl = ''
   foreach ($page in $pages) {
@@ -333,7 +348,8 @@ try {
           } else {
             $Scenario
           }
-          $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro
+          $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro $desktopOut $desktopErr
+          $desktopProcess.Handle | Out-Null
           Wait-Cdp $cdpPort | Out-Null
           $journalAfter = Read-JournalIdentity $journalPath
           Write-JsonAtomic $controlPath @{
@@ -383,7 +399,9 @@ try {
     $driverErr `
     $userDataDirectory `
     $journalPath `
-    $failurePath
+    $failurePath `
+    $desktopOut `
+    $desktopErr
   if (Test-Path -LiteralPath (Join-Path $installDirectory 'Uninstall Coder Studio.exe')) {
     Start-Process -FilePath (Join-Path $installDirectory 'Uninstall Coder Studio.exe') -ArgumentList '/S' -Wait -ErrorAction SilentlyContinue | Out-Null
   }

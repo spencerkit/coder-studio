@@ -314,6 +314,7 @@ function registerIpcHandlers(rootUserDataDir: string): void {
 
 async function handleStartupFailure(error: unknown): Promise<void> {
   const details = error instanceof Error ? error.stack || error.message : String(error);
+  console.error("Unable to start Coder Studio", details);
   await environmentActivation.failPending(details).catch(() => undefined);
   if (smokeResultPath) {
     await finishSmokeTest(
