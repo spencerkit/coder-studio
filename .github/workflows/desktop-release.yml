@@ -544,8 +544,8 @@ jobs:
           wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
           wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
           if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable production WSL distribution' }
-          wsl.exe -d $distro -u root -- sh -lc "printf '[boot]\nsystemd=false\n' > /etc/wsl.conf"
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to disable systemd in disposable production WSL distribution' }
+          wsl.exe -d $distro -u root -- sh -lc "useradd --create-home --shell /bin/bash coderstudio && printf '[boot]\nsystemd=false\n[user]\ndefault=coderstudio\n' > /etc/wsl.conf"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the disposable production WSL user' }
           wsl.exe --terminate $distro
           if ($LASTEXITCODE -ne 0) { throw 'Unable to restart disposable production WSL distribution' }
           "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8

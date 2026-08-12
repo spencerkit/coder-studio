@@ -480,6 +480,8 @@ describe("GitHub workflow boundaries", () => {
     expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
     expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
     expect(prepareWsl?.run).toContain("systemd=false");
+    expect(prepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
+    expect(prepareWsl?.run).toContain("default=coderstudio");
     expect(prepareWsl?.run).toContain("wsl.exe --terminate $distro");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
@@ -499,6 +501,8 @@ describe("GitHub workflow boundaries", () => {
     expect(releaseRunInstalled?.run).toContain("if ('${{ steps.identity.outputs.components }}')");
     expect(releaseRunInstalled?.run).toContain("-SkipAuthenticode");
     expect(releasePrepareWsl?.run).toContain("systemd=false");
+    expect(releasePrepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
+    expect(releasePrepareWsl?.run).toContain("default=coderstudio");
     expect(releasePrepareWsl?.run).toContain("wsl.exe --terminate $distro");
     expect(promotion.needs).toEqual(["prepare", "publish", "installed-upgrade"]);
     const promotionSteps = promotion.steps ?? [];
