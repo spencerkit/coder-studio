@@ -100,6 +100,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("'desktop.stdout.log'");
     expect(runner).toContain("'desktop.stderr.log'");
     expect(runner).toContain("-RedirectStandardOutput $StandardOut");
+    expect(runner).toContain("$startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }");
+    expect(runner).toContain("Wait-Cdp $cdpPort $startupTimeoutSeconds");
     expect(desktopMain).toContain('console.error("Unable to start Coder Studio", details)');
     expect(desktopMain).toContain("[desktop-acceptance:environment]");
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");

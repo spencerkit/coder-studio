@@ -284,7 +284,8 @@ try {
   }
   $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
   $desktopProcess.Handle | Out-Null
-  $pages = Wait-Cdp $cdpPort
+  $startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }
+  $pages = Wait-Cdp $cdpPort $startupTimeoutSeconds
   $sidecarUrl = ''
   foreach ($page in $pages) {
     if ($page.type -eq 'page' -and $page.url -match '^https?://') {
