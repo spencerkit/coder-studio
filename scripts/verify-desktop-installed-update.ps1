@@ -309,6 +309,9 @@ try {
   }
 
   $driverProcess = Start-Process -FilePath 'pnpm.cmd' -ArgumentList $driverArgs -PassThru -NoNewWindow -RedirectStandardOutput $driverOut -RedirectStandardError $driverErr
+  # Windows PowerShell 5.1 can return a null ExitCode after redirected Start-Process
+  # output unless the process handle is opened before the process exits.
+  $driverProcess.Handle | Out-Null
   $handledInterruptions = [System.Collections.Generic.HashSet[string]]::new(
     [StringComparer]::Ordinal
   )
