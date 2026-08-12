@@ -4,6 +4,7 @@ import {
   type AcceptanceWebSocket,
   callActivatedCoderStudioWsCommand,
   parseVerifyCliUpdateArgs,
+  startCandidateRegistryProxy,
   type VerifyCliUpdateDeps,
   verifyCliUpdate,
 } from "./verify-cli-update.js";
@@ -13,6 +14,15 @@ function createDeps(): VerifyCliUpdateDeps {
     command: vi.fn(async () => ({ stdout: "ok", stderr: "" })),
     startServer: vi.fn(async () => ({
       apiUrl: "http://127.0.0.1:43123",
+      stop: vi.fn(async () => undefined),
+    })),
+    lookupReleaseMetadata: vi.fn(async () => ({
+      version: "0.6.0",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-08T01:02:03.000Z",
+    })),
+    startRegistryProxy: vi.fn(async ({ registryUrl }) => ({
+      registryUrl,
       stop: vi.fn(async () => undefined),
     })),
     callWs: vi.fn(async ({ op }) => {
@@ -61,6 +71,7 @@ function createDeps(): VerifyCliUpdateDeps {
       latestVersion: "0.6.0",
       latestPublishedAt: "2026-08-08T01:02:03.000Z",
       targetVersion: "0.6.0",
+      availability: "up_to_date",
       updateStatus: "succeeded",
     })),
     runFailureScenario: vi.fn(async ({ scenario, prefix }) => ({
@@ -82,6 +93,45 @@ function createDeps(): VerifyCliUpdateDeps {
 }
 
 describe("verify-cli-update", () => {
+  it("serves a loopback npm registry view with the candidate mapped to latest", async () => {
+    const clientFetch = globalThis.fetch;
+    const upstreamFetch = vi.fn(async () =>
+      Response.json({
+        name: "@spencer-kit/coder-studio",
+        "dist-tags": {
+          latest: "0.5.6",
+          "coder-studio-accept-42": "0.5.7",
+        },
+        versions: { "0.5.6": {}, "0.5.7": {} },
+      })
+    );
+    vi.stubGlobal("fetch", upstreamFetch);
+    const proxy = await startCandidateRegistryProxy({
+      registryUrl: "https://registry.npmjs.org/",
+      packageName: "@spencer-kit/coder-studio",
+      candidateVersion: "0.5.7",
+    });
+
+    try {
+      const response = await clientFetch(
+        new URL("%40spencer-kit%2Fcoder-studio", proxy.registryUrl)
+      );
+      await expect(response.json()).resolves.toMatchObject({
+        "dist-tags": {
+          latest: "0.5.7",
+          "coder-studio-accept-42": "0.5.7",
+        },
+      });
+      expect(upstreamFetch).toHaveBeenCalledWith(expect.any(URL), { cache: "no-store" });
+      expect(String(upstreamFetch.mock.calls[0]?.[0])).toBe(
+        new URL("%40spencer-kit%2Fcoder-studio", "https://registry.npmjs.org/").toString()
+      );
+    } finally {
+      await proxy.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("claims activation and runs the update command on the same websocket", async () => {
     const sent: Array<Record<string, unknown>> = [];
     let socket: AcceptanceWebSocket | undefined;
@@ -211,6 +261,67 @@ describe("verify-cli-update", () => {
     });
     expect(deps.runFailureScenario).toHaveBeenCalledTimes(3);
     expect(deps.removePrefix).toHaveBeenCalledWith(prefix);
+  });
+
+  it("bootstraps an exact candidate from a legacy v1 update state", async () => {
+    const deps = createDeps();
+    vi.mocked(deps.callWs).mockImplementation(async ({ op }) => {
+      if (op === "updates.getState") {
+        return { version: 1, currentVersion: "0.5.6", updateStatus: "idle" };
+      }
+      if (op === "updates.prepareInstall") {
+        return { activity: { hasActiveWork: false } };
+      }
+      if (op === "updates.startInstall") {
+        return {
+          version: 1,
+          currentVersion: "0.5.6",
+          targetVersion: "0.5.7",
+          updateStatus: "installing",
+        };
+      }
+      throw new Error(`Legacy server must not receive ${op}`);
+    });
+    vi.mocked(deps.lookupReleaseMetadata).mockResolvedValue({
+      version: "0.5.7",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-12T01:02:03.000Z",
+    });
+    vi.mocked(deps.waitForReconcile).mockResolvedValue({
+      version: 2,
+      currentVersion: "0.5.7",
+      currentPublishedAt: "2026-08-12T01:02:03.000Z",
+      latestVersion: "0.5.7",
+      latestPublishedAt: "2026-08-12T01:02:03.000Z",
+      availability: "up_to_date",
+      updateStatus: "idle",
+    });
+
+    await expect(
+      verifyCliUpdate(
+        {
+          packageName: "@spencer-kit/coder-studio",
+          previousVersion: "0.5.6",
+          candidateVersion: "0.5.7",
+          registryUrl: "https://registry.npmjs.org/",
+          distTag: "coder-studio-accept-42",
+          prefix: resolve("/tmp/coder-studio-cli-acceptance-legacy"),
+        },
+        deps
+      )
+    ).resolves.toMatchObject({
+      previousVersion: "0.5.6",
+      candidateVersion: "0.5.7",
+      candidatePublishedAt: "2026-08-12T01:02:03.000Z",
+      reconciledStatus: "succeeded",
+    });
+    expect(deps.callWs).not.toHaveBeenCalledWith(expect.objectContaining({ op: "updates.check" }));
+    expect(deps.callWs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        op: "updates.startInstall",
+        args: { targetVersion: "0.5.7", force: false },
+      })
+    );
   });
 
   it("rejects an acceptance prefix that reports active work", async () => {
