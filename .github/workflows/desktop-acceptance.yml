@@ -2,6 +2,12 @@ name: Publish Desktop acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      windows_signing:
+        description: "Sign Windows executables with Authenticode"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -93,6 +99,7 @@ jobs:
     uses: ./.github/workflows/desktop-verify.yml
     with:
       signed: true
+      windows_signing: ${{ inputs.windows_signing }}
       signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
       runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
       release_tag: ${{ needs.prepare.outputs.release_tag }}
@@ -171,10 +178,14 @@ jobs:
               exit 1
             fi
           elif grep -q '(HTTP 404)' "${release_error}"; then
+            windows_signing_note=""
+            if [[ "${{ inputs.windows_signing }}" != "true" ]]; then
+              windows_signing_note=" WARNING: Windows executables in this acceptance build are not Authenticode-signed."
+            fi
             gh release create "${RELEASE_TAG}" \
               --target "${GITHUB_SHA}" \
               --title "Coder Studio Desktop acceptance ${GITHUB_RUN_NUMBER}" \
-              --notes "Ephemeral signed acceptance channel for ${GITHUB_SHA}. The signing key is test-only; do not promote these assets to production." \
+              --notes "Ephemeral Runtime-signed acceptance channel for ${GITHUB_SHA}. The Runtime signing key is test-only; do not promote these assets to production.${windows_signing_note}" \
               --draft
           else
             cat "${release_error}" >&2
@@ -387,6 +398,9 @@ jobs:
           }
           if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'wsl', 'wsl-combined')) {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          if ('${{ inputs.windows_signing }}' -ne 'true') {
+            $arguments += '-SkipAuthenticode'
           }
           pnpm acceptance:desktop:installed -- @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
