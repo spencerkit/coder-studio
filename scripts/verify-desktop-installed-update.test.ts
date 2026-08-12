@@ -82,6 +82,10 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
     expect(runner).toContain("Join-Path $factoryRuntime 'manifest.json'");
     expect(runner).not.toContain("Join-Path $factoryRuntime 'runtime.manifest.json'");
+    expect(runner).toContain("$driverProcess.WaitForExit()");
+    expect(runner.indexOf("$driverProcess.WaitForExit()")).toBeLessThan(
+      runner.indexOf("if ($driverProcess.ExitCode -ne 0)")
+    );
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");

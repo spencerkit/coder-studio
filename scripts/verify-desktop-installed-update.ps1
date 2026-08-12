@@ -345,6 +345,7 @@ try {
     Start-Sleep -Milliseconds 200
     $driverProcess.Refresh()
   }
+  $driverProcess.WaitForExit()
   if ($driverProcess.ExitCode -ne 0) {
     $stdout = if (Test-Path -LiteralPath $driverOut) { Get-Content -LiteralPath $driverOut -Raw } else { '' }
     $stderr = if (Test-Path -LiteralPath $driverErr) { Get-Content -LiteralPath $driverErr -Raw } else { '' }
