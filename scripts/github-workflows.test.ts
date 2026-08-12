@@ -469,6 +469,8 @@ describe("GitHub workflow boundaries", () => {
     expect(runInstalled?.run).toContain("-SkipAuthenticode");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
+    expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
+    expect(prepareScenario?.run).toContain("InvariantCulture");
     expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
