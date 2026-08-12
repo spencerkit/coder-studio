@@ -18,7 +18,7 @@ describe("validate-changesets", () => {
     await expect(findChangesetMarkdownFiles(changesetDir)).resolves.toEqual([]);
   });
 
-  it("accepts changesets that only target the CLI package", async () => {
+  it("accepts changesets that target the CLI and Desktop packages", async () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-changesets-"));
     const changesetDir = join(dir, ".changeset");
     const filePath = join(changesetDir, "green-lion.md");
@@ -28,16 +28,17 @@ describe("validate-changesets", () => {
       filePath,
       `---
 "@spencer-kit/coder-studio": minor
+"@coder-studio/desktop": patch
 ---
 
-Expose a new CLI flag.
+Expose a new CLI flag and update the Desktop Shell.
 `
     );
 
     await expect(assertAllowedChangesetPackages([filePath])).resolves.toBeUndefined();
   });
 
-  it("rejects changesets that target non-CLI packages", async () => {
+  it("rejects changesets that target packages outside the release surfaces", async () => {
     const dir = await mkdtemp(join(tmpdir(), "coder-studio-changesets-"));
     const changesetDir = join(dir, ".changeset");
     const filePath = join(changesetDir, "red-bird.md");

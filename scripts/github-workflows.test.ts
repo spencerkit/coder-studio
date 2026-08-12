@@ -360,10 +360,22 @@ describe("GitHub workflow boundaries", () => {
     const release = loadWorkflow("desktop-release.yml");
     const releaseInputs = (release.on.workflow_dispatch as { inputs: Record<string, unknown> })
       .inputs;
-    expect(releaseInputs.mode).toMatchObject({ options: ["full", "runtime-only"] });
+    expect(releaseInputs).not.toHaveProperty("mode");
     expect(release.jobs.prepare.outputs).toMatchObject({
       published_at: "${{ steps.release.outputs.published_at }}",
+      release_kind: "${{ steps.release.outputs.release_kind }}",
     });
+    const resolveRelease = (release.jobs.prepare.steps ?? []).find(
+      (step) => step.name === "Resolve versions and release tag"
+    );
+    expect(resolveRelease?.run).toContain("has_desktop_channel");
+    expect(resolveRelease?.run).toContain("--pattern desktop-channel.json");
+    expect(resolveRelease?.run).toContain("shell_change=$(node -e");
+    expect(resolveRelease?.run).toContain('if [[ "${shell_change}" == "same" ]]');
+    expect(resolveRelease?.run).toContain('elif [[ "${shell_change}" == "downgrade" ]]');
+    expect(resolveRelease?.run).toContain("elif ! grep -q '(HTTP 404)'");
+    expect(resolveRelease?.run).toContain('release_kind="runtime-only"');
+    expect(resolveRelease?.run).toContain('echo "release_kind=${release_kind}"');
     const linuxBuild = release.jobs["linux-assets"];
     const windowsBuild = release.jobs["windows-assets"];
     const releaseTypecheck = (windowsBuild.steps ?? []).find(
@@ -378,6 +390,8 @@ describe("GitHub workflow boundaries", () => {
     expect(windowsBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBe(
       "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/"
     );
+    expect(JSON.stringify(linuxBuild)).toContain("needs.prepare.outputs.release_kind");
+    expect(JSON.stringify(windowsBuild)).toContain("needs.prepare.outputs.release_kind");
     expect(linuxBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBeUndefined();
     expect(releaseTypecheck?.run).toContain("pnpm ci:typecheck");
     const publishSteps = release.jobs.publish.steps ?? [];

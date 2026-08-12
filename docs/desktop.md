@@ -256,17 +256,18 @@ GitHub Release 必须同时包含安装包、blockmap 和平台更新元数据�
   `desktop-ci-<run-id>-<attempt>` prerelease。只有这一层会发布测试资产；该通道固定到对应 tag，永远不会
   更新 GitHub `latest`，也不能晋升为生产发布。
 - `.github/workflows/desktop-release.yml` 保持生产发布边界不变：只能手动从 `main` 触发，并受
-  `desktop-production` environment 审批保护。`full` 模式发布 Shell、Windows Runtime、WSL Engine 和
-  WSL Runtime；`runtime` 模式只发布 Windows/WSL Product Runtime，并从当前稳定 Release 继承 Shell
-  安装包与 WSL Engine。
+  `desktop-production` environment 审批保护。工作流比较当前 `packages/desktop/package.json` 与最新稳定
+  `desktop-channel.json` 的 Shell 版本：Shell 版本提升或尚无稳定 Desktop 通道时发布 Shell、Windows
+  Runtime、WSL Engine 和 WSL Runtime；Shell 版本未变化时只发布 Windows/WSL Product Runtime，并从
+  当前稳定 Release 继承 Shell 安装包与 WSL Engine。
 
 生产流水线在原生 runner 上按平台并行执行：
 
 1. checkout，并安装 Node 24 与 pnpm；
 2. `pnpm install --frozen-lockfile`；
 3. Windows job 运行 Desktop 类型检查和测试；完整 server/CLI/Web 校验由同一提交的 CI 负责；
-4. full 模式运行 `pnpm dist:desktop`；
-5. Windows full 模式运行 `pnpm smoke:desktop`；
+4. Shell 版本提升时运行 `pnpm dist:desktop`；
+5. Windows Shell 发布路径运行 `pnpm smoke:desktop`；
 6. 用 `scripts/desktop-release-artifacts.ts` 汇总并重新解包校验签名、版本边界、文件 SHA-256、Engine
    包 SHA-256、sourcemap 和更新元数据；
 7. 为最终资产生成 GitHub artifact attestation，并将安装包、blockmap 和更新元数据上传到同一个
@@ -285,8 +286,9 @@ Windows runner 不能生成或复用 `node-pty` 的 Linux 原生文件。
 - GitHub：对目标 Release 有写权限的 token。
 
 上述四个 Desktop secret 应配置在 GitHub `desktop-production` environment 中，并为该 environment
-启用 required reviewers。稳定 full release 使用 `desktop-v<desktop-version>` 标签，Runtime-only release
-使用 `desktop-runtime-v<runtime-version>` 标签；标签已存在时流水线直接失败，不覆盖已有产物。
+启用 required reviewers。自动判定的完整 Shell release 使用 `desktop-v<desktop-version>` 标签，
+Runtime-only release 使用 `desktop-runtime-v<runtime-version>` 标签；标签已存在时流水线直接失败，
+不覆盖已有产物。
 
 由于 CLI 与 Desktop 共用同一个 GitHub `latest` 指针，CLI 发布流水线会把当前 Desktop 安装包、更新
 元数据、Windows Runtime、WSL Engine 和 WSL Runtime 复制到新的 CLI Release。这样 CLI 发布成为

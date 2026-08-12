@@ -3,14 +3,6 @@ name: Publish Desktop
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "Full Shell/Engine release or Product Runtime-only update"
-        required: true
-        default: full
-        type: choice
-        options:
-          - full
-          - runtime-only
       prerelease:
         description: "Publish as a GitHub prerelease"
         required: true
@@ -45,6 +37,7 @@ jobs:
       title: ${{ steps.release.outputs.title }}
       published_at: ${{ steps.release.outputs.published_at }}
       channel: ${{ steps.release.outputs.channel }}
+      release_kind: ${{ steps.release.outputs.release_kind }}
 
     steps:
       - name: Checkout repository
@@ -63,11 +56,39 @@ jobs:
       - name: Resolve versions and release tag
         id: release
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           desktop_version=$(node -p "require('./packages/desktop/package.json').version")
           runtime_version=$(node -p "require('./packages/cli/package.json').version")
           published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
-          if [[ "${{ inputs.mode }}" == "full" ]]; then
+
+          release_kind="full"
+          latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
+          latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
+            previous_tag=$(node -e "const release=require(process.argv[1]); if(typeof release.tag_name!=='string'||!release.tag_name) process.exit(1); process.stdout.write(release.tag_name)" "${latest_release_json}")
+            has_desktop_channel=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
+            if [[ "${has_desktop_channel}" == "true" ]]; then
+              mkdir -p release/desktop-release-boundary
+              gh release download "${previous_tag}" \
+                --pattern desktop-channel.json \
+                --dir release/desktop-release-boundary
+              previous_shell_version=$(node -e "const channel=require('./release/desktop-release-boundary/desktop-channel.json'); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)")
+              shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${desktop_version}" "${previous_shell_version}")
+              if [[ "${shell_change}" == "same" ]]; then
+                release_kind="runtime-only"
+              elif [[ "${shell_change}" == "downgrade" ]]; then
+                echo "Desktop Shell ${desktop_version} is older than stable ${previous_shell_version}" >&2
+                exit 1
+              fi
+            fi
+          elif ! grep -q '(HTTP 404)' "${latest_release_error}"; then
+            cat "${latest_release_error}" >&2
+            exit 1
+          fi
+
+          if [[ "${release_kind}" == "full" ]]; then
             tag="desktop-v${desktop_version}"
             title="Coder Studio Desktop ${desktop_version}"
           else
@@ -83,6 +104,7 @@ jobs:
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
           echo "title=${title}" >> "${GITHUB_OUTPUT}"
           echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+          echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
           if [[ "${{ inputs.prerelease }}" == "true" ]]; then
             echo "channel=prerelease" >> "${GITHUB_OUTPUT}"
           else
@@ -132,7 +154,7 @@ jobs:
       - name: Build signed WSL assets
         shell: bash
         run: |
-          if [[ "${{ inputs.mode }}" == "full" ]]; then
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "full" ]]; then
             pnpm build:wsl-engine
           fi
           pnpm build:wsl-runtime
@@ -141,7 +163,7 @@ jobs:
         shell: bash
         run: |
           components="wsl-runtime"
-          if [[ "${{ inputs.mode }}" == "full" ]]; then
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "full" ]]; then
             components="wsl-engine,wsl-runtime"
           fi
           pnpm desktop:artifacts stage --directory release/desktop-release-linux --components "${components}"
@@ -192,7 +214,7 @@ jobs:
           if (-not $env:CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY -or -not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
             throw "Desktop Runtime Ed25519 signing secrets are required"
           }
-          if ("${{ inputs.mode }}" -eq "full" -and (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD)) {
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full" -and (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD)) {
             throw "Windows Authenticode signing secrets are required for a full Desktop release"
           }
 
@@ -207,7 +229,7 @@ jobs:
       - name: Build signed Windows assets
         shell: pwsh
         run: |
-          if ("${{ inputs.mode }}" -eq "full") {
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full") {
             pnpm dist:desktop
             pnpm smoke:desktop
           } else {
@@ -215,7 +237,7 @@ jobs:
           }
 
       - name: Verify Authenticode signatures
-        if: inputs.mode == 'full'
+        if: needs.prepare.outputs.release_kind == 'full'
         shell: pwsh
         run: |
           $metadata = Get-Content release/desktop/latest.yml -Raw
@@ -236,7 +258,7 @@ jobs:
         shell: pwsh
         run: |
           $components = 'win-runtime'
-          if ("${{ inputs.mode }}" -eq "full") {
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full") {
             $components = 'desktop,win-runtime'
           }
           pnpm desktop:artifacts stage --directory release/desktop-release-windows --components $components
@@ -287,7 +309,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download previous immutable release
-        if: inputs.mode == 'runtime-only'
+        if: needs.prepare.outputs.release_kind == 'runtime-only'
         shell: bash
         run: |
           mkdir -p release/desktop-release-previous
@@ -306,7 +328,7 @@ jobs:
           done
 
       - name: Carry forward immutable Shell and Engine
-        if: inputs.mode == 'runtime-only'
+        if: needs.prepare.outputs.release_kind == 'runtime-only'
         run: |
           pnpm desktop:channel -- \
             --directory release/desktop-release-final \
@@ -339,9 +361,9 @@ jobs:
             validate
             --directory release/desktop-release-final
             --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
-            --release-kind "${{ inputs.mode }}"
+            --release-kind "${{ needs.prepare.outputs.release_kind }}"
           )
-          if [[ "${{ inputs.mode }}" == "runtime-only" ]]; then
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "runtime-only" ]]; then
             validation_args+=(--previous-release-directory release/desktop-release-previous)
           fi
           pnpm desktop:artifacts "${validation_args[@]}"
@@ -454,10 +476,10 @@ jobs:
           $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
           $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
           $isWsl = '${{ matrix.target }}' -eq 'wsl'
-          $scenario = if ($isWsl) { 'wsl' } elseif ('${{ inputs.mode }}' -eq 'full') { 'combined' } else { 'runtime-only' }
+          $scenario = if ($isWsl) { 'wsl' } elseif ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') { 'combined' } else { 'runtime-only' }
           $components = if ($isWsl) {
-            if ('${{ inputs.mode }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:win32-x64' }
-          } elseif ('${{ inputs.mode }}' -eq 'full') {
+            if ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:win32-x64' }
+          } elseif ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') {
             'shell,runtime:win32-x64'
           } else {
             'runtime:win32-x64'
