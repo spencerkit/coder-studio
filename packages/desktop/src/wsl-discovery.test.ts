@@ -13,6 +13,7 @@ function result(stdout: string | Buffer, exitCode = 0) {
 describe("WslDiscovery", () => {
   it("isolates interactive shell probe output from inherited WSL pipes", () => {
     expect(WSL_PROBE_SCRIPT).toContain('probe_file="/tmp/coder-studio-shell-probe-$$"');
+    expect(WSL_PROBE_SCRIPT).toContain("/usr/bin/timeout --kill-after=1s 5s");
     expect(WSL_PROBE_SCRIPT).toContain('>"$probe_file" 2>/dev/null');
     expect(WSL_PROBE_SCRIPT).toContain('cat "$probe_file"');
     expect(WSL_PROBE_SCRIPT).toContain('rm -f "$probe_file"');
