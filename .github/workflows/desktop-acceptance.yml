@@ -302,7 +302,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
           $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
           $validation = @(
-            'desktop:artifacts', '--', 'validate',
+            'desktop:artifacts', 'validate',
             '--directory', $candidate,
             '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
           )

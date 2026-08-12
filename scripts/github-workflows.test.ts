@@ -471,6 +471,8 @@ describe("GitHub workflow boundaries", () => {
     expect(prepareScenario?.run).toContain("'wsl-combined'");
     expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
     expect(prepareScenario?.run).toContain("InvariantCulture");
+    expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
+    expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
     expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
