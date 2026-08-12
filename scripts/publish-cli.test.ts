@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   assertCliPublishArtifacts,
@@ -89,7 +89,15 @@ describe("publish-cli", () => {
     await mkdir(join(cliDir, "dist", "esm"), { recursive: true });
     await mkdir(join(cliDir, "dist", "web"), { recursive: true });
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
-    await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
+    await writeFile(
+      join(cliDir, "dist", "esm", "bin.mjs"),
+      [
+        'import "vscode-jsonrpc/node.js";',
+        'import "@xterm/addon-serialize/internal";',
+        "export {};",
+        "",
+      ].join("\n")
+    );
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
@@ -115,6 +123,7 @@ describe("publish-cli", () => {
         },
         dependencies: {
           "@xterm/addon-serialize": "^0.14.0",
+          "vscode-jsonrpc": "^8.2.1",
         },
       })
     );
@@ -229,7 +238,7 @@ describe("publish-cli", () => {
     ).rejects.toThrow("Refusing to publish from a dirty git worktree");
 
     expect(exec).toHaveBeenCalledWith("git", ["status", "--porcelain"], {
-      cwd: "/repo",
+      cwd: resolve("/repo"),
       stdio: "pipe",
     });
     expect(exec).not.toHaveBeenCalledWith("pnpm", expect.any(Array), expect.any(Object));
