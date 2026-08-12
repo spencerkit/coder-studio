@@ -80,6 +80,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("$initialScenario");
     expect(runner).toContain("'runtime:win32-x64'");
     expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
+    expect(runner).toContain("Join-Path $factoryRuntime 'manifest.json'");
+    expect(runner).not.toContain("Join-Path $factoryRuntime 'runtime.manifest.json'");
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");

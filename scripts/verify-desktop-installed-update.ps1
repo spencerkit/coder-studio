@@ -249,7 +249,7 @@ try {
     $factoryRuntime = Join-Path $installDirectory 'resources/factory-runtime'
     $factoryEvidence = Join-Path $userDataDirectory 'factory-runtime'
     New-Item -ItemType Directory -Path $factoryEvidence -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $factoryRuntime 'runtime.manifest.json') -Destination (Join-Path $factoryEvidence 'runtime.manifest.json') -Force
+    Copy-Item -LiteralPath (Join-Path $factoryRuntime 'manifest.json') -Destination (Join-Path $factoryEvidence 'runtime.manifest.json') -Force
   }
   if ($Scenario -eq 'runtime-health-rollback') {
     $env:CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION = $ExpectedRuntimeVersion
