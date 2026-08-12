@@ -581,7 +581,6 @@ async function main(): Promise<void> {
   const required = [
     "cdp-url",
     "scenario",
-    "components",
     "previous-shell-version",
     "previous-runtime-version",
     "target-shell-version",
@@ -590,7 +589,7 @@ async function main(): Promise<void> {
   for (const key of required) if (!values.get(key)) throw new Error(`--${key} is required`);
   const scenario: InstalledDesktopScenario = {
     name: values.get("scenario") as InstalledDesktopScenarioName,
-    expectedComponentIds: parseList(values.get("components") as string),
+    expectedComponentIds: parseList(values.get("components") ?? ""),
     previousShellVersion: values.get("previous-shell-version") as string,
     previousRuntimeVersion: values.get("previous-runtime-version") as string,
     targetShellVersion: values.get("target-shell-version") as string,

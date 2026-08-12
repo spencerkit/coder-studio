@@ -466,6 +466,7 @@ describe("GitHub workflow boundaries", () => {
     expect(runInstalled?.run).toContain("pnpm acceptance:desktop:installed");
     expect(runInstalled?.run).toContain("-CandidateInstaller");
     expect(runInstalled?.run).toContain("-PublicKeyPath");
+    expect(runInstalled?.run).toContain("if ('${{ steps.scenario.outputs.components }}')");
     expect(runInstalled?.run).toContain("-SkipAuthenticode");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
@@ -485,6 +486,7 @@ describe("GitHub workflow boundaries", () => {
     const releaseRunInstalled = (releaseInstalled.steps ?? []).find(
       (step) => step.name === "Run production installed Desktop update"
     );
+    expect(releaseRunInstalled?.run).toContain("if ('${{ steps.identity.outputs.components }}')");
     expect(releaseRunInstalled?.run).toContain("-SkipAuthenticode");
     expect(promotion.needs).toEqual(["prepare", "publish", "installed-upgrade"]);
     const promotionSteps = promotion.steps ?? [];
