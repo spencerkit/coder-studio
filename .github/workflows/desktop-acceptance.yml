@@ -389,13 +389,15 @@ jobs:
             '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
             '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
             '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
-            '-ExpectedComponents', '${{ steps.scenario.outputs.components }}',
             '-PublicKeyPath', 'release/desktop-ci-signing/runtime-public.pem',
             '-Scenario', '${{ matrix.scenario }}',
             '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
             '-CommitSha', '${{ github.sha }}',
             '-ChannelSignatureDigest', '${{ steps.scenario.outputs.signature_digest }}'
           )
+          if ('${{ steps.scenario.outputs.components }}') {
+            $arguments += @('-ExpectedComponents', '${{ steps.scenario.outputs.components }}')
+          }
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
             $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
           }

@@ -558,13 +558,15 @@ jobs:
             '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
             '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
             '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
-            '-ExpectedComponents', '${{ steps.identity.outputs.components }}',
             '-PublicKeyPath', 'release/desktop-production-key/runtime-public.pem',
             '-Scenario', '${{ steps.identity.outputs.scenario }}',
             '-ReportPath', 'release/desktop-production-report/${{ matrix.target }}.json',
             '-CommitSha', '${{ github.sha }}',
             '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
           )
+          if ('${{ steps.identity.outputs.components }}') {
+            $arguments += @('-ExpectedComponents', '${{ steps.identity.outputs.components }}')
+          }
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }

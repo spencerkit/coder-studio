@@ -8,7 +8,7 @@ param(
   [Parameter(Mandatory = $true)][string]$PreviousRuntimeVersion,
   [Parameter(Mandatory = $true)][string]$ExpectedShellVersion,
   [Parameter(Mandatory = $true)][string]$ExpectedRuntimeVersion,
-  [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedComponents,
+  [string]$ExpectedComponents = '',
   [Parameter(Mandatory = $true)][string]$PublicKeyPath,
   [Parameter(Mandatory = $true)]
   [ValidateSet(
@@ -279,7 +279,6 @@ try {
     'exec', 'tsx', 'scripts/verify-desktop-installed-update.ts',
     '--cdp-url', "http://127.0.0.1:$cdpPort",
     '--scenario', $Scenario,
-    '--components', $ExpectedComponents,
     '--previous-shell-version', $PreviousShellVersion,
     '--previous-runtime-version', $PreviousRuntimeVersion,
     '--target-shell-version', $ExpectedShellVersion,
@@ -289,6 +288,9 @@ try {
     '--user-data-dir', $userDataDirectory,
     '--release-tag', $CandidateTag
   )
+  if ($ExpectedComponents) {
+    $driverArgs += @('--components', $ExpectedComponents)
+  }
   if ($ExpectedRuntimeAfterRestart) {
     $driverArgs += @('--expected-runtime-after', $ExpectedRuntimeAfterRestart)
   }

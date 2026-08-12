@@ -75,6 +75,8 @@ describe("verify-desktop-installed-update", () => {
     );
 
     expect(runner).toContain("function Preserve-AcceptanceEvidence");
+    expect(runner).toContain("[string]$ExpectedComponents = ''");
+    expect(runner).toContain("if ($ExpectedComponents)");
     expect(runner).toContain("$initialScenario");
     expect(runner).toContain("'runtime:win32-x64'");
     expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
