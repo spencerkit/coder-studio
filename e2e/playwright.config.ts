@@ -74,7 +74,7 @@ export default defineConfig({
   reporter: [["list"]],
   webServer: [
     {
-      command: "pnpm exec tsx packages/server/src/server.ts",
+      command: "pnpm exec tsx packages/server/src/main.ts",
       cwd: "..",
       url: `${BACKEND_HTTP_URL}/healthz`,
       reuseExistingServer: false,

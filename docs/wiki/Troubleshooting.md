@@ -107,6 +107,39 @@ Try:
 - Confirming the tunnel or network route is still active.
 - Restarting the service with `coder-studio serve --restart`.
 
+## Update Recovery
+
+Open **About & Updates → Update status**, then expand **Component diagnostics**. This shows which
+authority owns the update, the active environment, component version transitions, the failed phase,
+recovery guidance, and the exact log locations available for that installation.
+
+If a global npm CLI update reports **Manual action required**, select and copy the complete command
+shown under **Manual Command**, run it in a terminal with the permissions used for the global npm
+installation, and then restart Coder Studio. Do not shorten the command or replace its exact target
+version with a moving npm tag.
+
+Choosing **Restart later** closes the confirmation without beginning the restart. A verified Desktop
+download remains ready for a later restart; a CLI installation does not start until its confirmation
+is accepted. Reopen **Update status** when it is safe to interrupt active terminals, sessions, and
+Supervisor tasks.
+
+A **pending** Product Runtime is verified and staged but has not completed activation and its health
+check. A **quarantined** Runtime failed activation or health verification; Coder Studio retains the
+previous healthy Runtime and will not automatically retry the quarantined candidate. Review the
+reported failure, correct the underlying issue, and use the update screen's explicit retry action.
+
+An external browser connected to a Desktop sidecar cannot take over Desktop update authority. Open
+the installed Coder Studio Desktop application on the Windows host and continue from its **Update
+status** page. For WSL, recovery is still initiated by that Windows Desktop application, not by npm
+inside the distribution.
+
+Desktop diagnostics report the Electron log (normally `main.log` under Electron's logs directory)
+and the update journal is stored at `<userData>/desktop-update-plan.json`. CLI update worker failures
+are recorded under the configured Coder Studio state directory in `logs/update-worker.log`. Use the
+paths displayed by **Component diagnostics** when they differ from these names. Journals and Runtime
+current, pending, or failed pointers are recovery state owned by Coder Studio; do not edit or delete
+them manually.
+
 ## Still Stuck
 
 Collect:

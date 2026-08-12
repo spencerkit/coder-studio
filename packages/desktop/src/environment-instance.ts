@@ -1,0 +1,136 @@
+import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import { isEnvironmentLaunchRequestId } from "./environment-launch.js";
+import { createWslEnvironmentTarget, NATIVE_ENVIRONMENT } from "./environment-state.js";
+import type { DesktopEnvironmentTarget } from "./protocol.js";
+
+export const ENVIRONMENT_INSTANCE_ROOT_SWITCH = "coder-studio-environment-root";
+export const ENVIRONMENT_INSTANCE_TARGET_SWITCH = "coder-studio-environment-target";
+export const ENVIRONMENT_INSTANCE_DISTRO_SWITCH = "coder-studio-wsl-distro";
+export const ENVIRONMENT_LAUNCH_REQUEST_SWITCH = "coder-studio-environment-launch-request";
+
+export interface CommandLineSwitchReader {
+  getSwitchValue(name: string): string;
+}
+
+interface EnvironmentInstanceProcess {
+  off(event: "error", listener: (error: Error) => void): unknown;
+  off(event: "spawn", listener: () => void): unknown;
+  off(
+    event: "exit",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void
+  ): unknown;
+  once(event: "error", listener: (error: Error) => void): unknown;
+  once(event: "spawn", listener: () => void): unknown;
+  once(
+    event: "exit",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void
+  ): unknown;
+  unref(): void;
+}
+
+export async function waitForEnvironmentInstanceReady(
+  child: EnvironmentInstanceProcess,
+  waitForReady: () => Promise<void>
+): Promise<void> {
+  let spawned = false;
+  let resolveSpawned!: () => void;
+  let rejectSpawned!: (error: Error) => void;
+  let rejectEarlyExit!: (error: Error) => void;
+  const spawnedPromise = new Promise<void>((resolve, reject) => {
+    resolveSpawned = resolve;
+    rejectSpawned = reject;
+  });
+  const earlyExitPromise = new Promise<never>((_resolve, reject) => {
+    rejectEarlyExit = reject;
+  });
+  const handleError = (error: Error) => {
+    if (spawned) rejectEarlyExit(error);
+    else rejectSpawned(error);
+  };
+  const handleSpawn = () => {
+    spawned = true;
+    child.unref();
+    resolveSpawned();
+  };
+  const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
+    // A secondary Electron process exits normally after forwarding its activation request to
+    // the existing primary process. Keep waiting for that primary process to acknowledge ready.
+    if (code === 0 && signal === null) return;
+    const result = code !== null ? `code ${code}` : signal ? `signal ${signal}` : "unknown status";
+    rejectEarlyExit(new Error(`Desktop environment process exited before readiness (${result})`));
+  };
+
+  child.once("error", handleError);
+  child.once("spawn", handleSpawn);
+  child.once("exit", handleExit);
+  try {
+    await spawnedPromise;
+    await Promise.race([waitForReady(), earlyExitPromise]);
+  } finally {
+    child.off("error", handleError);
+    child.off("spawn", handleSpawn);
+    child.off("exit", handleExit);
+  }
+}
+
+export function getEnvironmentInstanceRoot(
+  commandLine: CommandLineSwitchReader,
+  fallbackUserDataDir: string
+): string {
+  const root = commandLine.getSwitchValue(ENVIRONMENT_INSTANCE_ROOT_SWITCH).trim();
+  return resolve(root || fallbackUserDataDir);
+}
+
+export function readEnvironmentInstanceTarget(
+  commandLine: CommandLineSwitchReader
+): DesktopEnvironmentTarget {
+  const kind = commandLine.getSwitchValue(ENVIRONMENT_INSTANCE_TARGET_SWITCH).trim();
+  if (!kind || kind === "native") return NATIVE_ENVIRONMENT;
+  if (kind !== "wsl") throw new Error(`Invalid Desktop environment target: ${kind}`);
+
+  const distro = commandLine.getSwitchValue(ENVIRONMENT_INSTANCE_DISTRO_SWITCH).trim();
+  if (!distro) throw new Error("A WSL Desktop instance requires a distribution name");
+  return createWslEnvironmentTarget(distro);
+}
+
+export function readEnvironmentLaunchRequestId(
+  commandLine: CommandLineSwitchReader
+): string | null {
+  const requestId = commandLine.getSwitchValue(ENVIRONMENT_LAUNCH_REQUEST_SWITCH).trim();
+  return isEnvironmentLaunchRequestId(requestId) ? requestId : null;
+}
+
+export function getEnvironmentInstanceUserDataDir(
+  rootUserDataDir: string,
+  target: DesktopEnvironmentTarget
+): string {
+  const root = resolve(rootUserDataDir);
+  if (target.kind === "native") return root;
+  const id = createHash("sha256").update(target.id).digest("hex").slice(0, 16);
+  return resolve(root, "environment-instances", id);
+}
+
+export function createEnvironmentInstanceArgs(
+  rootUserDataDir: string,
+  target: DesktopEnvironmentTarget,
+  launchRequestId?: string
+): string[] {
+  const root = resolve(rootUserDataDir);
+  const args = [
+    `--user-data-dir=${getEnvironmentInstanceUserDataDir(root, target)}`,
+    `--${ENVIRONMENT_INSTANCE_ROOT_SWITCH}=${root}`,
+    `--${ENVIRONMENT_INSTANCE_TARGET_SWITCH}=${target.kind}`,
+  ];
+  if (target.kind === "wsl") {
+    if (!target.distro) throw new Error("A WSL Desktop instance requires a distribution name");
+    args.push(`--${ENVIRONMENT_INSTANCE_DISTRO_SWITCH}=${target.distro}`);
+  }
+  if (launchRequestId !== undefined) {
+    if (!isEnvironmentLaunchRequestId(launchRequestId)) {
+      throw new Error("Invalid environment launch request id");
+    }
+    args.push(`--${ENVIRONMENT_LAUNCH_REQUEST_SWITCH}=${launchRequestId}`);
+  }
+  return args;
+}

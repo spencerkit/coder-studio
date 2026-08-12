@@ -1,0 +1,1428 @@
+{
+  "schemaVersion": 1,
+  "project": "packages/web/tsconfig.json",
+  "diagnostics": [
+    {
+      "file": "src/components/ui/_internal/focus-trap.ts",
+      "code": 18048,
+      "message": "'first' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/_internal/focus-trap.ts",
+      "code": 18048,
+      "message": "'last' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/confirm-dialog/index.test.tsx",
+      "code": 2353,
+      "message": "Object literal may only specify known properties, and '\"data-testid\"' does not exist in type 'ConfirmButtonProps'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/confirm-dialog/index.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/confirm-dialog/index.test.tsx",
+      "code": 6133,
+      "message": "'waitFor' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/confirm-dialog/index.tsx",
+      "code": 2322,
+      "message": "Type '{ children: ReactNode; className: string | undefined; disabled: any; onClick: () => void; variant: \"danger\" | \"primary\"; type?: string | undefined; id?: string | undefined; color?: string | undefined; ... 277 more ...; as?: \"a\" | ... 1 more ... | undefined; }' is not assignable to type 'IntrinsicAttributes & ButtonProps'.\n  Type '{ children: ReactNode; className: string | undefined; disabled: any; onClick: () => void; variant: \"danger\" | \"primary\"; type?: string | undefined; id?: string | undefined; color?: string | undefined; ... 277 more ...; as?: \"a\" | ... 1 more ... | undefined; }' is not assignable to type 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof ButtonBaseProps>'.\n    Types of property 'type' are incompatible.\n      Type 'string | undefined' is not assignable to type '\"submit\" | \"button\" | \"reset\" | undefined'.\n        Type 'string' is not assignable to type '\"submit\" | \"button\" | \"reset\" | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/confirm-dialog/index.tsx",
+      "code": 2339,
+      "message": "Property 'disabled' does not exist on type 'ConfirmButtonProps'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/drawer/index.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/empty-state/index.tsx",
+      "code": 2345,
+      "message": "Argument of type 'string | undefined' is not assignable to parameter of type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 3
+    },
+    {
+      "file": "src/components/ui/icon-button/index.tsx",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 2
+    },
+    {
+      "file": "src/components/ui/modal/index.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/progress-bar/index.test.tsx",
+      "code": 2339,
+      "message": "Property 'style' does not exist on type 'Element'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/progress-bar/index.tsx",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 5
+    },
+    {
+      "file": "src/components/ui/select/index.tsx",
+      "code": 2320,
+      "message": "Interface 'ListboxSelectProps<T>' cannot simultaneously extend types 'SelectBaseProps<T>' and 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, \"type\" | \"value\" | \"children\" | \"onChange\" | \"defaultValue\">'.\n  Named property 'className' of types 'SelectBaseProps<T>' and 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, \"type\" | \"value\" | \"children\" | \"onChange\" | \"defaultValue\">' are not identical.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/select/index.tsx",
+      "code": 2320,
+      "message": "Interface 'MobileSelectTriggerProps<T>' cannot simultaneously extend types 'SelectBaseProps<T>' and 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, \"type\" | \"value\" | \"children\" | \"onChange\" | \"defaultValue\">'.\n  Named property 'className' of types 'SelectBaseProps<T>' and 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, \"type\" | \"value\" | \"children\" | \"onChange\" | \"defaultValue\">' are not identical.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/select/index.tsx",
+      "code": 2320,
+      "message": "Interface 'NativeSelectProps<T>' cannot simultaneously extend types 'SelectBaseProps<T>' and 'Omit<SelectHTMLAttributes<HTMLSelectElement>, \"value\" | \"children\" | \"onChange\" | \"size\" | \"defaultValue\" | \"multiple\">'.\n  Named property 'className' of types 'SelectBaseProps<T>' and 'Omit<SelectHTMLAttributes<HTMLSelectElement>, \"value\" | \"children\" | \"onChange\" | \"size\" | \"defaultValue\" | \"multiple\">' are not identical.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/select/index.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'HTMLElement[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/tag/index.tsx",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 6
+    },
+    {
+      "file": "src/components/ui/themed-icon/index.tsx",
+      "code": 7053,
+      "message": "Element implicitly has an 'any' type because expression of type '\"data-testid\"' can't be used to index type '{ id?: string | undefined; color?: string | undefined; title?: string | undefined; key?: Key | null | undefined; content?: string | undefined; property?: string | undefined; dir?: string | undefined; ... 268 more ...; exportparts?: string | undefined; }'.\n  Property 'data-testid' does not exist on type '{ id?: string | undefined; color?: string | undefined; title?: string | undefined; key?: Key | null | undefined; content?: string | undefined; property?: string | undefined; dir?: string | undefined; ... 268 more ...; exportparts?: string | undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/toast/index.tsx",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 4
+    },
+    {
+      "file": "src/components/ui/toast/index.tsx",
+      "code": 2430,
+      "message": "Interface 'ToastProps' incorrectly extends interface 'Omit<HTMLAttributes<HTMLDivElement>, \"children\" | \"onClick\">'.\n  Types of property 'title' are incompatible.\n    Type 'ReactNode' is not assignable to type 'string | undefined'.\n      Type 'null' is not assignable to type 'string | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/ui/workbench-layer/index.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/features/agent-panes/views/shared/editor-pane-card.test.tsx",
+      "code": 2345,
+      "message": "Argument of type 'Element | null | undefined' is not assignable to parameter of type 'SVGElement | HTMLElement | null'.\n  Type 'undefined' is not assignable to type 'SVGElement | HTMLElement | null'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/actions/use-code-editor-actions.browser-tabs.test.tsx",
+      "code": 2322,
+      "message": "Type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to type 'WorkspaceEditorTab'.\n  Type '{ kind: \"browser\"; id: string; url: string; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 5
+    },
+    {
+      "file": "src/features/code-editor/actions/use-code-editor-actions.browser-tabs.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to parameter of type 'SetStateAction<WorkspaceEditorTab | null>'.\n  Type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to type 'WorkspaceBrowserEditorTab | ((prev: WorkspaceEditorTab | null) => WorkspaceEditorTab | null)'.\n    Type '{ kind: \"browser\"; id: string; url: string; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 3
+    },
+    {
+      "file": "src/features/code-editor/actions/use-code-editor-actions.browser-tabs.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to parameter of type 'WorkspaceEditorTab'.\n  Type '{ kind: \"browser\"; id: string; url: string; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 2
+    },
+    {
+      "file": "src/features/code-editor/actions/use-open-location.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ kind: \"browser\"; id: string; url: string | null; }' is not assignable to parameter of type 'SetStateAction<WorkspaceEditorTab | null>'.\n  Type '{ kind: \"browser\"; id: string; url: string | null; }' is not assignable to type 'WorkspaceBrowserEditorTab | ((prev: WorkspaceEditorTab | null) => WorkspaceEditorTab | null)'.\n    Type '{ kind: \"browser\"; id: string; url: string | null; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 2
+    },
+    {
+      "file": "src/features/code-editor/atoms.ts",
+      "code": 6133,
+      "message": "'workspaceId' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/monaco/language-tokenization.test.ts",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/monaco/model-registry.test.ts",
+      "code": 2348,
+      "message": "Value of type 'Mock<Procedure | Constructable>' is not callable. Did you mean to include 'new'?",
+      "count": 2
+    },
+    {
+      "file": "src/features/code-editor/monaco/model-registry.test.ts",
+      "code": 2352,
+      "message": "Conversion of type 'ITextModel' to type '{ dispose: Mock<Procedure | Constructable>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Types of property 'dispose' are incompatible.\n    Type '() => void' is not comparable to type 'Mock<Procedure | Constructable>'.\n      Type '() => void' is not comparable to type 'MockInstance<Procedure | Constructable> & { (...args: any[]): any; new (...args: any[]): any; } & {}'.\n        Type '() => void' is not comparable to type 'MockInstance<Procedure | Constructable>'.",
+      "count": 3
+    },
+    {
+      "file": "src/features/code-editor/monaco/model-registry.test.ts",
+      "code": 2352,
+      "message": "Conversion of type 'ITextModel' to type '{ getValue: Mock<Procedure | Constructable>; setValue: Mock<Procedure | Constructable>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Types of property 'getValue' are incompatible.\n    Type '(eol?: EndOfLinePreference | undefined, preserveBOM?: boolean | undefined) => string' is not comparable to type 'Mock<Procedure | Constructable>'.\n      Type '(eol?: EndOfLinePreference | undefined, preserveBOM?: boolean | undefined) => string' is not comparable to type 'MockInstance<Procedure | Constructable> & { (...args: any[]): any; new (...args: any[]): any; } & {}'.\n        Type '(eol?: EndOfLinePreference | undefined, preserveBOM?: boolean | undefined) => string' is not comparable to type 'MockInstance<Procedure | Constructable>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/monaco/model-registry.test.ts",
+      "code": 2352,
+      "message": "Conversion of type 'ITextModel' to type '{ setValue: Mock<Procedure | Constructable>; getValue: Mock<Procedure | Constructable>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Types of property 'setValue' are incompatible.\n    Type '(newValue: string | ITextSnapshot) => void' is not comparable to type 'Mock<Procedure | Constructable>'.\n      Type '(newValue: string | ITextSnapshot) => void' is not comparable to type 'MockInstance<Procedure | Constructable> & { (...args: any[]): any; new (...args: any[]): any; } & {}'.\n        Type '(newValue: string | ITextSnapshot) => void' is not comparable to type 'MockInstance<Procedure | Constructable>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/monaco/model-registry.test.ts",
+      "code": 2353,
+      "message": "Object literal may only specify known properties, and 'language' does not exist in type '{ workspaceRootPath: string; path: string; content: string; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/monaco/uri.test.ts",
+      "code": 2345,
+      "message": "Argument of type '{ scheme: string; fsPath: string; path: string; toString: () => string; }' is not assignable to parameter of type 'Uri'.\n  Type '{ scheme: string; fsPath: string; path: string; toString: () => string; }' is missing the following properties from type 'Uri': authority, query, fragment, with, toJSON",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/monaco/vue-language.test.ts",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'any[][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/views/shared/code-editor-host.test.tsx",
+      "code": 2719,
+      "message": "Type '{ activeFilePath: string | null; activeEditorTab: import(\"<project>/src/features/workspace/atoms/files\").WorkspaceEditorTab | null; ... 39 more ...; workspaceId: string | undefined; }' is not assignable to type '{ activeFilePath: string | null; activeEditorTab: import(\"<project>/src/features/workspace/atoms/files\").WorkspaceEditorTab | null; ... 39 more ...; workspaceId: string | undefined; }'. Two different types with this name exist, but they are unrelated.\n  Types of property 'closeAllEditorTabs' are incompatible.\n    Type '(() => void) | undefined' is not assignable to type '() => void'.\n      Type 'undefined' is not assignable to type '() => void'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/views/shared/code-editor-tabs-header.test.tsx",
+      "code": 2345,
+      "message": "Argument of type 'HTMLElement | undefined' is not assignable to parameter of type 'HTMLElement'.\n  Type 'undefined' is not assignable to type 'HTMLElement'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/code-editor/views/shared/editor-surface.test.tsx",
+      "code": 2322,
+      "message": "Type '{ activeFilePath: string | null; activeEditorTab: WorkspaceEditorTab | null; activeDiffChange: GitWorktreeFileDiffPreview | GitCommitFileListPreview | GitCommitFileDiffPreview | SearchReplaceFileDiffPreview | null; ... 38 more ...; workspaceId: string; }' is not assignable to type '{ activeFilePath: string | null; activeEditorTab: WorkspaceEditorTab | null; activeDiffChange: GitWorktreeFileDiffPreview | GitCommitFileListPreview | GitCommitFileDiffPreview | SearchReplaceFileDiffPreview | null; ... 38 more ...; workspaceId: string | undefined; }'.\n  Types of property 'closeAllEditorTabs' are incompatible.\n    Type '(() => void) | undefined' is not assignable to type '() => void'.\n      Type 'undefined' is not assignable to type '() => void'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/views/shared/editor-surface.test.tsx",
+      "code": 2322,
+      "message": "Type '{ kind: \"browser\"; id: string; url: null; }' is not assignable to type 'WorkspaceEditorTab | null | undefined'.\n  Type '{ kind: \"browser\"; id: string; url: null; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/views/shared/editor-surface.test.tsx",
+      "code": 2322,
+      "message": "Type '{ kind: \"browser\"; id: string; url: null; }' is not assignable to type 'WorkspaceEditorTab'.\n  Type '{ kind: \"browser\"; id: string; url: null; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/views/shared/editor-surface.test.tsx",
+      "code": 2322,
+      "message": "Type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to type 'WorkspaceEditorTab | null | undefined'.\n  Type '{ kind: \"browser\"; id: string; url: string; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 1
+    },
+    {
+      "file": "src/features/code-editor/views/shared/editor-surface.test.tsx",
+      "code": 2322,
+      "message": "Type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to type 'WorkspaceEditorTab'.\n  Type '{ kind: \"browser\"; id: string; url: string; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 2
+    },
+    {
+      "file": "src/features/code-editor/views/shared/editor-surface.tsx",
+      "code": 2322,
+      "message": "Type 'WorkspaceEditorTab' is not assignable to type 'WorkspaceFileEditorTab'.\n  Property 'path' is missing in type 'WorkspaceBrowserEditorTab' but required in type 'WorkspaceFileEditorTab'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/dev-browser/dev-browser-surface.test.tsx",
+      "code": 2683,
+      "message": "'this' implicitly has type 'any' because it does not have a type annotation.",
+      "count": 2
+    },
+    {
+      "file": "src/features/diagnostics/index.test.tsx",
+      "code": 6133,
+      "message": "'args' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/mobile-select/components/mobile-select-sheet.test.tsx",
+      "code": 2349,
+      "message": "This expression is not callable.\n  Type 'never' has no call signatures.",
+      "count": 1
+    },
+    {
+      "file": "src/features/mobile-select/components/mobile-select-sheet.tsx",
+      "code": 18048,
+      "message": "'item.trailingAction' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/more/page.tsx",
+      "code": 2550,
+      "message": "Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/config-editor.test.tsx",
+      "code": 2722,
+      "message": "Cannot invoke an object which is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/monitoring-settings-card.tsx",
+      "code": 2305,
+      "message": "Module '\"../../monitoring\"' has no exported member 'TimeWindow'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/monitoring-settings-subpage.tsx",
+      "code": 2305,
+      "message": "Module '\"../../monitoring\"' has no exported member 'TimeWindow'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/monitoring-settings-subpage.tsx",
+      "code": 6133,
+      "message": "'formatUptime' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/provider-settings.tsx",
+      "code": 2322,
+      "message": "Type 'boolean | undefined' is not assignable to type 'boolean'.\n  Type 'undefined' is not assignable to type 'boolean'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/provider-settings.tsx",
+      "code": 2322,
+      "message": "Type 'number | undefined' is not assignable to type 'number'.\n  Type 'undefined' is not assignable to type 'number'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/provider-settings.tsx",
+      "code": 2322,
+      "message": "Type 'ProviderRuntimeStatusEntry | null | undefined' is not assignable to type 'null'.\n  Type 'undefined' is not assignable to type 'null'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/provider-settings.tsx",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/settings/components/terminal-profile-settings.tsx",
+      "code": 2345,
+      "message": "Argument of type 'string' is not assignable to parameter of type '`custom:${string}`'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/components/objective-dialog.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ open: true; sessionId: string; mode: \"enable\"; draftObjective: string; draftEvaluatorProviderId: \"claude\"; }' is not assignable to parameter of type 'SetStateAction<SupervisorDialogState>'.\n  Type '{ open: true; sessionId: string; mode: \"enable\"; draftObjective: string; draftEvaluatorProviderId: \"claude\"; }' is missing the following properties from type 'SupervisorDialogState': draftEvaluatorModel, draftMaxSupervisionCount, draftScheduledAt",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/components/objective-dialog.test.tsx",
+      "code": 2353,
+      "message": "Object literal may only specify known properties, and 'initialObjective' does not exist in type 'Partial<{ open: boolean; sessionId: string | null; mode: \"enable\" | \"edit\"; restoreStep: \"form\" | \"restore\"; draftObjective: string; draftEvaluatorProviderId: \"codex\" | \"claude\"; draftEvaluatorModel: string; draftMaxSupervisionCount: string; draftScheduledAt: string; }>'.",
+      "count": 10
+    },
+    {
+      "file": "src/features/supervisor/views/shared/objective-dialog-content.test.tsx",
+      "code": 2322,
+      "message": "Type '\"heuristic\"' is not assignable to type 'ObjectiveDialogEvaluatorProviderId | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/views/shared/objective-dialog-content.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/views/shared/objective-dialog-content.tsx",
+      "code": 2345,
+      "message": "Argument of type 'string' is not assignable to parameter of type '\"zh\" | \"en\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/views/shared/supervisor-details-content.test.tsx",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/views/shared/supervisor-mind-map-flow.test.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'CapturedNode[][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/features/supervisor/views/shared/supervisor-mind-map-flow.test.tsx",
+      "code": 7006,
+      "message": "Parameter 'node' implicitly has an 'any' type.",
+      "count": 6
+    },
+    {
+      "file": "src/features/supervisor/views/shared/supervisor-mind-map-flow.tsx",
+      "code": 7053,
+      "message": "Element implicitly has an 'any' type because expression of type '\"data-selected-node\"' can't be used to index type 'Omit<HTMLAttributes<HTMLDivElement>, \"id\" | \"className\" | \"style\" | \"role\" | \"aria-label\" | \"defaultValue\" | \"draggable\" | keyof DOMAttributes<HTMLDivElement>>'.\n  Property 'data-selected-node' does not exist on type 'Omit<HTMLAttributes<HTMLDivElement>, \"id\" | \"className\" | \"style\" | \"role\" | \"aria-label\" | \"defaultValue\" | \"draggable\" | keyof DOMAttributes<HTMLDivElement>>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/recovery-coordinator.test.ts",
+      "code": 2322,
+      "message": "Type '{ getStatus: Mock<() => string>; probeConnection: Mock<Procedure>; onStatus: Mock<() => () => void>; subscribe: Mock<() => () => void>; }' is not assignable to type 'Pick<{ getStatus: () => ConnectionStatus; probeConnection: (trigger: ProbeTrigger) => Promise<{ ok: true; }>; onStatus: (listener: (status: ConnectionStatus) => void) => () => void; subscribe: (topics: string[], handler: (topic: string, payload: unknown, seq: number) => void) => () => void; }, \"subscribe\" | ... 2 mo...'.\n  The types returned by 'getStatus(...)' are incompatible between these types.\n    Type 'string' is not assignable to type 'ConnectionStatus'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/recovery-coordinator.test.ts",
+      "code": 2322,
+      "message": "Type '{ getStatus: Mock<() => string>; probeConnection: Mock<Procedure>; onStatus: Mock<(listener: (status: string) => void) => () => void>; subscribe: Mock<() => () => void>; }' is not assignable to type 'Pick<{ getStatus: () => ConnectionStatus; probeConnection: (trigger: ProbeTrigger) => Promise<{ ok: true; }>; onStatus: (listener: (status: ConnectionStatus) => void) => () => void; subscribe: (topics: string[], handler: (topic: string, payload: unknown, seq: number) => void) => () => void; }, \"subscribe\" | ... 2 mo...'.\n  The types returned by 'getStatus(...)' are incompatible between these types.\n    Type 'string' is not assignable to type 'ConnectionStatus'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/recovery-coordinator.test.ts",
+      "code": 2345,
+      "message": "Argument of type '{ registerTerminal: Mock<Procedure>; notifyReason: Mock<Procedure>; handleConnectionStatus: Mock<Procedure>; dispose: Mock<Procedure>; }' is not assignable to parameter of type 'RecoveryCoordinator'.\n  Property 'handleActivationStatus' is missing in type '{ registerTerminal: Mock<Procedure>; notifyReason: Mock<Procedure>; handleConnectionStatus: Mock<Procedure>; dispose: Mock<Procedure>; }' but required in type 'RecoveryCoordinator'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/terminal-panel.test.tsx",
+      "code": 2783,
+      "message": "'id' is specified more than once, so this usage will be overwritten.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/terminal-panel.test.tsx",
+      "code": 2783,
+      "message": "'label' is specified more than once, so this usage will be overwritten.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '\"too_old\"' is not assignable to type '\"ok\"'.",
+      "count": 3
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '{ dispose: Mock<Procedure>; }' is not assignable to type 'Mock<Procedure>'.\n  Type '{ dispose: Mock<Procedure>; }' is missing the following properties from type 'MockInstance<Procedure>': getMockName, mockName, mock, mockClear, and 16 more.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { status: string; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { status: string; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { status: string; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { status: string; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ status: string; }' is not assignable to type 'T'.\n            'T' could be instantiated with an arbitrary type which could be unrelated to '{ status: string; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; }; error?: undefined; } | { ok: false; error: { ...; }; data?: undefined; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; }' is not assignable to type 'T | undefined'.\n            Type '{ status: string; terminals?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ status: string; terminals?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; exitCode: number; }[]; status?: undefined; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; exitCode: number; }[]; status?: undefined; }; error?: undefined; } | { ...; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; exitCode: number; }[]; status?: undefined; }; error?: undefined; } | { ok: false; error: { ...; }; data?: undefined; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; exitCode: number; }[]; status?: undefined; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; headSeq: number; exitCode: number; }[]; status?: undefined; }' is not assignable to type 'T | undefined'.\n            Type '{ status: string; terminals?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ status: string; terminals?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ status: string; terminals?: undefined; } | { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }' is not assignable to type 'T | undefined'.\n            Type '{ status: string; terminals?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ status: string; terminals?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { status: string; transport: string; streamId: number; size: number; ... 5 more ...; terminals?: undefined; } | { ...; } | { ...; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { status: string; transport: string; streamId: number; size: number; seq: number; rows: number; cols: number; source: string; bytes: Uint8Array<ArrayBuffer>; terminals?: undefined; } | { ...; } | { ...; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { status: string; transport: string; streamId: number; size: number; seq: number; rows: number; cols: number; source: string; bytes: Uint8Array<ArrayBuffer>; terminals?: undefined; } | { ...; } | { ...; } | { ...; }; error?: undefined; } | { ...; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { status: string; transport: string; streamId: number; size: number; seq: number; rows: number; cols: number; source: string; bytes: Uint8Array<ArrayBuffer>; terminals?: undefined; } | { ...; } | { ...; } | { ...; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ status: string; transport: string; streamId: number; size: number; seq: number; rows: number; cols: number; source: string; bytes: Uint8Array<ArrayBuffer>; terminals?: undefined; } | { ...; } | { ...; } | { ...; }' is not assignable to type 'T | undefined'.\n            Type '{ status: string; transport: string; streamId: number; size: number; seq: number; rows: number; cols: number; source: string; bytes: Uint8Array<ArrayBuffer>; terminals?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ status: string; transport: string; streamId: number; size: number; seq: number; rows: number; cols: number; source: string; bytes: Uint8Array<ArrayBuffer>; terminals?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; } | { status: string; terminals?: undefined; }; error?: undefined; } | { ...; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; } | { status: string; terminals?: undefined; }; error?: undefined; } | { ok: false; error: { ...; }; data?: undefined; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; } | { status: string; terminals?: undefined; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; } | { status: string; terminals?: undefined; }' is not assignable to type 'T | undefined'.\n            Type '{ terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; headSeq: number; }[]; ... 8 more ...; bytes?: undefined; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }; error?: undefined; } | { ...;...' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }; error?: undefined; } | { ...; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }' is not assignable to type 'T | undefined'.\n            Type '{ terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ terminals: { terminalId: string; action: string; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; ... 8 more ...; bytes?: undefined; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }; error?: undefined; } | { ...; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; } | { ...; }' is not assignable to type 'T | undefined'.\n            Type '{ terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; rows?: undefined; cols?: undefined; source?: undefined; bytes?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, args: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; } | { status: string; terminals?: undefined; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; } | { status: string; terminals?: undefined; }; error?: undefined; } | { ok: false; error: { code: string; message: string; }; data?: undefined; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; } | { status: string; terminals?: undefined; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; } | { status: string; terminals?: undefined; }' is not assignable to type 'T | undefined'.\n            Type '{ terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ terminals: { terminalId: string; action: string; reason: string; }[]; status?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type '<T = unknown>(op: string, innerArgs: unknown, options: DispatchCommandOptions | undefined) => Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; ... 5 more ...; bytes?: undefined; } | { ...; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'DispatchCommand'.\n  Type 'Promise<{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; bytes?: undefined; } | { ...; } | { ...; }; error?: undefined; } | { ...; }>' is not assignable to type 'Promise<CommandResult<T>>'.\n    Type '{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; bytes?: undefined; } | { ...; } | { ...; }; error?: undefined; } | { ...; }' is not assignable to type 'CommandResult<T>'.\n      Type '{ ok: true; data: { terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; bytes?: undefined; } | { ...; } | { ...; }; error?: undefined; }' is not assignable to type 'CommandResult<T>'.\n        Types of property 'data' are incompatible.\n          Type '{ terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; bytes?: undefined; } | { ...; } | { ...; }' is not assignable to type 'T | undefined'.\n            Type '{ terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; bytes?: undefined; }' is not assignable to type 'T'.\n              'T' could be instantiated with an arbitrary type which could be unrelated to '{ terminals: { terminalId: string; action: string; fromSeq: number; headSeq: number; }[]; status?: undefined; transport?: undefined; streamId?: undefined; size?: undefined; seq?: undefined; bytes?: undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type 'HTMLDivElement | null' is not assignable to type 'EventTarget | undefined'.\n  Type 'null' is not assignable to type 'EventTarget | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2322,
+      "message": "Type 'undefined' is not assignable to type 'number'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2339,
+      "message": "Property 'fontSize' does not exist on type '{}'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2339,
+      "message": "Property 'rows' does not exist on type '{ open: Mock<Procedure>; onData: Mock<() => Mock<Procedure>>; onBinary: Mock<() => Mock<Procedure>>; onResize: Mock<() => Mock<...>>; ... 17 more ...; options: {}; }'.",
+      "count": 63
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2339,
+      "message": "Property 'theme' does not exist on type '{}'.",
+      "count": 3
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '(callback: (data: string) => void) => Mock<Procedure>' is not assignable to parameter of type '() => Mock<Procedure>'.\n  Target signature provides too few arguments. Expected 1 or more, but got 0.",
+      "count": 8
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '(listener: any) => Mock<Procedure>' is not assignable to parameter of type '() => Mock<Procedure>'.\n  Target signature provides too few arguments. Expected 1 or more, but got 0.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2349,
+      "message": "This expression is not callable.\n  Type 'never' has no call signatures.",
+      "count": 70
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2493,
+      "message": "Tuple type '[]' of length '0' has no element at index '0'.",
+      "count": 43
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2493,
+      "message": "Tuple type '[]' of length '0' has no element at index '1'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type '[][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 3
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type '[options?: (ITerminalOptions & ITerminalInitOnlyOptions) | undefined][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 5
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2554,
+      "message": "Expected 1 arguments, but got 3.",
+      "count": 9
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 2554,
+      "message": "Expected 1-2 arguments, but got 3.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 6133,
+      "message": "'topics' is declared but its value is never read.",
+      "count": 14
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 6133,
+      "message": "'within' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/__tests__/xterm-host.test.tsx",
+      "code": 7006,
+      "message": "Parameter 'listener' implicitly has an 'any' type.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/actions/use-create-shell-terminal.test.tsx",
+      "code": 2322,
+      "message": "Type 'Terminal | null' is not assignable to type 'string'.\n  Type 'null' is not assignable to type 'string'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/terminal-panel/links/terminal-link-provider.ts",
+      "code": 2345,
+      "message": "Argument of type '{ text: string; range: TerminalLinkRange; activate: () => void; } | null' is not assignable to parameter of type 'TerminalLink'.\n  Type 'null' is not assignable to type 'TerminalLink'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/links/terminal-link-provider.ts",
+      "code": 2677,
+      "message": "A type predicate's type must be assignable to its parameter's type.\n  Type 'TerminalLink' is not assignable to type '{ text: string; range: TerminalLinkRange; activate: () => void; }'.\n    Types of property 'activate' are incompatible.\n      Type '(event: MouseEvent, text: string) => void' is not assignable to type '() => void'.\n        Target signature provides too few arguments. Expected 2 or more, but got 0.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/links/terminal-link-provider.ts",
+      "code": 18047,
+      "message": "'left' is possibly 'null'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/links/terminal-link-provider.ts",
+      "code": 18047,
+      "message": "'link' is possibly 'null'.",
+      "count": 4
+    },
+    {
+      "file": "src/features/terminal-panel/links/terminal-link-provider.ts",
+      "code": 18047,
+      "message": "'right' is possibly 'null'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/mobile/long-press-copy-line.ts",
+      "code": 18048,
+      "message": "'rowElement' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/preferences.ts",
+      "code": 2550,
+      "message": "Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 2
+    },
+    {
+      "file": "src/features/terminal-panel/recovery-coordinator.ts",
+      "code": 2367,
+      "message": "This comparison appears to be unintentional because the types '\"ok\"' and '\"too_old\"' have no overlap.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/recovery-coordinator.ts",
+      "code": 2367,
+      "message": "This comparison appears to be unintentional because the types '\"ok\"' and '\"unknown\"' have no overlap.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/recovery-coordinator.ts",
+      "code": 7006,
+      "message": "Parameter 'options' implicitly has an 'any' type.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/uploads/upload-files.test.ts",
+      "code": 2488,
+      "message": "Type 'any[] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/uploads/use-paste-drop-upload.test.tsx",
+      "code": 2322,
+      "message": "Type 'Mock<Procedure | Constructable>' is not assignable to type '(text: string) => Promise<void>'.\n  Type 'MockInstance<Procedure | Constructable> & (new (...args: any[]) => any) & {}' is not assignable to type '(text: string) => Promise<void>'.\n    Type 'MockInstance<Procedure | Constructable> & (new (...args: any[]) => any) & {}' provides no match for the signature '(text: string): Promise<void>'.",
+      "count": 26
+    },
+    {
+      "file": "src/features/terminal-panel/views/shared/terminal-profile-create-button.tsx",
+      "code": 2322,
+      "message": "Type 'string | TerminalProfile[] | undefined' is not assignable to type 'Key | null | undefined'.\n  Type 'TerminalProfile[]' is not assignable to type 'Key | null | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/views/shared/terminal-profile-create-button.tsx",
+      "code": 2339,
+      "message": "Property 'map' does not exist on type 'string | TerminalProfile[]'.\n  Property 'map' does not exist on type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/views/shared/terminal-profile-create-button.tsx",
+      "code": 7006,
+      "message": "Parameter 'profile' implicitly has an 'any' type.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/views/shared/terminal-profile-create-button.tsx",
+      "code": 18048,
+      "message": "'items' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/terminal-panel/views/shared/terminal-profile-create-button.tsx",
+      "code": 18048,
+      "message": "'section.items' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/topbar/components/connection-status.tsx",
+      "code": 2345,
+      "message": "Argument of type '\"disconnected\" | \"connecting\" | \"reconnecting\" | \"rejected\"' is not assignable to parameter of type '\"connected\" | \"disconnected\" | \"connecting\" | \"reconnecting\"'.\n  Type '\"rejected\"' is not assignable to type '\"connected\" | \"disconnected\" | \"connecting\" | \"reconnecting\"'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/topbar/components/tab.test.tsx",
+      "code": 2322,
+      "message": "Type '{ uiState: { leftPanelWidth: number; bottomPanelHeight: number; focusMode: boolean; paneLayout: { id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }; }; ... 8 more ...; lastActiveAt: number; }' is not assignable to type 'Workspace'.\n  The types of 'uiState.paneLayout' are incompatible between these types.\n    Type '{ id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }' is not assignable to type 'WorkspacePaneNode | undefined'.\n      Type '{ id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }' is not assignable to type 'LegacyWorkspacePaneLeaf | WorkspaceDraftPaneLeaf | WorkspaceSessionPaneLeaf | WorkspaceEditorPaneLeaf | WorkspacePaneSplit'.\n        Type '{ id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }' is not assignable to type 'WorkspacePaneSplit'.\n          Types of property 'type' are incompatible.\n            Type 'string' is not assignable to type '\"split\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/topbar/components/tab.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ uiState: { leftPanelWidth: number; bottomPanelHeight: number; focusMode: boolean; paneLayout: { id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }; }; ... 8 more ...; lastActiveAt: number; }' is not assignable to parameter of type 'Workspace'.\n  The types of 'uiState.paneLayout' are incompatible between these types.\n    Type '{ id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }' is not assignable to type 'WorkspacePaneNode | undefined'.\n      Type '{ id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }' is not assignable to type 'LegacyWorkspacePaneLeaf | WorkspaceDraftPaneLeaf | WorkspaceSessionPaneLeaf | WorkspaceEditorPaneLeaf | WorkspacePaneSplit'.\n        Type '{ id: string; type: string; direction: string; children: { id: string; type: string; sessionId: string; }[]; }' is not assignable to type 'WorkspacePaneSplit'.\n          Types of property 'type' are incompatible.\n            Type 'string' is not assignable to type '\"split\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/topbar/components/tab.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ uiState: { leftPanelWidth: number; bottomPanelHeight: number; focusMode: boolean; paneLayout: { id: string; type: string; sessionId: string; }; }; name?: string; isActive?: boolean; unreadCount?: number; ... 5 more ...; lastActiveAt: number; }' is not assignable to parameter of type 'Workspace'.\n  The types of 'uiState.paneLayout' are incompatible between these types.\n    Type '{ id: string; type: string; sessionId: string; }' is not assignable to type 'WorkspacePaneNode | undefined'.\n      Type '{ id: string; type: string; sessionId: string; }' is not assignable to type 'LegacyWorkspacePaneLeaf | WorkspaceDraftPaneLeaf | WorkspaceSessionPaneLeaf | WorkspaceEditorPaneLeaf | WorkspacePaneSplit'.\n        Property 'leafKind' is missing in type '{ id: string; type: string; sessionId: string; }' but required in type 'WorkspaceSessionPaneLeaf'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/topbar/components/tab.tsx",
+      "code": 2345,
+      "message": "Argument of type 'PaneNode' is not assignable to parameter of type 'WorkspacePaneNodeLike | null | undefined'.\n  Type 'PaneLeaf' is not assignable to type 'WorkspacePaneNodeLike | null | undefined'.\n    Type 'PaneLeaf' is not assignable to type '(LegacyWorkspacePaneLeaf & { readonly ratio?: number | undefined; readonly children?: WorkspacePaneNodeLike[] | undefined; }) | (WorkspaceDraftPaneLeaf & { ...; }) | (WorkspaceSessionPaneLeaf & { ...; }) | (WorkspaceEditorPaneLeaf & { ...; })'.\n      Type 'PaneLeaf' is not assignable to type 'WorkspaceSessionPaneLeaf & { readonly ratio?: number | undefined; readonly children?: WorkspacePaneNodeLike[] | undefined; }'.\n        Type 'PaneLeaf' is not assignable to type 'WorkspaceSessionPaneLeaf'.\n          Types of property 'leafKind' are incompatible.\n            Type 'WorkspacePaneLeafKind | undefined' is not assignable to type '\"session\"'.\n              Type 'undefined' is not assignable to type '\"session\"'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/topbar/components/workspace-session-mini-map-model.test.ts",
+      "code": 2353,
+      "message": "Object literal may only specify known properties, and 'ratio' does not exist in type 'WorkspacePaneSplit'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/topbar/components/workspace-session-mini-map-model.ts",
+      "code": 2339,
+      "message": "Property 'sessionId' does not exist on type 'WorkspacePaneNodeLike'.\n  Property 'sessionId' does not exist on type 'WorkspaceDraftPaneLeaf & { readonly ratio?: number | undefined; readonly children?: WorkspacePaneNodeLike[] | undefined; }'.",
+      "count": 3
+    },
+    {
+      "file": "src/features/ui-actions/use-ui-action-subscription.test.tsx",
+      "code": 2739,
+      "message": "Type '{ kind: \"browser\"; id: string; url: string | null; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 1
+    },
+    {
+      "file": "src/features/work-analysis/page.test.tsx",
+      "code": 2339,
+      "message": "Property 'preset' does not exist on type 'WorkAnalysisTimeRange'.\n  Property 'preset' does not exist on type '{ startAt: number; endAt: number; }'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/work-analysis/page.test.tsx",
+      "code": 2493,
+      "message": "Tuple type '[]' of length '0' has no element at index '0'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/work-analysis/page.test.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'any[][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 3
+    },
+    {
+      "file": "src/features/work-analysis/page.test.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'unknown[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 2
+    },
+    {
+      "file": "src/features/work-analysis/page.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'number[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/open-editor-state.ts",
+      "code": 2367,
+      "message": "This comparison appears to be unintentional because the types '\"file\" | undefined' and '\"browser\"' have no overlap.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-agent-instructions-actions.ts",
+      "code": 6196,
+      "message": "'AgentInstructionsSystemDocument' is declared but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-file-actions.test.tsx",
+      "code": 2322,
+      "message": "Type '{ kind: \"text\"; path: string; content: string; baseHash: string; isDirty: false; }' is not assignable to type 'OpenFile'.\n  Property 'savedContent' is missing in type '{ kind: \"text\"; path: string; content: string; baseHash: string; isDirty: false; }' but required in type 'OpenTextFile'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/actions/use-file-actions.test.tsx",
+      "code": 2698,
+      "message": "Spread types may only be created from object types.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-file-context-actions.ts",
+      "code": 2322,
+      "message": "Type 'void | Promise<unknown>' is not assignable to type 'void | Promise<void>'.\n  Type 'Promise<unknown>' is not assignable to type 'void | Promise<void>'.\n    Type 'Promise<unknown>' is not assignable to type 'Promise<void>'.\n      Type 'unknown' is not assignable to type 'void'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-git-actions.ts",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'GitCommitSummary[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/actions/use-open-workspace-file.ts",
+      "code": 2322,
+      "message": "Type 'WorkspaceEditorTab | undefined' is not assignable to type 'WorkspaceCanvasEditorTab | undefined'.\n  Type 'WorkspaceFileEditorTab' is missing the following properties from type 'WorkspaceCanvasEditorTab': id, title, sourcePath",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-open-workspace-file.ts",
+      "code": 2339,
+      "message": "Property 'pinned' does not exist on type 'WorkspaceEditorTab'.\n  Property 'pinned' does not exist on type 'WorkspaceBrowserEditorTab'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-persist-workspace-last-viewed-target.ts",
+      "code": 2305,
+      "message": "Module '\"jotai\"' has no exported member 'Store'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-skill-file-actions.ts",
+      "code": 2349,
+      "message": "This expression is not callable.\n  Type 'Atom<unknown>' has no call signatures.",
+      "count": 12
+    },
+    {
+      "file": "src/features/workspace/actions/use-skill-file-actions.ts",
+      "code": 6192,
+      "message": "All imports in import declaration are unused.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-skill-file-actions.ts",
+      "code": 7006,
+      "message": "Parameter 'current' implicitly has an 'any' type.",
+      "count": 11
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-launch-actions.ts",
+      "code": 2345,
+      "message": "Argument of type '(prev: Record<string, Workspace>) => { [x: string]: Workspace | undefined; }' is not assignable to parameter of type 'SetStateAction<Record<string, Workspace>>'.\n  Type '(prev: Record<string, Workspace>) => { [x: string]: Workspace | undefined; }' is not assignable to type '(prev: Record<string, Workspace>) => Record<string, Workspace>'.\n    Type '{ [x: string]: Workspace | undefined; }' is not assignable to type 'Record<string, Workspace>'.\n      'string' index signatures are incompatible.\n        Type 'Workspace | undefined' is not assignable to type 'Workspace'.\n          Type 'undefined' is not assignable to type 'Workspace'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-launch-actions.ts",
+      "code": 2552,
+      "message": "Cannot find name 'err'. Did you mean '_err'?",
+      "count": 3
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-launch-actions.ts",
+      "code": 18048,
+      "message": "'result.data' is possibly 'undefined'.",
+      "count": 3
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-navigation-shortcuts.test.tsx",
+      "code": 18048,
+      "message": "'current' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-refresh-actions.test.tsx",
+      "code": 18048,
+      "message": "'args' is possibly 'undefined'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-screen-model.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ kind: \"browser\"; id: string; url: string | null; }' is not assignable to parameter of type 'SetStateAction<WorkspaceEditorTab | null>'.\n  Type '{ kind: \"browser\"; id: string; url: string | null; }' is not assignable to type 'WorkspaceBrowserEditorTab | ((prev: WorkspaceEditorTab | null) => WorkspaceEditorTab | null)'.\n    Type '{ kind: \"browser\"; id: string; url: string | null; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-ui-state-persistence.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ uiState: { leftPanelWidth: number; bottomPanelHeight: number; focusMode: boolean; editorViewVisible: boolean; paneLayout: { id: string; type: string; leafKind: string; }; activeSessionId: string; }; ... 8 more ...; lastActiveAt?: number | undefined; }' is not assignable to parameter of type '{ id: string; path: string; targetRuntime: \"native\"; openedAt: number; lastActiveAt: number; uiState: Record<string, unknown>; }'.\n  Types of property 'id' are incompatible.\n    Type 'string | undefined' is not assignable to type 'string'.\n      Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-ui-state-persistence.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ uiState: { leftPanelWidth: number; bottomPanelHeight: number; focusMode: boolean; editorViewVisible: boolean; paneLayout: { id: string; type: string; leafKind: string; }; activeSessionId: string; editorPinned: boolean; }; ... 8 more ...; lastActiveAt?: number | undefined; }' is not assignable to parameter of type '{ id: string; path: string; targetRuntime: \"native\"; openedAt: number; lastActiveAt: number; uiState: Record<string, unknown>; }'.\n  Types of property 'id' are incompatible.\n    Type 'string | undefined' is not assignable to type 'string'.\n      Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-workspace-ui-state-persistence.ts",
+      "code": 2305,
+      "message": "Module '\"jotai\"' has no exported member 'Store'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-worktree-management-actions.ts",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/actions/use-worktree-management-actions.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/atoms/skills.ts",
+      "code": 2345,
+      "message": "Argument of type '(_workspaceId: string) => AtomFamily<string, PrimitiveAtom<CreateDialogState | null> & WithInitialValue<CreateDialogState | null>>' is not assignable to parameter of type '(param: string) => Atom<unknown>'.\n  Property 'read' is missing in type 'AtomFamily<string, PrimitiveAtom<CreateDialogState | null> & WithInitialValue<CreateDialogState | null>>' but required in type 'Atom<unknown>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/atoms/skills.ts",
+      "code": 2345,
+      "message": "Argument of type '(_workspaceId: string) => AtomFamily<string, PrimitiveAtom<Map<string, FileNode[]> | null> & WithInitialValue<Map<string, FileNode[]> | null>>' is not assignable to parameter of type '(param: string) => Atom<unknown>'.\n  Property 'read' is missing in type 'AtomFamily<string, PrimitiveAtom<Map<string, FileNode[]> | null> & WithInitialValue<Map<string, FileNode[]> | null>>' but required in type 'Atom<unknown>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/atoms/skills.ts",
+      "code": 2345,
+      "message": "Argument of type '(_workspaceId: string) => AtomFamily<string, PrimitiveAtom<PendingDeleteState | null> & WithInitialValue<PendingDeleteState | null>>' is not assignable to parameter of type '(param: string) => Atom<unknown>'.\n  Property 'read' is missing in type 'AtomFamily<string, PrimitiveAtom<PendingDeleteState | null> & WithInitialValue<PendingDeleteState | null>>' but required in type 'Atom<unknown>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/atoms/skills.ts",
+      "code": 2345,
+      "message": "Argument of type '(_workspaceId: string) => AtomFamily<string, PrimitiveAtom<RenameDialogState | null> & WithInitialValue<RenameDialogState | null>>' is not assignable to parameter of type '(param: string) => Atom<unknown>'.\n  Property 'read' is missing in type 'AtomFamily<string, PrimitiveAtom<RenameDialogState | null> & WithInitialValue<RenameDialogState | null>>' but required in type 'Atom<unknown>'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/atoms/skills.ts",
+      "code": 2345,
+      "message": "Argument of type '(_workspaceId: string) => AtomFamily<string, PrimitiveAtom<Set<string>> & WithInitialValue<Set<string>>>' is not assignable to parameter of type '(param: string) => Atom<unknown>'.\n  Property 'read' is missing in type 'AtomFamily<string, PrimitiveAtom<Set<string>> & WithInitialValue<Set<string>>>' but required in type 'Atom<unknown>'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/views/desktop/workspace-desktop-view.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to parameter of type 'SetStateAction<WorkspaceEditorTab | null>'.\n  Type '{ kind: \"browser\"; id: string; url: string; }' is not assignable to type 'WorkspaceBrowserEditorTab | ((prev: WorkspaceEditorTab | null) => WorkspaceEditorTab | null)'.\n    Type '{ kind: \"browser\"; id: string; url: string; }' is missing the following properties from type 'WorkspaceBrowserEditorTab': devicePreset, viewportWidth, viewportHeight, orientation, userAgentMode",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/desktop/workspace-desktop-view.tsx",
+      "code": 2538,
+      "message": "Type 'null' cannot be used as an index type.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/mobile/workspace-mobile-view.test.tsx",
+      "code": 6133,
+      "message": "'createSendCommandMock' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/mobile/workspace-mobile-view.tsx",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/agent-instructions-section.test.tsx",
+      "code": 2339,
+      "message": "Property 'code' does not exist on type '{ message?: string | undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/agent-instructions-token-trend.test.tsx",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'any[][]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/branch-quick-pick.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/file-tree-panel.test.tsx",
+      "code": 2339,
+      "message": "Property 'uiState' does not exist on type '{ subPath?: string | undefined; }'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/file-tree-panel.test.tsx",
+      "code": 6133,
+      "message": "'container' is declared but its value is never read.",
+      "count": 3
+    },
+    {
+      "file": "src/features/workspace/views/shared/file-tree-panel.tsx",
+      "code": 2741,
+      "message": "Property 'preserveSourceOrder' is missing in type '{ key: string; workspaceId: string; node: FileNode; depth: number; variant: \"desktop\" | \"mobile\"; expandedDirs: Set<string> | null; defaultExpandedRootPaths: string[]; selectedPath: string | null; ... 11 more ...; consumeSuppressedClick: () => boolean; }' but required in type 'FileTreeNodeProps'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/git-panel-status-strip.test.tsx",
+      "code": 2304,
+      "message": "Cannot find name 'afterEach'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/git-panel-status-strip.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/git-panel-status-strip.tsx",
+      "code": 2322,
+      "message": "Type 'GitStatus | null | undefined' is not assignable to type 'GitStatus | null'.\n  Type 'undefined' is not assignable to type 'GitStatus | null'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/git-panel-status-strip.tsx",
+      "code": 6133,
+      "message": "'branchSummary' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/search-panel-state.ts",
+      "code": 2345,
+      "message": "Argument of type '(current: SearchPanelState) => { resolvedRequestKey: string; result: SearchSessionStartResult | undefined; activeSessionId: string; ... 19 more ...; applySummary: SearchSessionApplyResult | null; }' is not assignable to parameter of type 'SetStateAction<SearchPanelState>'.\n  Type '(current: SearchPanelState) => { resolvedRequestKey: string; result: SearchSessionStartResult | undefined; activeSessionId: string; ... 19 more ...; applySummary: SearchSessionApplyResult | null; }' is not assignable to type '(prev: SearchPanelState) => SearchPanelState'.\n    Call signature return types '{ resolvedRequestKey: string; result: SearchSessionStartResult | undefined; activeSessionId: string; selectedMatchKey: string | null; expandedFiles: Record<...>; ... 17 more ...; applySummary: SearchSessionApplyResult | null; }' and 'SearchPanelState' are incompatible.\n      The types of 'result' are incompatible between these types.\n        Type 'SearchSessionStartResult | undefined' is not assignable to type 'SearchSessionStartResult | null'.\n          Type 'undefined' is not assignable to type 'SearchSessionStartResult | null'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/search-panel-state.ts",
+      "code": 2345,
+      "message": "Argument of type 'SearchSessionStartResult | undefined' is not assignable to parameter of type 'SearchSessionStartResult'.\n  Type 'undefined' is not assignable to type 'SearchSessionStartResult'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/views/shared/search-panel-state.ts",
+      "code": 18048,
+      "message": "'result.data' is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 2339,
+      "message": "Property 'limit' does not exist on type 'never'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 2339,
+      "message": "Property 'offset' does not exist on type 'never'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 2339,
+      "message": "Property 'workspaceId' does not exist on type 'never'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 2352,
+      "message": "Conversion of type '{ isIntersecting: true; target: HTMLElement; }' to type 'IntersectionObserverEntry' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Type '{ isIntersecting: true; target: HTMLElement; }' is missing the following properties from type 'IntersectionObserverEntry': boundingClientRect, intersectionRatio, intersectionRect, rootBounds, time",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 2352,
+      "message": "Conversion of type 'undefined' to type '{ slug?: string | undefined; force?: boolean | undefined; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 2493,
+      "message": "Tuple type '[op: string]' of length '1' has no element at index '1'.",
+      "count": 2
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.test.tsx",
+      "code": 6133,
+      "message": "'args' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/skills-panel.tsx",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/workspace-empty-state.tsx",
+      "code": 2322,
+      "message": "Type '{ minHeight: string; padding: number; gap: number; alignItems: string; justifyContent: string; textAlign: string; }' is not assignable to type 'Properties<string | number, string & {}>'.\n  Types of property 'textAlign' are incompatible.\n    Type 'string' is not assignable to type 'TextAlign | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/workspace-launch-modal.test.tsx",
+      "code": 2493,
+      "message": "Tuple type '[]' of length '0' has no element at index '0'.",
+      "count": 1
+    },
+    {
+      "file": "src/features/workspace/views/shared/workspace-launch-modal.test.tsx",
+      "code": 6133,
+      "message": "'args' is declared but its value is never read.",
+      "count": 5
+    },
+    {
+      "file": "src/features/workspace/views/shared/workspace-route-gate.test.tsx",
+      "code": 2741,
+      "message": "Property 'uiState' is missing in type '{ id: string; path: string; targetRuntime: \"native\"; openedAt: number; lastActiveAt: number; }' but required in type 'Workspace'.",
+      "count": 1
+    },
+    {
+      "file": "src/lib/i18n.test.ts",
+      "code": 2322,
+      "message": "Type 'string | undefined' is not assignable to type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/lib/i18n.test.ts",
+      "code": 2345,
+      "message": "Argument of type 'string | undefined' is not assignable to parameter of type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/main.tsx",
+      "code": 6133,
+      "message": "'React' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/shells/desktop-shell.test.tsx",
+      "code": 2741,
+      "message": "Property 'uiState' is missing in type '{ id: string; path: string; targetRuntime: \"native\"; openedAt: number; lastActiveAt: number; }' but required in type 'Workspace'.",
+      "count": 3
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2322,
+      "message": "Type '{ uiState: { paneLayout: { id: string; type: \"leaf\"; sessionId: string; }; leftPanelWidth: number; bottomPanelHeight: number; focusMode: boolean; editorViewVisible?: boolean; editorPinned?: boolean; ... 7 more ...; agentInstructionsExpanded?: boolean; }; ... 8 more ...; lastActiveAt?: number | undefined; }' is not assignable to type 'Workspace'.\n  Types of property 'id' are incompatible.\n    Type 'string | undefined' is not assignable to type 'string'.\n      Type 'undefined' is not assignable to type 'string'.",
+      "count": 2
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2339,
+      "message": "Property 'children' does not exist on type 'PaneNode'.\n  Property 'children' does not exist on type 'PaneLeaf'.",
+      "count": 2
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2339,
+      "message": "Property 'connectionStatus' does not exist on type '{ initialEntry?: string | undefined; withWorkspaces?: boolean | undefined; locale?: \"zh\" | \"en\" | undefined; sessions?: Session[] | undefined; seedSupervisor?: boolean | undefined; paneLayout?: { ...; } | undefined; sendCommand?: Mock<...> | undefined; sendTerminalInput?: Mock<...> | undefined; lastViewedTarget?: { ...'.",
+      "count": 1
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2339,
+      "message": "Property 'reconnectAttempts' does not exist on type '{ initialEntry?: string | undefined; withWorkspaces?: boolean | undefined; locale?: \"zh\" | \"en\" | undefined; sessions?: Session[] | undefined; seedSupervisor?: boolean | undefined; paneLayout?: { ...; } | undefined; sendCommand?: Mock<...> | undefined; sendTerminalInput?: Mock<...> | undefined; lastViewedTarget?: { ...'.",
+      "count": 1
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2345,
+      "message": "Argument of type '{ path: string; diff: string; staged: false; }' is not assignable to parameter of type 'SetStateAction<GitDiffPreview | null>'.\n  Property 'kind' is missing in type '{ path: string; diff: string; staged: false; }' but required in type 'GitWorktreeFileDiffPreview'.",
+      "count": 1
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2349,
+      "message": "This expression is not callable.\n  Type 'never' has no call signatures.",
+      "count": 1
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2353,
+      "message": "Object literal may only specify known properties, and 'connectionStatus' does not exist in type '{ initialEntry?: string | undefined; withWorkspaces?: boolean | undefined; locale?: \"zh\" | \"en\" | undefined; sessions?: Session[] | undefined; seedSupervisor?: boolean | undefined; paneLayout?: { ...; } | undefined; sendCommand?: Mock<...> | undefined; sendTerminalInput?: Mock<...> | undefined; lastViewedTarget?: { ...'.",
+      "count": 2
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 2
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 2741,
+      "message": "Property 'uiState' is missing in type '{ id: string; path: string; targetRuntime: \"native\"; openedAt: number; lastActiveAt: number; }' but required in type 'Workspace'.",
+      "count": 1
+    },
+    {
+      "file": "src/shells/mobile-shell/index.test.tsx",
+      "code": 6133,
+      "message": "'fireEvent' is declared but its value is never read.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/base.theme.test.ts",
+      "code": 2345,
+      "message": "Argument of type 'string | undefined' is not assignable to parameter of type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/base.theme.test.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/base.theme.test.ts",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/foundations.guard.test.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/pane-layout-divider.theme.test.ts",
+      "code": 2345,
+      "message": "Argument of type 'string | undefined' is not assignable to parameter of type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/pane-layout-divider.theme.test.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/tokens-touch.test.ts",
+      "code": 2322,
+      "message": "Type '(string | undefined)[]' is not assignable to type 'string[]'.\n  Type 'string | undefined' is not assignable to type 'string'.\n    Type 'undefined' is not assignable to type 'string'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/tokens-touch.test.ts",
+      "code": 2345,
+      "message": "Argument of type 'string | undefined' is not assignable to parameter of type 'string'.\n  Type 'undefined' is not assignable to type 'string'.",
+      "count": 2
+    },
+    {
+      "file": "src/styles/tokens-touch.test.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/styles/tokens-touch.test.ts",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'string[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 5
+    },
+    {
+      "file": "src/styles/typography.guard.test.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/test-utils/workspace-state.ts",
+      "code": 2305,
+      "message": "Module '\"jotai\"' has no exported member 'Store'.",
+      "count": 1
+    },
+    {
+      "file": "src/theme/registry.ts",
+      "code": 2345,
+      "message": "Argument of type 'string' is not assignable to parameter of type '\"string\" | \"number\" | \"function\" | \"type\" | \"enum\" | \"namespace\" | \"class\" | \"interface\" | \"struct\" | \"typeParameter\" | \"parameter\" | \"variable\" | \"property\" | \"enumMember\" | ... 8 more ... | \"decorator\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/theme/resolve.ts",
+      "code": 2550,
+      "message": "Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/app.test.tsx",
+      "code": 2790,
+      "message": "The operand of a 'delete' operator must be optional.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/scenes/desktop-review-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ gitDiffPreviewByWorkspaceId: { [workspace.id]: { kind: \"worktree-file-diff\"; path: string; diff: string; renderAs: \"text\"; status: \"modified\"; }; }; workspaces: Workspace[]; activeWorkspaceId: string; ... 7 more ...; device: \"desktop\" | \"mobile\"; }' is not assignable to type 'UiPreviewSeed'.\n  The types of 'commands.gitDiffByWorkspaceId' are incompatible between these types.\n    Type '{ [workspace.id]: { diff: string; renderAs: string; status: string; }; }' is not assignable to type 'Record<string, GitFileDiffPayload>'.\n      'string' index signatures are incompatible.\n        Type '{ diff: string; renderAs: string; status: string; }' is not assignable to type 'GitFileDiffPayload'.\n          Types of property 'renderAs' are incompatible.\n            Type 'string' is not assignable to type 'GitDiffRenderMode'.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/scenes/desktop-review-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ settingsGet: { \"notifications.enabled\": true; \"notifications.soundEnabled\": true; \"supervisor.evaluationTimeoutSec\": number; \"appearance.locale\": UiPreviewLocale; \"appearance.themeId\": string; \"appearance.terminalRenderer\": string; \"providers.claude.additionalArgs\": string[]; \"providers.codex.additionalArgs\": stri...' is not assignable to type 'UiPreviewCommands'.\n  Types of property 'gitDiffByWorkspaceId' are incompatible.\n    Type '{ [workspace.id]: { diff: string; renderAs: string; status: string; }; }' is not assignable to type 'Record<string, GitFileDiffPayload>'.\n      'string' index signatures are incompatible.\n        Type '{ diff: string; renderAs: string; status: string; }' is not assignable to type 'GitFileDiffPayload'.\n          Types of property 'renderAs' are incompatible.\n            Type 'string' is not assignable to type 'GitDiffRenderMode'.",
+      "count": 2
+    },
+    {
+      "file": "src/ui-preview/scenes/desktop-review-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ workspaceBrowse: { currentPath: string; parentPath: string; directories: { name: string; path: string; itemCount: number; }[]; }; workspaceOpen: Workspace; workspaceList: Workspace[]; ... 11 more ...; terminalListByWorkspaceId: { ...; }; }' is not assignable to type 'UiPreviewCommands'.\n  Types of property 'gitDiffByWorkspaceId' are incompatible.\n    Type '{ [workspace.id]: { diff: string; renderAs: string; status: string; }; }' is not assignable to type 'Record<string, GitFileDiffPayload>'.\n      'string' index signatures are incompatible.\n        Type '{ diff: string; renderAs: string; status: string; }' is not assignable to type 'GitFileDiffPayload'.\n          Types of property 'renderAs' are incompatible.\n            Type 'string' is not assignable to type 'GitDiffRenderMode'.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/scenes/desktop-review-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ workspaces: Workspace[]; activeWorkspaceId: string; fileTreeByWorkspaceId: { [workspace.id]: Map<string, FileNode[]>; }; gitStateByWorkspaceId: { [workspace.id]: GitStatus; }; gitBranchListByWorkspaceId: { ...; }; ... 4 more ...; device: \"desktop\" | \"mobile\"; }' is not assignable to type 'UiPreviewSeed'.\n  The types of 'commands.gitDiffByWorkspaceId' are incompatible between these types.\n    Type '{ [workspace.id]: { diff: string; renderAs: string; status: string; }; }' is not assignable to type 'Record<string, GitFileDiffPayload>'.\n      'string' index signatures are incompatible.\n        Type '{ diff: string; renderAs: string; status: string; }' is not assignable to type 'GitFileDiffPayload'.\n          Types of property 'renderAs' are incompatible.\n            Type 'string' is not assignable to type 'GitDiffRenderMode'.",
+      "count": 6
+    },
+    {
+      "file": "src/ui-preview/scenes/desktop-review-scenes.tsx",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 3
+    },
+    {
+      "file": "src/ui-preview/scenes/page-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ commands: { skillsLibraryList: ({ slug: string; displayName: string; description: string; version: string; source: \"installed\"; origin: \"skillhub\"; libraryPath: string; installState: \"installed\"; ... 4 more ...; errorCount: number; } | { ...; } | { ...; })[]; ... 15 more ...; terminalListByWorkspaceId: { ...; }; }...' is not assignable to type 'UiPreviewSeed'.\n  Types of property 'paneLayoutByWorkspaceId' are incompatible.\n    Type '{ [workspace.id]: { id: string; type: string; }; }' is not assignable to type 'Record<string, PaneNode>'.\n      'string' index signatures are incompatible.\n        Type '{ id: string; type: string; }' is not assignable to type 'PaneNode'.\n          Type '{ id: string; type: string; }' is not assignable to type 'PaneSplit'.\n            Types of property 'type' are incompatible.\n              Type 'string' is not assignable to type '\"split\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/scenes/page-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ workspaces: Workspace[]; activeWorkspaceId: string; sessions: never[]; paneLayoutByWorkspaceId: { [x: string]: { id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }; }; ... 12 more ...; device: UiPreviewDevice; }' is not assignable to type 'UiPreviewSeed'.\n  Types of property 'paneLayoutByWorkspaceId' are incompatible.\n    Type '{ [x: string]: { id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }; }' is not assignable to type 'Record<string, PaneNode>'.\n      'string' index signatures are incompatible.\n        Type '{ id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }' is not assignable to type 'PaneNode'.\n          Type '{ id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }' is not assignable to type 'PaneSplit'.\n            Types of property 'type' are incompatible.\n              Type 'string' is not assignable to type '\"split\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/scenes/page-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ workspaces: Workspace[]; activeWorkspaceId: string; sessions: never[]; paneLayoutByWorkspaceId: { [x: string]: { id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }; }; ... 8 more ...; device: UiPreviewDevice; }' is not assignable to type 'UiPreviewSeed'.\n  Types of property 'paneLayoutByWorkspaceId' are incompatible.\n    Type '{ [x: string]: { id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }; }' is not assignable to type 'Record<string, PaneNode>'.\n      'string' index signatures are incompatible.\n        Type '{ id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }' is not assignable to type 'PaneNode'.\n          Type '{ id: string; type: string; direction: string; children: { id: string; type: string; leafKind: string; }[]; }' is not assignable to type 'PaneSplit'.\n            Types of property 'type' are incompatible.\n              Type 'string' is not assignable to type '\"split\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/ui-preview/scenes/page-scenes.tsx",
+      "code": 2322,
+      "message": "Type '{ workspaces: Workspace[]; activeWorkspaceId: string; sessions: Session[]; paneLayoutByWorkspaceId: { [workspace.id]: { id: string; type: string; }; }; fileTreeByWorkspaceId: { [workspace.id]: Map<string, FileNode[]>; }; ... 9 more ...; device: UiPreviewDevice; }' is not assignable to type 'UiPreviewSeed'.\n  Types of property 'paneLayoutByWorkspaceId' are incompatible.\n    Type '{ [workspace.id]: { id: string; type: string; }; }' is not assignable to type 'Record<string, PaneNode>'.\n      'string' index signatures are incompatible.\n        Type '{ id: string; type: string; }' is not assignable to type 'PaneNode'.\n          Type '{ id: string; type: string; }' is not assignable to type 'PaneSplit'.\n            Types of property 'type' are incompatible.\n              Type 'string' is not assignable to type '\"split\"'.",
+      "count": 2
+    },
+    {
+      "file": "src/ui-preview/scenes/page-scenes.tsx",
+      "code": 2741,
+      "message": "Property 'baseHash' is missing in type '{ path: string; name: string; matchCount: number; hasMoreMatches: false; matches: { line: number; id: string; column: number; endColumn: number; preview: string; previewColumnStart: number; previewColumnEnd: number; replacementPreview: string; replacementPreviewColumnStart: number; replacementPreviewColumnEnd: numbe...' but required in type 'SearchSessionFileResult'.",
+      "count": 1
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 2322,
+      "message": "Type 'ArrayBuffer | SharedArrayBuffer' is not assignable to type 'string | ArrayBuffer'.\n  Type 'SharedArrayBuffer' is not assignable to type 'string | ArrayBuffer'.\n    Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.\n      Types of property '[Symbol.toStringTag]' are incompatible.\n        Type '\"SharedArrayBuffer\"' is not assignable to type '\"ArrayBuffer\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 2345,
+      "message": "Argument of type '\"visibility_resume\"' is not assignable to parameter of type 'ProbeTrigger | undefined'.",
+      "count": 1
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 2352,
+      "message": "Conversion of type 'WsClient' to type '{ orphanBinaryPayloads: Map<number, unknown>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Property 'orphanBinaryPayloads' is private in type 'WsClient' but not in type '{ orphanBinaryPayloads: Map<number, unknown>; }'.",
+      "count": 6
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 2352,
+      "message": "Conversion of type 'WsClient' to type '{ pendingBinaryStreamIds: Map<number, unknown>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Property 'pendingBinaryStreamIds' is private in type 'WsClient' but not in type '{ pendingBinaryStreamIds: Map<number, unknown>; }'.",
+      "count": 3
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'any[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 3
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 2550,
+      "message": "Property 'at' does not exist on type 'MockWebSocket[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.",
+      "count": 1
+    },
+    {
+      "file": "src/ws/__tests__/client.test.ts",
+      "code": 7006,
+      "message": "Parameter 'entry' implicitly has an 'any' type.",
+      "count": 3
+    },
+    {
+      "file": "src/ws/client.ts",
+      "code": 2345,
+      "message": "Argument of type 'Uint8Array<ArrayBufferLike>' is not assignable to parameter of type 'string | Blob | BufferSource'.\n  Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'ArrayBufferView<ArrayBuffer>'.\n    Types of property 'buffer' are incompatible.\n      Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.\n        Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.\n          Types of property '[Symbol.toStringTag]' are incompatible.\n            Type '\"SharedArrayBuffer\"' is not assignable to type '\"ArrayBuffer\"'.",
+      "count": 1
+    },
+    {
+      "file": "src/ws/client.ts",
+      "code": 2532,
+      "message": "Object is possibly 'undefined'.",
+      "count": 2
+    }
+  ]
+}

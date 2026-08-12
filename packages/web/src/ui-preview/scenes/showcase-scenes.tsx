@@ -295,9 +295,11 @@ const worktreeTree: FileNode[] = [
 ];
 
 const footerUpdateRailPreviewState: UpdateStateView = {
-  version: 1,
+  version: 2,
   currentVersion: "0.4.0",
+  currentPublishedAt: null,
   latestVersion: "0.5.0",
+  latestPublishedAt: null,
   availability: "update_available",
   updateStatus: "idle",
   lastCheckedAt: 1715731200000,
@@ -310,6 +312,12 @@ const footerUpdateRailPreviewState: UpdateStateView = {
   supported: true,
   installKind: "global_npm",
   unsupportedReason: null,
+  runtimeContext: {
+    environment: "cli-global-npm",
+    authority: "cli",
+    supported: true,
+    unsupportedReason: null,
+  },
 };
 
 const fileTreeRoot: FileNode[] = [
@@ -1171,7 +1179,7 @@ function FooterUpdateRailConfirmPreview({ device }: { device: "desktop" | "mobil
           </div>
         }
         cancelText={t("action.cancel")}
-        confirmText={t("settings.about.update_now")}
+        confirmText={t("settings.about.restart_and_update")}
         tone="danger"
         onConfirm={() => {}}
       />

@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import type {
   LspServerKind,
@@ -7,6 +6,7 @@ import type {
   LspToolSource,
   Workspace,
 } from "@coder-studio/core";
+import { resolveEngineModule } from "../engine-modules.js";
 import {
   type CommandAvailabilityCheck,
   type CommandCheckDeps,
@@ -21,8 +21,6 @@ import {
   resolveManagedPythonCommand,
 } from "./definitions.js";
 import { type FileManifestStore, type ManagedLspToolManifest } from "./manifest-store.js";
-
-const require = createRequire(import.meta.url);
 
 export interface ResolvedLspToolCommand {
   kind: "ready";
@@ -242,7 +240,7 @@ export class LspToolManager {
     }
 
     try {
-      const packageJsonPath = require.resolve(`${definition.bundled.packageName}/package.json`);
+      const packageJsonPath = resolveEngineModule(`${definition.bundled.packageName}/package.json`);
       const packageRoot = join(packageJsonPath, "..");
       const entryPath = join(packageRoot, definition.bundled.entry);
       if (!existsSync(entryPath)) {

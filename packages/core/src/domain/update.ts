@@ -1,3 +1,5 @@
+import type { UpdateRuntimeContext } from "./product-update";
+
 export const UPDATE_CHECK_INTERVAL_OPTIONS = [3600, 21600, 43200, 86400] as const;
 
 export const DEFAULT_UPDATE_CHECK_INTERVAL_SEC = 3600;
@@ -14,8 +16,7 @@ export type UpdateStatus =
   | "failed"
   | "manual_required";
 
-export interface UpdateStateSnapshot {
-  version: 1;
+export interface UpdateStateFields {
   currentVersion: string;
   latestVersion: string | null;
   availability: UpdateAvailability;
@@ -29,6 +30,18 @@ export interface UpdateStateSnapshot {
   errorSummary: string | null;
 }
 
+export interface UpdateStateSnapshotV1 extends UpdateStateFields {
+  version: 1;
+}
+
+export interface UpdateStateSnapshot extends UpdateStateFields {
+  version: 2;
+  currentPublishedAt: string | null;
+  latestPublishedAt: string | null;
+}
+
+export type ReadableUpdateStateSnapshot = UpdateStateSnapshotV1 | UpdateStateSnapshot;
+
 export interface UpdateActivitySummary {
   runningTerminalCount: number;
   runningSessionCount: number;
@@ -40,6 +53,7 @@ export interface UpdateSupportInfo {
   supported: boolean;
   installKind: "global_npm" | "unsupported";
   unsupportedReason: string | null;
+  runtimeContext: UpdateRuntimeContext;
 }
 
 export interface UpdateStateView extends UpdateStateSnapshot, UpdateSupportInfo {}
@@ -69,11 +83,16 @@ export function resolveUpdateAutoCheckEnabled(value: unknown): boolean {
   return typeof value === "boolean" ? value : DEFAULT_UPDATE_AUTO_CHECK_ENABLED;
 }
 
-export function createDefaultUpdateState(currentVersion: string): UpdateStateSnapshot {
+export function createDefaultUpdateState(
+  currentVersion: string,
+  currentPublishedAt: string | null = null
+): UpdateStateSnapshot {
   return {
-    version: 1,
+    version: 2,
     currentVersion,
+    currentPublishedAt,
     latestVersion: null,
+    latestPublishedAt: null,
     availability: "unknown",
     updateStatus: "idle",
     lastCheckedAt: null,

@@ -1,7 +1,7 @@
 import { normalizeLegacyStateDir, normalizeStateDir } from "@coder-studio/core/state-paths";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
+import { getCoderStudioHome } from "./paths.js";
 
 export interface CliConfig {
   host?: string;
@@ -11,7 +11,7 @@ export interface CliConfig {
 }
 
 export function getCliConfigPath(): string {
-  return join(homedir(), ".coder-studio", "config.json");
+  return join(getCoderStudioHome(), "config.json");
 }
 
 export function normalizeLegacyDataDir(input: string): string {
@@ -59,7 +59,7 @@ export function readCliConfig(): CliConfig | null {
 
 export function writeCliConfig(config: CliConfig): void {
   const path = getCliConfigPath();
-  const dir = join(homedir(), ".coder-studio");
+  const dir = getCoderStudioHome();
   const normalizedConfig: CliConfig = {
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined && config.port > 0 ? { port: config.port } : {}),

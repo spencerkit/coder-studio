@@ -32,7 +32,9 @@ interface PreviewSessionUpdateBody {
 type WorkspaceLookup = { path: string } | null | undefined;
 
 const require = createRequire(import.meta.url);
-const MERMAID_RUNTIME_PATH = require.resolve("mermaid/dist/mermaid.min.js");
+const MERMAID_RUNTIME_PATH =
+  process.env.CODER_STUDIO_MERMAID_RUNTIME_PATH?.trim() ||
+  require.resolve("mermaid/dist/mermaid.min.js");
 const MARKDOWN_MERMAID_INIT_SCRIPT = [
   "if (typeof window.mermaid !== 'undefined') {",
   "  window.mermaid.initialize({ startOnLoad: true, securityLevel: 'strict' });",

@@ -1,0 +1,67 @@
+appId: com.coderstudio.desktop
+productName: Coder Studio
+copyright: Copyright © Coder Studio
+asar: true
+electronDist: node_modules/electron/dist
+
+directories:
+  output: ../../release/desktop
+
+files:
+  - dist/main.cjs
+  - dist/preload.cjs
+  - package.json
+  - "!**/*.map"
+
+extraResources:
+  - from: dist/build-info.json
+    to: build-info.json
+  - from: dist/factory-runtime
+    to: factory-runtime
+    filter:
+      - "**/*"
+      - "!**/*.map"
+  - from: dist/engine
+    to: engine
+    filter:
+      - "**/*"
+      - "!node_modules{,/**}"
+      - "!**/*.map"
+  - from: dist/engine/node_modules
+    to: engine/node_modules
+    filter:
+      - "**/*"
+      - "!**/*.map"
+
+win:
+  icon: ../web/public/favicon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  artifactName: Coder-Studio-Setup-${version}.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+
+mac:
+  icon: ../web/public/favicon.png
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+
+linux:
+  icon: ../web/public/favicon.png
+  category: Development
+  target:
+    - target: AppImage
+      arch:
+        - x64
+
+publish:
+  provider: github
+  owner: spencerkit
+  repo: coder-studio

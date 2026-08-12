@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,9 +22,11 @@ describe("UpdateStateRepo", () => {
     });
 
     expect(repo.get()).toEqual({
-      version: 1,
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: null,
+      latestPublishedAt: null,
       availability: "unknown",
       updateStatus: "idle",
       lastCheckedAt: null,
@@ -57,6 +59,43 @@ describe("UpdateStateRepo", () => {
       availability: "update_available",
       lastCheckedAt: 123,
       updateStatus: "idle",
+    });
+  });
+
+  it("reads v1 without writing and upgrades on the next mutation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "update-state-repo-"));
+    tempDirs.push(dir);
+    const filePath = join(dir, "update-state.json");
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        version: 1,
+        currentVersion: "0.4.0",
+        latestVersion: "0.5.0",
+        availability: "update_available",
+        updateStatus: "idle",
+        lastCheckedAt: 100,
+        targetVersion: null,
+        startedAt: null,
+        finishedAt: null,
+        requiresManualStep: false,
+        manualCommand: null,
+        errorSummary: null,
+      })
+    );
+    const repo = new UpdateStateRepo({ filePath, currentVersion: "0.4.0" });
+
+    expect(repo.get()).toMatchObject({
+      version: 2,
+      currentPublishedAt: null,
+      latestPublishedAt: null,
+    });
+    expect(JSON.parse(readFileSync(filePath, "utf8")).version).toBe(1);
+
+    repo.update({ latestPublishedAt: "2026-08-08T01:02:03.000Z" });
+    expect(JSON.parse(readFileSync(filePath, "utf8"))).toMatchObject({
+      version: 2,
+      latestPublishedAt: "2026-08-08T01:02:03.000Z",
     });
   });
 });

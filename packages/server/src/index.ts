@@ -4,6 +4,7 @@ export { parseServerConfig, type ServerConfig, type ServerConfigInput } from "./
 export type { Server } from "./server.js";
 // Server entry point
 export { createServer } from "./server.js";
+export { acquireStateLock, type StateLockHandle, type StateLockOptions } from "./state-lock.js";
 export * from "./storage/index.js";
 export * from "./terminal/index.js";
 export { type Broadcaster, WsHub } from "./ws/hub.js";

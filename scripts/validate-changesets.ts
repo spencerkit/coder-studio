@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { error, ROOT_DIR, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
-const ALLOWED_PACKAGE = "@spencer-kit/coder-studio";
+const ALLOWED_PACKAGES = new Set(["@spencer-kit/coder-studio", "@coder-studio/desktop"]);
 
 export async function findChangesetMarkdownFiles(changesetDir: string): Promise<string[]> {
   const entries = await readdir(changesetDir, { withFileTypes: true }).catch(() => []);
@@ -18,12 +18,12 @@ export async function assertAllowedChangesetPackages(filePaths: string[]): Promi
   for (const filePath of filePaths) {
     const content = await readFile(filePath, "utf8");
     const packages = extractChangesetPackages(content);
-    const disallowed = packages.filter((name) => name !== ALLOWED_PACKAGE);
+    const disallowed = packages.filter((name) => !ALLOWED_PACKAGES.has(name));
 
     if (disallowed.length > 0) {
       throw new Error(
         `${filePath} includes unsupported release packages: ${disallowed.join(", ")}. ` +
-          `Current release flow only allows ${ALLOWED_PACKAGE}.`
+          `Current release flow only allows ${Array.from(ALLOWED_PACKAGES).join(", ")}.`
       );
     }
   }
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
   const files = await findChangesetMarkdownFiles(changesetDir);
   await assertAllowedChangesetPackages(files);
   success(
-    `Validated ${files.length} changeset file(s); release scope is limited to ${ALLOWED_PACKAGE}.`
+    `Validated ${files.length} changeset file(s); release scope is limited to ${Array.from(ALLOWED_PACKAGES).join(", ")}.`
   );
 }
 

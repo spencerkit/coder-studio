@@ -34,13 +34,13 @@ import {
   supervisorDialogAtom,
   supervisorsAtom,
 } from "../../features/supervisor/atoms";
-import { updateStateAtom } from "../../features/updates/atoms";
 import {
   branchQuickPickAtom,
   type GitDiffPreview,
   gitDiffPreviewAtomFamily,
   gitStateAtomFamily,
 } from "../../features/workspace/atoms";
+import { seedCliUpdateState } from "../../test-utils/update-state";
 import { seedReadyWorkspaceState } from "../../test-utils/workspace-state";
 import { CommandResultError } from "../../ws/client";
 import { MobileShell } from "./index";
@@ -782,10 +782,12 @@ describe("MobileShell Phase 2 workspace", () => {
     const { store } = renderMobileShell({ initialEntry: "/workspace", sendCommand });
 
     act(() => {
-      store.set(updateStateAtom, {
-        version: 1,
+      seedCliUpdateState(store, {
+        version: 2,
         currentVersion: "0.4.0",
+        currentPublishedAt: null,
         latestVersion: "0.5.0",
+        latestPublishedAt: null,
         availability: "update_available",
         updateStatus: "idle",
         lastCheckedAt: 123,
@@ -798,6 +800,12 @@ describe("MobileShell Phase 2 workspace", () => {
         supported: true,
         installKind: "global_npm",
         unsupportedReason: null,
+        runtimeContext: {
+          environment: "cli-global-npm",
+          authority: "cli",
+          supported: true,
+          unsupportedReason: null,
+        },
       });
     });
 

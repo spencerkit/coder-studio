@@ -32,7 +32,7 @@ async function dev(): Promise<void> {
   });
 
   info("Starting backend (tsx watch)...");
-  const serverProcess = runBackground("pnpm", ["tsx", "watch", "src/server.ts"], {
+  const serverProcess = runBackground("pnpm", ["tsx", "watch", "src/main.ts"], {
     cwd: SERVER_DIR,
     stdio: "inherit",
     env: buildDevServerEnv({

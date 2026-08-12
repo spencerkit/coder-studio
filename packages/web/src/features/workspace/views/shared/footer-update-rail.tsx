@@ -1,207 +1,148 @@
-import type { UpdatePrepareInstallResponse, UpdateStateView } from "@coder-studio/core";
+import type { ProductUpdatePreparation } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { dispatchCommandAtom } from "../../../../atoms/connection";
 import { Button, ConfirmDialog } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
 import { pushToastAtom } from "../../../notifications";
-import { updatePrepareInstallAtom, updateStateAtom } from "../../../updates/atoms";
-
-function getSuccessVersion(state: UpdateStateView | null): string | null {
-  if (!state || state.updateStatus !== "succeeded") {
-    return null;
-  }
-
-  return state.targetVersion ?? state.latestVersion ?? state.currentVersion ?? null;
-}
+import {
+  productUpdateStateAtom,
+  updateControllerAtom,
+  updatePreparationAtom,
+} from "../../../updates/atoms";
 
 export function FooterUpdateRail() {
   const t = useTranslation();
   const navigate = useNavigate();
-  const dispatch = useAtomValue(dispatchCommandAtom);
-  const updateState = useAtomValue(updateStateAtom);
-  const setUpdateState = useSetAtom(updateStateAtom);
-  const setUpdatePrepareInstall = useSetAtom(updatePrepareInstallAtom);
+  const updateState = useAtomValue(productUpdateStateAtom);
+  const updateController = useAtomValue(updateControllerAtom);
+  const setPreparation = useSetAtom(updatePreparationAtom);
   const pushToast = useSetAtom(pushToastAtom);
-  const [confirmState, setConfirmState] = useState<UpdatePrepareInstallResponse | null>(null);
-  const [loading, setLoading] = useState<false | "prepare" | "install">(false);
-  const [successHidden, setSuccessHidden] = useState(false);
+  const [confirmState, setConfirmState] = useState<ProductUpdatePreparation | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const successVersion = getSuccessVersion(updateState);
+  if (!updateState || !updateController || updateController.kind === "readonly") return null;
+  if (
+    updateState.status !== "available" &&
+    updateState.status !== "ready" &&
+    updateState.status !== "failed" &&
+    updateState.status !== "manual_required"
+  ) {
+    return null;
+  }
 
-  useEffect(() => {
-    if (updateState?.updateStatus !== "succeeded") {
-      setSuccessHidden(false);
-      return;
-    }
-
-    setSuccessHidden(false);
-    const timer = window.setTimeout(() => {
-      setSuccessHidden(true);
-    }, 3000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [successVersion, updateState?.updateStatus]);
-
-  const handleStartInstall = async (prepared: UpdatePrepareInstallResponse, force: boolean) => {
-    setLoading("install");
-    const result = await dispatch<UpdateStateView>("updates.startInstall", {
-      targetVersion: prepared.latestVersion ?? prepared.targetVersion ?? undefined,
-      force,
+  const showError = (error: unknown) => {
+    pushToast({
+      kind: "error",
+      title: t("settings.about.update_now"),
+      body: error instanceof Error ? error.message : String(error),
     });
-    setLoading(false);
-    setConfirmState(null);
-    if (!result.ok || !result.data) {
-      pushToast({
-        kind: "error",
-        title: t("settings.about.update_now"),
-        body: result.error?.message,
-      });
-      return;
-    }
-    setUpdateState(result.data);
   };
 
-  const handlePrepareInstall = async () => {
-    setLoading("prepare");
-    const result = await dispatch<UpdatePrepareInstallResponse>("updates.prepareInstall", {});
-    setLoading(false);
-    if (!result.ok || !result.data) {
-      pushToast({
-        kind: "error",
-        title: t("settings.about.update_now"),
-        body: result.error?.message,
-      });
-      return;
+  const start = async (prepared: ProductUpdatePreparation, force: boolean) => {
+    setLoading(true);
+    try {
+      await updateController.start(prepared, force);
+      setConfirmState(null);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
     }
-    setUpdatePrepareInstall(result.data);
-    if (result.data.activity.hasActiveWork) {
-      setConfirmState(result.data);
-      return;
-    }
-    await handleStartInstall(result.data, false);
   };
 
-  const openDetails = () => {
-    navigate("/more/about/update-status");
+  const prepare = async () => {
+    setLoading(true);
+    try {
+      const prepared = await updateController.prepare();
+      setPreparation(prepared);
+      if (prepared.activity.hasActiveWork) setConfirmState(prepared);
+      else await updateController.start(prepared, false);
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!updateState) {
-    return null;
-  }
+  const runAction = async () => {
+    if (updateState.status === "manual_required") {
+      navigate("/more/about/update-status");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (updateState.status === "available") {
+        if (updateController.kind === "desktop") await updateController.download();
+        else await prepare();
+      } else if (updateState.status === "ready") {
+        await prepare();
+      } else if (updateState.status === "failed") {
+        if (updateController.kind === "desktop") await updateController.retry();
+        else navigate("/more/about/update-status");
+      }
+    } catch (error) {
+      showError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const isDiscovery =
-    updateState.availability === "update_available" && updateState.updateStatus === "idle";
-  const isVisibleStatus =
-    updateState.updateStatus === "installing" ||
-    updateState.updateStatus === "restarting" ||
-    updateState.updateStatus === "failed" ||
-    updateState.updateStatus === "manual_required" ||
-    (updateState.updateStatus === "succeeded" && !successHidden);
+  const actionLabel =
+    updateState.status === "manual_required"
+      ? t("settings.about.footer_view_details")
+      : updateState.status === "available"
+        ? t(
+            updateController.kind === "desktop"
+              ? "settings.about.download_update"
+              : "settings.about.update_and_restart"
+          )
+        : updateState.status === "ready"
+          ? t("settings.about.restart_and_update")
+          : updateController.kind === "desktop"
+            ? t("settings.about.retry_update")
+            : t("settings.about.footer_view_details");
 
-  if (!isDiscovery && !isVisibleStatus) {
-    return null;
-  }
+  const targetVersion = updateState.components.find(
+    (component) => component.targetVersion
+  )?.targetVersion;
 
   return (
     <>
       <div className="footer-update-rail" data-testid="footer-update-rail">
-        {isDiscovery ? (
-          <>
-            <span className="footer-update-rail__text">
-              {t("settings.about.footer_update_available", {
-                version: updateState.latestVersion ? `v${updateState.latestVersion}` : "",
-              })}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="footer-update-rail__action"
-              onClick={() => {
-                void handlePrepareInstall();
-              }}
-              disabled={loading !== false}
-            >
-              {t("settings.about.update_now")}
-            </Button>
-          </>
-        ) : null}
-
-        {updateState.updateStatus === "installing" ? (
-          <span className="footer-update-rail__text">{t("settings.about.footer_installing")}</span>
-        ) : null}
-
-        {updateState.updateStatus === "restarting" ? (
-          <span className="footer-update-rail__text">{t("settings.about.footer_restarting")}</span>
-        ) : null}
-
-        {updateState.updateStatus === "failed" ? (
-          <>
-            <span className="footer-update-rail__text">{t("settings.about.footer_failed")}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="footer-update-rail__action"
-              onClick={openDetails}
-            >
-              {t("settings.about.footer_view_details")}
-            </Button>
-          </>
-        ) : null}
-
-        {updateState.updateStatus === "manual_required" ? (
-          <>
-            <span className="footer-update-rail__text">
-              {t("settings.about.footer_manual_required")}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="footer-update-rail__action"
-              onClick={openDetails}
-            >
-              {t("settings.about.footer_view_details")}
-            </Button>
-          </>
-        ) : null}
-
-        {updateState.updateStatus === "succeeded" && !successHidden && successVersion ? (
-          <span className="footer-update-rail__text">
-            {t("settings.about.footer_succeeded", { version: `v${successVersion}` })}
-          </span>
-        ) : null}
+        <span className="footer-update-rail__text">
+          {updateState.status === "available"
+            ? t("settings.about.footer_update_available", {
+                version: targetVersion ? `v${targetVersion}` : "",
+              })
+            : t(`settings.about.product_status_${updateState.status}`)}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="footer-update-rail__action"
+          disabled={loading}
+          onClick={() => void runAction()}
+        >
+          {actionLabel}
+        </Button>
       </div>
-
       {confirmState ? (
         <ConfirmDialog
           open
           onOpenChange={(open) => {
-            if (!open) {
-              setConfirmState(null);
-            }
+            if (!open) setConfirmState(null);
           }}
           title={t("settings.about.confirm_update_title")}
-          description={
-            <div className="settings-dialog-copy">
-              <p>{t("settings.about.confirm_update_message")}</p>
-              <p>
-                {t("settings.about.confirm_update_activity", {
-                  terminals: confirmState.activity.runningTerminalCount,
-                  sessions: confirmState.activity.runningSessionCount,
-                  supervisors: confirmState.activity.runningSupervisorCount,
-                })}
-              </p>
-            </div>
-          }
-          cancelText={t("action.cancel")}
-          confirmText={t("settings.about.update_now")}
+          description={t("settings.about.confirm_update_activity", {
+            terminals: confirmState.activity.runningTerminalCount,
+            sessions: confirmState.activity.runningSessionCount,
+            supervisors: confirmState.activity.runningSupervisorCount,
+          })}
+          cancelText={t("settings.about.restart_later")}
+          confirmText={t("settings.about.restart_and_update")}
           tone="danger"
-          onConfirm={() => {
-            void handleStartInstall(confirmState, true);
-          }}
+          onConfirm={() => void start(confirmState, true)}
         />
       ) : null}
     </>

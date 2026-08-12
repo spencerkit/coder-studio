@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, FolderOpen, X } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { localeAtom } from "../../../../atoms/app-ui";
 import {
@@ -57,8 +57,10 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
   const [showClearRecentConfirm, setShowClearRecentConfirm] = useState(false);
   const {
     browsing,
+    canUseNativeDirectoryPicker,
     clearRecentWorkspaces,
     closeCreateFolder,
+    chooseWorkspaceDirectory,
     currentPath,
     createFolderError,
     creatingFolder,
@@ -165,6 +167,17 @@ export function WorkspaceLaunchModal({ onClose }: WorkspaceLaunchModalProps) {
       {recentSection}
       <div className="folder-picker">
         <div className="fp-toolbar">
+          {canUseNativeDirectoryPicker ? (
+            <button
+              className="fp-btn"
+              type="button"
+              onClick={() => void chooseWorkspaceDirectory()}
+              disabled={loading}
+            >
+              <FolderOpen size={12} />
+              {t("workspace.launch.choose_folder")}
+            </button>
+          ) : null}
           <button className="fp-btn" onClick={() => handleNavigate("~")}>
             <ThemedIcon semantic="workspace.launch.home" size={12} />
             {t("workspace.launch.home_directory")}

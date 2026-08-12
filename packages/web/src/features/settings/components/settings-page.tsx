@@ -15,6 +15,7 @@ import {
   DEFAULT_SUPERVISOR_RETRY_ON_EVALUATOR_ERROR,
   DEFAULT_SUPERVISOR_RETRY_ON_TIMEOUT,
   deriveMonitoringMode,
+  isUpdateCheckIntervalSec,
   type LspRuntimeMode,
   MAX_SUPERVISOR_EVALUATION_TIMEOUT_SEC,
   MAX_SUPERVISOR_RETRY_DELAY_SEC,
@@ -31,7 +32,9 @@ import {
   resolveSupervisorRetryOnTimeout,
   resolveUpdateAutoCheckEnabled,
   resolveUpdateCheckIntervalSec,
+  type TerminalProfile,
   type TerminalProfilesListResult,
+  type UpdateCheckIntervalSec,
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
@@ -69,6 +72,7 @@ import {
   resolveTerminalFontSizeSetting,
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
+import { updateControllerAtom } from "../../updates/atoms";
 import { WorkAnalyticsSettingsSection } from "../../work-analysis";
 import { AboutSettings, type AboutSettingsView } from "./about-settings";
 import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
@@ -488,6 +492,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
   const [personalization, setPersonalization] = useAtom(appearancePersonalizationAtom);
   const [theme, setTheme] = useAtom(themeAtom);
   const terminalPreferences = useAtomValue(terminalPreferencesAtom);
+  const updateController = useAtomValue(updateControllerAtom);
   const setNotificationPreferences = useSetAtom(notificationPreferencesAtom);
   const setTerminalPreferences = useSetAtom(terminalPreferencesAtom);
   const resetTerminalProfiles = useSetAtom(resetTerminalProfilesAtom);
@@ -653,16 +658,18 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
         setMonitoringSettingsReady(true);
       }
       if (
+        updateController?.kind !== "desktop" &&
         updateSelectionVersionRef.current.autoCheckEnabled ===
-        updateSelectionVersionAtRequestStart.autoCheckEnabled
+          updateSelectionVersionAtRequestStart.autoCheckEnabled
       ) {
         setUpdateAutoCheckEnabled(
           resolveUpdateAutoCheckEnabled(settings["updates.autoCheckEnabled"])
         );
       }
       if (
+        updateController?.kind !== "desktop" &&
         updateSelectionVersionRef.current.checkIntervalSec ===
-        updateSelectionVersionAtRequestStart.checkIntervalSec
+          updateSelectionVersionAtRequestStart.checkIntervalSec
       ) {
         setUpdateCheckIntervalSec(
           resolveUpdateCheckIntervalSec(settings["updates.checkIntervalSec"])
@@ -803,7 +810,30 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
     setTheme,
     settingsRefreshKey,
     store,
+    updateController,
   ]);
+
+  useEffect(() => {
+    if (updateController?.kind !== "desktop") return;
+    let disposed = false;
+    void updateController
+      .getSettings()
+      .then((settings) => {
+        if (disposed || !settings) return;
+        setUpdateAutoCheckEnabled(settings.autoCheckEnabled);
+        setUpdateCheckIntervalSec(settings.checkIntervalSec);
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSettingsLoadError(
+            error instanceof Error ? error.message : settingsLoadFailedUnknownRef.current
+          );
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [updateController]);
 
   const handleLocaleSelection = (value: "zh" | "en") => {
     appearanceSelectionVersionRef.current.locale += 1;
@@ -828,9 +858,9 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
       },
     });
 
-    if (!result.ok) {
+    if (!result?.ok) {
       setPersonalization(previous);
-      setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
+      setSettingsLoadError(result?.error?.message ?? settingsLoadFailedUnknownRef.current);
       return false;
     }
 
@@ -891,8 +921,27 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
 
   const saveUpdateSettings = async (updates: {
     autoCheckEnabled?: boolean;
-    checkIntervalSec?: number;
+    checkIntervalSec?: UpdateCheckIntervalSec;
   }) => {
+    if (updateController?.kind === "desktop") {
+      try {
+        await updateController.setSettings(updates);
+        return { ok: true as const };
+      } catch (error) {
+        return {
+          ok: false as const,
+          error: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    }
+    if (updateController?.kind === "readonly") {
+      return {
+        ok: false as const,
+        error: {
+          message: updateController.getState().runtimeContext.unsupportedReason ?? "Read only",
+        },
+      };
+    }
     return await dispatch("settings.update", {
       settings: {
         updates,
@@ -973,12 +1022,13 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
       return;
     }
     if (!result.ok) {
-      setUpdateAutoCheckEnabled((current) => !value);
+      setUpdateAutoCheckEnabled(!value);
+      setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
     }
   };
 
   const handleUpdateIntervalChange = async (value: number) => {
-    if (value === updateCheckIntervalSec) {
+    if (!isUpdateCheckIntervalSec(value) || value === updateCheckIntervalSec) {
       return;
     }
     const previous = updateCheckIntervalSec;
@@ -990,6 +1040,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
     }
     if (!result.ok) {
       setUpdateCheckIntervalSec(previous);
+      setSettingsLoadError(result.error?.message ?? settingsLoadFailedUnknownRef.current);
     }
   };
 
@@ -1156,7 +1207,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
             checkIntervalSec={updateCheckIntervalSec}
             onAutoCheckEnabledChange={handleUpdateAutoCheckChange}
             onCheckIntervalChange={handleUpdateIntervalChange}
-            locale={locale}
+            locale={locale === "en" ? "en" : "zh"}
             view={currentAboutView}
           />
         );
@@ -1449,14 +1500,14 @@ function clearPersonalizationOverrides(
 ): AppearancePersonalizationOverrides {
   const next: AppearancePersonalizationOverrides = {};
 
-  for (const field of PERSONALIZATION_OVERRIDE_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(overrides, field)) {
-      const value = overrides[field];
-      if (value !== undefined) {
-        next[field] = value;
-      }
-    }
-  }
+  if (overrides.backgroundAssetId !== undefined)
+    next.backgroundAssetId = overrides.backgroundAssetId;
+  if (overrides.backgroundDimness !== undefined)
+    next.backgroundDimness = overrides.backgroundDimness;
+  if (overrides.backgroundBlur !== undefined) next.backgroundBlur = overrides.backgroundBlur;
+  if (overrides.glassEnabled !== undefined) next.glassEnabled = overrides.glassEnabled;
+  if (overrides.glassIntensity !== undefined) next.glassIntensity = overrides.glassIntensity;
+  if (overrides.surfaceOpacity !== undefined) next.surfaceOpacity = overrides.surfaceOpacity;
 
   return next;
 }

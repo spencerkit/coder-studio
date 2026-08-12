@@ -1,7 +1,7 @@
-import type { UpdatePrepareInstallResponse, UpdateStateView } from "@coder-studio/core";
+import type { ProductUpdatePreparation, ProductUpdateState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useId, useMemo, useState } from "react";
-import { dispatchCommandAtom, serverInfoAtom } from "../../../atoms/connection";
+import { serverInfoAtom } from "../../../atoms/connection";
 import {
   Button,
   ConfirmDialog,
@@ -12,12 +12,35 @@ import {
 } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
 import { pushToastAtom } from "../../notifications";
-import { updatePrepareInstallAtom, updateStateAtom } from "../../updates/atoms";
+import {
+  productUpdateStateAtom,
+  updateControllerAtom,
+  updatePreparationAtom,
+} from "../../updates/atoms";
+import type { UpdateController } from "../../updates/types";
 
-function formatTime(timestamp: number | null, locale: "zh" | "en", emptyLabel: string): string {
-  if (!timestamp) {
-    return emptyLabel;
-  }
+const UPDATE_INTERVALS = [3600, 21600, 43200, 86400] as const;
+
+export type AboutSettingsView = "all" | "product" | "update-status" | "auto-update";
+export type ProductUpdatePrimaryAction = "check" | "download" | "cancel" | "prepare" | "retry";
+
+interface AboutSettingsProps {
+  autoCheckEnabled: boolean;
+  checkIntervalSec: number;
+  onAutoCheckEnabledChange: (value: boolean) => void;
+  onCheckIntervalChange: (value: number) => void;
+  locale: "zh" | "en";
+  view?: AboutSettingsView;
+}
+
+export function formatReleaseTime(
+  value: string | null,
+  locale: "zh" | "en",
+  unknownLabel: string
+): string {
+  if (!value) return unknownLabel;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return unknownLabel;
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
     year: "numeric",
     month: "short",
@@ -27,37 +50,62 @@ function formatTime(timestamp: number | null, locale: "zh" | "en", emptyLabel: s
   }).format(timestamp);
 }
 
-function getStatusTone(
-  state: UpdateStateView | null
-): "neutral" | "info" | "warning" | "success" | "error" {
-  if (!state) return "neutral";
-  switch (state.updateStatus) {
-    case "installing":
-    case "restarting":
-    case "checking":
-      return "info";
-    case "succeeded":
-      return "success";
-    case "manual_required":
-      return "warning";
-    case "failed":
-      return "error";
-    default:
-      return "neutral";
-  }
+function formatCheckTime(value: number | null, locale: "zh" | "en", empty: string): string {
+  if (value === null) return empty;
+  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
 }
 
-const UPDATE_INTERVALS = [3600, 21600, 43200, 86400] as const;
+export function primaryActionFor(
+  state: ProductUpdateState,
+  controller: UpdateController
+): ProductUpdatePrimaryAction | null {
+  if (controller.kind === "readonly" || !state.runtimeContext.supported) return null;
+  if (state.status === "idle" || state.status === "succeeded") return "check";
+  if (state.status === "available") return controller.kind === "desktop" ? "download" : "prepare";
+  if (state.status === "downloading") return controller.kind === "desktop" ? "cancel" : null;
+  if (state.status === "ready") return "prepare";
+  if (state.status === "failed" && controller.kind === "desktop") return "retry";
+  return null;
+}
 
-export type AboutSettingsView = "all" | "product" | "update-status" | "auto-update";
+function statusTone(
+  status: ProductUpdateState["status"] | undefined
+): "neutral" | "info" | "warning" | "success" | "error" {
+  if (status === "checking" || status === "downloading" || status === "restarting") return "info";
+  if (status === "ready" || status === "manual_required") return "warning";
+  if (status === "succeeded") return "success";
+  if (status === "failed") return "error";
+  return "neutral";
+}
 
-interface AboutSettingsProps {
-  autoCheckEnabled: boolean;
-  checkIntervalSec: number;
-  onAutoCheckEnabledChange: (value: boolean) => void;
-  onCheckIntervalChange: (value: number) => void;
-  locale: "zh" | "en";
-  view?: AboutSettingsView;
+function componentLabel(component: ProductUpdateState["components"][number]): string {
+  if (component.kind === "shell") return "Shell";
+  if (component.kind === "runtime")
+    return component.target ? `Runtime (${component.target})` : "Runtime";
+  return "CLI";
+}
+
+function versionTransition(component: ProductUpdateState["components"][number]): string {
+  const target = component.targetVersion ? ` → v${component.targetVersion}` : "";
+  return `${componentLabel(component)} v${component.currentVersion}${target}`;
+}
+
+function environmentGuidance(
+  state: ProductUpdateState,
+  controller: UpdateController
+): string | null {
+  if (state.runtimeContext.environment === "desktop-wsl") return "settings.about.wsl_managed";
+  if (controller.kind === "readonly" && state.runtimeContext.environment === "desktop-managed") {
+    return "settings.about.managed_in_desktop";
+  }
+  if (controller.kind === "readonly") return "settings.about.readonly_mismatch";
+  return null;
 }
 
 export function AboutSettings({
@@ -69,121 +117,107 @@ export function AboutSettings({
   view = "all",
 }: AboutSettingsProps) {
   const t = useTranslation();
-  const dispatch = useAtomValue(dispatchCommandAtom);
   const serverInfo = useAtomValue(serverInfoAtom);
-  const updateState = useAtomValue(updateStateAtom);
-  const setUpdateState = useSetAtom(updateStateAtom);
-  const setUpdatePrepareInstall = useSetAtom(updatePrepareInstallAtom);
+  const updateState = useAtomValue(productUpdateStateAtom);
+  const updateController = useAtomValue(updateControllerAtom);
+  const setPreparation = useSetAtom(updatePreparationAtom);
   const pushToast = useSetAtom(pushToastAtom);
-  const [confirmState, setConfirmState] = useState<UpdatePrepareInstallResponse | null>(null);
-  const [loading, setLoading] = useState<null | "check" | "prepare" | "install">(null);
+  const [confirmState, setConfirmState] = useState<ProductUpdatePreparation | null>(null);
+  const [loading, setLoading] = useState<ProductUpdatePrimaryAction | "start" | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const autoCheckLabelId = useId();
   const autoCheckDescId = useId();
   const checkIntervalLabelId = useId();
   const showProduct = view === "all" || view === "product";
   const showUpdateStatus = view === "all" || view === "update-status";
   const showAutoUpdate = view === "all" || view === "auto-update";
-
-  const statusLabel = useMemo(() => {
-    if (!updateState) {
-      return t("settings.about.update_status_unknown");
-    }
-    switch (updateState.updateStatus) {
-      case "idle":
-        return t("settings.about.update_status_idle");
-      case "checking":
-        return t("settings.about.update_status_checking");
-      case "installing":
-        return t("settings.about.update_status_installing");
-      case "restarting":
-        return t("settings.about.update_status_restarting");
-      case "succeeded":
-        return t("settings.about.update_status_succeeded");
-      case "failed":
-        return t("settings.about.update_status_failed");
-      case "manual_required":
-        return t("settings.about.update_status_manual_required");
-    }
-  }, [t, updateState]);
-
-  const availabilityLabel = useMemo(() => {
-    if (!updateState) {
-      return t("settings.about.availability_unknown");
-    }
-    switch (updateState.availability) {
-      case "unknown":
-        return t("settings.about.availability_unknown");
-      case "up_to_date":
-        return t("settings.about.availability_up_to_date");
-      case "update_available":
-        return t("settings.about.availability_update_available");
-      case "check_failed":
-        return t("settings.about.availability_check_failed");
-    }
-  }, [t, updateState]);
+  const readOnly = !updateController || updateController.kind === "readonly";
+  const primaryAction =
+    updateState && updateController ? primaryActionFor(updateState, updateController) : null;
+  const guidanceKey =
+    updateState && updateController ? environmentGuidance(updateState, updateController) : null;
 
   const intervalOptions = useMemo(
     () =>
       UPDATE_INTERVALS.map((value) => ({
-        disabled: !autoCheckEnabled,
+        disabled: !autoCheckEnabled || readOnly,
         label: t(`settings.about.interval_${value}`),
         value: String(value),
       })),
-    [autoCheckEnabled, t]
+    [autoCheckEnabled, readOnly, t]
   );
 
-  const handleCheck = async () => {
-    setLoading("check");
-    const result = await dispatch<UpdateStateView>("updates.check", {});
-    setLoading(null);
-    if (!result.ok || !result.data) {
-      pushToast({
-        kind: "error",
-        title: t("settings.about.check_failed"),
-        body: result.error?.message,
-      });
-      return;
-    }
-    setUpdateState(result.data);
+  const statusLabel = updateState
+    ? t(`settings.about.product_status_${updateState.status}`)
+    : t("settings.about.update_status_unknown");
+  const targetVersion = updateState?.components.find(
+    (component) => component.kind === "runtime" || component.kind === "cli"
+  )?.targetVersion;
+  const progress = updateState?.components
+    .map((component) => component.progressPercent)
+    .filter((value): value is number => value !== null)
+    .reduce<number | null>((current, value) => Math.max(current ?? 0, value), null);
+
+  const actionLabel = (action: ProductUpdatePrimaryAction): string => {
+    if (action === "check") return t("settings.about.check_now");
+    if (action === "download") return t("settings.about.download_update");
+    if (action === "cancel") return t("settings.about.cancel_download");
+    if (action === "retry") return t("settings.about.retry_update");
+    return t(
+      updateController?.kind === "cli"
+        ? "settings.about.update_and_restart"
+        : "settings.about.restart_and_update"
+    );
   };
 
-  const handlePrepareInstall = async () => {
-    setLoading("prepare");
-    const result = await dispatch<UpdatePrepareInstallResponse>("updates.prepareInstall", {});
-    setLoading(null);
-    if (!result.ok || !result.data) {
-      pushToast({
-        kind: "error",
-        title: t("settings.about.update_now"),
-        body: result.error?.message,
-      });
-      return;
-    }
-    setUpdatePrepareInstall(result.data);
-    if (result.data.activity.hasActiveWork) {
-      setConfirmState(result.data);
-      return;
-    }
-    await handleStartInstall(result.data, false);
-  };
-
-  const handleStartInstall = async (prepared: UpdatePrepareInstallResponse, force: boolean) => {
-    setLoading("install");
-    const result = await dispatch<UpdateStateView>("updates.startInstall", {
-      targetVersion: prepared.latestVersion ?? prepared.targetVersion ?? undefined,
-      force,
+  const showError = (title: string, error: unknown) => {
+    pushToast({
+      kind: "error",
+      title,
+      body: error instanceof Error ? error.message : String(error),
     });
-    setLoading(null);
-    setConfirmState(null);
-    if (!result.ok || !result.data) {
-      pushToast({
-        kind: "error",
-        title: t("settings.about.update_now"),
-        body: result.error?.message,
-      });
-      return;
+  };
+
+  const startPrepared = async (prepared: ProductUpdatePreparation, force: boolean) => {
+    if (!updateController) return;
+    setLoading("start");
+    try {
+      await updateController.start(prepared, force);
+      setConfirmState(null);
+    } catch (error) {
+      showError(t("settings.about.update_now"), error);
+    } finally {
+      setLoading(null);
     }
-    setUpdateState(result.data);
+  };
+
+  const runPrimaryAction = async () => {
+    if (!primaryAction || !updateController) return;
+    setLoading(primaryAction);
+    try {
+      if (primaryAction === "check") await updateController.check();
+      if (primaryAction === "download") await updateController.download();
+      if (primaryAction === "cancel") await updateController.cancelDownload();
+      if (primaryAction === "retry") await updateController.retry();
+      if (primaryAction === "prepare") {
+        const prepared = await updateController.prepare();
+        setPreparation(prepared);
+        if (prepared.activity.hasActiveWork) {
+          setConfirmState(prepared);
+        } else {
+          await updateController.start(prepared, false);
+        }
+      }
+    } catch (error) {
+      showError(
+        primaryAction === "check"
+          ? t("settings.about.check_failed")
+          : t("settings.about.update_now"),
+        error
+      );
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
@@ -192,26 +226,29 @@ export function AboutSettings({
         <div className="settings-group">
           <h3 className="settings-group-title">{t("settings.about.title")}</h3>
           <p className="settings-group-desc">{t("settings.about.description")}</p>
-
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.product_name")}</span>
             <span className="settings-info-value">Coder Studio</span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.current_version")}</span>
-            <span className="settings-info-value">v{serverInfo?.version ?? "0.0.0"}</span>
+            <span className="settings-info-value" data-testid="product-version">
+              v{updateState?.productVersion ?? serverInfo?.version ?? "0.0.0"}
+            </span>
+          </div>
+          <div className="settings-info-row">
+            <span className="settings-info-label">{t("settings.about.product_release_time")}</span>
+            <span className="settings-info-value" data-testid="product-release-time">
+              {formatReleaseTime(
+                updateState?.productPublishedAt ?? null,
+                locale,
+                t("settings.about.release_time_unknown")
+              )}
+            </span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.server_instance_id")}</span>
             <span className="settings-info-value">{serverInfo?.serverInstanceId ?? "-"}</span>
-          </div>
-          <div className="settings-info-row">
-            <span className="settings-info-label">{t("settings.about.install_support")}</span>
-            <span className="settings-info-value">
-              {updateState?.supported
-                ? t("settings.about.install_supported")
-                : (updateState?.unsupportedReason ?? t("settings.about.install_unsupported"))}
-            </span>
           </div>
         </div>
       ) : null}
@@ -219,18 +256,16 @@ export function AboutSettings({
       {showUpdateStatus ? (
         <div className="settings-group">
           <h3 className="settings-group-title">{t("settings.about.update_group")}</h3>
-          <p className="settings-group-desc">{t("settings.about.update_group_hint")}</p>
-
+          <p className="settings-group-desc">{t("settings.about.unified_update_group_hint")}</p>
+          {guidanceKey ? <Notice tone="info" message={t(guidanceKey)} /> : null}
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.latest_version")}</span>
-            <span className="settings-info-value">
-              {updateState?.latestVersion ? `v${updateState.latestVersion}` : "-"}
-            </span>
+            <span className="settings-info-value">{targetVersion ? `v${targetVersion}` : "-"}</span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.last_checked")}</span>
             <span className="settings-info-value">
-              {formatTime(
+              {formatCheckTime(
                 updateState?.lastCheckedAt ?? null,
                 locale,
                 t("settings.about.availability_unknown")
@@ -238,25 +273,32 @@ export function AboutSettings({
             </span>
           </div>
           <div className="settings-info-row">
-            <span className="settings-info-label">{t("settings.about.availability")}</span>
-            <span className="settings-info-value">{availabilityLabel}</span>
-          </div>
-          <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.update_status")}</span>
             <span className="settings-info-value settings-info-value--with-dot">
-              <StatusDot tone={getStatusTone(updateState)} size="sm" />
+              <StatusDot tone={statusTone(updateState?.status)} size="sm" />
               <span>{statusLabel}</span>
             </span>
           </div>
-
+          {progress !== null ? (
+            <div className="settings-info-row">
+              <span className="settings-info-label">{t("settings.about.progress")}</span>
+              <span className="settings-info-value">{progress}%</span>
+            </div>
+          ) : null}
+          {updateState && !updateState.compatibility.compatible ? (
+            <Notice
+              tone="error"
+              title={t("settings.about.compatibility_error")}
+              message={updateState.compatibility.summary ?? updateState.compatibility.code ?? "-"}
+            />
+          ) : null}
           {updateState?.errorSummary ? (
             <Notice
-              tone={updateState.updateStatus === "manual_required" ? "warning" : "error"}
+              tone={updateState.status === "manual_required" ? "warning" : "error"}
               title={t("settings.about.error_summary")}
               message={updateState.errorSummary}
             />
           ) : null}
-
           {updateState?.manualCommand ? (
             <Notice
               tone="warning"
@@ -265,39 +307,76 @@ export function AboutSettings({
             />
           ) : null}
 
-          <div className="settings-actions-row settings-actions-row--end">
-            <Button
-              onClick={() => {
-                void handleCheck();
-              }}
-              disabled={
-                loading !== null ||
-                updateState?.updateStatus === "checking" ||
-                updateState?.updateStatus === "installing" ||
-                updateState?.updateStatus === "restarting"
-              }
+          {primaryAction ? (
+            <div
+              className="settings-actions-row settings-actions-row--end"
+              data-testid="update-primary-actions"
             >
-              {loading === "check" ? t("settings.about.checking") : t("settings.about.check_now")}
-            </Button>
-            <Button
-              onClick={() => {
-                void handlePrepareInstall();
-              }}
-              disabled={
-                loading !== null ||
-                !updateState?.supported ||
-                updateState?.availability !== "update_available" ||
-                updateState.updateStatus === "checking" ||
-                updateState.updateStatus === "installing" ||
-                updateState.updateStatus === "restarting" ||
-                Boolean(updateState.manualCommand)
-              }
-            >
-              {loading === "install" || loading === "prepare"
-                ? t("settings.about.installing")
-                : t("settings.about.update_now")}
-            </Button>
-          </div>
+              <Button
+                disabled={loading !== null}
+                loading={loading !== null}
+                onClick={() => void runPrimaryAction()}
+              >
+                {actionLabel(primaryAction)}
+              </Button>
+            </div>
+          ) : null}
+
+          {updateState ? (
+            <div className="settings-actions-row">
+              <Button variant="ghost" onClick={() => setDiagnosticsOpen((open) => !open)}>
+                {t("settings.about.component_diagnostics")}
+              </Button>
+            </div>
+          ) : null}
+          {updateState && diagnosticsOpen ? (
+            <div data-testid="update-component-diagnostics">
+              {updateState.components.map((component) => (
+                <div className="settings-info-row" key={component.id}>
+                  <span className="settings-info-value">
+                    {versionTransition(component)}
+                    {component.progressPercent !== null ? ` · ${component.progressPercent}%` : ""}
+                    {component.errorSummary ? ` · ${component.errorSummary}` : ""}
+                  </span>
+                </div>
+              ))}
+              <p>
+                {t("settings.about.authority")}: {updateState.runtimeContext.authority}
+              </p>
+              <p>
+                {t("settings.about.environment")}: {updateState.runtimeContext.environment}
+              </p>
+              <p>
+                {t("settings.about.plan_id")}: {updateState.planId ?? "-"}
+              </p>
+              {updateState.diagnostics.shellBuiltAt ? (
+                <p>
+                  {t("settings.about.shell_built_at")}: {updateState.diagnostics.shellBuiltAt}
+                </p>
+              ) : null}
+              {updateState.diagnostics.engineVersion ? (
+                <p>
+                  {t("settings.about.engine_abi")}: {updateState.diagnostics.engineVersion}
+                </p>
+              ) : null}
+              {updateState.diagnostics.nodeVersion ? (
+                <p>Node: {updateState.diagnostics.nodeVersion}</p>
+              ) : null}
+              {updateState.diagnostics.failedPhase ? (
+                <p>
+                  {t("settings.about.failed_phase")}: {updateState.diagnostics.failedPhase}
+                </p>
+              ) : null}
+              {updateState.diagnostics.recoveryAction ? (
+                <p>
+                  {t("settings.about.recovery_action")}: {updateState.diagnostics.recoveryAction}
+                </p>
+              ) : null}
+              {updateState.diagnostics.logLocations.map((location) => (
+                <p key={location}>{location}</p>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -317,10 +396,10 @@ export function AboutSettings({
               aria-labelledby={autoCheckLabelId}
               checked={autoCheckEnabled}
               className="settings-toggle"
+              disabled={readOnly}
               onCheckedChange={onAutoCheckEnabledChange}
             />
           </div>
-
           <div className="settings-info-row">
             <span className="settings-info-label" id={checkIntervalLabelId}>
               {t("settings.about.check_interval")}
@@ -340,9 +419,7 @@ export function AboutSettings({
         <ConfirmDialog
           open
           onOpenChange={(open) => {
-            if (!open) {
-              setConfirmState(null);
-            }
+            if (!open) setConfirmState(null);
           }}
           title={t("settings.about.confirm_update_title")}
           description={
@@ -357,12 +434,11 @@ export function AboutSettings({
               </p>
             </div>
           }
-          cancelText={t("action.cancel")}
-          confirmText={t("settings.about.update_now")}
+          cancelText={t("settings.about.restart_later")}
+          confirmDisabled={loading !== null}
+          confirmText={t("settings.about.restart_and_update")}
           tone="danger"
-          onConfirm={() => {
-            void handleStartInstall(confirmState, true);
-          }}
+          onConfirm={() => void startPrepared(confirmState, true)}
         />
       ) : null}
     </div>

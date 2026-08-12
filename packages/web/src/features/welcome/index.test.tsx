@@ -13,6 +13,12 @@ vi.mock("../../hooks/use-viewport", () => ({
   useViewport: () => viewportMocks.viewport,
 }));
 
+vi.mock("../desktop-environment", () => ({
+  EnvironmentSwitcher: ({ variant }: { variant?: string }) => (
+    <div data-testid={`environment-switcher-${variant ?? "topbar"}`} />
+  ),
+}));
+
 vi.mock("../workspace/views/shared/workspace-launch-modal", () => ({
   WorkspaceLaunchModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="workspace-launch-modal">
@@ -43,6 +49,43 @@ describe("WelcomePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Workspace" }));
 
     expect(screen.getByTestId("workspace-launch-modal")).toBeInTheDocument();
+  });
+
+  it("places the desktop environment context before the primary workspace action", () => {
+    viewportMocks.viewport = "desktop";
+    const store = createStore();
+    store.set(localeAtom, "en");
+    const { container } = render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WelcomePage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    const firstStep = container.querySelector(".welcome-step-card");
+    const environment = screen.getByTestId("environment-switcher-welcome");
+    const openWorkspace = screen.getByRole("button", { name: "Open Workspace" });
+
+    expect(firstStep).toContainElement(environment);
+    expect(firstStep).toContainElement(openWorkspace);
+    expect(
+      environment.compareDocumentPosition(openWorkspace) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("does not add the desktop environment context to the mobile welcome layout", () => {
+    viewportMocks.viewport = "mobile";
+    const store = createStore();
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <WelcomePage />
+        </MemoryRouter>
+      </Provider>
+    );
+
+    expect(screen.queryByTestId("environment-switcher-welcome")).toBeNull();
   });
 
   it("adds the mobile welcome page variant classes on mobile viewports", () => {

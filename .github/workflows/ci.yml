@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches:
@@ -41,6 +42,9 @@ jobs:
 
       - name: Run lint
         run: pnpm ci:lint
+
+      - name: Run type checks
+        run: pnpm ci:typecheck
 
       - name: Run tests
         run: pnpm ci:test

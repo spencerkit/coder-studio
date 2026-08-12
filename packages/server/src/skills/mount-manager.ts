@@ -13,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ProviderDefinition, SkillMountRelation } from "@coder-studio/core";
+import { renameWithRetry } from "../fs/rename-with-retry.js";
 import type { SkillLibraryRepo } from "../storage/repositories/skill-library-repo.js";
 import type { SkillMountRepo } from "../storage/repositories/skill-mount-repo.js";
 
@@ -222,12 +223,12 @@ async function replaceMountedPath(
     await materialize(stagedPath);
 
     if (await pathExists(targetPath)) {
-      await rename(targetPath, backupPath);
+      await renameWithRetry(targetPath, backupPath, { rename });
       hasBackup = true;
     }
 
     try {
-      await rename(stagedPath, targetPath);
+      await renameWithRetry(stagedPath, targetPath, { rename });
     } catch (error) {
       if (hasBackup) {
         await restoreMountedPathBackup(backupPath, targetPath);
@@ -270,7 +271,7 @@ async function restoreMountedPathBackup(backupPath: string, targetPath: string):
     return;
   }
 
-  await rename(backupPath, targetPath);
+  await renameWithRetry(backupPath, targetPath, { rename });
 }
 
 async function copyRecursively(source: string, target: string): Promise<void> {

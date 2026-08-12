@@ -9,9 +9,11 @@ import {
 describe("update domain helpers", () => {
   it("creates the default persisted update state shape", () => {
     expect(createDefaultUpdateState("0.4.0")).toEqual({
-      version: 1,
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: null,
+      latestPublishedAt: null,
       availability: "unknown",
       updateStatus: "idle",
       lastCheckedAt: null,

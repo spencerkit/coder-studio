@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { callCoderStudioCommand } = vi.hoisted(() => ({
-  callCoderStudioCommand: vi.fn(),
+const { callCoderStudioWsCommand } = vi.hoisted(() => ({
+  callCoderStudioWsCommand: vi.fn(),
 }));
 
-vi.mock("./automation-command-client.js", () => ({
-  callCoderStudioCommand,
+vi.mock("./automation-ws-client.js", () => ({
+  callCoderStudioWsCommand,
 }));
 
 import { main } from "./automation-entry.js";
@@ -14,7 +14,7 @@ describe("automation entry", () => {
   beforeEach(() => {
     vi.stubEnv("CODER_STUDIO_API_URL", "http://127.0.0.1:4173");
     vi.stubEnv("CODER_STUDIO_WORKSPACE_ID", "ws-1");
-    callCoderStudioCommand.mockResolvedValue({ ok: true });
+    callCoderStudioWsCommand.mockResolvedValue({ ok: true });
   });
 
   afterEach(() => {
@@ -39,9 +39,8 @@ describe("automation entry", () => {
       "--json",
     ]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "memory.create",
       args: {
         workspaceId: "ws-1",
@@ -67,9 +66,8 @@ describe("automation entry", () => {
       "--json",
     ]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "uiAction.dispatch",
       args: {
         workspaceId: "ws-1",
@@ -90,9 +88,8 @@ describe("automation entry", () => {
 
     await main(["ui.open-canvas", "--canvas", "canvas_123", "--json"]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "uiAction.dispatch",
       args: {
         workspaceId: "ws-1",
@@ -110,7 +107,7 @@ describe("automation entry", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
 
     await expect(main(["ui.open-file", "--path", "--json"])).rejects.toThrow("Missing path value");
-    expect(callCoderStudioCommand).not.toHaveBeenCalled();
+    expect(callCoderStudioWsCommand).not.toHaveBeenCalled();
   });
 
   it("allows option values that begin with a single dash", async () => {
@@ -118,9 +115,8 @@ describe("automation entry", () => {
 
     await main(["memory.create", "--type", "note", "--content", "- starts with dash", "--json"]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "memory.create",
       args: {
         workspaceId: "ws-1",
@@ -135,9 +131,8 @@ describe("automation entry", () => {
 
     await main(["ui.close-url", "--url", "https://example.com", "--json"]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "uiAction.dispatch",
       args: {
         workspaceId: "ws-1",
@@ -156,9 +151,8 @@ describe("automation entry", () => {
 
     await main(["canvas.render", "--source-path", "docs/report.md", "--json"]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "canvas.render",
       args: {
         workspaceId: "ws-1",
@@ -172,9 +166,8 @@ describe("automation entry", () => {
 
     await main(["canvas.inspect", "--source-path", "docs/report.md", "--json"]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "canvas.inspect",
       args: {
         workspaceId: "ws-1",
@@ -188,9 +181,8 @@ describe("automation entry", () => {
 
     await main(["canvas.preset.list", "--json"]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "canvas.preset.list",
       args: {
         workspaceId: "ws-1",
@@ -211,9 +203,8 @@ describe("automation entry", () => {
       "--json",
     ]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "canvas.create-from-preset",
       args: {
         workspaceId: "ws-1",
@@ -234,9 +225,8 @@ describe("automation entry", () => {
       "--json",
     ]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "canvas.snapshot.create",
       args: {
         workspaceId: "ws-1",
@@ -258,9 +248,8 @@ describe("automation entry", () => {
       "--json",
     ]);
 
-    expect(callCoderStudioCommand).toHaveBeenCalledWith({
+    expect(callCoderStudioWsCommand).toHaveBeenCalledWith({
       apiUrl: "http://127.0.0.1:4173",
-      resolveStrategy: "session",
       op: "canvas.clone",
       args: {
         workspaceId: "ws-1",
@@ -277,6 +266,6 @@ describe("automation entry", () => {
     await expect(main(["ui.launch-rocket", "--json"])).rejects.toThrow(
       "Unsupported automation op: ui.launch-rocket"
     );
-    expect(callCoderStudioCommand).not.toHaveBeenCalled();
+    expect(callCoderStudioWsCommand).not.toHaveBeenCalled();
   });
 });

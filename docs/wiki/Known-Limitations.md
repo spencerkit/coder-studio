@@ -50,6 +50,30 @@ coder-studio serve --restart
 
 Do not expose Coder Studio to the public internet without authentication.
 
+## Updates
+
+Coder Studio presents one product update plan, but the installed components and update authority
+depend on how the application is running:
+
+- Desktop Shell and Product Runtime versions are intentionally independent. The normal Desktop
+  product version is the Product Runtime version; the global CLI product version is the published
+  npm package version.
+- Engine ABI is compatibility information for diagnostics. It is not another product version.
+- The Windows Desktop application manages both native Windows and WSL Product Runtime updates. A
+  WSL environment never installs or updates the Desktop-managed Runtime through npm.
+- A globally installed npm CLI keeps its own check, exact-version install, restart, and recovery
+  workflow. Source, bundled, or otherwise unsupported CLI environments are read-only.
+- A browser connected to a Desktop sidecar is also read-only for updates. Open the installed Coder
+  Studio Desktop application to download or install that plan.
+- Release time is displayed only when it comes from signed Desktop release metadata or npm registry
+  metadata. Legacy, offline, or missing metadata remains explicitly unknown; Coder Studio does not
+  substitute a check time or file modification time.
+- Product Runtime activation can roll back automatically when its startup health check fails. An
+  Electron/NSIS Shell installation does not promise automatic rollback, so release promotion also
+  requires compatibility with the previous Runtime and a real installed-upgrade acceptance run.
+- Windows x64 and WSL Linux x64 are the initial mutable Desktop targets. Other Desktop feeds remain
+  disabled until they have equivalent installed-upgrade lanes.
+
 ## Not The Focus Of This Launch
 
 The current launch does not focus on:

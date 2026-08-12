@@ -1,0 +1,271 @@
+.trigger {
+  align-items: center;
+  background: var(--surface-input);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-sec);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  gap: var(--gap-tight);
+  height: 28px;
+  max-width: 210px;
+  padding: 0 var(--sp-2);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.trigger:focus-visible,
+.item:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.triggerLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover {
+  min-width: 300px;
+}
+
+.menu {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 276px;
+}
+
+.heading {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  font-size: var(--type-body-5-size);
+  font-weight: var(--font-semibold);
+  justify-content: space-between;
+}
+
+.group {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.groupLabel {
+  color: var(--text-ter);
+  font-size: var(--type-body-6-size);
+  padding: 0 var(--sp-2);
+  text-transform: uppercase;
+}
+
+.item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-sec);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--sp-2);
+  min-height: 42px;
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  width: 100%;
+}
+
+.item:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.item[aria-current="true"] {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.item:disabled:not([aria-current="true"]) {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.itemIcon {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  width: 18px;
+}
+
+.itemText {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.itemLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemStatus,
+.runtimeVersion,
+.progressLabel {
+  color: var(--text-ter);
+  font-size: var(--type-body-6-size);
+}
+
+.runtimeVersion {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+}
+
+.error {
+  align-items: flex-start;
+  background: var(--status-danger-bg);
+  border: 1px solid var(--status-danger-border);
+  border-radius: 6px;
+  color: var(--status-danger-fg);
+  display: flex;
+  font-size: var(--type-body-6-size);
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+}
+
+.spinner {
+  animation: environment-spin 0.8s linear infinite;
+}
+
+.welcomeShell {
+  align-items: stretch;
+  background: var(--surface-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  display: flex;
+  min-height: 48px;
+  overflow: hidden;
+}
+
+.welcomeSelector {
+  flex: 1;
+  min-width: 0;
+}
+
+.welcomeSelector > span {
+  display: block;
+  height: 100%;
+}
+
+.welcomeTrigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: var(--sp-2);
+  height: 100%;
+  min-height: 48px;
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  width: 100%;
+}
+
+.welcomeTrigger:hover {
+  background: var(--surface-hover);
+}
+
+.welcomeIcon {
+  align-items: center;
+  background: var(--surface-active);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.welcomeText {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.welcomeEyebrow,
+.welcomeAction {
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+}
+
+.welcomeEnvironment {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcomeAction,
+.retry {
+  flex: 0 0 auto;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retry {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--status-danger-border);
+  color: var(--status-danger-fg);
+  cursor: pointer;
+  padding: 0 var(--sp-3);
+}
+
+.welcomeTrigger:focus-visible,
+.retry:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+@keyframes environment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+@media (max-width: 1180px) {
+  .triggerLabel {
+    max-width: 108px;
+  }
+}

@@ -154,6 +154,7 @@ The current phone layout is not a bottom dock UI. It uses a top bar for workspac
 | [Security and Privacy](docs/wiki/Security-and-Privacy.md) | Local-first model, provider boundaries, and remote access risks |
 | [Known Limitations](docs/wiki/Known-Limitations.md) | Current requirements and product boundaries |
 | [Troubleshooting](docs/wiki/Troubleshooting.md) | First-run problems, Provider CLI issues, and service recovery |
+| [Desktop Container Guide](docs/desktop.md) | Electron architecture, local development, packaging, signing, and updates |
 | [Chinese Help Center](docs/help/README.md) | 中文帮助中心 |
 
 ---
@@ -197,6 +198,7 @@ pnpm dev
 | Terminal | xterm.js, node-pty |
 | Editor | Monaco Editor |
 | Storage | SQLite (node:sqlite) |
+| Desktop | Electron + bundled Node.js sidecar |
 
 ### Development Docs
 

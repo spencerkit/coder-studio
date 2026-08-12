@@ -107,6 +107,8 @@ function setDocumentHidden(value: boolean): void {
   documentHidden = value;
 }
 
+const originalDesktopBridge = Object.getOwnPropertyDescriptor(window, "coderStudioDesktop");
+
 /** Seed a session as `running` so the trace will record an `activeSince`. */
 function seedRunningSession(
   store: ReturnType<typeof createStore>,
@@ -151,6 +153,8 @@ describe("useSessionNotifications", () => {
     vi.stubGlobal("AudioContext", AudioContextMock);
     viewportMocks.viewport = "desktop";
     setDocumentHidden(false);
+    Reflect.deleteProperty(window, "coderStudioDesktop");
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
     Object.defineProperty(document, "hidden", {
       configurable: true,
       get: () => documentHidden,
@@ -159,7 +163,13 @@ describe("useSessionNotifications", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     setDocumentHidden(false);
+    if (originalDesktopBridge) {
+      Object.defineProperty(window, "coderStudioDesktop", originalDesktopBridge);
+    } else {
+      Reflect.deleteProperty(window, "coderStudioDesktop");
+    }
   });
 
   /**
@@ -327,6 +337,69 @@ describe("useSessionNotifications", () => {
     seedRunningSession(store, "sess-1", "ws-1");
 
     mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
+      });
+    });
+
+    await waitFor(() => {
+      expect(NotificationMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(store.get(toastsAtom)).toHaveLength(0);
+  });
+
+  it("uses a system push when the page is visible but the browser window is unfocused", async () => {
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
+      });
+    });
+
+    await waitFor(() => {
+      expect(NotificationMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(store.get(toastsAtom)).toHaveLength(0);
+  });
+
+  it("uses the Desktop window activity bridge when renderer visibility still looks active", async () => {
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        getWindowActivityState: vi.fn(async () => ({
+          focused: false,
+          visible: true,
+          minimized: false,
+        })),
+        onWindowActivityStateChanged: vi.fn(() => () => {}),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: true });
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
+
+    render(
+      <Provider store={store}>
+        <Harness />
+      </Provider>
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      vi.advanceTimersByTime(5_000);
       store.set(sessionsAtom, {
         "sess-1": createSession("sess-1", "idle", "ws-1"),
       });

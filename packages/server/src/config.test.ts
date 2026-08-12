@@ -77,10 +77,18 @@ describe("parseServerConfig", () => {
     expect(config.update).toEqual({
       supported: false,
       installKind: "unsupported",
+      runtimeContext: {
+        environment: "cli-unsupported",
+        authority: "none",
+        supported: false,
+        unsupportedReason: "In-app update is only supported for global npm installs",
+      },
       packageName: "@spencer-kit/coder-studio",
       cliCommand: "coder-studio",
       workerEntryPath: undefined,
       npmCommand: "npm",
+      registryUrl: "https://registry.npmjs.org/",
+      distTag: "latest",
       restartArgs: ["serve", "--restart"],
       installArgsPrefix: ["install", "-g"],
       unsupportedReason: "In-app update is only supported for global npm installs",

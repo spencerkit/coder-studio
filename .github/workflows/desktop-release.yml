@@ -1,0 +1,695 @@
+name: Publish Desktop
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Publish as a GitHub prerelease"
+        required: true
+        default: false
+        type: boolean
+      desktop_acceptance_run_id:
+        description: "Workflow run containing the complete installed Desktop acceptance matrix"
+        required: false
+        default: ""
+        type: string
+      cli_acceptance_run_id:
+        description: "Workflow run containing the accepted packaged CLI report"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: publish-release-channel
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve release boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      desktop_version: ${{ steps.release.outputs.desktop_version }}
+      runtime_version: ${{ steps.release.outputs.runtime_version }}
+      tag: ${{ steps.release.outputs.tag }}
+      title: ${{ steps.release.outputs.title }}
+      published_at: ${{ steps.release.outputs.published_at }}
+      channel: ${{ steps.release.outputs.channel }}
+      release_kind: ${{ steps.release.outputs.release_kind }}
+      has_previous_desktop: ${{ steps.release.outputs.has_previous_desktop }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require main branch
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Desktop production releases must run from main" >&2
+            exit 1
+          fi
+
+      - name: Resolve versions and release tag
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          desktop_version=$(node -p "require('./packages/desktop/package.json').version")
+          runtime_version=$(node -p "require('./packages/cli/package.json').version")
+          published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+
+          release_kind="full"
+          has_previous_desktop=false
+          latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
+          latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
+            previous_tag=$(node -e "const release=require(process.argv[1]); if(typeof release.tag_name!=='string'||!release.tag_name) process.exit(1); process.stdout.write(release.tag_name)" "${latest_release_json}")
+            has_desktop_channel=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
+            if [[ "${has_desktop_channel}" == "true" ]]; then
+              has_previous_desktop=true
+              mkdir -p release/desktop-release-boundary
+              gh release download "${previous_tag}" \
+                --pattern desktop-channel.json \
+                --dir release/desktop-release-boundary
+              previous_shell_version=$(node -e "const channel=require('./release/desktop-release-boundary/desktop-channel.json'); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)")
+              shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${desktop_version}" "${previous_shell_version}")
+              if [[ "${shell_change}" == "same" ]]; then
+                release_kind="runtime-only"
+              elif [[ "${shell_change}" == "downgrade" ]]; then
+                echo "Desktop Shell ${desktop_version} is older than stable ${previous_shell_version}" >&2
+                exit 1
+              fi
+            fi
+          elif ! grep -q '(HTTP 404)' "${latest_release_error}"; then
+            cat "${latest_release_error}" >&2
+            exit 1
+          fi
+
+          if [[ "${release_kind}" == "full" ]]; then
+            tag="desktop-v${desktop_version}"
+            title="Coder Studio Desktop ${desktop_version}"
+          else
+            tag="desktop-runtime-v${runtime_version}"
+            title="Coder Studio Runtime ${runtime_version}"
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Release tag ${tag} already exists" >&2
+            exit 1
+          fi
+          echo "desktop_version=${desktop_version}" >> "${GITHUB_OUTPUT}"
+          echo "runtime_version=${runtime_version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "title=${title}" >> "${GITHUB_OUTPUT}"
+          echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+          echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
+          echo "has_previous_desktop=${has_previous_desktop}" >> "${GITHUB_OUTPUT}"
+          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
+            echo "channel=prerelease" >> "${GITHUB_OUTPUT}"
+          else
+            echo "channel=stable" >> "${GITHUB_OUTPUT}"
+          fi
+
+  linux-assets:
+    name: Build signed WSL assets
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: desktop-production
+    permissions:
+      contents: read
+    env:
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Require Runtime signing keys
+        shell: bash
+        run: |
+          if [[ -z "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" || -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+            echo "Desktop Runtime Ed25519 signing secrets are required" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build signed WSL assets
+        shell: bash
+        run: |
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "full" ]]; then
+            pnpm build:wsl-engine
+          fi
+          pnpm build:wsl-runtime
+
+      - name: Stage signed WSL assets
+        shell: bash
+        run: |
+          components="wsl-runtime"
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "full" ]]; then
+            components="wsl-engine,wsl-runtime"
+          fi
+          pnpm desktop:artifacts stage --directory release/desktop-release-linux --components "${components}"
+
+      - name: Upload WSL assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-release
+          path: release/desktop-release-linux/
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-assets:
+    name: Build signed Windows assets
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: desktop-production
+    permissions:
+      contents: read
+    env:
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_FACTORY_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Require signing credentials
+        shell: pwsh
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY -or -not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw "Desktop Runtime Ed25519 signing secrets are required"
+          }
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full" -and (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD)) {
+            throw "Windows Authenticode signing secrets are required for a full Desktop release"
+          }
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test Desktop and type-check repository
+        run: |
+          pnpm --filter @coder-studio/desktop test
+          pnpm ci:typecheck
+
+      - name: Build signed Windows assets
+        shell: pwsh
+        run: |
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full") {
+            pnpm dist:desktop
+            pnpm smoke:desktop
+          } else {
+            pnpm build:desktop-runtime
+          }
+
+      - name: Verify Authenticode signatures
+        if: needs.prepare.outputs.release_kind == 'full'
+        shell: pwsh
+        run: |
+          $metadata = Get-Content release/desktop/latest.yml -Raw
+          $installerName = [regex]::Match($metadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $paths = @(
+            (Join-Path release/desktop $installerName),
+            'release/desktop/win-unpacked/Coder Studio.exe',
+            'release/desktop/win-unpacked/resources/engine/node.exe'
+          )
+          foreach ($path in $paths) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne 'Valid') {
+              throw "Invalid Authenticode signature for ${path}: $($signature.Status)"
+            }
+          }
+
+      - name: Stage signed Windows assets
+        shell: pwsh
+        run: |
+          $components = 'win-runtime'
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full") {
+            $components = 'desktop,win-runtime'
+          }
+          pnpm desktop:artifacts stage --directory release/desktop-release-windows --components $components
+
+      - name: Upload Windows assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-release
+          path: release/desktop-release-windows/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs:
+      - prepare
+      - linux-assets
+      - windows-assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: desktop-production
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download previous immutable release
+        if: needs.prepare.outputs.release_kind == 'runtime-only'
+        shell: bash
+        run: |
+          mkdir -p release/desktop-release-previous
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          for pattern in \
+            "latest.yml" \
+            "Coder-Studio-Setup-*.exe" \
+            "*.blockmap" \
+            "build-info.json" \
+            "desktop-channel.json" \
+            "coder-studio-engine-linux-x64.manifest.json" \
+            "coder-studio-engine-*-linux-x64.tgz" \
+            "coder-studio-runtime-win32-x64.manifest.json" \
+            "coder-studio-server-runtime-linux-x64.manifest.json"; do
+            gh release download "${latest_tag}" --pattern "${pattern}" --dir release/desktop-release-previous --clobber
+          done
+
+      - name: Carry forward immutable Shell and Engine
+        if: needs.prepare.outputs.release_kind == 'runtime-only'
+        run: |
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-final \
+            --carry-forward-from release/desktop-release-previous
+
+      - name: Download newly built release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*-release
+          path: release/desktop-release-final
+          merge-multiple: true
+
+      - name: Build signed Desktop channel
+        shell: bash
+        run: |
+          key_file=$(mktemp)
+          trap 'shred -u "${key_file}"' EXIT
+          printf '%s' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" > "${key_file}"
+          pnpm desktop:channel -- \
+            --directory release/desktop-release-final \
+            --release-tag "${{ needs.prepare.outputs.tag }}" \
+            --channel "${{ needs.prepare.outputs.channel }}" \
+            --generated-at "${{ needs.prepare.outputs.published_at }}" \
+            --private-key "${key_file}"
+
+      - name: Validate complete production release
+        shell: bash
+        run: |
+          validation_args=(
+            validate
+            --directory release/desktop-release-final
+            --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+            --release-kind "${{ needs.prepare.outputs.release_kind }}"
+          )
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "runtime-only" ]]; then
+            validation_args+=(--previous-release-directory release/desktop-release-previous)
+          fi
+          pnpm desktop:artifacts "${validation_args[@]}"
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/desktop-release-final/*
+
+      - name: Publish immutable prerelease
+        shell: bash
+        run: |
+          gh release create "${{ needs.prepare.outputs.tag }}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ needs.prepare.outputs.title }}" \
+            --generate-notes \
+            --prerelease --latest=false \
+            release/desktop-release-final/*
+
+      - name: Upload final release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-${{ needs.prepare.outputs.tag }}
+          path: release/desktop-release-final/
+          if-no-files-found: error
+          retention-days: 30
+
+  installed-upgrade:
+    name: Production installed upgrade (${{ matrix.target }})
+    needs:
+      - prepare
+      - publish
+    runs-on: windows-latest
+    timeout-minutes: 90
+    environment: desktop-production
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - native
+          - wsl
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download immutable candidate release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path release/desktop-production-candidate -Force | Out-Null
+          gh release download '${{ needs.prepare.outputs.tag }}' --dir release/desktop-production-candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Desktop candidate release' }
+
+      - name: Download previous stable Desktop release
+        if: needs.prepare.outputs.has_previous_desktop == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path release/desktop-production-previous -Force | Out-Null
+          $latestTag = gh api "repos/${env:GITHUB_REPOSITORY}/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0 -or -not $latestTag) {
+            throw 'A previous stable unified Desktop release is required'
+          }
+          $patterns = @(
+            'latest.yml',
+            'Coder-Studio-Setup-*.exe',
+            'desktop-channel.json'
+          )
+          foreach ($pattern in $patterns) {
+            gh release download $latestTag --pattern $pattern --dir release/desktop-production-previous --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Previous Desktop asset is missing: $pattern" }
+          }
+
+      - name: Resolve production installed-upgrade identity
+        id: identity
+        shell: pwsh
+        env:
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw 'Desktop Runtime public key is required for production acceptance'
+          }
+          New-Item -ItemType Directory -Path release/desktop-production-key -Force | Out-Null
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content release/desktop-production-key/runtime-public.pem -NoNewline
+          $candidateRoot = 'release/desktop-production-candidate'
+          $previousRoot = 'release/desktop-production-previous'
+          $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
+          $channel = Get-Content (Join-Path $candidateRoot 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $candidateMetadata = Get-Content (Join-Path $candidateRoot 'latest.yml') -Raw
+          $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $isWsl = '${{ matrix.target }}' -eq 'wsl'
+          if ($hasPreviousDesktop) {
+            $previousChannel = Get-Content (Join-Path $previousRoot 'desktop-channel.json') -Raw | ConvertFrom-Json
+            $previousMetadata = Get-Content (Join-Path $previousRoot 'latest.yml') -Raw
+            $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+            $previousInstaller = "$previousRoot/$previousInstallerName"
+            $previousShell = $previousChannel.shell.version
+            $previousRuntime = $previousChannel.runtimes.'win32-x64'.version
+          } else {
+            $previousInstaller = "$candidateRoot/$candidateInstallerName"
+            $previousShell = $channel.shell.version
+            $previousRuntime = $channel.runtimes.'win32-x64'.version
+          }
+          $scenario = if (-not $hasPreviousDesktop) {
+            if ($isWsl) { 'fresh-wsl' } else { 'fresh-native' }
+          } elseif ($isWsl) {
+            'wsl'
+          } elseif ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') {
+            'combined'
+          } else {
+            'runtime-only'
+          }
+          $components = if (-not $hasPreviousDesktop) {
+            ''
+          } elseif ($isWsl) {
+            if ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:win32-x64' }
+          } elseif ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') {
+            'shell,runtime:win32-x64'
+          } else {
+            'runtime:win32-x64'
+          }
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$channel.signature.value)
+          $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
+          "scenario=$scenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate_installer=$candidateRoot/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_shell=$previousShell" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$previousRuntime" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_shell=$($channel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_runtime=$($channel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Prepare disposable production WSL distribution
+        if: matrix.target == 'wsl'
+        id: wsl
+        shell: pwsh
+        run: |
+          $distro = "coder-studio-acceptance-production-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          wsl.exe --install -d Ubuntu --no-launch
+          wsl.exe -d Ubuntu -u root -- true
+          wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
+          wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable production WSL distribution' }
+          "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run production installed Desktop update
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.previous_installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ needs.prepare.outputs.tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/desktop-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.previous_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-ExpectedComponents', '${{ steps.identity.outputs.components }}',
+            '-PublicKeyPath', 'release/desktop-production-key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.scenario }}',
+            '-ReportPath', 'release/desktop-production-report/${{ matrix.target }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed -- @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Production installed Desktop acceptance failed' }
+
+      - name: Upload production installed-upgrade report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-production-installed-${{ matrix.target }}-${{ needs.prepare.outputs.tag }}
+          path: release/desktop-production-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Clean up production WSL distribution
+        if: always() && matrix.target == 'wsl'
+        shell: pwsh
+        run: |
+          $distro = '${{ steps.wsl.outputs.name }}'
+          if ($distro) { wsl.exe --unregister $distro 2>$null }
+
+  promote:
+    name: Promote accepted Desktop release
+    if: inputs.prerelease == false
+    needs:
+      - prepare
+      - publish
+      - installed-upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: desktop-production
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Require acceptance report run identities
+        shell: bash
+        run: |
+          if [[ -z "${{ inputs.desktop_acceptance_run_id }}" || -z "${{ inputs.cli_acceptance_run_id }}" ]]; then
+            echo "Stable Desktop promotion requires Desktop matrix and CLI acceptance run IDs" >&2
+            exit 1
+          fi
+
+      - name: Download production installed reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-production-installed-*-${{ needs.prepare.outputs.tag }}
+          path: release/promotion-reports/production
+          merge-multiple: true
+
+      - name: Download complete Desktop acceptance reports
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.desktop_acceptance_run_id }}
+          pattern: desktop-installed-upgrade-*
+          path: release/promotion-reports/desktop-matrix
+          merge-multiple: true
+
+      - name: Download packaged CLI acceptance report
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.cli_acceptance_run_id }}
+          pattern: cli-update-acceptance-*
+          path: release/promotion-reports/cli
+          merge-multiple: true
+
+      - name: Download immutable channel identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release/promotion-reports/channel
+          gh release download "${{ needs.prepare.outputs.tag }}" \
+            --pattern desktop-channel.json \
+            --dir release/promotion-reports/channel
+
+      - name: Validate promotion report identities
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readdirSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+
+          const commitSha = process.env.GITHUB_SHA;
+          const releaseTag = "${{ needs.prepare.outputs.tag }}";
+          const productVersion = "${{ needs.prepare.outputs.runtime_version }}";
+          const channel = JSON.parse(readFileSync("release/promotion-reports/channel/desktop-channel.json", "utf8"));
+          const channelSignatureDigest = createHash("sha256")
+            .update(channel.signature.value, "utf8")
+            .digest("hex");
+          const readReports = (directory) => readdirSync(directory, { recursive: true })
+            .filter((name) => String(name).endsWith(".json"))
+            .map((name) => JSON.parse(readFileSync(join(directory, String(name)), "utf8")));
+          const production = readReports("release/promotion-reports/production");
+          if (production.length !== 2) throw new Error("Both native and WSL production reports are required");
+          const requiredProductionScenarios = new Set(${{ needs.prepare.outputs.has_previous_desktop == 'true' }}
+            ? [${{ needs.prepare.outputs.release_kind == 'full' }} ? "combined" : "runtime-only", "wsl"]
+            : ["fresh-native", "fresh-wsl"]);
+          for (const report of production) {
+            if (report.commitSha !== commitSha || report.releaseTag !== releaseTag) {
+              throw new Error("Production report commitSha or release tag does not match");
+            }
+            if (report.actualRuntimeVersion !== productVersion || report.channelSignatureDigest !== channelSignatureDigest) {
+              throw new Error("Production report product version or channelSignatureDigest does not match");
+            }
+            if ((report.scenario === "fresh-wsl" || report.scenario === "wsl") && report.wslRuntimeVersion !== productVersion) {
+              throw new Error("Production WSL report does not match the shared Web product version");
+            }
+            requiredProductionScenarios.delete(report.scenario);
+          }
+          if (requiredProductionScenarios.size) throw new Error(`Production reports are missing: ${[...requiredProductionScenarios].join(", ")}`);
+          const matrix = readReports("release/promotion-reports/desktop-matrix");
+          const requiredScenarios = new Set(${{ needs.prepare.outputs.has_previous_desktop == 'true' }}
+            ? ["runtime-only", "combined", "wsl", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
+            : ["fresh-native", "fresh-wsl"]);
+          for (const report of matrix) {
+            if (report.commitSha !== commitSha) throw new Error("Desktop matrix commitSha does not match");
+            if ((report.scenario === "fresh-wsl" || report.scenario === "wsl" || report.scenario === "wsl-combined") && report.wslRuntimeVersion !== productVersion) {
+              throw new Error("Desktop matrix WSL report does not match the shared Web product version");
+            }
+            requiredScenarios.delete(report.scenario);
+          }
+          if (requiredScenarios.size) throw new Error(`Desktop matrix reports are missing: ${[...requiredScenarios].join(", ")}`);
+          const cli = readReports("release/promotion-reports/cli");
+          if (cli.length !== 1 || cli[0].commitSha !== commitSha || cli[0].candidateVersion !== productVersion) {
+            throw new Error("CLI acceptance commitSha or product version does not match");
+          }
+          NODE
+
+      - name: Promote existing prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest

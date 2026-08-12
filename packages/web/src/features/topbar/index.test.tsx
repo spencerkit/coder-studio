@@ -10,7 +10,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../../atoms/workspaces";
-import { updateStateAtom } from "../updates/atoms";
+import { seedCliUpdateState } from "../../test-utils/update-state";
 import { sidebarCollapsedAtom, terminalPanelVisibleAtom } from "../workspace/atoms";
 import { TopBar } from "./index";
 
@@ -59,6 +59,7 @@ function createWorkspace(id: string, path: string): Workspace {
 
 describe("TopBar", () => {
   beforeEach(() => {
+    delete window.coderStudioDesktop;
     routerMocks.navigate.mockReset();
     viewportMocks.value = "desktop";
   });
@@ -354,10 +355,12 @@ describe("TopBar", () => {
     const store = createStore();
     store.set(localeAtom, "en");
     store.set(workspacesLoadStateAtom, "ready");
-    store.set(updateStateAtom, {
-      version: 1,
+    seedCliUpdateState(store, {
+      version: 2,
       currentVersion: "0.4.0",
+      currentPublishedAt: null,
       latestVersion: "0.5.0",
+      latestPublishedAt: null,
       availability: "update_available",
       updateStatus: "idle",
       lastCheckedAt: 1,
@@ -370,6 +373,12 @@ describe("TopBar", () => {
       supported: true,
       installKind: "global_npm",
       unsupportedReason: null,
+      runtimeContext: {
+        environment: "cli-global-npm",
+        authority: "cli",
+        supported: true,
+        unsupportedReason: null,
+      },
     });
 
     render(
