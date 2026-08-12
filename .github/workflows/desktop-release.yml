@@ -573,7 +573,7 @@ jobs:
           if ('${{ inputs.windows_signing }}' -ne 'true') {
             $arguments += '-SkipAuthenticode'
           }
-          pnpm acceptance:desktop:installed -- @arguments
+          pnpm acceptance:desktop:installed @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Production installed Desktop acceptance failed' }
 
       - name: Upload production installed-upgrade report
