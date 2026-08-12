@@ -633,7 +633,14 @@ async function startApplication(): Promise<void> {
       undefined,
     loadChannel: desktopChannelUrl && runtimePublicKey ? loadDesktopChannel : undefined,
     nativeRuntimeUpdateAdapter,
-    onProgress: emitEnvironmentProgress,
+    onProgress: (progress) => {
+      emitEnvironmentProgress(progress);
+      if (process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1") {
+        console.error(
+          `[desktop-acceptance:environment] ${new Date().toISOString()} ${JSON.stringify(progress)}`
+        );
+      }
+    },
   });
   environmentManager.setActiveTarget(activeEnvironmentTarget);
   activeSession = session.fromPartition(getEnvironmentPartition(activeEnvironmentTarget));
