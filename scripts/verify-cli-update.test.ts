@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  type AcceptanceWebSocket,
+  callActivatedCoderStudioWsCommand,
   parseVerifyCliUpdateArgs,
   type VerifyCliUpdateDeps,
   verifyCliUpdate,
@@ -80,6 +82,49 @@ function createDeps(): VerifyCliUpdateDeps {
 }
 
 describe("verify-cli-update", () => {
+  it("claims activation and runs the update command on the same websocket", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    let socket: AcceptanceWebSocket | undefined;
+    const command = callActivatedCoderStudioWsCommand<{ currentVersion: string }>(
+      {
+        apiUrl: "http://127.0.0.1:43123",
+        op: "updates.getState",
+        args: {},
+      },
+      () => {
+        socket = {
+          onopen: null,
+          onmessage: null,
+          onerror: null,
+          onclose: null,
+          send: (data) => sent.push(JSON.parse(data) as Record<string, unknown>),
+          close: vi.fn(),
+        };
+        queueMicrotask(() => socket?.onopen?.());
+        return socket;
+      }
+    );
+
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ op: "activation.claim" });
+    socket?.onmessage?.({
+      data: JSON.stringify({ kind: "result", id: sent[0].id, ok: true, data: { active: true } }),
+    });
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1]).toMatchObject({ op: "updates.getState", args: {} });
+    socket?.onmessage?.({
+      data: JSON.stringify({
+        kind: "result",
+        id: sent[1].id,
+        ok: true,
+        data: { currentVersion: "0.5.7" },
+      }),
+    });
+
+    await expect(command).resolves.toEqual({ currentVersion: "0.5.7" });
+    expect(socket?.close).toHaveBeenCalledOnce();
+  });
+
   it("accepts pnpm's argument separator before workflow options", () => {
     expect(
       parseVerifyCliUpdateArgs([
