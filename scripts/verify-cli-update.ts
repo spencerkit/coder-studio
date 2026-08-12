@@ -6,10 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { UpdatePrepareInstallResponse, UpdateStateSnapshot } from "@coder-studio/core";
-import {
-  type CoderStudioWsCommandInput,
-  callCoderStudioWsCommand,
-} from "../packages/cli/src/automation-ws-client.js";
+import type { CoderStudioWsCommandInput } from "../packages/cli/src/automation-ws-client.js";
 import { error, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
@@ -63,6 +60,23 @@ interface ManagedServer {
 interface CommandOptions {
   env: NodeJS.ProcessEnv;
   cwd?: string;
+}
+
+export interface AcceptanceWebSocket {
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: unknown }) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onclose: (() => void) | null;
+  send(data: string): void;
+  close(): void;
+}
+
+interface AcceptanceCommandResult {
+  kind: "result";
+  id: string;
+  ok: boolean;
+  data?: unknown;
+  error?: { code?: string; message?: string };
 }
 
 export interface VerifyCliUpdateDeps {
@@ -191,6 +205,107 @@ function acceptanceEnvironment(input: {
     CODER_STUDIO_UPDATE_REGISTRY_URL: input.registryUrl,
     CODER_STUDIO_UPDATE_DIST_TAG: input.distTag,
   };
+}
+
+function toAcceptanceWebSocketUrl(apiUrl: string): string {
+  const url = new URL(apiUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = `${url.pathname.replace(/\/$/u, "")}/ws`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+export async function callActivatedCoderStudioWsCommand<T = unknown>(
+  input: CoderStudioWsCommandInput,
+  createSocket: (url: string) => AcceptanceWebSocket = (url) =>
+    new WebSocket(url) as unknown as AcceptanceWebSocket
+): Promise<T> {
+  const socket = createSocket(toAcceptanceWebSocketUrl(input.apiUrl));
+  const claimId = randomUUID();
+  const commandId = randomUUID();
+  const timeoutMs = input.timeoutMs ?? 30_000;
+
+  return new Promise<T>((resolveCommand, rejectCommand) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      finish(() => rejectCommand(new Error(`Timed out waiting for ${input.op} result`)));
+    }, timeoutMs);
+
+    function finish(callback: () => void): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.close();
+      callback();
+    }
+
+    socket.onopen = () => {
+      socket.send(
+        JSON.stringify({
+          kind: "command",
+          id: claimId,
+          op: "activation.claim",
+          args: { clientInstanceId: `cli-update-acceptance-${randomUUID()}` },
+        })
+      );
+    };
+    socket.onmessage = (event) => {
+      let result: AcceptanceCommandResult;
+      try {
+        result = JSON.parse(String(event.data)) as AcceptanceCommandResult;
+      } catch (parseError) {
+        finish(() => rejectCommand(parseError));
+        return;
+      }
+      if (result.kind !== "result") return;
+      if (result.id === claimId) {
+        if (!result.ok) {
+          finish(() =>
+            rejectCommand(
+              new Error(
+                `${result.error?.code ? `${result.error.code}: ` : ""}${result.error?.message ?? "Activation claim failed"}`
+              )
+            )
+          );
+          return;
+        }
+        socket.send(
+          JSON.stringify({
+            kind: "command",
+            id: commandId,
+            op: input.op,
+            args: input.args,
+          })
+        );
+        return;
+      }
+      if (result.id !== commandId) return;
+      if (result.ok) {
+        finish(() => resolveCommand(result.data as T));
+        return;
+      }
+      finish(() =>
+        rejectCommand(
+          new Error(
+            `${result.error?.code ? `${result.error.code}: ` : ""}${result.error?.message ?? "Command failed"}`
+          )
+        )
+      );
+    };
+    socket.onerror = (event) => {
+      finish(() =>
+        rejectCommand(event instanceof Error ? event : new Error("CLI acceptance WebSocket failed"))
+      );
+    };
+    socket.onclose = () => {
+      if (!settled) {
+        finish(() =>
+          rejectCommand(new Error("CLI acceptance WebSocket closed before command result"))
+        );
+      }
+    };
+  });
 }
 
 async function writePosixShim(path: string, source: string): Promise<void> {
@@ -386,7 +501,7 @@ const defaultDeps: VerifyCliUpdateDeps = {
       },
     };
   },
-  callWs: callCoderStudioWsCommand,
+  callWs: callActivatedCoderStudioWsCommand,
   waitForReconcile: async ({ apiUrl, candidateVersion, callWs }) => {
     const deadline = Date.now() + 120_000;
     let lastState: Partial<UpdateStateSnapshot> = {};
