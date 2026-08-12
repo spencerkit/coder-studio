@@ -8,6 +8,11 @@ on:
         required: true
         default: false
         type: boolean
+      windows_signing:
+        description: "Sign Windows executables with Authenticode"
+        required: true
+        default: true
+        type: boolean
       desktop_acceptance_run_id:
         description: "Workflow run containing the complete installed Desktop acceptance matrix"
         required: false
@@ -181,7 +186,7 @@ jobs:
           retention-days: 14
 
   windows-assets:
-    name: Build signed Windows assets
+    name: Build Windows assets
     needs: prepare
     runs-on: windows-latest
     timeout-minutes: 60
@@ -191,8 +196,9 @@ jobs:
     env:
       CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
-      CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
+      CSC_LINK: ${{ inputs.windows_signing && secrets.DESKTOP_WINDOWS_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ inputs.windows_signing && secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD || '' }}
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.windows_signing && 'true' || 'false' }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
       CODER_STUDIO_FACTORY_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/
 
@@ -218,7 +224,7 @@ jobs:
           if (-not $env:CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY -or -not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
             throw "Desktop Runtime Ed25519 signing secrets are required"
           }
-          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full" -and (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD)) {
+          if ("${{ needs.prepare.outputs.release_kind }}" -eq "full" -and "${{ inputs.windows_signing }}" -eq "true" -and (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD)) {
             throw "Windows Authenticode signing secrets are required for a full Desktop release"
           }
 
@@ -230,7 +236,7 @@ jobs:
           pnpm --filter @coder-studio/desktop test
           pnpm ci:typecheck
 
-      - name: Build signed Windows assets
+      - name: Build Windows assets
         shell: pwsh
         run: |
           if ("${{ needs.prepare.outputs.release_kind }}" -eq "full") {
@@ -241,7 +247,7 @@ jobs:
           }
 
       - name: Verify Authenticode signatures
-        if: needs.prepare.outputs.release_kind == 'full'
+        if: needs.prepare.outputs.release_kind == 'full' && inputs.windows_signing
         shell: pwsh
         run: |
           $metadata = Get-Content release/desktop/latest.yml -Raw
@@ -258,7 +264,7 @@ jobs:
             }
           }
 
-      - name: Stage signed Windows assets
+      - name: Stage Windows assets
         shell: pwsh
         run: |
           $components = 'win-runtime'
@@ -380,10 +386,16 @@ jobs:
       - name: Publish immutable prerelease
         shell: bash
         run: |
+          release_notes_args=()
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "full" && "${{ inputs.windows_signing }}" != "true" ]]; then
+            release_notes_args+=(--notes "> [!WARNING]
+          > Windows executables in this release are not Authenticode-signed. Windows may show an Unknown publisher warning. Runtime, WSL Engine, and update-channel manifests remain cryptographically signed.")
+          fi
           gh release create "${{ needs.prepare.outputs.tag }}" \
             --target "${GITHUB_SHA}" \
             --title "${{ needs.prepare.outputs.title }}" \
             --generate-notes \
+            "${release_notes_args[@]}" \
             --prerelease --latest=false \
             release/desktop-release-final/*
 
@@ -555,6 +567,9 @@ jobs:
           )
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          if ('${{ inputs.windows_signing }}' -ne 'true') {
+            $arguments += '-SkipAuthenticode'
           }
           pnpm acceptance:desktop:installed -- @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Production installed Desktop acceptance failed' }

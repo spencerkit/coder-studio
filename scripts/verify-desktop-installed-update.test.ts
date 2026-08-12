@@ -79,6 +79,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("'runtime:win32-x64'");
     expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
+    expect(runner).toContain("[switch]$SkipAuthenticode");
+    expect(runner).toContain("if (-not $SkipAuthenticode)");
     expect(runner).toContain("$report.logPaths = @($preservedPaths)");
     expect(runner.indexOf("Preserve-AcceptanceEvidence")).toBeLessThan(
       runner.lastIndexOf("Remove-Item -LiteralPath $runRoot -Recurse")

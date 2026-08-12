@@ -29,6 +29,7 @@ param(
   [string]$CommitSha = '',
   [string]$ChannelSignatureDigest = '',
   [string]$WslDistro = '',
+  [switch]$SkipAuthenticode,
   [switch]$KeepOnFailure
 )
 
@@ -189,8 +190,10 @@ function Read-JournalIdentity([string]$Path) {
 $previousInstallerPath = Resolve-RequiredFile $PreviousInstaller 'Previous installer'
 $candidateInstallerPath = Resolve-RequiredFile $CandidateInstaller 'Candidate installer'
 $publicKeyFile = Resolve-RequiredFile $PublicKeyPath 'Desktop acceptance public key'
-Assert-Authenticode $previousInstallerPath 'Previous installer'
-Assert-Authenticode $candidateInstallerPath 'Candidate installer'
+if (-not $SkipAuthenticode) {
+  Assert-Authenticode $previousInstallerPath 'Previous installer'
+  Assert-Authenticode $candidateInstallerPath 'Candidate installer'
+}
 $isFreshInstall = $Scenario -in @('fresh-native', 'fresh-wsl')
 $isWslScenario = $Scenario -in @('fresh-wsl', 'wsl', 'wsl-combined')
 
@@ -222,7 +225,9 @@ try {
   if (-not (Test-Path -LiteralPath $desktopExecutable -PathType Leaf)) {
     throw "Installed Desktop executable is missing: $desktopExecutable"
   }
-  Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
+  if (-not $SkipAuthenticode) {
+    Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
+  }
 
   if ($isWslScenario) {
     if (-not $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
