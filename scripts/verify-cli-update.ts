@@ -111,6 +111,7 @@ export interface VerifyCliUpdateDeps {
     distTag: string;
     registryUrl: string;
   }): Promise<NpmReleaseMetadata>;
+  wait(ms: number): Promise<void>;
   startRegistryProxy(input: {
     registryUrl: string;
     packageName: string;
@@ -596,6 +597,7 @@ const defaultDeps: VerifyCliUpdateDeps = {
   },
   callWs: callActivatedCoderStudioWsCommand,
   lookupReleaseMetadata: lookupNpmReleaseMetadata,
+  wait: (ms) => new Promise((resolveWait) => setTimeout(resolveWait, ms)),
   startRegistryProxy: startCandidateRegistryProxy,
   waitForReconcile: async ({ apiUrl, candidateVersion, callWs }) => {
     const deadline = Date.now() + 120_000;
@@ -640,6 +642,43 @@ function requireVersion(value: string, label: string): string {
   return normalized;
 }
 
+async function waitForCandidateRelease(input: {
+  deps: Pick<VerifyCliUpdateDeps, "lookupReleaseMetadata" | "wait">;
+  packageName: string;
+  previousVersion: string;
+  candidateVersion: string;
+  distTag: string;
+  registryUrl: string;
+  timeoutMs?: number;
+}): Promise<NpmReleaseMetadata> {
+  const deadline = Date.now() + (input.timeoutMs ?? 30_000);
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const release = await input.deps.lookupReleaseMetadata({
+        packageName: input.packageName,
+        currentVersion: input.previousVersion,
+        distTag: input.distTag,
+        registryUrl: input.registryUrl,
+      });
+      if (release.version !== input.candidateVersion) {
+        throw new Error(
+          `Selected dist-tag resolved ${release.version}, expected exact candidate ${input.candidateVersion}`
+        );
+      }
+      return release;
+    } catch (lookupError) {
+      lastError = lookupError;
+      const message = lookupError instanceof Error ? lookupError.message : String(lookupError);
+      if (!message.includes(`did not return dist-tag ${input.distTag}`)) throw lookupError;
+      await input.deps.wait(500);
+    }
+  }
+  throw new Error(
+    `Candidate dist-tag ${input.distTag} did not propagate before timeout: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 export async function verifyCliUpdate(
   options: VerifyCliUpdateOptions,
   deps: VerifyCliUpdateDeps = defaultDeps
@@ -663,15 +702,14 @@ export async function verifyCliUpdate(
   let registryProxy: ManagedRegistryProxy | null = null;
   let server: ManagedServer | null = null;
   try {
-    const release = await deps.lookupReleaseMetadata({
+    const release = await waitForCandidateRelease({
+      deps,
       packageName,
-      currentVersion: previousVersion,
+      previousVersion,
+      candidateVersion,
       distTag: options.distTag.trim(),
       registryUrl,
     });
-    if (release.version !== candidateVersion) {
-      throw new Error(`Selected dist-tag must resolve exact candidate ${candidateVersion}`);
-    }
     if (!release.latestPublishedAt || !Number.isFinite(Date.parse(release.latestPublishedAt))) {
       throw new Error("Candidate npm publication time is missing");
     }

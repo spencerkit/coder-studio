@@ -21,6 +21,7 @@ function createDeps(): VerifyCliUpdateDeps {
       currentPublishedAt: "2026-07-01T00:00:00.000Z",
       latestPublishedAt: "2026-08-08T01:02:03.000Z",
     })),
+    wait: vi.fn(async () => undefined),
     startRegistryProxy: vi.fn(async ({ registryUrl }) => ({
       registryUrl,
       stop: vi.fn(async () => undefined),
@@ -322,6 +323,58 @@ describe("verify-cli-update", () => {
         args: { targetVersion: "0.5.7", force: false },
       })
     );
+  });
+
+  it("waits for a just-written candidate dist-tag to propagate", async () => {
+    const deps = createDeps();
+    vi.mocked(deps.lookupReleaseMetadata)
+      .mockRejectedValueOnce(
+        new Error("npm registry did not return dist-tag coder-studio-accept-42")
+      )
+      .mockResolvedValue({
+        version: "0.6.0",
+        currentPublishedAt: "2026-07-01T00:00:00.000Z",
+        latestPublishedAt: "2026-08-08T01:02:03.000Z",
+      });
+
+    await verifyCliUpdate(
+      {
+        packageName: "@spencer-kit/coder-studio",
+        previousVersion: "0.5.0",
+        candidateVersion: "0.6.0",
+        registryUrl: "https://registry.npmjs.org/",
+        distTag: "coder-studio-accept-42",
+        prefix: resolve("/tmp/coder-studio-cli-acceptance-propagation"),
+      },
+      deps
+    );
+
+    expect(deps.lookupReleaseMetadata).toHaveBeenCalledTimes(2);
+    expect(deps.wait).toHaveBeenCalledWith(500);
+  });
+
+  it("rejects a propagated candidate dist-tag that points at the wrong version", async () => {
+    const deps = createDeps();
+    vi.mocked(deps.lookupReleaseMetadata).mockResolvedValue({
+      version: "0.6.1",
+      currentPublishedAt: "2026-07-01T00:00:00.000Z",
+      latestPublishedAt: "2026-08-09T01:02:03.000Z",
+    });
+
+    await expect(
+      verifyCliUpdate(
+        {
+          packageName: "@spencer-kit/coder-studio",
+          previousVersion: "0.5.0",
+          candidateVersion: "0.6.0",
+          registryUrl: "https://registry.npmjs.org/",
+          distTag: "coder-studio-accept-42",
+          prefix: resolve("/tmp/coder-studio-cli-acceptance-wrong-tag"),
+        },
+        deps
+      )
+    ).rejects.toThrow("resolved 0.6.1, expected exact candidate 0.6.0");
+    expect(deps.wait).not.toHaveBeenCalled();
   });
 
   it("rejects an acceptance prefix that reports active work", async () => {
