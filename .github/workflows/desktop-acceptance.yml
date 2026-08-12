@@ -375,6 +375,10 @@ jobs:
           wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
           wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
           if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable WSL acceptance distribution' }
+          wsl.exe -d $distro -u root -- sh -lc "printf '[boot]\nsystemd=false\n' > /etc/wsl.conf"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to disable systemd in disposable WSL acceptance distribution' }
+          wsl.exe --terminate $distro
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to restart disposable WSL acceptance distribution' }
           "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Run installed Desktop update scenario

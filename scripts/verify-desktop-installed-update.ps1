@@ -132,7 +132,8 @@ function Preserve-AcceptanceEvidence(
   [string]$DriverStandardOut,
   [string]$DriverStandardError,
   [string]$UserDataDirectory,
-  [string]$JournalFile
+  [string]$JournalFile,
+  [string]$FailureFile
 ) {
   $resolvedReport = [System.IO.Path]::GetFullPath($ReportFile)
   $reportDirectory = Split-Path -Parent $resolvedReport
@@ -141,7 +142,7 @@ function Preserve-AcceptanceEvidence(
   New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
 
   $sources = [System.Collections.Generic.List[string]]::new()
-  foreach ($source in @($DriverStandardOut, $DriverStandardError, $JournalFile)) {
+  foreach ($source in @($DriverStandardOut, $DriverStandardError, $JournalFile, $FailureFile)) {
     if ($source -and (Test-Path -LiteralPath $source -PathType Leaf)) {
       $sources.Add([System.IO.Path]::GetFullPath($source))
     }
@@ -205,6 +206,7 @@ $userDataDirectory = Join-Path $runRoot 'user-data'
 $controlPath = Join-Path $runRoot 'interruption-control.json'
 $driverOut = Join-Path $runRoot 'driver.stdout.log'
 $driverErr = Join-Path $runRoot 'driver.stderr.log'
+$failurePath = Join-Path $runRoot 'acceptance.failure.log'
 $journalPath = Join-Path $userDataDirectory 'desktop-update-plan.json'
 $wslMarkerPath = "/tmp/$runId-npm-invoked"
 $desktopExecutable = Join-Path $installDirectory 'Coder Studio.exe'
@@ -359,6 +361,20 @@ try {
     throw 'Installed Desktop driver did not produce its JSON report'
   }
   $failed = $false
+} catch {
+  $failureDetails = [System.Collections.Generic.List[string]]::new()
+  $failureDetails.Add(($_ | Out-String).TrimEnd())
+  if ($null -ne $desktopProcess) {
+    try {
+      $desktopProcess.Refresh()
+      $failureDetails.Add("Desktop process id: $($desktopProcess.Id)")
+      $failureDetails.Add("Desktop process exited: $($desktopProcess.HasExited)")
+    } catch {
+      $failureDetails.Add("Unable to inspect Desktop process: $($_.Exception.Message)")
+    }
+  }
+  $failureDetails | Set-Content -LiteralPath $failurePath -Encoding UTF8
+  throw
 } finally {
   Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
   Preserve-AcceptanceEvidence `
@@ -366,7 +382,8 @@ try {
     $driverOut `
     $driverErr `
     $userDataDirectory `
-    $journalPath
+    $journalPath `
+    $failurePath
   if (Test-Path -LiteralPath (Join-Path $installDirectory 'Uninstall Coder Studio.exe')) {
     Start-Process -FilePath (Join-Path $installDirectory 'Uninstall Coder Studio.exe') -ArgumentList '/S' -Wait -ErrorAction SilentlyContinue | Out-Null
   }

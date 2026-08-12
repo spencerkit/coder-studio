@@ -459,6 +459,9 @@ describe("GitHub workflow boundaries", () => {
     const prepareScenario = installedSteps.find(
       (step) => step.name === "Prepare scenario-specific signed channel"
     );
+    const prepareWsl = installedSteps.find(
+      (step) => step.name === "Prepare disposable WSL distribution"
+    );
     expect(installed.needs).toEqual(["prepare", "publish"]);
     expect(installed.strategy?.matrix?.scenario).toBe(
       "${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}"
@@ -476,6 +479,8 @@ describe("GitHub workflow boundaries", () => {
     expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
     expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
     expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
+    expect(prepareWsl?.run).toContain("systemd=false");
+    expect(prepareWsl?.run).toContain("wsl.exe --terminate $distro");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
     );
@@ -487,9 +492,14 @@ describe("GitHub workflow boundaries", () => {
     const releaseRunInstalled = (releaseInstalled.steps ?? []).find(
       (step) => step.name === "Run production installed Desktop update"
     );
+    const releasePrepareWsl = (releaseInstalled.steps ?? []).find(
+      (step) => step.name === "Prepare disposable production WSL distribution"
+    );
     expect(releaseRunInstalled?.run).not.toContain("pnpm acceptance:desktop:installed --");
     expect(releaseRunInstalled?.run).toContain("if ('${{ steps.identity.outputs.components }}')");
     expect(releaseRunInstalled?.run).toContain("-SkipAuthenticode");
+    expect(releasePrepareWsl?.run).toContain("systemd=false");
+    expect(releasePrepareWsl?.run).toContain("wsl.exe --terminate $distro");
     expect(promotion.needs).toEqual(["prepare", "publish", "installed-upgrade"]);
     const promotionSteps = promotion.steps ?? [];
     const validateReports = promotionSteps.find(
