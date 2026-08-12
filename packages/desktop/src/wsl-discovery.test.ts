@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WslCommandRunner } from "./wsl-command.js";
-import { WslDiscovery } from "./wsl-discovery.js";
+import { WSL_PROBE_SCRIPT, WslDiscovery } from "./wsl-discovery.js";
 
 function result(stdout: string | Buffer, exitCode = 0) {
   return {
@@ -11,6 +11,13 @@ function result(stdout: string | Buffer, exitCode = 0) {
 }
 
 describe("WslDiscovery", () => {
+  it("isolates interactive shell probe output from inherited WSL pipes", () => {
+    expect(WSL_PROBE_SCRIPT).toContain('probe_file="/tmp/coder-studio-shell-probe-$$"');
+    expect(WSL_PROBE_SCRIPT).toContain('>"$probe_file" 2>/dev/null');
+    expect(WSL_PROBE_SCRIPT).toContain('cat "$probe_file"');
+    expect(WSL_PROBE_SCRIPT).toContain('rm -f "$probe_file"');
+  });
+
   it("decodes Windows UTF-16 distro output", async () => {
     const runner = vi
       .fn<WslCommandRunner>()
