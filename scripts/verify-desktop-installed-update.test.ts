@@ -73,6 +73,10 @@ describe("verify-desktop-installed-update", () => {
       resolve(import.meta.dirname, "verify-desktop-installed-update.ps1"),
       "utf8"
     );
+    const desktopMain = await readFile(
+      resolve(import.meta.dirname, "../packages/desktop/src/main.ts"),
+      "utf8"
+    );
 
     expect(runner).toContain("function Preserve-AcceptanceEvidence");
     expect(runner).toContain("[string]$ExpectedComponents = ''");
@@ -82,6 +86,27 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
     expect(runner).toContain("Join-Path $factoryRuntime 'manifest.json'");
     expect(runner).not.toContain("Join-Path $factoryRuntime 'runtime.manifest.json'");
+    expect(runner).toContain("$driverProcess.Handle | Out-Null");
+    expect(runner.indexOf("$driverProcess.Handle | Out-Null")).toBeLessThan(
+      runner.indexOf("while (-not $driverProcess.HasExited)")
+    );
+    expect(runner).toContain("$driverProcess.WaitForExit()");
+    expect(runner.indexOf("$driverProcess.WaitForExit()")).toBeLessThan(
+      runner.indexOf("if ($driverProcess.ExitCode -ne 0)")
+    );
+    expect(runner).toContain("$_.Name -in @('main.log', 'backend.log')");
+    expect(runner).toContain("'acceptance.failure.log'");
+    expect(runner).toContain("$failureDetails | Set-Content");
+    expect(runner).toContain("'desktop.stdout.log'");
+    expect(runner).toContain("'desktop.stderr.log'");
+    expect(runner).toContain("-RedirectStandardOutput $StandardOut");
+    expect(runner).toContain("$startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }");
+    expect(runner).toContain("Wait-Cdp $cdpPort $startupTimeoutSeconds");
+    expect(desktopMain).toContain('console.error("Unable to start Coder Studio", details)');
+    expect(desktopMain).toContain("[desktop-acceptance:environment]");
+    expect(desktopMain).toContain(
+      'probeUserShell: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1"'
+    );
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");

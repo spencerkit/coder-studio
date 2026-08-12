@@ -314,6 +314,7 @@ function registerIpcHandlers(rootUserDataDir: string): void {
 
 async function handleStartupFailure(error: unknown): Promise<void> {
   const details = error instanceof Error ? error.stack || error.message : String(error);
+  console.error("Unable to start Coder Studio", details);
   await environmentActivation.failPending(details).catch(() => undefined);
   if (smokeResultPath) {
     await finishSmokeTest(
@@ -617,7 +618,9 @@ async function startApplication(): Promise<void> {
       : undefined;
   environmentManager = new DesktopEnvironmentManager({
     stateStore: environmentStateStore,
-    discovery: new WslDiscovery(),
+    discovery: new WslDiscovery({
+      probeUserShell: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1",
+    }),
     shellVersion: app.getVersion(),
     nodeVersion: DESKTOP_NODE_VERSION,
     runtimeVersion: webRuntime?.manifest.runtimeVersion ?? productVersion,
@@ -632,7 +635,14 @@ async function startApplication(): Promise<void> {
       undefined,
     loadChannel: desktopChannelUrl && runtimePublicKey ? loadDesktopChannel : undefined,
     nativeRuntimeUpdateAdapter,
-    onProgress: emitEnvironmentProgress,
+    onProgress: (progress) => {
+      emitEnvironmentProgress(progress);
+      if (process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1") {
+        console.error(
+          `[desktop-acceptance:environment] ${new Date().toISOString()} ${JSON.stringify(progress)}`
+        );
+      }
+    },
   });
   environmentManager.setActiveTarget(activeEnvironmentTarget);
   activeSession = session.fromPartition(getEnvironmentPartition(activeEnvironmentTarget));
