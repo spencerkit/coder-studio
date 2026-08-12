@@ -565,13 +565,13 @@ function readArg(argv: string[], index: number, option: string): string {
   return value;
 }
 
-async function main(): Promise<void> {
+export function parseVerifyCliUpdateArgs(argv: string[]): VerifyCliUpdateOptions {
   const values = new Map<string, string>();
-  const args = process.argv.slice(2);
-  for (let index = 0; index < args.length; index += 1) {
-    const option = args[index];
+  for (let index = 0; index < argv.length; index += 1) {
+    const option = argv[index];
+    if (option === "--") continue;
     if (!option?.startsWith("--")) throw new Error(`Unknown CLI acceptance argument: ${option}`);
-    values.set(option.slice(2), readArg(args, ++index, option));
+    values.set(option.slice(2), readArg(argv, ++index, option));
   }
   const required = [
     "package-name",
@@ -581,7 +581,7 @@ async function main(): Promise<void> {
     "dist-tag",
   ];
   for (const name of required) if (!values.get(name)) throw new Error(`--${name} is required`);
-  const report = await verifyCliUpdate({
+  return {
     packageName: values.get("package-name") as string,
     previousVersion: values.get("previous-version") as string,
     candidateVersion: values.get("candidate-version") as string,
@@ -590,7 +590,11 @@ async function main(): Promise<void> {
     commitSha: values.get("commit-sha"),
     prefix: values.get("prefix"),
     reportPath: values.get("report"),
-  });
+  };
+}
+
+async function main(): Promise<void> {
+  const report = await verifyCliUpdate(parseVerifyCliUpdateArgs(process.argv.slice(2)));
   success("Packaged CLI update acceptance passed");
   console.log(JSON.stringify(report, null, 2));
 }

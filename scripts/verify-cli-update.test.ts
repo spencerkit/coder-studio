@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { type VerifyCliUpdateDeps, verifyCliUpdate } from "./verify-cli-update.js";
+import {
+  parseVerifyCliUpdateArgs,
+  type VerifyCliUpdateDeps,
+  verifyCliUpdate,
+} from "./verify-cli-update.js";
 
 function createDeps(): VerifyCliUpdateDeps {
   return {
@@ -76,6 +80,37 @@ function createDeps(): VerifyCliUpdateDeps {
 }
 
 describe("verify-cli-update", () => {
+  it("accepts pnpm's argument separator before workflow options", () => {
+    expect(
+      parseVerifyCliUpdateArgs([
+        "--",
+        "--package-name",
+        "@spencer-kit/coder-studio",
+        "--previous-version",
+        "0.5.6",
+        "--candidate-version",
+        "0.5.7",
+        "--registry-url",
+        "https://registry.npmjs.org/",
+        "--dist-tag",
+        "coder-studio-accept-42",
+        "--commit-sha",
+        "0123456789abcdef",
+        "--report",
+        "release/report.json",
+      ])
+    ).toEqual({
+      packageName: "@spencer-kit/coder-studio",
+      previousVersion: "0.5.6",
+      candidateVersion: "0.5.7",
+      registryUrl: "https://registry.npmjs.org/",
+      distTag: "coder-studio-accept-42",
+      commitSha: "0123456789abcdef",
+      prefix: undefined,
+      reportPath: "release/report.json",
+    });
+  });
+
   it("upgrades a packaged CLI inside one isolated npm prefix", async () => {
     const deps = createDeps();
     const prefix = resolve("/tmp/coder-studio-cli-acceptance-42");
