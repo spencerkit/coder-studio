@@ -284,7 +284,10 @@ jobs:
           $scenario = '${{ matrix.scenario }}'
           $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
           $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
-          $generatedAt = $originalChannel.generatedAt
+          $generatedAt = ([DateTimeOffset]$originalChannel.generatedAt).UtcDateTime.ToString(
+            'yyyy-MM-ddTHH:mm:ss.fffZ',
+            [Globalization.CultureInfo]::InvariantCulture
+          )
           $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
           if ($hasPreviousDesktop -and $scenario -notin @('combined', 'wsl-combined')) {
             pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
