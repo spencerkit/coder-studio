@@ -1,6 +1,6 @@
 {
   "name": "@spencer-kit/coder-studio",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "type": "module",
   "description": "Self-hosted browser workspace for AI coding agents, review, supervision, and cross-device continuation.",
   "main": "./src/index.ts",

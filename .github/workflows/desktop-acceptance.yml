@@ -2,6 +2,12 @@ name: Publish Desktop acceptance
 
 on:
   workflow_dispatch:
+    inputs:
+      windows_signing:
+        description: "Sign Windows executables with Authenticode"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -93,6 +99,7 @@ jobs:
     uses: ./.github/workflows/desktop-verify.yml
     with:
       signed: true
+      windows_signing: ${{ inputs.windows_signing }}
       signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
       runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
       release_tag: ${{ needs.prepare.outputs.release_tag }}
@@ -171,10 +178,14 @@ jobs:
               exit 1
             fi
           elif grep -q '(HTTP 404)' "${release_error}"; then
+            windows_signing_note=""
+            if [[ "${{ inputs.windows_signing }}" != "true" ]]; then
+              windows_signing_note=" WARNING: Windows executables in this acceptance build are not Authenticode-signed."
+            fi
             gh release create "${RELEASE_TAG}" \
               --target "${GITHUB_SHA}" \
               --title "Coder Studio Desktop acceptance ${GITHUB_RUN_NUMBER}" \
-              --notes "Ephemeral signed acceptance channel for ${GITHUB_SHA}. The signing key is test-only; do not promote these assets to production." \
+              --notes "Ephemeral Runtime-signed acceptance channel for ${GITHUB_SHA}. The Runtime signing key is test-only; do not promote these assets to production.${windows_signing_note}" \
               --draft
           else
             cat "${release_error}" >&2
@@ -273,7 +284,10 @@ jobs:
           $scenario = '${{ matrix.scenario }}'
           $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
           $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
-          $generatedAt = $originalChannel.generatedAt
+          $generatedAt = ([DateTimeOffset]$originalChannel.generatedAt).UtcDateTime.ToString(
+            'yyyy-MM-ddTHH:mm:ss.fffZ',
+            [Globalization.CultureInfo]::InvariantCulture
+          )
           $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
           if ($hasPreviousDesktop -and $scenario -notin @('combined', 'wsl-combined')) {
             pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
@@ -288,7 +302,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
           $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
           $validation = @(
-            'desktop:artifacts', '--', 'validate',
+            'desktop:artifacts', 'validate',
             '--directory', $candidate,
             '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
           )
@@ -361,6 +375,10 @@ jobs:
           wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
           wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
           if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable WSL acceptance distribution' }
+          wsl.exe -d $distro -u root -- sh -lc "useradd --create-home --shell /bin/bash coderstudio && printf '[boot]\nsystemd=false\n[user]\ndefault=coderstudio\n' > /etc/wsl.conf"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the disposable WSL acceptance user' }
+          wsl.exe --terminate $distro
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to restart disposable WSL acceptance distribution' }
           "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Run installed Desktop update scenario
@@ -375,20 +393,25 @@ jobs:
             '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
             '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
             '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
-            '-ExpectedComponents', '${{ steps.scenario.outputs.components }}',
             '-PublicKeyPath', 'release/desktop-ci-signing/runtime-public.pem',
             '-Scenario', '${{ matrix.scenario }}',
             '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
             '-CommitSha', '${{ github.sha }}',
             '-ChannelSignatureDigest', '${{ steps.scenario.outputs.signature_digest }}'
           )
+          if ('${{ steps.scenario.outputs.components }}') {
+            $arguments += @('-ExpectedComponents', '${{ steps.scenario.outputs.components }}')
+          }
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
             $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
           }
           if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'wsl', 'wsl-combined')) {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
-          pnpm acceptance:desktop:installed -- @arguments
+          if ('${{ inputs.windows_signing }}' -ne 'true') {
+            $arguments += '-SkipAuthenticode'
+          }
+          pnpm acceptance:desktop:installed @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
 
       - name: Upload installed-upgrade report

@@ -7,6 +7,10 @@ on:
         type: boolean
         required: false
         default: false
+      windows_signing:
+        type: boolean
+        required: false
+        default: true
       signing_key_artifact:
         type: string
         required: false
@@ -114,8 +118,9 @@ jobs:
     timeout-minutes: 60
     env:
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
-      CSC_LINK: ${{ secrets.windows_csc_link }}
-      CSC_KEY_PASSWORD: ${{ secrets.windows_csc_key_password }}
+      CSC_LINK: ${{ inputs.windows_signing && secrets.windows_csc_link || '' }}
+      CSC_KEY_PASSWORD: ${{ inputs.windows_signing && secrets.windows_csc_key_password || '' }}
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.windows_signing && 'true' || 'false' }}
     outputs:
       artifact_name: ${{ steps.artifact_name.outputs.value }}
 
@@ -170,18 +175,18 @@ jobs:
           pnpm ci:typecheck
 
       - name: Require acceptance Authenticode credentials
-        if: inputs.signed
+        if: inputs.windows_signing
         shell: pwsh
         run: |
           if (-not $env:CSC_LINK -or -not $env:CSC_KEY_PASSWORD) {
-            throw 'Windows Authenticode signing secrets are required for signed Desktop acceptance'
+            throw 'Windows Authenticode signing secrets are required when windows_signing is enabled'
           }
 
       - name: Build Windows installer and Runtime
         run: pnpm dist:desktop
 
       - name: Verify acceptance Authenticode signatures
-        if: inputs.signed
+        if: inputs.windows_signing
         shell: pwsh
         run: |
           $metadata = Get-Content release/desktop/latest.yml -Raw

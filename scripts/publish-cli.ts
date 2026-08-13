@@ -335,13 +335,20 @@ function assertBundleRuntimeDependenciesDeclared(
   }
 
   const declaredDeps = new Set(Object.keys(dependencies as Record<string, unknown>));
-  const undeclared = bareImports.filter((specifier) => !declaredDeps.has(specifier));
+  const undeclared = bareImports.filter(
+    (specifier) => !declaredDeps.has(getPackageName(specifier))
+  );
 
   if (undeclared.length > 0) {
     throw new Error(
       `CLI bundle has runtime imports not declared in package.json dependencies: ${undeclared.join(", ")}`
     );
   }
+}
+
+function getPackageName(specifier: string): string {
+  const segments = specifier.split("/");
+  return specifier.startsWith("@") ? segments.slice(0, 2).join("/") : segments[0];
 }
 
 function assertPublishDependenciesResolvable(dependencies: unknown, packageJsonPath: string): void {

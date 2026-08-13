@@ -8,7 +8,7 @@ param(
   [Parameter(Mandatory = $true)][string]$PreviousRuntimeVersion,
   [Parameter(Mandatory = $true)][string]$ExpectedShellVersion,
   [Parameter(Mandatory = $true)][string]$ExpectedRuntimeVersion,
-  [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ExpectedComponents,
+  [string]$ExpectedComponents = '',
   [Parameter(Mandatory = $true)][string]$PublicKeyPath,
   [Parameter(Mandatory = $true)]
   [ValidateSet(
@@ -29,6 +29,7 @@ param(
   [string]$CommitSha = '',
   [string]$ChannelSignatureDigest = '',
   [string]$WslDistro = '',
+  [switch]$SkipAuthenticode,
   [switch]$KeepOnFailure
 )
 
@@ -97,7 +98,9 @@ function Start-AcceptanceDesktop(
   [string]$UserDataDirectory,
   [int]$CdpPort,
   [string]$ScenarioName,
-  [string]$Distro
+  [string]$Distro,
+  [string]$StandardOut,
+  [string]$StandardError
 ) {
   $arguments = @(
     "--remote-debugging-port=$CdpPort",
@@ -110,7 +113,8 @@ function Start-AcceptanceDesktop(
   } else {
     $arguments += '--coder-studio-environment-target=native'
   }
-  return Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru
+  return Start-Process -FilePath $Executable -ArgumentList $arguments -PassThru `
+    -RedirectStandardOutput $StandardOut -RedirectStandardError $StandardError
 }
 
 function Write-JsonAtomic([string]$Path, [object]$Value) {
@@ -131,7 +135,10 @@ function Preserve-AcceptanceEvidence(
   [string]$DriverStandardOut,
   [string]$DriverStandardError,
   [string]$UserDataDirectory,
-  [string]$JournalFile
+  [string]$JournalFile,
+  [string]$FailureFile,
+  [string]$DesktopStandardOut,
+  [string]$DesktopStandardError
 ) {
   $resolvedReport = [System.IO.Path]::GetFullPath($ReportFile)
   $reportDirectory = Split-Path -Parent $resolvedReport
@@ -140,14 +147,22 @@ function Preserve-AcceptanceEvidence(
   New-Item -ItemType Directory -Path $evidenceDirectory -Force | Out-Null
 
   $sources = [System.Collections.Generic.List[string]]::new()
-  foreach ($source in @($DriverStandardOut, $DriverStandardError, $JournalFile)) {
+  foreach ($source in @(
+    $DriverStandardOut,
+    $DriverStandardError,
+    $JournalFile,
+    $FailureFile,
+    $DesktopStandardOut,
+    $DesktopStandardError
+  )) {
     if ($source -and (Test-Path -LiteralPath $source -PathType Leaf)) {
       $sources.Add([System.IO.Path]::GetFullPath($source))
     }
   }
   if (Test-Path -LiteralPath $UserDataDirectory -PathType Container) {
     Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File | Where-Object {
-      $_.Name -match '(?i)(update|electron).*\.log$'
+      $_.Name -match '(?i)(update|electron).*\.log$' -or
+      $_.Name -in @('main.log', 'backend.log')
     } | ForEach-Object {
       $sources.Add($_.FullName)
     }
@@ -189,8 +204,10 @@ function Read-JournalIdentity([string]$Path) {
 $previousInstallerPath = Resolve-RequiredFile $PreviousInstaller 'Previous installer'
 $candidateInstallerPath = Resolve-RequiredFile $CandidateInstaller 'Candidate installer'
 $publicKeyFile = Resolve-RequiredFile $PublicKeyPath 'Desktop acceptance public key'
-Assert-Authenticode $previousInstallerPath 'Previous installer'
-Assert-Authenticode $candidateInstallerPath 'Candidate installer'
+if (-not $SkipAuthenticode) {
+  Assert-Authenticode $previousInstallerPath 'Previous installer'
+  Assert-Authenticode $candidateInstallerPath 'Candidate installer'
+}
 $isFreshInstall = $Scenario -in @('fresh-native', 'fresh-wsl')
 $isWslScenario = $Scenario -in @('fresh-wsl', 'wsl', 'wsl-combined')
 
@@ -201,6 +218,9 @@ $userDataDirectory = Join-Path $runRoot 'user-data'
 $controlPath = Join-Path $runRoot 'interruption-control.json'
 $driverOut = Join-Path $runRoot 'driver.stdout.log'
 $driverErr = Join-Path $runRoot 'driver.stderr.log'
+$desktopOut = Join-Path $runRoot 'desktop.stdout.log'
+$desktopErr = Join-Path $runRoot 'desktop.stderr.log'
+$failurePath = Join-Path $runRoot 'acceptance.failure.log'
 $journalPath = Join-Path $userDataDirectory 'desktop-update-plan.json'
 $wslMarkerPath = "/tmp/$runId-npm-invoked"
 $desktopExecutable = Join-Path $installDirectory 'Coder Studio.exe'
@@ -222,7 +242,9 @@ try {
   if (-not (Test-Path -LiteralPath $desktopExecutable -PathType Leaf)) {
     throw "Installed Desktop executable is missing: $desktopExecutable"
   }
-  Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
+  if (-not $SkipAuthenticode) {
+    Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
+  }
 
   if ($isWslScenario) {
     if (-not $WslDistro.StartsWith('coder-studio-acceptance-', [StringComparison]::Ordinal)) {
@@ -244,7 +266,7 @@ try {
     $factoryRuntime = Join-Path $installDirectory 'resources/factory-runtime'
     $factoryEvidence = Join-Path $userDataDirectory 'factory-runtime'
     New-Item -ItemType Directory -Path $factoryEvidence -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $factoryRuntime 'runtime.manifest.json') -Destination (Join-Path $factoryEvidence 'runtime.manifest.json') -Force
+    Copy-Item -LiteralPath (Join-Path $factoryRuntime 'manifest.json') -Destination (Join-Path $factoryEvidence 'runtime.manifest.json') -Force
   }
   if ($Scenario -eq 'runtime-health-rollback') {
     $env:CODER_STUDIO_DESKTOP_FAIL_RUNTIME_VERSION = $ExpectedRuntimeVersion
@@ -260,8 +282,12 @@ try {
   } else {
     $Scenario
   }
-  $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro
-  $pages = Wait-Cdp $cdpPort
+  $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
+  $desktopProcess.Handle | Out-Null
+  # A fresh WSL launch downloads, verifies, and installs both Engine and Runtime before it
+  # creates a page. Keep native and subsequent restart checks at the stricter default.
+  $startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }
+  $pages = Wait-Cdp $cdpPort $startupTimeoutSeconds
   $sidecarUrl = ''
   foreach ($page in $pages) {
     if ($page.type -eq 'page' -and $page.url -match '^https?://') {
@@ -274,7 +300,6 @@ try {
     'exec', 'tsx', 'scripts/verify-desktop-installed-update.ts',
     '--cdp-url', "http://127.0.0.1:$cdpPort",
     '--scenario', $Scenario,
-    '--components', $ExpectedComponents,
     '--previous-shell-version', $PreviousShellVersion,
     '--previous-runtime-version', $PreviousRuntimeVersion,
     '--target-shell-version', $ExpectedShellVersion,
@@ -284,6 +309,9 @@ try {
     '--user-data-dir', $userDataDirectory,
     '--release-tag', $CandidateTag
   )
+  if ($ExpectedComponents) {
+    $driverArgs += @('--components', $ExpectedComponents)
+  }
   if ($ExpectedRuntimeAfterRestart) {
     $driverArgs += @('--expected-runtime-after', $ExpectedRuntimeAfterRestart)
   }
@@ -301,6 +329,9 @@ try {
   }
 
   $driverProcess = Start-Process -FilePath 'pnpm.cmd' -ArgumentList $driverArgs -PassThru -NoNewWindow -RedirectStandardOutput $driverOut -RedirectStandardError $driverErr
+  # Windows PowerShell 5.1 can return a null ExitCode after redirected Start-Process
+  # output unless the process handle is opened before the process exits.
+  $driverProcess.Handle | Out-Null
   $handledInterruptions = [System.Collections.Generic.HashSet[string]]::new(
     [StringComparer]::Ordinal
   )
@@ -320,7 +351,8 @@ try {
           } else {
             $Scenario
           }
-          $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro
+          $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro $desktopOut $desktopErr
+          $desktopProcess.Handle | Out-Null
           Wait-Cdp $cdpPort | Out-Null
           $journalAfter = Read-JournalIdentity $journalPath
           Write-JsonAtomic $controlPath @{
@@ -338,6 +370,7 @@ try {
     Start-Sleep -Milliseconds 200
     $driverProcess.Refresh()
   }
+  $driverProcess.WaitForExit()
   if ($driverProcess.ExitCode -ne 0) {
     $stdout = if (Test-Path -LiteralPath $driverOut) { Get-Content -LiteralPath $driverOut -Raw } else { '' }
     $stderr = if (Test-Path -LiteralPath $driverErr) { Get-Content -LiteralPath $driverErr -Raw } else { '' }
@@ -347,6 +380,20 @@ try {
     throw 'Installed Desktop driver did not produce its JSON report'
   }
   $failed = $false
+} catch {
+  $failureDetails = [System.Collections.Generic.List[string]]::new()
+  $failureDetails.Add(($_ | Out-String).TrimEnd())
+  if ($null -ne $desktopProcess) {
+    try {
+      $desktopProcess.Refresh()
+      $failureDetails.Add("Desktop process id: $($desktopProcess.Id)")
+      $failureDetails.Add("Desktop process exited: $($desktopProcess.HasExited)")
+    } catch {
+      $failureDetails.Add("Unable to inspect Desktop process: $($_.Exception.Message)")
+    }
+  }
+  $failureDetails | Set-Content -LiteralPath $failurePath -Encoding UTF8
+  throw
 } finally {
   Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
   Preserve-AcceptanceEvidence `
@@ -354,7 +401,10 @@ try {
     $driverOut `
     $driverErr `
     $userDataDirectory `
-    $journalPath
+    $journalPath `
+    $failurePath `
+    $desktopOut `
+    $desktopErr
   if (Test-Path -LiteralPath (Join-Path $installDirectory 'Uninstall Coder Studio.exe')) {
     Start-Process -FilePath (Join-Path $installDirectory 'Uninstall Coder Studio.exe') -ArgumentList '/S' -Wait -ErrorAction SilentlyContinue | Out-Null
   }

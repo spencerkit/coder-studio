@@ -92,6 +92,7 @@ describe("GitHub workflow boundaries", () => {
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflowCall.inputs).toEqual({
       signed: { type: "boolean", required: false, default: false },
+      windows_signing: { type: "boolean", required: false, default: true },
       signing_key_artifact: { type: "string", required: false, default: "" },
       runtime_update_url: { type: "string", required: false, default: "" },
       release_tag: { type: "string", required: false, default: "" },
@@ -142,13 +143,14 @@ describe("GitHub workflow boundaries", () => {
       overwrite: true,
     });
     expect(windowsJob.env).toMatchObject({
-      CSC_LINK: "${{ secrets.windows_csc_link }}",
-      CSC_KEY_PASSWORD: "${{ secrets.windows_csc_key_password }}",
+      CSC_LINK: "${{ inputs.windows_signing && secrets.windows_csc_link || '' }}",
+      CSC_KEY_PASSWORD: "${{ inputs.windows_signing && secrets.windows_csc_key_password || '' }}",
+      CSC_IDENTITY_AUTO_DISCOVERY: "${{ inputs.windows_signing && 'true' || 'false' }}",
     });
     const authenticode = windowsSteps.find(
       (step) => step.name === "Verify acceptance Authenticode signatures"
     );
-    expect(authenticode?.if).toBe("inputs.signed");
+    expect(authenticode?.if).toBe("inputs.windows_signing");
     expect(authenticode?.run).toContain("Get-AuthenticodeSignature");
     expect(authenticode?.run).toContain("release/desktop/latest.yml");
     expect(windowsTypecheck?.run).toContain("pnpm ci:typecheck");
@@ -214,7 +216,18 @@ describe("GitHub workflow boundaries", () => {
     );
     const release = publishSteps.find((step) => step.name === "Publish tag-pinned prerelease");
 
-    expect(workflow.on).toEqual({ workflow_dispatch: null });
+    expect(workflow.on).toEqual({
+      workflow_dispatch: {
+        inputs: {
+          windows_signing: {
+            description: "Sign Windows executables with Authenticode",
+            required: true,
+            default: true,
+            type: "boolean",
+          },
+        },
+      },
+    });
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(Object.keys(workflow.jobs)).toEqual([
       "prepare",
@@ -270,6 +283,7 @@ describe("GitHub workflow boundaries", () => {
       uses: "./.github/workflows/desktop-verify.yml",
       with: {
         signed: true,
+        windows_signing: "${{ inputs.windows_signing }}",
         signing_key_artifact: "${{ needs.prepare.outputs.signing_key_artifact }}",
         runtime_update_url: "${{ needs.prepare.outputs.runtime_update_url }}",
         release_tag: "${{ needs.prepare.outputs.release_tag }}",
@@ -365,6 +379,11 @@ describe("GitHub workflow boundaries", () => {
     const releaseInputs = (release.on.workflow_dispatch as { inputs: Record<string, unknown> })
       .inputs;
     expect(releaseInputs).not.toHaveProperty("mode");
+    expect(releaseInputs.windows_signing).toMatchObject({
+      default: true,
+      required: true,
+      type: "boolean",
+    });
     expect(release.jobs.prepare.outputs).toMatchObject({
       published_at: "${{ steps.release.outputs.published_at }}",
       release_kind: "${{ steps.release.outputs.release_kind }}",
@@ -395,6 +414,9 @@ describe("GitHub workflow boundaries", () => {
     expect(windowsBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBe(
       "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/"
     );
+    expect(windowsBuild.env?.CSC_IDENTITY_AUTO_DISCOVERY).toBe(
+      "${{ inputs.windows_signing && 'true' || 'false' }}"
+    );
     expect(JSON.stringify(linuxBuild)).toContain("needs.prepare.outputs.release_kind");
     expect(JSON.stringify(windowsBuild)).toContain("needs.prepare.outputs.release_kind");
     expect(linuxBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBeUndefined();
@@ -424,6 +446,7 @@ describe("GitHub workflow boundaries", () => {
     expect(releaseIndex).toBeGreaterThan(attestIndex);
     expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
     expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
+    expect(publishSteps[releaseIndex]?.run).toContain("not Authenticode-signed");
   });
 
   it("gates Desktop and CLI promotion on immutable installed-upgrade reports", () => {
@@ -436,16 +459,30 @@ describe("GitHub workflow boundaries", () => {
     const prepareScenario = installedSteps.find(
       (step) => step.name === "Prepare scenario-specific signed channel"
     );
+    const prepareWsl = installedSteps.find(
+      (step) => step.name === "Prepare disposable WSL distribution"
+    );
     expect(installed.needs).toEqual(["prepare", "publish"]);
     expect(installed.strategy?.matrix?.scenario).toBe(
       "${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}"
     );
     expect(runInstalled?.run).toContain("pnpm acceptance:desktop:installed");
+    expect(runInstalled?.run).not.toContain("pnpm acceptance:desktop:installed --");
     expect(runInstalled?.run).toContain("-CandidateInstaller");
     expect(runInstalled?.run).toContain("-PublicKeyPath");
+    expect(runInstalled?.run).toContain("if ('${{ steps.scenario.outputs.components }}')");
+    expect(runInstalled?.run).toContain("-SkipAuthenticode");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
+    expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
+    expect(prepareScenario?.run).toContain("InvariantCulture");
+    expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
+    expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
     expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
+    expect(prepareWsl?.run).toContain("systemd=false");
+    expect(prepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
+    expect(prepareWsl?.run).toContain("default=coderstudio");
+    expect(prepareWsl?.run).toContain("wsl.exe --terminate $distro");
     expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
       true
     );
@@ -454,6 +491,19 @@ describe("GitHub workflow boundaries", () => {
     const releaseInstalled = release.jobs["installed-upgrade"];
     const promotion = release.jobs.promote;
     expect(releaseInstalled.needs).toEqual(["prepare", "publish"]);
+    const releaseRunInstalled = (releaseInstalled.steps ?? []).find(
+      (step) => step.name === "Run production installed Desktop update"
+    );
+    const releasePrepareWsl = (releaseInstalled.steps ?? []).find(
+      (step) => step.name === "Prepare disposable production WSL distribution"
+    );
+    expect(releaseRunInstalled?.run).not.toContain("pnpm acceptance:desktop:installed --");
+    expect(releaseRunInstalled?.run).toContain("if ('${{ steps.identity.outputs.components }}')");
+    expect(releaseRunInstalled?.run).toContain("-SkipAuthenticode");
+    expect(releasePrepareWsl?.run).toContain("systemd=false");
+    expect(releasePrepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
+    expect(releasePrepareWsl?.run).toContain("default=coderstudio");
+    expect(releasePrepareWsl?.run).toContain("wsl.exe --terminate $distro");
     expect(promotion.needs).toEqual(["prepare", "publish", "installed-upgrade"]);
     const promotionSteps = promotion.steps ?? [];
     const validateReports = promotionSteps.find(

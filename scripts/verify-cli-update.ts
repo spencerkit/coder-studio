@@ -1,15 +1,21 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import type { UpdatePrepareInstallResponse, UpdateStateSnapshot } from "@coder-studio/core";
+import type {
+  ReadableUpdateStateSnapshot,
+  UpdatePrepareInstallResponse,
+  UpdateStateSnapshot,
+} from "@coder-studio/core";
+import type { CoderStudioWsCommandInput } from "../packages/cli/src/automation-ws-client.js";
 import {
-  type CoderStudioWsCommandInput,
-  callCoderStudioWsCommand,
-} from "../packages/cli/src/automation-ws-client.js";
+  lookupNpmReleaseMetadata,
+  type NpmReleaseMetadata,
+} from "../packages/server/src/update/npm-release-metadata.js";
 import { error, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
@@ -60,9 +66,31 @@ interface ManagedServer {
   stop(): Promise<void>;
 }
 
+interface ManagedRegistryProxy {
+  registryUrl: string;
+  stop(): Promise<void>;
+}
+
 interface CommandOptions {
   env: NodeJS.ProcessEnv;
   cwd?: string;
+}
+
+export interface AcceptanceWebSocket {
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: unknown }) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onclose: (() => void) | null;
+  send(data: string): void;
+  close(): void;
+}
+
+interface AcceptanceCommandResult {
+  kind: "result";
+  id: string;
+  ok: boolean;
+  data?: unknown;
+  error?: { code?: string; message?: string };
 }
 
 export interface VerifyCliUpdateDeps {
@@ -77,6 +105,18 @@ export interface VerifyCliUpdateDeps {
     port: number;
   }): Promise<ManagedServer>;
   callWs<T = unknown>(input: CoderStudioWsCommandInput): Promise<T>;
+  lookupReleaseMetadata(input: {
+    packageName: string;
+    currentVersion: string;
+    distTag: string;
+    registryUrl: string;
+  }): Promise<NpmReleaseMetadata>;
+  wait(ms: number): Promise<void>;
+  startRegistryProxy(input: {
+    registryUrl: string;
+    packageName: string;
+    candidateVersion: string;
+  }): Promise<ManagedRegistryProxy>;
   waitForReconcile(input: {
     apiUrl: string;
     candidateVersion: string;
@@ -105,7 +145,7 @@ function assertAcceptancePrefix(prefix: string): string {
 
 async function reservePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
-    const server = createServer();
+    const server = createNetServer();
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -116,6 +156,72 @@ async function reservePort(): Promise<number> {
       });
     });
   });
+}
+
+export async function startCandidateRegistryProxy(input: {
+  registryUrl: string;
+  packageName: string;
+  candidateVersion: string;
+}): Promise<ManagedRegistryProxy> {
+  const upstream = new URL(
+    input.registryUrl.endsWith("/") ? input.registryUrl : `${input.registryUrl}/`
+  );
+  const server = createHttpServer(async (request, response) => {
+    try {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        response.writeHead(405, { Allow: "GET, HEAD" });
+        response.end();
+        return;
+      }
+      const target = new URL(request.url ?? "/", upstream);
+      if (target.origin !== upstream.origin) {
+        throw new Error("npm acceptance proxy target changed origin");
+      }
+      const upstreamResponse = await fetch(target, { cache: "no-store" });
+      const contentType = upstreamResponse.headers.get("content-type") ?? "";
+      let body = Buffer.from(await upstreamResponse.arrayBuffer());
+      if (upstreamResponse.ok && contentType.includes("application/json")) {
+        const metadata = JSON.parse(body.toString("utf8")) as {
+          name?: unknown;
+          "dist-tags"?: Record<string, unknown>;
+          versions?: Record<string, unknown>;
+        };
+        if (
+          metadata.name === input.packageName &&
+          metadata.versions?.[input.candidateVersion] &&
+          metadata["dist-tags"]
+        ) {
+          metadata["dist-tags"].latest = input.candidateVersion;
+          body = Buffer.from(JSON.stringify(metadata));
+        }
+      }
+      response.statusCode = upstreamResponse.status;
+      response.setHeader("cache-control", "no-store");
+      if (contentType) response.setHeader("content-type", contentType);
+      response.setHeader("content-length", String(body.length));
+      if (request.method === "HEAD") response.end();
+      else response.end(body);
+    } catch (proxyError) {
+      response.statusCode = 502;
+      response.end(proxyError instanceof Error ? proxyError.message : String(proxyError));
+    }
+  });
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", rejectListen);
+      resolveListen();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    throw new Error("npm acceptance proxy did not bind a TCP port");
+  }
+  return {
+    registryUrl: `http://127.0.0.1:${address.port}/`,
+    stop: () => new Promise<void>((resolveClose) => server.close(() => resolveClose())),
+  };
 }
 
 async function waitForHealth(apiUrl: string, timeoutMs = 30_000): Promise<void> {
@@ -185,12 +291,114 @@ function acceptanceEnvironment(input: {
     ...process.env,
     PATH: pathEntries,
     npm_config_prefix: input.prefix,
+    npm_config_registry: input.registryUrl,
     PM2_HOME: resolve(input.prefix, "pm2"),
     CODER_STUDIO_HOME: coderStudioHome,
     CODER_STUDIO_RUNTIME_DIR: coderStudioHome,
     CODER_STUDIO_UPDATE_REGISTRY_URL: input.registryUrl,
     CODER_STUDIO_UPDATE_DIST_TAG: input.distTag,
   };
+}
+
+function toAcceptanceWebSocketUrl(apiUrl: string): string {
+  const url = new URL(apiUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = `${url.pathname.replace(/\/$/u, "")}/ws`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+export async function callActivatedCoderStudioWsCommand<T = unknown>(
+  input: CoderStudioWsCommandInput,
+  createSocket: (url: string) => AcceptanceWebSocket = (url) =>
+    new WebSocket(url) as unknown as AcceptanceWebSocket
+): Promise<T> {
+  const socket = createSocket(toAcceptanceWebSocketUrl(input.apiUrl));
+  const claimId = randomUUID();
+  const commandId = randomUUID();
+  const timeoutMs = input.timeoutMs ?? 30_000;
+
+  return new Promise<T>((resolveCommand, rejectCommand) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      finish(() => rejectCommand(new Error(`Timed out waiting for ${input.op} result`)));
+    }, timeoutMs);
+
+    function finish(callback: () => void): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.close();
+      callback();
+    }
+
+    socket.onopen = () => {
+      socket.send(
+        JSON.stringify({
+          kind: "command",
+          id: claimId,
+          op: "activation.claim",
+          args: { clientInstanceId: `cli-update-acceptance-${randomUUID()}` },
+        })
+      );
+    };
+    socket.onmessage = (event) => {
+      let result: AcceptanceCommandResult;
+      try {
+        result = JSON.parse(String(event.data)) as AcceptanceCommandResult;
+      } catch (parseError) {
+        finish(() => rejectCommand(parseError));
+        return;
+      }
+      if (result.kind !== "result") return;
+      if (result.id === claimId) {
+        if (!result.ok) {
+          finish(() =>
+            rejectCommand(
+              new Error(
+                `${result.error?.code ? `${result.error.code}: ` : ""}${result.error?.message ?? "Activation claim failed"}`
+              )
+            )
+          );
+          return;
+        }
+        socket.send(
+          JSON.stringify({
+            kind: "command",
+            id: commandId,
+            op: input.op,
+            args: input.args,
+          })
+        );
+        return;
+      }
+      if (result.id !== commandId) return;
+      if (result.ok) {
+        finish(() => resolveCommand(result.data as T));
+        return;
+      }
+      finish(() =>
+        rejectCommand(
+          new Error(
+            `${result.error?.code ? `${result.error.code}: ` : ""}${result.error?.message ?? "Command failed"}`
+          )
+        )
+      );
+    };
+    socket.onerror = (event) => {
+      finish(() =>
+        rejectCommand(event instanceof Error ? event : new Error("CLI acceptance WebSocket failed"))
+      );
+    };
+    socket.onclose = () => {
+      if (!settled) {
+        finish(() =>
+          rejectCommand(new Error("CLI acceptance WebSocket closed before command result"))
+        );
+      }
+    };
+  });
 }
 
 async function writePosixShim(path: string, source: string): Promise<void> {
@@ -279,12 +487,13 @@ async function runDefaultFailureScenario(input: {
       { env }
     );
     server = await defaultDeps.startServer({ executable: cliExecutable, env, port });
-    const checked = await defaultDeps.callWs<UpdateStateSnapshot>({
-      apiUrl: server.apiUrl,
-      op: "updates.check",
-      args: {},
+    const release = await defaultDeps.lookupReleaseMetadata({
+      packageName: input.packageName,
+      currentVersion: input.previousVersion,
+      distTag: input.distTag,
+      registryUrl: input.registryUrl,
     });
-    if (checked.latestVersion !== input.candidateVersion) {
+    if (release.version !== input.candidateVersion) {
       throw new Error(`Fault scenario dist-tag did not resolve ${input.candidateVersion}`);
     }
     await defaultDeps.callWs({
@@ -386,7 +595,10 @@ const defaultDeps: VerifyCliUpdateDeps = {
       },
     };
   },
-  callWs: callCoderStudioWsCommand,
+  callWs: callActivatedCoderStudioWsCommand,
+  lookupReleaseMetadata: lookupNpmReleaseMetadata,
+  wait: (ms) => new Promise((resolveWait) => setTimeout(resolveWait, ms)),
+  startRegistryProxy: startCandidateRegistryProxy,
   waitForReconcile: async ({ apiUrl, candidateVersion, callWs }) => {
     const deadline = Date.now() + 120_000;
     let lastState: Partial<UpdateStateSnapshot> = {};
@@ -400,8 +612,13 @@ const defaultDeps: VerifyCliUpdateDeps = {
           timeoutMs: 5_000,
         });
         if (
+          lastState.version === 2 &&
           lastState.currentVersion === candidateVersion &&
-          lastState.updateStatus === "succeeded"
+          lastState.currentPublishedAt &&
+          lastState.latestVersion === candidateVersion &&
+          lastState.latestPublishedAt === lastState.currentPublishedAt &&
+          lastState.availability === "up_to_date" &&
+          (lastState.updateStatus === "succeeded" || lastState.updateStatus === "idle")
         ) {
           return lastState;
         }
@@ -425,6 +642,43 @@ function requireVersion(value: string, label: string): string {
   return normalized;
 }
 
+async function waitForCandidateRelease(input: {
+  deps: Pick<VerifyCliUpdateDeps, "lookupReleaseMetadata" | "wait">;
+  packageName: string;
+  previousVersion: string;
+  candidateVersion: string;
+  distTag: string;
+  registryUrl: string;
+  timeoutMs?: number;
+}): Promise<NpmReleaseMetadata> {
+  const deadline = Date.now() + (input.timeoutMs ?? 30_000);
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      const release = await input.deps.lookupReleaseMetadata({
+        packageName: input.packageName,
+        currentVersion: input.previousVersion,
+        distTag: input.distTag,
+        registryUrl: input.registryUrl,
+      });
+      if (release.version !== input.candidateVersion) {
+        throw new Error(
+          `Selected dist-tag resolved ${release.version}, expected exact candidate ${input.candidateVersion}`
+        );
+      }
+      return release;
+    } catch (lookupError) {
+      lastError = lookupError;
+      const message = lookupError instanceof Error ? lookupError.message : String(lookupError);
+      if (!message.includes(`did not return dist-tag ${input.distTag}`)) throw lookupError;
+      await input.deps.wait(500);
+    }
+  }
+  throw new Error(
+    `Candidate dist-tag ${input.distTag} did not propagate before timeout: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 export async function verifyCliUpdate(
   options: VerifyCliUpdateOptions,
   deps: VerifyCliUpdateDeps = defaultDeps
@@ -445,14 +699,31 @@ export async function verifyCliUpdate(
       : resolve(binDirectory, "coder-studio");
   const port = await reservePort();
   const registryUrl = new URL(options.registryUrl).toString();
-  const acceptanceEnv = acceptanceEnvironment({
-    prefix,
-    binDirectory,
-    registryUrl,
-    distTag: options.distTag.trim(),
-  });
+  let registryProxy: ManagedRegistryProxy | null = null;
   let server: ManagedServer | null = null;
   try {
+    const release = await waitForCandidateRelease({
+      deps,
+      packageName,
+      previousVersion,
+      candidateVersion,
+      distTag: options.distTag.trim(),
+      registryUrl,
+    });
+    if (!release.latestPublishedAt || !Number.isFinite(Date.parse(release.latestPublishedAt))) {
+      throw new Error("Candidate npm publication time is missing");
+    }
+    registryProxy = await deps.startRegistryProxy({
+      registryUrl,
+      packageName,
+      candidateVersion,
+    });
+    const acceptanceEnv = acceptanceEnvironment({
+      prefix,
+      binDirectory,
+      registryUrl: registryProxy.registryUrl,
+      distTag: options.distTag.trim(),
+    });
     await mkdir(stateDirectory, { recursive: true });
     await deps.command(
       "npm",
@@ -465,24 +736,29 @@ export async function verifyCliUpdate(
       { env: acceptanceEnv }
     );
     server = await deps.startServer({ executable: cliExecutable, env: acceptanceEnv, port });
-    const initial = await deps.callWs<UpdateStateSnapshot>({
+    const initial = await deps.callWs<ReadableUpdateStateSnapshot>({
       apiUrl: server.apiUrl,
       op: "updates.getState",
       args: {},
     });
-    if (initial.currentVersion !== previousVersion || initial.version !== 2) {
+    if (
+      initial.currentVersion !== previousVersion ||
+      (initial.version !== 1 && initial.version !== 2)
+    ) {
       throw new Error(`Packaged CLI did not start at exact previous version ${previousVersion}`);
     }
-    const checked = await deps.callWs<UpdateStateSnapshot>({
-      apiUrl: server.apiUrl,
-      op: "updates.check",
-      args: {},
-    });
-    if (checked.latestVersion !== candidateVersion) {
-      throw new Error(`Selected dist-tag must resolve exact candidate ${candidateVersion}`);
-    }
-    if (!checked.latestPublishedAt || !Number.isFinite(Date.parse(checked.latestPublishedAt))) {
-      throw new Error("Candidate npm publication time is missing");
+    if (initial.version === 2) {
+      const checked = await deps.callWs<UpdateStateSnapshot>({
+        apiUrl: server.apiUrl,
+        op: "updates.check",
+        args: {},
+      });
+      if (
+        checked.latestVersion !== candidateVersion ||
+        checked.latestPublishedAt !== release.latestPublishedAt
+      ) {
+        throw new Error(`Selected dist-tag must resolve exact candidate ${candidateVersion}`);
+      }
     }
     const prepared = await deps.callWs<UpdatePrepareInstallResponse>({
       apiUrl: server.apiUrl,
@@ -508,9 +784,13 @@ export async function verifyCliUpdate(
       callWs: deps.callWs,
     });
     if (
+      reconciled.version !== 2 ||
       reconciled.currentVersion !== candidateVersion ||
-      reconciled.currentPublishedAt !== checked.latestPublishedAt ||
-      reconciled.updateStatus !== "succeeded"
+      reconciled.currentPublishedAt !== release.latestPublishedAt ||
+      reconciled.latestVersion !== candidateVersion ||
+      reconciled.latestPublishedAt !== release.latestPublishedAt ||
+      reconciled.availability !== "up_to_date" ||
+      (reconciled.updateStatus !== "succeeded" && reconciled.updateStatus !== "idle")
     ) {
       throw new Error("CLI restart did not preserve npm metadata or reconcile to succeeded");
     }
@@ -539,7 +819,7 @@ export async function verifyCliUpdate(
       packageName,
       previousVersion,
       candidateVersion,
-      candidatePublishedAt: checked.latestPublishedAt,
+      candidatePublishedAt: release.latestPublishedAt,
       prefix,
       exactInstallObserved: true,
       restartObserved: true,
@@ -555,6 +835,7 @@ export async function verifyCliUpdate(
     return report;
   } finally {
     await server?.stop().catch(() => undefined);
+    await registryProxy?.stop().catch(() => undefined);
     await deps.removePrefix(prefix);
   }
 }
@@ -565,13 +846,13 @@ function readArg(argv: string[], index: number, option: string): string {
   return value;
 }
 
-async function main(): Promise<void> {
+export function parseVerifyCliUpdateArgs(argv: string[]): VerifyCliUpdateOptions {
   const values = new Map<string, string>();
-  const args = process.argv.slice(2);
-  for (let index = 0; index < args.length; index += 1) {
-    const option = args[index];
+  for (let index = 0; index < argv.length; index += 1) {
+    const option = argv[index];
+    if (option === "--") continue;
     if (!option?.startsWith("--")) throw new Error(`Unknown CLI acceptance argument: ${option}`);
-    values.set(option.slice(2), readArg(args, ++index, option));
+    values.set(option.slice(2), readArg(argv, ++index, option));
   }
   const required = [
     "package-name",
@@ -581,7 +862,7 @@ async function main(): Promise<void> {
     "dist-tag",
   ];
   for (const name of required) if (!values.get(name)) throw new Error(`--${name} is required`);
-  const report = await verifyCliUpdate({
+  return {
     packageName: values.get("package-name") as string,
     previousVersion: values.get("previous-version") as string,
     candidateVersion: values.get("candidate-version") as string,
@@ -590,7 +871,11 @@ async function main(): Promise<void> {
     commitSha: values.get("commit-sha"),
     prefix: values.get("prefix"),
     reportPath: values.get("report"),
-  });
+  };
+}
+
+async function main(): Promise<void> {
+  const report = await verifyCliUpdate(parseVerifyCliUpdateArgs(process.argv.slice(2)));
   success("Packaged CLI update acceptance passed");
   console.log(JSON.stringify(report, null, 2));
 }
