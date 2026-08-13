@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": false,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "./dist/esm",
+    "rootDir": "./src",
+    "types": ["node"]
+  },
+  "include": ["src/index.ts", "src/embed.ts"],
+  "exclude": ["node_modules", "dist"]
+}

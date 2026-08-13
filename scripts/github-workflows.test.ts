@@ -524,7 +524,11 @@ describe("GitHub workflow boundaries", () => {
     const cliInputs = (cli.on.workflow_dispatch as { inputs: Record<string, unknown> }).inputs;
     expect(cliInputs.promote).toMatchObject({ default: true, type: "boolean" });
     const steps = cli.jobs.publish.steps ?? [];
+    const readVersion = steps.find((step) => step.name === "Read CLI version");
     const packIndex = steps.findIndex((step) => step.name === "Pack CLI candidate once");
+    const validatePackageIndex = steps.findIndex(
+      (step) => step.name === "Validate packed CLI assets"
+    );
     const stageIndex = steps.findIndex(
       (step) => step.name === "Publish or reuse immutable CLI candidate"
     );
@@ -542,7 +546,11 @@ describe("GitHub workflow boundaries", () => {
     const githubReleaseIndex = steps.findIndex((step) => step.name === "Create GitHub release");
     const preserveDesktop = steps[preserveDesktopIndex];
     expect(packIndex).toBeGreaterThan(-1);
-    expect(stageIndex).toBeGreaterThan(packIndex);
+    expect(readVersion?.run).toContain(
+      'acceptance_tag="rc-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+    );
+    expect(validatePackageIndex).toBeGreaterThan(packIndex);
+    expect(stageIndex).toBeGreaterThan(validatePackageIndex);
     expect(acceptanceIndex).toBeGreaterThan(stageIndex);
     expect(desktopReportIndex).toBeGreaterThan(acceptanceIndex);
     expect(preserveDesktopIndex).toBeGreaterThan(desktopReportIndex);
@@ -550,8 +558,16 @@ describe("GitHub workflow boundaries", () => {
     expect(tagIndex).toBeGreaterThan(preserveDesktopIndex);
     expect(githubReleaseIndex).toBeGreaterThan(tagIndex);
     expect(promoteIndex).toBeGreaterThan(desktopReportIndex);
+    expect(steps[packIndex]?.run).toContain("pnpm --dir ./packages/cli pack --json");
+    expect(steps[packIndex]?.run).not.toMatch(/(^|\s)npm pack/);
+    expect(steps[validatePackageIndex]?.run).toContain("pnpm validate:cli-package");
+    expect(steps[validatePackageIndex]?.run).toContain('--tarball "${TARBALL}"');
+    expect(steps[validatePackageIndex]?.run).toContain(
+      "--source-package-json packages/cli/package.json"
+    );
     expect(steps[stageIndex]?.run).toContain("dist.integrity");
-    expect(steps[stageIndex]?.run).toContain('npm publish "${tarball}"');
+    expect(steps[stageIndex]?.run).toContain('pnpm publish "${tarball}"');
+    expect(steps[stageIndex]?.run).not.toMatch(/(^|\s)npm publish "\$\{tarball\}"/);
     expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
     expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-native");

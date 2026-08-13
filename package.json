@@ -23,6 +23,7 @@
     "changeset:validate": "tsx scripts/validate-changesets.ts",
     "version-packages": "changeset version",
     "publish:cli": "tsx scripts/publish-cli.ts",
+    "validate:cli-package": "tsx scripts/validate-cli-package.ts",
     "publish:wiki": "tsx scripts/publish-wiki.ts",
     "ci:lint": "pnpm exec biome check --diagnostic-level=error --max-diagnostics=none .",
     "ci:test:scripts": "pnpm exec vitest run --config scripts/vitest.config.ts --environment node",
