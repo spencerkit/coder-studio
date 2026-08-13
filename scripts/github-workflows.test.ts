@@ -535,6 +535,9 @@ describe("GitHub workflow boundaries", () => {
     const acceptanceIndex = steps.findIndex(
       (step) => step.name === "Run isolated packaged CLI acceptance"
     );
+    const candidateCleanupIndex = steps.findIndex(
+      (step) => step.name === "Remove candidate-only npm dist-tag"
+    );
     const desktopReportIndex = steps.findIndex(
       (step) => step.name === "Validate required Desktop acceptance report"
     );
@@ -552,6 +555,7 @@ describe("GitHub workflow boundaries", () => {
     expect(validatePackageIndex).toBeGreaterThan(packIndex);
     expect(stageIndex).toBeGreaterThan(validatePackageIndex);
     expect(acceptanceIndex).toBeGreaterThan(stageIndex);
+    expect(candidateCleanupIndex).toBeGreaterThan(acceptanceIndex);
     expect(desktopReportIndex).toBeGreaterThan(acceptanceIndex);
     expect(preserveDesktopIndex).toBeGreaterThan(desktopReportIndex);
     expect(promoteIndex).toBeGreaterThan(preserveDesktopIndex);
@@ -569,12 +573,19 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[stageIndex]?.run).toContain('pnpm publish "${tarball}"');
     expect(steps[stageIndex]?.run).not.toMatch(/(^|\s)npm publish "\$\{tarball\}"/);
     expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
+    expect(steps[candidateCleanupIndex]?.if).toBe("inputs.promote == false");
+    expect(steps[candidateCleanupIndex]?.run).toContain("if ! npm dist-tag rm");
+    expect(steps[candidateCleanupIndex]?.run).toContain("::warning");
     expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-native");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
     expect(steps[preserveDesktopIndex]?.if).toBe("inputs.promote");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
-    expect(steps[promoteIndex]?.run).toContain("npm dist-tag rm");
+    expect(steps[promoteIndex]?.run).toContain("if ! npm dist-tag rm");
+    expect(steps[promoteIndex]?.run).toContain("::warning");
+    expect(steps[promoteIndex]?.run?.indexOf("npm dist-tag add")).toBeLessThan(
+      steps[promoteIndex]?.run?.indexOf("if ! npm dist-tag rm") ?? -1
+    );
     expect(preserveDesktop?.run).toContain(
       'gh release download "${latest_tag}" --dir desktop-channel-assets --clobber'
     );

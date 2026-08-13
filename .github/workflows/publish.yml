@@ -179,7 +179,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           PACKAGE_NAME: ${{ steps.release.outputs.package_name }}
           ACCEPTANCE_DIST_TAG: ${{ steps.release.outputs.acceptance_tag }}
-        run: npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"
+        run: |
+          if ! npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"; then
+            echo "::warning title=Temporary npm dist-tag cleanup failed::${ACCEPTANCE_DIST_TAG} remains on ${PACKAGE_NAME}; npm rejected deletion. Candidate acceptance remains valid."
+          fi
 
       - name: Download required Desktop acceptance report
         if: inputs.promote && inputs.npm_tag == 'latest'
@@ -252,7 +255,9 @@ jobs:
           FINAL_DIST_TAG: ${{ inputs.npm_tag }}
         run: |
           npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${FINAL_DIST_TAG}"
-          npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"
+          if ! npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"; then
+            echo "::warning title=Temporary npm dist-tag cleanup failed::${ACCEPTANCE_DIST_TAG} remains on ${PACKAGE_NAME}; npm rejected deletion. The ${FINAL_DIST_TAG} promotion remains valid."
+          fi
 
       - name: Create and push release tag
         if: inputs.promote
