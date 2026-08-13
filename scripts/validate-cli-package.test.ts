@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { create } from "tar";
 import { describe, expect, it } from "vitest";
-import { validateCliPackageArchive } from "./validate-cli-package.js";
+import {
+  parseValidateCliPackageArguments,
+  validateCliPackageArchive,
+} from "./validate-cli-package.js";
 
 interface PackageFixtureOptions {
   binContent?: string;
@@ -43,6 +46,21 @@ const validPackedManifest = {
 };
 
 describe("validate-cli-package", () => {
+  it("accepts pnpm's forwarded argument separator", () => {
+    expect(
+      parseValidateCliPackageArguments([
+        "--",
+        "--tarball",
+        "release/cli.tgz",
+        "--source-package-json",
+        "packages/cli/package.json",
+      ])
+    ).toEqual({
+      sourcePackageJsonPath: "packages/cli/package.json",
+      tarballPath: "release/cli.tgz",
+    });
+  });
+
   it("accepts package entry fields that resolve to real archive files", async () => {
     const fixture = await createPackageFixture();
 
