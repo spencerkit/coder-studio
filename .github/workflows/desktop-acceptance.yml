@@ -28,6 +28,9 @@ jobs:
       acceptance_scenarios: ${{ steps.channel.outputs.acceptance_scenarios }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Resolve acceptance channel
         id: channel
         shell: bash
@@ -49,6 +52,17 @@ jobs:
           has_previous_desktop=false
           if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
             has_previous_desktop=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
+            if [[ "${has_previous_desktop}" == "true" ]]; then
+              latest_tag=$(node -e "const release=require(process.argv[1]); process.stdout.write(release.tag_name)" "${latest_release_json}")
+              latest_channel="${RUNNER_TEMP}/coder-studio-latest-channel.json"
+              gh release download "${latest_tag}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --pattern desktop-channel.json \
+                --output "${latest_channel}"
+              current_shell=$(node -p "require('./packages/desktop/package.json').version")
+              current_runtime=$(node -p "require('./packages/cli/package.json').version")
+              has_previous_desktop=$(node -e "const channel=require(process.argv[1]); const currentShell=process.argv[2]; const currentRuntime=process.argv[3]; process.stdout.write(channel?.shell?.version===currentShell&&channel?.runtimes?.['win32-x64']?.version===currentRuntime&&channel?.runtimes?.['linux-x64']?.version===currentRuntime?'false':'true')" "${latest_channel}" "${current_shell}" "${current_runtime}")
+            fi
           elif ! grep -q '(HTTP 404)' "${latest_release_error}"; then
             cat "${latest_release_error}" >&2
             exit 1

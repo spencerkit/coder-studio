@@ -262,6 +262,11 @@ describe("GitHub workflow boundaries", () => {
       'public_key_artifact="desktop-acceptance-public-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
     );
     expect(resolveChannel?.run).toContain("has_previous_desktop=false");
+    expect(resolveChannel?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
+    expect(resolveChannel?.run).toContain("require('./packages/desktop/package.json').version");
+    expect(resolveChannel?.run).toContain("require('./packages/cli/package.json').version");
+    expect(resolveChannel?.run).toContain("channel?.shell?.version===currentShell");
+    expect(resolveChannel?.run).toContain("?'false':'true'");
     expect(resolveChannel?.run).toContain('acceptance_scenarios=\'["fresh-native","fresh-wsl"]\'');
     expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
     expect(signingKeyUpload?.with).toMatchObject({
