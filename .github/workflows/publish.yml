@@ -88,7 +88,7 @@ jobs:
             echo "Candidate ${candidate_version} is already selected by ${FINAL_DIST_TAG}" >&2
             exit 1
           fi
-          acceptance_tag="coder-studio-accept-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          acceptance_tag="rc-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "package_name=${package_name}" >> "${GITHUB_OUTPUT}"
           echo "version=${candidate_version}" >> "${GITHUB_OUTPUT}"
           echo "previous_version=${previous_version}" >> "${GITHUB_OUTPUT}"
