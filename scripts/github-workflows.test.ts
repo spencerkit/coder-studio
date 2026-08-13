@@ -509,8 +509,13 @@ describe("GitHub workflow boundaries", () => {
     const validateReports = promotionSteps.find(
       (step) => step.name === "Validate promotion report identities"
     );
+    const downloadChannel = promotionSteps.find(
+      (step) => step.name === "Download immutable channel identity"
+    );
     const promote = promotionSteps.find((step) => step.name === "Promote existing prerelease");
+    expect(downloadChannel?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
     expect(validateReports?.run).toContain("channelSignatureDigest");
+    expect(validateReports?.run).toContain("text.charCodeAt(0) === 0xfeff");
     expect(validateReports?.run).toContain("commitSha");
     expect(validateReports?.run).toContain("wslRuntimeVersion");
     expect(validateReports?.run).toContain("wsl-combined");
@@ -579,6 +584,7 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-native");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
+    expect(steps[desktopReportIndex]?.run).toContain("text.charCodeAt(0) === 0xfeff");
     expect(steps[preserveDesktopIndex]?.if).toBe("inputs.promote");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
     expect(steps[promoteIndex]?.run).toContain("if ! npm dist-tag rm");

@@ -212,9 +212,13 @@ jobs:
           import { readdirSync, readFileSync } from "node:fs";
           import { join } from "node:path";
           const root = "release/desktop-acceptance-reports";
+          const parseJson = (path) => {
+            const text = readFileSync(path, "utf8");
+            return JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+          };
           const reports = readdirSync(root, { recursive: true })
             .filter((name) => String(name).endsWith(".json"))
-            .map((name) => JSON.parse(readFileSync(join(root, String(name)), "utf8")));
+            .map((name) => parseJson(join(root, String(name))));
           const bootstrap = reports.some((report) => report.scenario === "fresh-native");
           const required = new Set(bootstrap
             ? ["fresh-native", "fresh-wsl"]
