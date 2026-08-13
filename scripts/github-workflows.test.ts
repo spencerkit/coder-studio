@@ -524,6 +524,7 @@ describe("GitHub workflow boundaries", () => {
     const cliInputs = (cli.on.workflow_dispatch as { inputs: Record<string, unknown> }).inputs;
     expect(cliInputs.promote).toMatchObject({ default: true, type: "boolean" });
     const steps = cli.jobs.publish.steps ?? [];
+    const readVersion = steps.find((step) => step.name === "Read CLI version");
     const packIndex = steps.findIndex((step) => step.name === "Pack CLI candidate once");
     const validatePackageIndex = steps.findIndex(
       (step) => step.name === "Validate packed CLI assets"
@@ -545,6 +546,9 @@ describe("GitHub workflow boundaries", () => {
     const githubReleaseIndex = steps.findIndex((step) => step.name === "Create GitHub release");
     const preserveDesktop = steps[preserveDesktopIndex];
     expect(packIndex).toBeGreaterThan(-1);
+    expect(readVersion?.run).toContain(
+      'acceptance_tag="rc-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+    );
     expect(validatePackageIndex).toBeGreaterThan(packIndex);
     expect(stageIndex).toBeGreaterThan(validatePackageIndex);
     expect(acceptanceIndex).toBeGreaterThan(stageIndex);
