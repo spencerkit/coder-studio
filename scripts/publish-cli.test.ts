@@ -99,6 +99,7 @@ describe("publish-cli", () => {
       ].join("\n")
     );
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "index.d.ts"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
@@ -113,6 +114,7 @@ describe("publish-cli", () => {
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",
+              types: "./dist/esm/index.d.ts",
             },
           },
         },
@@ -146,6 +148,7 @@ describe("publish-cli", () => {
       'import { SerializeAddon } from "@xterm/addon-serialize";\nvoid SerializeAddon;\n'
     );
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "index.d.ts"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
@@ -160,6 +163,7 @@ describe("publish-cli", () => {
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",
+              types: "./dist/esm/index.d.ts",
             },
           },
         },
@@ -184,6 +188,7 @@ describe("publish-cli", () => {
     await writeFile(join(cliDir, "dist", "bin.js"), "#!/usr/bin/env node\n");
     await writeFile(join(cliDir, "dist", "esm", "bin.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "index.mjs"), "export {};\n");
+    await writeFile(join(cliDir, "dist", "esm", "index.d.ts"), "export {};\n");
     await writeFile(join(cliDir, "dist", "esm", "server-runner.mjs"), "export {};\n");
     await writeFile(join(cliDir, "dist", "web", "index.html"), "<!doctype html>\n");
     await writeFile(
@@ -198,6 +203,7 @@ describe("publish-cli", () => {
           exports: {
             ".": {
               import: "./dist/esm/index.mjs",
+              types: "./dist/esm/index.d.ts",
             },
           },
         },

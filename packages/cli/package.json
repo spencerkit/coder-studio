@@ -22,7 +22,7 @@
     "exports": {
       ".": {
         "import": "./dist/esm/index.mjs",
-        "types": "./dist/esm/index.d.mts"
+        "types": "./dist/esm/index.d.ts"
       }
     }
   },
