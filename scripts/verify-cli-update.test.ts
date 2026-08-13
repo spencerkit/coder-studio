@@ -230,6 +230,8 @@ describe("verify-cli-update", () => {
       ["install", "--global", "--prefix", prefix, "@spencer-kit/coder-studio@0.5.0"],
       expect.objectContaining({
         env: expect.objectContaining({
+          HOME: resolve(prefix, "home"),
+          CODER_STUDIO_HOME: resolve(prefix, "home", ".coder-studio"),
           npm_config_prefix: prefix,
           CODER_STUDIO_UPDATE_DIST_TAG: "coder-studio-accept-42",
         }),
