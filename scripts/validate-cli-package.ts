@@ -268,12 +268,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseArguments(argv: string[]): ValidateCliPackageInput {
+export function parseValidateCliPackageArguments(argv: string[]): ValidateCliPackageInput {
   let tarballPath: string | undefined;
   let sourcePackageJsonPath: string | undefined;
 
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
+    if (argument === "--") {
+      continue;
+    }
     if (argument === "--tarball") {
       tarballPath = argv[++index];
     } else if (argument === "--source-package-json") {
@@ -291,7 +294,7 @@ function parseArguments(argv: string[]): ValidateCliPackageInput {
 }
 
 if (isDirectExecution(import.meta.url)) {
-  validateCliPackageArchive(parseArguments(process.argv.slice(2)))
+  validateCliPackageArchive(parseValidateCliPackageArguments(process.argv.slice(2)))
     .then((result) => {
       success(
         `Validated ${result.name}@${result.version} package entry files: ${result.entryTargets.join(", ")}`
