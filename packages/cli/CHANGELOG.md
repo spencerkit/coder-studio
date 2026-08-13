@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.8
+
+### Patch Changes
+
+- [#105](https://github.com/spencerkit/coder-studio/pull/105) [`7c15fdf`](https://github.com/spencerkit/coder-studio/commit/7c15fdf6d883fbb2b424952e17e28f852c93692e) Thanks [@pallyoung](https://github.com/pallyoung)! - Validate the final packed CLI manifest and every declared package entry before publishing, emit the public type declaration referenced by the package exports, and isolate npm acceptance candidates under traceable `rc-<run-id>-<attempt>` dist-tags.
+
 ## 0.5.7
 
 ### Patch Changes
