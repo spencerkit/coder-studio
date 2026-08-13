@@ -286,9 +286,12 @@ function acceptanceEnvironment(input: {
   const pathEntries = [input.shimDirectory, input.binDirectory, process.env.PATH]
     .filter((entry): entry is string => Boolean(entry))
     .join(process.platform === "win32" ? ";" : ":");
-  const coderStudioHome = resolve(input.prefix, "home");
+  const isolatedHome = resolve(input.prefix, "home");
+  const coderStudioHome = resolve(isolatedHome, ".coder-studio");
   return {
     ...process.env,
+    HOME: isolatedHome,
+    ...(process.platform === "win32" ? { USERPROFILE: isolatedHome } : {}),
     PATH: pathEntries,
     npm_config_prefix: input.prefix,
     npm_config_registry: input.registryUrl,
@@ -477,7 +480,7 @@ async function runDefaultFailureScenario(input: {
         "--global",
         "--prefix",
         scenarioPrefix,
-        `${input.packageName}@${input.previousVersion}`,
+        `${input.packageName}@${input.candidateVersion}`,
       ],
       { env }
     );
@@ -489,7 +492,7 @@ async function runDefaultFailureScenario(input: {
     server = await defaultDeps.startServer({ executable: cliExecutable, env, port });
     const release = await defaultDeps.lookupReleaseMetadata({
       packageName: input.packageName,
-      currentVersion: input.previousVersion,
+      currentVersion: input.candidateVersion,
       distTag: input.distTag,
       registryUrl: input.registryUrl,
     });
@@ -524,12 +527,12 @@ async function runDefaultFailureScenario(input: {
       );
     }
 
-    const started = await defaultDeps.callWs<UpdateStateSnapshot>({
+    const started = await startInstallAfterBackgroundCheck({
+      deps: defaultDeps,
       apiUrl: server.apiUrl,
-      op: "updates.startInstall",
-      args: { targetVersion: input.candidateVersion, force: false },
+      candidateVersion: input.previousVersion,
     });
-    if (started.targetVersion !== input.candidateVersion) {
+    if (started.targetVersion !== input.previousVersion) {
       throw new Error("CLI fault scenario did not retain the exact target version");
     }
     const terminal = await waitForFailureState({
@@ -542,7 +545,7 @@ async function runDefaultFailureScenario(input: {
     const expectedStatus = input.scenario === "permission" ? "manual_required" : "failed";
     const expectedManual =
       input.scenario === "permission"
-        ? `npm install -g ${input.packageName}@${input.candidateVersion}`
+        ? `npm install -g ${input.packageName}@${input.previousVersion}`
         : input.scenario === "restart"
           ? "coder-studio serve --restart"
           : null;
