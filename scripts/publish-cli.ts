@@ -155,11 +155,17 @@ export async function assertCliPublishArtifacts(
       'CLI package.json publish exports must point "." import to "./dist/esm/index.mjs"'
     );
   }
+  if (!hasNestedRecordValue(publishExports, ".", "types", "./dist/esm/index.d.ts")) {
+    throw new Error(
+      'CLI package.json publish exports must point "." types to "./dist/esm/index.d.ts"'
+    );
+  }
   assertPublishDependenciesResolvable(pkg.dependencies, packageJsonPath);
 
   await assertFile(resolve(cliDir, "dist/bin.js"));
   await assertFile(resolve(cliDir, "dist/esm/bin.mjs"));
   await assertFile(resolve(cliDir, "dist/esm/index.mjs"));
+  await assertFile(resolve(cliDir, "dist/esm/index.d.ts"));
   await assertFile(resolve(cliDir, "dist/esm/server-runner.mjs"));
   await assertFile(resolve(cliDir, "dist/web/index.html"));
   assertBundleRuntimeDependenciesDeclared(

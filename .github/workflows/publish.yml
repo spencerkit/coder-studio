@@ -107,16 +107,23 @@ jobs:
         shell: bash
         run: |
           mkdir -p release/cli-candidate
-          pack_json=$(npm pack --json ./packages/cli --pack-destination release/cli-candidate)
-          tarball_name=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d)[0].filename))")
-          integrity=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d)[0].integrity))")
-          tarball="release/cli-candidate/${tarball_name}"
+          pack_json=$(pnpm --dir ./packages/cli pack --json --pack-destination "${PWD}/release/cli-candidate")
+          tarball=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d).filename))")
+          integrity=$(node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'))" "${tarball}")
           if [ ! -f "${tarball}" ] || [ -z "${integrity}" ]; then
-            echo "npm pack did not produce one integrity-addressed candidate" >&2
+            echo "pnpm pack did not produce one integrity-addressed candidate" >&2
             exit 1
           fi
           echo "tarball=${tarball}" >> "${GITHUB_OUTPUT}"
           echo "integrity=${integrity}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate packed CLI assets
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          pnpm validate:cli-package -- \
+            --tarball "${TARBALL}" \
+            --source-package-json packages/cli/package.json
 
       - name: Publish or reuse immutable CLI candidate
         env:
@@ -134,7 +141,7 @@ jobs:
           tarball="${TARBALL}"
           registry_integrity=$(npm view "${PACKAGE_NAME}@${CANDIDATE_VERSION}" dist.integrity --json 2>/dev/null | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { try { const v=JSON.parse(d); console.log(typeof v === 'string' ? v : '') } catch { console.log('') } })")
           if [ -z "${registry_integrity}" ]; then
-            npm publish "${tarball}" --access public --tag "${ACCEPTANCE_DIST_TAG}"
+            pnpm publish "${tarball}" --access public --tag "${ACCEPTANCE_DIST_TAG}"
           elif [ "${registry_integrity}" != "${PACKED_INTEGRITY}" ]; then
             echo "Registry dist.integrity differs from the packed candidate; refusing to republish different bytes" >&2
             exit 1

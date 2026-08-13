@@ -17,6 +17,8 @@ import {
   exists,
   info,
   log,
+  ROOT_DIR,
+  run,
   SERVER_DIR,
   step,
   success,
@@ -55,6 +57,14 @@ async function buildCli(): Promise<void> {
   const esmOptions = await createCliBuildOptions("esm");
   await esbuild.build(esmOptions);
   success(`ESM bundle: ${resolve(CLI_DIR, "dist/esm/bin.mjs")}`);
+
+  info("Generating public type declarations...");
+  await run(
+    "pnpm",
+    ["--filter", "@spencer-kit/coder-studio", "exec", "tsc", "-p", "tsconfig.publish.json"],
+    { cwd: ROOT_DIR }
+  );
+  success(`Types: ${resolve(CLI_DIR, "dist/esm/index.d.ts")}`);
 
   // Create bin.js wrapper (for ESM)
   info("Creating bin.js entry point...");
