@@ -679,6 +679,37 @@ async function waitForCandidateRelease(input: {
   );
 }
 
+async function startInstallAfterBackgroundCheck(input: {
+  deps: Pick<VerifyCliUpdateDeps, "callWs" | "wait">;
+  apiUrl: string;
+  candidateVersion: string;
+  maxAttempts?: number;
+}): Promise<UpdateStateSnapshot> {
+  const maxAttempts = input.maxAttempts ?? 60;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await input.deps.callWs<UpdateStateSnapshot>({
+        apiUrl: input.apiUrl,
+        op: "updates.startInstall",
+        args: { targetVersion: input.candidateVersion, force: false },
+      });
+    } catch (startError) {
+      lastError = startError;
+      const message = startError instanceof Error ? startError.message : String(startError);
+      if (!message.startsWith("update_busy: Update check is already in progress")) {
+        throw startError;
+      }
+      if (attempt < maxAttempts) await input.deps.wait(500);
+    }
+  }
+
+  throw new Error(
+    `CLI updater remained busy while waiting for its startup update check: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 export async function verifyCliUpdate(
   options: VerifyCliUpdateOptions,
   deps: VerifyCliUpdateDeps = defaultDeps
@@ -767,10 +798,10 @@ export async function verifyCliUpdate(
     });
     if (prepared.activity.hasActiveWork)
       throw new Error("CLI acceptance prefix unexpectedly has active work");
-    const started = await deps.callWs<UpdateStateSnapshot>({
+    const started = await startInstallAfterBackgroundCheck({
+      deps,
       apiUrl: server.apiUrl,
-      op: "updates.startInstall",
-      args: { targetVersion: candidateVersion, force: false },
+      candidateVersion,
     });
     if (
       started.targetVersion !== candidateVersion ||

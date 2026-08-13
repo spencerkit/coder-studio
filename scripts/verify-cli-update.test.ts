@@ -266,6 +266,7 @@ describe("verify-cli-update", () => {
 
   it("bootstraps an exact candidate from a legacy v1 update state", async () => {
     const deps = createDeps();
+    let startInstallAttempts = 0;
     vi.mocked(deps.callWs).mockImplementation(async ({ op }) => {
       if (op === "updates.getState") {
         return { version: 1, currentVersion: "0.5.6", updateStatus: "idle" };
@@ -274,6 +275,10 @@ describe("verify-cli-update", () => {
         return { activity: { hasActiveWork: false } };
       }
       if (op === "updates.startInstall") {
+        startInstallAttempts += 1;
+        if (startInstallAttempts === 1) {
+          throw new Error("update_busy: Update check is already in progress");
+        }
         return {
           version: 1,
           currentVersion: "0.5.6",
@@ -323,6 +328,8 @@ describe("verify-cli-update", () => {
         args: { targetVersion: "0.5.7", force: false },
       })
     );
+    expect(deps.wait).toHaveBeenCalledWith(500);
+    expect(startInstallAttempts).toBe(2);
   });
 
   it("waits for a just-written candidate dist-tag to propagate", async () => {
