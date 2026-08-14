@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.9
+
+### Patch Changes
+
+- [#115](https://github.com/spencerkit/coder-studio/pull/115) [`e50a6ea`](https://github.com/spencerkit/coder-studio/commit/e50a6ea4ef7bc4447108d840fc82af7e45e9df90) Thanks [@pallyoung](https://github.com/pallyoung)! - Improve product update version and diagnostics UI, and let Desktop web clients request authentication recovery while reconnecting.
+
 ## 0.5.8
 
 ### Patch Changes
