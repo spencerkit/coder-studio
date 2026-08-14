@@ -211,7 +211,13 @@ describe("GitHub workflow boundaries", () => {
     const publicKeyDownload = publishSteps.find(
       (step) => step.name === "Download acceptance public key"
     );
+    const previousShellBlockmapIndex = publishSteps.findIndex(
+      (step) => step.name === "Carry forward previous Shell blockmap for differential updates"
+    );
     const validation = publishSteps.find(
+      (step) => step.name === "Validate complete signed acceptance channel"
+    );
+    const validationIndex = publishSteps.findIndex(
       (step) => step.name === "Validate complete signed acceptance channel"
     );
     const release = publishSteps.find((step) => step.name === "Publish tag-pinned prerelease");
@@ -318,6 +324,19 @@ describe("GitHub workflow boundaries", () => {
       name: "${{ needs.prepare.outputs.public_key_artifact }}",
       path: "release/desktop-ci-signing",
     });
+    expect(previousShellBlockmapIndex).toBeGreaterThan(-1);
+    expect(previousShellBlockmapIndex).toBeLessThan(validationIndex);
+    expect(publishSteps[previousShellBlockmapIndex]?.if).toBe(
+      "needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'"
+    );
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
+      '--pattern "${previous_installer}.blockmap"'
+    );
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("--pattern latest.yml");
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("require('yaml')");
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
+      "--dir release/desktop-acceptance"
+    );
     expect(validation?.run).toContain(
       "validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime'"
     );
@@ -441,6 +460,9 @@ describe("GitHub workflow boundaries", () => {
     const channelIndex = publishSteps.findIndex(
       (step) => step.name === "Build signed Desktop channel"
     );
+    const previousShellBlockmapIndex = publishSteps.findIndex(
+      (step) => step.name === "Carry forward previous Shell blockmap for differential updates"
+    );
     const productionValidateIndex = publishSteps.findIndex(
       (step) => step.name === "Validate complete production release"
     );
@@ -450,10 +472,22 @@ describe("GitHub workflow boundaries", () => {
     );
     expect(previousIndex).toBeGreaterThan(-1);
     expect(carryIndex).toBeGreaterThan(previousIndex);
-    expect(channelIndex).toBeGreaterThan(carryIndex);
+    expect(previousShellBlockmapIndex).toBeGreaterThan(carryIndex);
+    expect(channelIndex).toBeGreaterThan(previousShellBlockmapIndex);
     expect(productionValidateIndex).toBeGreaterThan(channelIndex);
     expect(attestIndex).toBeGreaterThan(productionValidateIndex);
     expect(releaseIndex).toBeGreaterThan(attestIndex);
+    expect(publishSteps[previousShellBlockmapIndex]?.if).toBe(
+      "needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'"
+    );
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
+      '--pattern "${previous_installer}.blockmap"'
+    );
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("--pattern latest.yml");
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("require('yaml')");
+    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
+      "--dir release/desktop-release-final"
+    );
     expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
     expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
     expect(publishSteps[releaseIndex]?.run).toContain("not Authenticode-signed");

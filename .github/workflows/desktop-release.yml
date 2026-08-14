@@ -351,6 +351,23 @@ jobs:
           path: release/desktop-release-final
           merge-multiple: true
 
+      - name: Carry forward previous Shell blockmap for differential updates
+        if: needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          previous_metadata="${RUNNER_TEMP}/coder-studio-previous-latest.yml"
+          gh release download "${latest_tag}" \
+            --pattern latest.yml \
+            --output "${previous_metadata}"
+          previous_installer=$(node -e "const { readFileSync } = require('node:fs'); const { parse } = require('yaml'); const value = parse(readFileSync(process.argv[1], 'utf8')).path; if (typeof value !== 'string' || !value) process.exit(1); process.stdout.write(value)" "${previous_metadata}")
+          gh release download "${latest_tag}" \
+            --pattern "${previous_installer}.blockmap" \
+            --dir release/desktop-release-final \
+            --clobber
+
       - name: Build signed Desktop channel
         shell: bash
         run: |
