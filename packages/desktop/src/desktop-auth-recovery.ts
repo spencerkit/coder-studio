@@ -13,11 +13,15 @@ export function isDesktopNetworkService(details: DesktopChildProcessGoneDetails)
 
 export interface DesktopAuthRecoveryOptions {
   canRecover(): boolean;
-  authenticate(): Promise<void>;
+  authenticate(): Promise<"already_authenticated" | "recovered">;
   onRecovered(): void;
   onAttemptFailure?(error: unknown, attempt: number, willRetry: boolean): void;
   retryDelaysMs?: readonly number[];
   wait?(delayMs: number): Promise<void>;
+}
+
+export interface DesktopAuthRecoveryRequest {
+  notifyWhenAlreadyAuthenticated?: boolean;
 }
 
 const DEFAULT_RETRY_DELAYS_MS = [250, 1_000, 3_000] as const;
@@ -27,15 +31,25 @@ const waitForDelay = (delayMs: number) =>
 
 export class DesktopAuthRecoveryCoordinator {
   private inFlight: Promise<boolean> | null = null;
+  private notifyWhenAlreadyAuthenticated = false;
 
   constructor(private readonly options: DesktopAuthRecoveryOptions) {}
 
-  recover(): Promise<boolean> {
+  recover(request: DesktopAuthRecoveryRequest = {}): Promise<boolean> {
+    if (request.notifyWhenAlreadyAuthenticated) {
+      this.notifyWhenAlreadyAuthenticated = true;
+    }
     if (this.inFlight) return this.inFlight;
-    if (!this.options.canRecover()) return Promise.resolve(false);
+    if (!this.options.canRecover()) {
+      this.notifyWhenAlreadyAuthenticated = false;
+      return Promise.resolve(false);
+    }
 
     const recovery = this.run().finally(() => {
-      if (this.inFlight === recovery) this.inFlight = null;
+      if (this.inFlight === recovery) {
+        this.inFlight = null;
+        this.notifyWhenAlreadyAuthenticated = false;
+      }
     });
     this.inFlight = recovery;
     return recovery;
@@ -53,9 +67,11 @@ export class DesktopAuthRecoveryCoordinator {
       }
 
       try {
-        await this.options.authenticate();
+        const result = await this.options.authenticate();
         if (!this.options.canRecover()) return false;
-        this.options.onRecovered();
+        if (result === "recovered" || this.notifyWhenAlreadyAuthenticated) {
+          this.options.onRecovered();
+        }
         return true;
       } catch (error) {
         this.options.onAttemptFailure?.(error, attemptIndex + 1, attemptIndex < retryDelays.length);

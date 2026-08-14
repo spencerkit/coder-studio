@@ -115,7 +115,7 @@ const desktopAuthRecovery = new DesktopAuthRecoveryCoordinator({
       const response = await browserSession.fetch(`${gatewayUrl}/auth/status`);
       if (response.ok) {
         const status = (await response.json()) as { authenticated?: unknown };
-        if (status.authenticated === true) return;
+        if (status.authenticated === true) return "already_authenticated";
       }
     } catch {
       // A newly relaunched Network Service may fail its first request. The login below
@@ -123,6 +123,7 @@ const desktopAuthRecovery = new DesktopAuthRecoveryCoordinator({
     }
 
     await manager.authenticatePublicSession(browserSession, gatewayUrl);
+    return "recovered";
   },
   onRecovered: () => {
     if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
@@ -913,7 +914,7 @@ if (!hasSingleInstanceLock) {
 
   app.on("child-process-gone", (_event, details) => {
     if (!isDesktopNetworkService(details)) return;
-    void desktopAuthRecovery.recover();
+    void desktopAuthRecovery.recover({ notifyWhenAlreadyAuthenticated: true });
   });
 
   app.whenReady().then(startApplication).catch(handleStartupFailure);

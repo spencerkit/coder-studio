@@ -18,10 +18,10 @@ describe("Desktop authentication recovery", () => {
   });
 
   it("coalesces concurrent recovery requests and notifies once", async () => {
-    let finishAuthentication: (() => void) | undefined;
+    let finishAuthentication: ((result: "recovered") => void) | undefined;
     const authenticate = vi.fn(
       () =>
-        new Promise<void>((resolve) => {
+        new Promise<"recovered">((resolve) => {
           finishAuthentication = resolve;
         })
     );
@@ -38,16 +38,16 @@ describe("Desktop authentication recovery", () => {
     expect(first).toBe(second);
     expect(authenticate).toHaveBeenCalledTimes(1);
 
-    finishAuthentication?.();
+    finishAuthentication?.("recovered");
     await expect(first).resolves.toBe(true);
     expect(onRecovered).toHaveBeenCalledTimes(1);
   });
 
   it("retries transient authentication failures before notifying the renderer", async () => {
     const authenticate = vi
-      .fn<() => Promise<void>>()
+      .fn<() => Promise<"recovered">>()
       .mockRejectedValueOnce(new Error("network service restarting"))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce("recovered");
     const onRecovered = vi.fn();
     const onAttemptFailure = vi.fn();
     const wait = vi.fn(async () => undefined);
@@ -67,9 +67,59 @@ describe("Desktop authentication recovery", () => {
     expect(onRecovered).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the normal WebSocket backoff when authentication is already valid", async () => {
+    const onRecovered = vi.fn();
+    const coordinator = new DesktopAuthRecoveryCoordinator({
+      canRecover: () => true,
+      authenticate: vi.fn(async () => "already_authenticated" as const),
+      onRecovered,
+      retryDelaysMs: [],
+    });
+
+    await expect(coordinator.recover()).resolves.toBe(true);
+    expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  it("notifies after a Network Service restart even when authentication remains valid", async () => {
+    const onRecovered = vi.fn();
+    const coordinator = new DesktopAuthRecoveryCoordinator({
+      canRecover: () => true,
+      authenticate: vi.fn(async () => "already_authenticated" as const),
+      onRecovered,
+      retryDelaysMs: [],
+    });
+
+    await expect(coordinator.recover({ notifyWhenAlreadyAuthenticated: true })).resolves.toBe(true);
+    expect(onRecovered).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a Network Service notification request while recovery is in flight", async () => {
+    let finishAuthentication: ((result: "already_authenticated") => void) | undefined;
+    const onRecovered = vi.fn();
+    const coordinator = new DesktopAuthRecoveryCoordinator({
+      canRecover: () => true,
+      authenticate: vi.fn(
+        () =>
+          new Promise<"already_authenticated">((resolve) => {
+            finishAuthentication = resolve;
+          })
+      ),
+      onRecovered,
+      retryDelaysMs: [],
+    });
+
+    const reconnectRecovery = coordinator.recover();
+    const networkServiceRecovery = coordinator.recover({ notifyWhenAlreadyAuthenticated: true });
+    expect(reconnectRecovery).toBe(networkServiceRecovery);
+
+    finishAuthentication?.("already_authenticated");
+    await expect(reconnectRecovery).resolves.toBe(true);
+    expect(onRecovered).toHaveBeenCalledTimes(1);
+  });
+
   it("stops retrying when the Desktop environment begins shutting down", async () => {
     let recoverable = true;
-    const authenticate = vi.fn(async () => {
+    const authenticate = vi.fn(async (): Promise<"recovered"> => {
       recoverable = false;
       throw new Error("shutting down");
     });
