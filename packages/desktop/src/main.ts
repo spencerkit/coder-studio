@@ -485,6 +485,7 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
     height: 900,
     minWidth: 960,
     minHeight: 640,
+    autoHideMenuBar: process.platform !== "darwin",
     show: false,
     backgroundColor: "#111318",
     webPreferences: {
