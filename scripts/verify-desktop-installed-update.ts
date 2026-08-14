@@ -263,6 +263,15 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
   ).toString();
   const playwright = (await import(playwrightUrl)) as {
     chromium: {
+      launch(options: { channel: "msedge"; headless: true }): Promise<{
+        newPage(): Promise<{
+          addInitScript(callback: () => void): Promise<void>;
+          goto(url: string, options: { waitUntil: "domcontentloaded" }): Promise<unknown>;
+          waitForTimeout(timeout: number): Promise<void>;
+          evaluate<T>(callback: () => T | Promise<T>): Promise<T>;
+        }>;
+        close(): Promise<void>;
+      }>;
       connectOverCDP(url: string): Promise<{
         contexts(): Array<{
           pages(): Array<{
@@ -300,8 +309,11 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
         return operation.call(bridge);
       }, method),
     verifyExternalSidecar: async (url) => {
-      if (!context) throw new Error("Installed Desktop CDP session has no browser context");
-      const externalPage = await context.newPage();
+      const externalBrowser = await playwright.chromium.launch({
+        channel: "msedge",
+        headless: true,
+      });
+      const externalPage = await externalBrowser.newPage();
       try {
         await externalPage.addInitScript(() => {
           const sent: string[] = [];
@@ -341,7 +353,7 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
           };
         });
       } finally {
-        await externalPage.close();
+        await externalBrowser.close();
       }
     },
   };

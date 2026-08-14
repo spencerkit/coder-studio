@@ -589,6 +589,9 @@ describe("GitHub workflow boundaries", () => {
     );
     expect(steps[stageIndex]?.run).toContain("dist.integrity");
     expect(steps[stageIndex]?.run).toContain('pnpm publish "${tarball}"');
+    expect(steps[stageIndex]?.run).toContain('npm pack "${PACKAGE_NAME}@${CANDIDATE_VERSION}"');
+    expect(steps[stageIndex]?.run).toContain('--compare-tarball "${registry_tarball}"');
+    expect(steps[stageIndex]?.run).toContain("npm dist-tag add");
     expect(steps[stageIndex]?.run).not.toMatch(/(^|\s)npm publish "\$\{tarball\}"/);
     expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
     expect(steps[candidateCleanupIndex]?.if).toBe("inputs.promote == false");
