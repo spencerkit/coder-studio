@@ -83,6 +83,8 @@ export interface DesktopApi {
   selectWorkspaceDirectory(): Promise<string | null>;
   openExternal(url: string): Promise<boolean>;
   getBackendStatus(): Promise<DesktopBackendStatus | null>;
+  recoverAuthentication(): Promise<boolean>;
+  onAuthenticationRecovered(listener: () => void): () => void;
   getWindowActivityState(): Promise<DesktopWindowActivityState>;
   onWindowActivityStateChanged(listener: (state: DesktopWindowActivityState) => void): () => void;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;

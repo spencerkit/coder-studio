@@ -731,6 +731,9 @@ export function AppProviders({ children }: AppProvidersProps) {
         store.set(productUpdateStateAtom, null);
         store.set(updateControllerAtom, null);
         store.set(updatePreparationAtom, null);
+        void window.coderStudioDesktop?.recoverAuthentication?.().catch((error) => {
+          console.error("Desktop authentication recovery failed:", error);
+        });
       }
 
       // Reset writer status on disconnect
@@ -885,6 +888,12 @@ export function AppProviders({ children }: AppProvidersProps) {
           reportRecoveryCoordinatorError("network_online", error);
         });
     };
+
+    const unsubscribeDesktopAuthenticationRecovery =
+      window.coderStudioDesktop?.onAuthenticationRecovered?.(() => {
+        if (store.get(activationStatusAtom) === "gated") return;
+        wsClientRef.current?.recoverConnection("manual_retry");
+      }) ?? (() => {});
 
     const refreshBranchState = (workspaceId: string) => {
       dispatchRef
@@ -1074,6 +1083,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         window.removeEventListener("focus", handleWindowFocus);
         window.removeEventListener("pageshow", handlePageShow);
         window.removeEventListener("online", handleOnline);
+        unsubscribeDesktopAuthenticationRecovery();
         unsubscribeStatus();
         unsubscribeEvents();
         refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
@@ -1135,6 +1145,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       window.removeEventListener("focus", handleWindowFocus);
       window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("online", handleOnline);
+      unsubscribeDesktopAuthenticationRecovery();
       unsubscribeStatus();
       unsubscribeEvents();
       refreshTimersRef.current.forEach((timer) => clearTimeout(timer));

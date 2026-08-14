@@ -10,6 +10,9 @@ interface CoderStudioDesktopApi {
     pid: number | null;
   } | null>;
   // Optional while newer Web bundles can still be paired with an older Desktop shell.
+  recoverAuthentication?(): Promise<boolean>;
+  onAuthenticationRecovered?(listener: () => void): () => void;
+  // Optional while newer Web bundles can still be paired with an older Desktop shell.
   getWindowActivityState?(): Promise<DesktopWindowActivityState>;
   onWindowActivityStateChanged?(listener: (state: DesktopWindowActivityState) => void): () => void;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;

@@ -185,11 +185,21 @@ describe("AboutSettings unified updates", () => {
     renderAbout();
     expect(screen.getByTestId("product-version")).toHaveTextContent("v0.6.0");
     expect(screen.queryByText("Shell v0.2.0 → v0.3.0")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Component diagnostics" }));
+    const diagnosticsButton = screen.getByRole("button", { name: "Component diagnostics" });
+    expect(diagnosticsButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(diagnosticsButton);
+    expect(diagnosticsButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Shell v0.2.0 → v0.3.0")).toBeInTheDocument();
-    expect(screen.getByText(/Authority: desktop/)).toBeInTheDocument();
-    expect(screen.getByText(/Environment: desktop-native/)).toBeInTheDocument();
-    expect(screen.getByText(/Plan ID: plan-1/)).toBeInTheDocument();
+    const diagnostics = screen.getByRole("region", { name: "Component diagnostics" });
+    expect(diagnostics).toHaveTextContent("Authority: desktop");
+    expect(diagnostics).toHaveTextContent("Environment: desktop-native");
+    expect(diagnostics).toHaveTextContent("Plan ID: plan-1");
+  });
+
+  it("shows the current product version as latest when no update is required", () => {
+    const state = desktopState({ status: "idle", components: [] });
+    renderAbout({ state, controller: createController(state) });
+    expect(screen.getByTestId("latest-version")).toHaveTextContent("v0.6.0");
   });
 
   it("renders trusted UTC release time locally and preserves unknown", () => {

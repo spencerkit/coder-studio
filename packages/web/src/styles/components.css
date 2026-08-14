@@ -1337,6 +1337,175 @@
   margin-top: var(--sp-3);
 }
 
+.update-diagnostics {
+  margin-top: var(--sp-4);
+  overflow: hidden;
+  border: 1px solid var(--surface-elevated-border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.update-diagnostics__toggle.btn {
+  width: 100%;
+  height: auto;
+  min-height: var(--control-height-md);
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-xl);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.update-diagnostics__toggle.btn:hover:not(:disabled) {
+  transform: none;
+}
+
+.update-diagnostics--open .update-diagnostics__toggle.btn {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+
+.update-diagnostics__body {
+  display: grid;
+  gap: var(--sp-5);
+  padding: var(--sp-4);
+  border-top: 1px solid var(--border-default);
+}
+
+.update-diagnostics__section {
+  display: grid;
+  min-width: 0;
+  gap: var(--sp-2);
+}
+
+.update-diagnostics__section-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.08em;
+  line-height: var(--type-body-6-line-height);
+  text-transform: uppercase;
+}
+
+.update-diagnostics__components {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.update-diagnostics__component {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.update-diagnostics__component:last-child {
+  border-bottom: none;
+}
+
+.update-diagnostics__component-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.update-diagnostics__component-version {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--type-body-5-size);
+  font-weight: var(--font-medium);
+  line-height: var(--type-body-5-line-height);
+  overflow-wrap: anywhere;
+}
+
+.update-diagnostics__component-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+}
+
+.update-diagnostics__component-meta {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+}
+
+.update-diagnostics__component-error {
+  color: var(--status-danger-fg);
+}
+
+.update-diagnostics__details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.update-diagnostics__detail {
+  display: grid;
+  min-width: 0;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.update-diagnostics__detail--wide {
+  grid-column: 1 / -1;
+}
+
+.update-diagnostics__detail dt {
+  color: var(--text-secondary);
+  font-size: var(--type-body-6-size);
+  font-weight: var(--type-body-6-weight);
+  letter-spacing: 0.04em;
+  line-height: var(--type-body-6-line-height);
+  text-transform: uppercase;
+}
+
+.update-diagnostics__detail dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--type-body-5-size);
+  line-height: var(--type-body-5-line-height);
+  overflow-wrap: anywhere;
+}
+
+.update-diagnostics__paths {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.update-diagnostics__paths code {
+  display: block;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-5-line-height);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .settings-card {
   border: 1px solid var(--surface-elevated-border);
   background: var(--surface-elevated);

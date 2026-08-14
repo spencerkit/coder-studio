@@ -1,5 +1,6 @@
 import type { ProductUpdatePreparation, ProductUpdateState } from "@coder-studio/core";
 import { useAtomValue, useSetAtom } from "jotai";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { serverInfoAtom } from "../../../atoms/connection";
 import {
@@ -96,6 +97,21 @@ function versionTransition(component: ProductUpdateState["components"][number]):
   return `${componentLabel(component)} v${component.currentVersion}${target}`;
 }
 
+interface DiagnosticItemProps {
+  label: string;
+  value: string | number;
+  wide?: boolean;
+}
+
+function DiagnosticItem({ label, value, wide = false }: DiagnosticItemProps) {
+  return (
+    <div className={`update-diagnostics__detail${wide ? " update-diagnostics__detail--wide" : ""}`}>
+      <dt>{label}:</dt>
+      <dd> {value}</dd>
+    </div>
+  );
+}
+
 function environmentGuidance(
   state: ProductUpdateState,
   controller: UpdateController
@@ -128,6 +144,8 @@ export function AboutSettings({
   const autoCheckLabelId = useId();
   const autoCheckDescId = useId();
   const checkIntervalLabelId = useId();
+  const diagnosticsLabelId = useId();
+  const diagnosticsPanelId = useId();
   const showProduct = view === "all" || view === "product";
   const showUpdateStatus = view === "all" || view === "update-status";
   const showAutoUpdate = view === "all" || view === "auto-update";
@@ -153,6 +171,7 @@ export function AboutSettings({
   const targetVersion = updateState?.components.find(
     (component) => component.kind === "runtime" || component.kind === "cli"
   )?.targetVersion;
+  const latestVersion = targetVersion ?? updateState?.productVersion ?? serverInfo?.version;
   const progress = updateState?.components
     .map((component) => component.progressPercent)
     .filter((value): value is number => value !== null)
@@ -260,7 +279,9 @@ export function AboutSettings({
           {guidanceKey ? <Notice tone="info" message={t(guidanceKey)} /> : null}
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.latest_version")}</span>
-            <span className="settings-info-value">{targetVersion ? `v${targetVersion}` : "-"}</span>
+            <span className="settings-info-value" data-testid="latest-version">
+              {latestVersion ? `v${latestVersion}` : "-"}
+            </span>
           </div>
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.last_checked")}</span>
@@ -323,58 +344,130 @@ export function AboutSettings({
           ) : null}
 
           {updateState ? (
-            <div className="settings-actions-row">
-              <Button variant="ghost" onClick={() => setDiagnosticsOpen((open) => !open)}>
+            <div
+              className={`update-diagnostics${diagnosticsOpen ? " update-diagnostics--open" : ""}`}
+            >
+              <Button
+                aria-controls={diagnosticsPanelId}
+                aria-expanded={diagnosticsOpen}
+                className="update-diagnostics__toggle"
+                id={diagnosticsLabelId}
+                trailingIcon={diagnosticsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                variant="ghost"
+                onClick={() => setDiagnosticsOpen((open) => !open)}
+              >
                 {t("settings.about.component_diagnostics")}
               </Button>
-            </div>
-          ) : null}
-          {updateState && diagnosticsOpen ? (
-            <div data-testid="update-component-diagnostics">
-              {updateState.components.map((component) => (
-                <div className="settings-info-row" key={component.id}>
-                  <span className="settings-info-value">
-                    {versionTransition(component)}
-                    {component.progressPercent !== null ? ` · ${component.progressPercent}%` : ""}
-                    {component.errorSummary ? ` · ${component.errorSummary}` : ""}
-                  </span>
+              {diagnosticsOpen ? (
+                <div
+                  aria-labelledby={diagnosticsLabelId}
+                  className="update-diagnostics__body"
+                  data-testid="update-component-diagnostics"
+                  id={diagnosticsPanelId}
+                  role="region"
+                >
+                  {updateState.components.length > 0 ? (
+                    <section className="update-diagnostics__section">
+                      <h4 className="update-diagnostics__section-title">
+                        {t("settings.about.component_versions")}
+                      </h4>
+                      <div className="update-diagnostics__components">
+                        {updateState.components.map((component) => (
+                          <div className="update-diagnostics__component" key={component.id}>
+                            <div className="update-diagnostics__component-main">
+                              <span className="update-diagnostics__component-version">
+                                {versionTransition(component)}
+                              </span>
+                              <span className="update-diagnostics__component-status">
+                                <StatusDot tone={statusTone(component.status)} size="sm" />
+                                {t(`settings.about.product_status_${component.status}`)}
+                              </span>
+                            </div>
+                            {component.progressPercent !== null || component.errorSummary ? (
+                              <div className="update-diagnostics__component-meta">
+                                {component.progressPercent !== null ? (
+                                  <span>
+                                    {t("settings.about.progress")}: {component.progressPercent}%
+                                  </span>
+                                ) : null}
+                                {component.errorSummary ? (
+                                  <span className="update-diagnostics__component-error">
+                                    {component.errorSummary}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  <section className="update-diagnostics__section">
+                    <h4 className="update-diagnostics__section-title">
+                      {t("settings.about.update_context")}
+                    </h4>
+                    <dl className="update-diagnostics__details">
+                      <DiagnosticItem
+                        label={t("settings.about.authority")}
+                        value={updateState.runtimeContext.authority}
+                      />
+                      <DiagnosticItem
+                        label={t("settings.about.environment")}
+                        value={updateState.runtimeContext.environment}
+                      />
+                      <DiagnosticItem
+                        label={t("settings.about.plan_id")}
+                        value={updateState.planId ?? "-"}
+                      />
+                      {updateState.diagnostics.shellBuiltAt ? (
+                        <DiagnosticItem
+                          label={t("settings.about.shell_built_at")}
+                          value={updateState.diagnostics.shellBuiltAt}
+                        />
+                      ) : null}
+                      {updateState.diagnostics.engineVersion ? (
+                        <DiagnosticItem
+                          label={t("settings.about.engine_abi")}
+                          value={updateState.diagnostics.engineVersion}
+                        />
+                      ) : null}
+                      {updateState.diagnostics.nodeVersion ? (
+                        <DiagnosticItem
+                          label="Node.js"
+                          value={updateState.diagnostics.nodeVersion}
+                        />
+                      ) : null}
+                      {updateState.diagnostics.failedPhase ? (
+                        <DiagnosticItem
+                          label={t("settings.about.failed_phase")}
+                          value={updateState.diagnostics.failedPhase}
+                        />
+                      ) : null}
+                      {updateState.diagnostics.recoveryAction ? (
+                        <DiagnosticItem
+                          label={t("settings.about.recovery_action")}
+                          value={updateState.diagnostics.recoveryAction}
+                          wide
+                        />
+                      ) : null}
+                    </dl>
+                  </section>
+
+                  {updateState.diagnostics.logLocations.length > 0 ? (
+                    <section className="update-diagnostics__section">
+                      <h4 className="update-diagnostics__section-title">
+                        {t("settings.about.diagnostic_paths")}
+                      </h4>
+                      <div className="update-diagnostics__paths">
+                        {updateState.diagnostics.logLocations.map((location) => (
+                          <code key={location}>{location}</code>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
                 </div>
-              ))}
-              <p>
-                {t("settings.about.authority")}: {updateState.runtimeContext.authority}
-              </p>
-              <p>
-                {t("settings.about.environment")}: {updateState.runtimeContext.environment}
-              </p>
-              <p>
-                {t("settings.about.plan_id")}: {updateState.planId ?? "-"}
-              </p>
-              {updateState.diagnostics.shellBuiltAt ? (
-                <p>
-                  {t("settings.about.shell_built_at")}: {updateState.diagnostics.shellBuiltAt}
-                </p>
               ) : null}
-              {updateState.diagnostics.engineVersion ? (
-                <p>
-                  {t("settings.about.engine_abi")}: {updateState.diagnostics.engineVersion}
-                </p>
-              ) : null}
-              {updateState.diagnostics.nodeVersion ? (
-                <p>Node: {updateState.diagnostics.nodeVersion}</p>
-              ) : null}
-              {updateState.diagnostics.failedPhase ? (
-                <p>
-                  {t("settings.about.failed_phase")}: {updateState.diagnostics.failedPhase}
-                </p>
-              ) : null}
-              {updateState.diagnostics.recoveryAction ? (
-                <p>
-                  {t("settings.about.recovery_action")}: {updateState.diagnostics.recoveryAction}
-                </p>
-              ) : null}
-              {updateState.diagnostics.logLocations.map((location) => (
-                <p key={location}>{location}</p>
-              ))}
             </div>
           ) : null}
         </div>
