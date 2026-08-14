@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { list, type ReadEntry } from "tar";
@@ -33,6 +34,7 @@ interface PackageEntryTarget {
 }
 
 export interface ValidateCliPackageInput {
+  compareTarballPath?: string;
   sourcePackageJsonPath: string;
   tarballPath: string;
 }
@@ -41,6 +43,14 @@ export interface ValidatedCliPackage {
   entryTargets: string[];
   name: string;
   version: string;
+}
+
+interface ArchiveContentEntry {
+  digest: string;
+  executable: boolean;
+  linkpath: string;
+  size: number;
+  type: string;
 }
 
 export async function validateCliPackageArchive({
@@ -96,6 +106,84 @@ export async function validateCliPackageArchive({
     name: packedManifest.name,
     version: packedManifest.version,
   };
+}
+
+export async function compareCliPackageArchives(
+  candidateTarballPath: string,
+  publishedTarballPath: string
+): Promise<void> {
+  const [candidateEntries, publishedEntries] = await Promise.all([
+    readArchiveContentEntries(candidateTarballPath),
+    readArchiveContentEntries(publishedTarballPath),
+  ]);
+  const candidatePaths = [...candidateEntries.keys()].sort();
+  const publishedPaths = [...publishedEntries.keys()].sort();
+  if (!isDeepStrictEqual(candidatePaths, publishedPaths)) {
+    const candidateOnly = candidatePaths.filter((path) => !publishedEntries.has(path));
+    const publishedOnly = publishedPaths.filter((path) => !candidateEntries.has(path));
+    throw new Error(
+      `Packed CLI contents differ; candidate-only: ${candidateOnly.join(", ") || "none"}; published-only: ${publishedOnly.join(", ") || "none"}`
+    );
+  }
+
+  for (const path of candidatePaths) {
+    if (!isDeepStrictEqual(candidateEntries.get(path), publishedEntries.get(path))) {
+      throw new Error(`Packed CLI contents differ at ${path}`);
+    }
+  }
+}
+
+async function readArchiveContentEntries(
+  tarballPath: string
+): Promise<Map<string, ArchiveContentEntry>> {
+  const entries = new Map<string, ArchiveContentEntry>();
+  const seen = new Set<string>();
+  const reads: Promise<void>[] = [];
+
+  await list({
+    file: tarballPath,
+    strict: true,
+    onReadEntry(entry) {
+      if (entry.type === "Directory") {
+        entry.resume();
+        return;
+      }
+      const archivePath = normalizeArchivePath(entry.path);
+      if (seen.has(archivePath)) {
+        throw new Error(`Packed CLI contains duplicate archive path: ${archivePath}`);
+      }
+      seen.add(archivePath);
+      reads.push(
+        readEntryContent(entry).then((content) => {
+          entries.set(archivePath, content);
+        })
+      );
+    },
+  });
+  await Promise.all(reads);
+  return entries;
+}
+
+function readEntryContent(entry: ReadEntry): Promise<ArchiveContentEntry> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha512");
+    let size = 0;
+    entry.on("data", (chunk: Buffer | string) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      hash.update(buffer);
+      size += buffer.length;
+    });
+    entry.on("end", () =>
+      resolve({
+        digest: hash.digest("base64"),
+        executable: ((entry.mode ?? 0) & 0o111) !== 0,
+        linkpath: entry.linkpath ?? "",
+        size,
+        type: entry.type,
+      })
+    );
+    entry.on("error", reject);
+  });
 }
 
 async function readArchiveEntries(tarballPath: string): Promise<Map<string, ArchiveEntry>> {
@@ -269,6 +357,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parseValidateCliPackageArguments(argv: string[]): ValidateCliPackageInput {
+  let compareTarballPath: string | undefined;
   let tarballPath: string | undefined;
   let sourcePackageJsonPath: string | undefined;
 
@@ -279,6 +368,8 @@ export function parseValidateCliPackageArguments(argv: string[]): ValidateCliPac
     }
     if (argument === "--tarball") {
       tarballPath = argv[++index];
+    } else if (argument === "--compare-tarball") {
+      compareTarballPath = argv[++index];
     } else if (argument === "--source-package-json") {
       sourcePackageJsonPath = argv[++index];
     } else {
@@ -290,12 +381,24 @@ export function parseValidateCliPackageArguments(argv: string[]): ValidateCliPac
     throw new Error("Usage: validate-cli-package --tarball <file> --source-package-json <file>");
   }
 
-  return { sourcePackageJsonPath, tarballPath };
+  return {
+    ...(compareTarballPath ? { compareTarballPath } : {}),
+    sourcePackageJsonPath,
+    tarballPath,
+  };
 }
 
 if (isDirectExecution(import.meta.url)) {
-  validateCliPackageArchive(parseValidateCliPackageArguments(process.argv.slice(2)))
-    .then((result) => {
+  const input = parseValidateCliPackageArguments(process.argv.slice(2));
+  validateCliPackageArchive(input)
+    .then(async (result) => {
+      if (input.compareTarballPath) {
+        await validateCliPackageArchive({
+          sourcePackageJsonPath: input.sourcePackageJsonPath,
+          tarballPath: input.compareTarballPath,
+        });
+        await compareCliPackageArchives(input.tarballPath, input.compareTarballPath);
+      }
       success(
         `Validated ${result.name}@${result.version} package entry files: ${result.entryTargets.join(", ")}`
       );

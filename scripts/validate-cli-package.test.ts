@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { create } from "tar";
 import { describe, expect, it } from "vitest";
 import {
+  compareCliPackageArchives,
   parseValidateCliPackageArguments,
   validateCliPackageArchive,
 } from "./validate-cli-package.js";
@@ -11,7 +12,9 @@ import {
 interface PackageFixtureOptions {
   binContent?: string;
   includeTypes?: boolean;
+  indexContent?: string;
   packedManifest?: Record<string, unknown>;
+  tarMtime?: Date;
 }
 
 const sourceManifest = {
@@ -61,6 +64,23 @@ describe("validate-cli-package", () => {
     });
   });
 
+  it("parses an optional published tarball comparison", () => {
+    expect(
+      parseValidateCliPackageArguments([
+        "--tarball",
+        "release/candidate.tgz",
+        "--compare-tarball",
+        "release/published.tgz",
+        "--source-package-json",
+        "packages/cli/package.json",
+      ])
+    ).toEqual({
+      compareTarballPath: "release/published.tgz",
+      sourcePackageJsonPath: "packages/cli/package.json",
+      tarballPath: "release/candidate.tgz",
+    });
+  });
+
   it("accepts package entry fields that resolve to real archive files", async () => {
     const fixture = await createPackageFixture();
 
@@ -94,12 +114,34 @@ describe("validate-cli-package", () => {
       "Packed CLI package.json still contains publishConfig"
     );
   });
+
+  it("compares logical package contents instead of tarball metadata", async () => {
+    const candidate = await createPackageFixture({ tarMtime: new Date("2026-01-01T00:00:00Z") });
+    const published = await createPackageFixture({ tarMtime: new Date("2026-02-01T00:00:00Z") });
+
+    await expect(
+      compareCliPackageArchives(candidate.tarballPath, published.tarballPath)
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects a published package with different file bytes", async () => {
+    const candidate = await createPackageFixture();
+    const published = await createPackageFixture({
+      indexContent: "export const changed = true;\n",
+    });
+
+    await expect(
+      compareCliPackageArchives(candidate.tarballPath, published.tarballPath)
+    ).rejects.toThrow("package/dist/esm/index.mjs");
+  });
 });
 
 async function createPackageFixture({
   binContent = '#!/usr/bin/env node\nimport "./esm/index.mjs";\n',
   includeTypes = true,
+  indexContent = "export {};\n",
   packedManifest = validPackedManifest,
+  tarMtime,
 }: PackageFixtureOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), "coder-studio-package-validation-"));
   const packageDir = join(root, "package");
@@ -110,11 +152,11 @@ async function createPackageFixture({
   await writeFile(sourcePackageJsonPath, JSON.stringify(sourceManifest));
   await writeFile(join(packageDir, "package.json"), JSON.stringify(packedManifest));
   await writeFile(join(packageDir, "dist", "bin.js"), binContent);
-  await writeFile(join(packageDir, "dist", "esm", "index.mjs"), "export {};\n");
+  await writeFile(join(packageDir, "dist", "esm", "index.mjs"), indexContent);
   if (includeTypes) {
     await writeFile(join(packageDir, "dist", "esm", "index.d.ts"), "export {};\n");
   }
-  await create({ cwd: root, file: tarballPath, gzip: true }, ["package"]);
+  await create({ cwd: root, file: tarballPath, gzip: true, mtime: tarMtime }, ["package"]);
 
   return { sourcePackageJsonPath, tarballPath };
 }

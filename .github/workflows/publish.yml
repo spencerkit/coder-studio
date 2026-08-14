@@ -143,8 +143,19 @@ jobs:
           if [ -z "${registry_integrity}" ]; then
             pnpm publish "${tarball}" --access public --tag "${ACCEPTANCE_DIST_TAG}"
           elif [ "${registry_integrity}" != "${PACKED_INTEGRITY}" ]; then
-            echo "Registry dist.integrity differs from the packed candidate; refusing to republish different bytes" >&2
-            exit 1
+            mkdir -p release/cli-registry
+            registry_pack_json=$(npm pack "${PACKAGE_NAME}@${CANDIDATE_VERSION}" --json --pack-destination release/cli-registry)
+            registry_filename=$(printf '%s' "${registry_pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { const v=JSON.parse(d); console.log((Array.isArray(v) ? v[0] : v).filename) })")
+            registry_tarball="release/cli-registry/$(basename "${registry_filename}")"
+            if [ ! -f "${registry_tarball}" ]; then
+              echo "Unable to download the immutable registry candidate" >&2
+              exit 1
+            fi
+            pnpm validate:cli-package -- \
+              --tarball "${tarball}" \
+              --compare-tarball "${registry_tarball}" \
+              --source-package-json packages/cli/package.json
+            npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${ACCEPTANCE_DIST_TAG}"
           else
             npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${ACCEPTANCE_DIST_TAG}"
           fi
