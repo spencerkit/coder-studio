@@ -25,6 +25,10 @@ import { autoUpdater, CancellationToken } from "electron-updater";
 import { BackendManager } from "./backend-manager.js";
 import { readDesktopBuildInfo } from "./build-info.js";
 import {
+  DesktopAuthRecoveryCoordinator,
+  isDesktopNetworkService,
+} from "./desktop-auth-recovery.js";
+import {
   parseDesktopChannel,
   resolveDesktopChannelUrl,
   resolveDesktopRuntimePublicKey,
@@ -93,6 +97,44 @@ let shutdownComplete = false;
 let shutdownStarted = false;
 let shutdownActivationPromise: Promise<void> = Promise.resolve();
 const smokeResultPath = process.env.CODER_STUDIO_DESKTOP_SMOKE_RESULT?.trim() || null;
+const desktopAuthRecovery = new DesktopAuthRecoveryCoordinator({
+  canRecover: () =>
+    !shutdownStarted &&
+    backendManager?.getStatus()?.source === "managed" &&
+    activeSession !== null &&
+    activeGatewayUrl !== null,
+  authenticate: async () => {
+    const manager = backendManager;
+    const browserSession = activeSession;
+    const gatewayUrl = activeGatewayUrl;
+    if (!manager || !browserSession || !gatewayUrl) {
+      throw new Error("Desktop authentication recovery is not ready");
+    }
+
+    try {
+      const response = await browserSession.fetch(`${gatewayUrl}/auth/status`);
+      if (response.ok) {
+        const status = (await response.json()) as { authenticated?: unknown };
+        if (status.authenticated === true) return;
+      }
+    } catch {
+      // A newly relaunched Network Service may fail its first request. The login below
+      // and the coordinator retry schedule provide the recovery path.
+    }
+
+    await manager.authenticatePublicSession(browserSession, gatewayUrl);
+  },
+  onRecovered: () => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+    mainWindow.webContents.send("desktop:authentication-recovered");
+  },
+  onAttemptFailure: (error, attempt, willRetry) => {
+    console.warn(
+      `[desktop-auth] Recovery attempt ${attempt} failed${willRetry ? "; retrying" : ""}`,
+      error
+    );
+  },
+});
 const environmentActivation = new EnvironmentActivationCoordinator({
   focusWindow: () => {
     if (shutdownStarted || !mainWindow) return false;
@@ -261,6 +303,7 @@ function registerIpcHandlers(rootUserDataDir: string): void {
     typeof value === "string" ? openExternal(value) : false
   );
   ipcMain.handle("desktop:get-backend-status", () => backendManager?.getStatus() ?? null);
+  ipcMain.handle("desktop:recover-authentication", () => desktopAuthRecovery.recover());
   ipcMain.handle("desktop:get-window-activity-state", () =>
     readDesktopWindowActivityState(mainWindow)
   );
@@ -866,6 +909,11 @@ if (!hasSingleInstanceLock) {
     void environmentActivation.request(requestId).catch((error) => {
       console.error("Unable to activate Desktop environment window", error);
     });
+  });
+
+  app.on("child-process-gone", (_event, details) => {
+    if (!isDesktopNetworkService(details)) return;
+    void desktopAuthRecovery.recover();
   });
 
   app.whenReady().then(startApplication).catch(handleStartupFailure);

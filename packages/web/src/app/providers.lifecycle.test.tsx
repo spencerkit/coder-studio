@@ -922,6 +922,41 @@ describe("AppProviders lifecycle recovery", () => {
       });
   });
 
+  it("asks Desktop to restore authentication and retries immediately after recovery", async () => {
+    let authenticationRecovered: (() => void) | undefined;
+    const recoverAuthentication = vi.fn(async () => true);
+    const unsubscribe = vi.fn();
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        recoverAuthentication,
+        onAuthenticationRecovered: vi.fn((listener: () => void) => {
+          authenticationRecovered = listener;
+          return unsubscribe;
+        }),
+      } as unknown as CoderStudioDesktopApi,
+    });
+
+    const rendered = renderProviders();
+    await vi.waitFor(() => {
+      expect(wsState.client?.connect).toHaveBeenCalled();
+    });
+    wsState.client?.recoverConnection.mockClear();
+
+    act(() => {
+      wsState.client?.statusHandler?.("reconnecting");
+    });
+    await vi.waitFor(() => {
+      expect(recoverAuthentication).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => authenticationRecovered?.());
+    expect(wsState.client?.recoverConnection).toHaveBeenCalledWith("manual_retry");
+
+    rendered.unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
   it("probes and reconciles on visibility return instead of forcing replay semantics", async () => {
     const probeConnection = vi.fn().mockResolvedValue({ ok: true });
     const sendCommand = createWsSendCommandMock((op) => {

@@ -18,6 +18,13 @@ const api: DesktopApi = {
   openExternal: (url: string) => ipcRenderer.invoke("desktop:open-external", url),
   getBackendStatus: () =>
     ipcRenderer.invoke("desktop:get-backend-status") as Promise<DesktopBackendStatus | null>,
+  recoverAuthentication: () =>
+    ipcRenderer.invoke("desktop:recover-authentication") as Promise<boolean>,
+  onAuthenticationRecovered: (listener: () => void) => {
+    const handler = () => listener();
+    ipcRenderer.on("desktop:authentication-recovered", handler);
+    return () => ipcRenderer.removeListener("desktop:authentication-recovered", handler);
+  },
   getWindowActivityState: () =>
     ipcRenderer.invoke("desktop:get-window-activity-state") as Promise<DesktopWindowActivityState>,
   onWindowActivityStateChanged: (listener: (state: DesktopWindowActivityState) => void) => {
