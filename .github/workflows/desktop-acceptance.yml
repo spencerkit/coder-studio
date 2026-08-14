@@ -25,6 +25,7 @@ jobs:
       signing_key_artifact: ${{ steps.channel.outputs.signing_key_artifact }}
       public_key_artifact: ${{ steps.channel.outputs.public_key_artifact }}
       has_previous_desktop: ${{ steps.channel.outputs.has_previous_desktop }}
+      release_kind: ${{ steps.channel.outputs.release_kind }}
       acceptance_scenarios: ${{ steps.channel.outputs.acceptance_scenarios }}
 
     steps:
@@ -50,6 +51,7 @@ jobs:
           latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
           latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
           has_previous_desktop=false
+          release_kind=full
           if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
             has_previous_desktop=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
             if [[ "${has_previous_desktop}" == "true" ]]; then
@@ -62,17 +64,32 @@ jobs:
               current_shell=$(node -p "require('./packages/desktop/package.json').version")
               current_runtime=$(node -p "require('./packages/cli/package.json').version")
               has_previous_desktop=$(node -e "const channel=require(process.argv[1]); const currentShell=process.argv[2]; const currentRuntime=process.argv[3]; process.stdout.write(channel?.shell?.version===currentShell&&channel?.runtimes?.['win32-x64']?.version===currentRuntime&&channel?.runtimes?.['linux-x64']?.version===currentRuntime?'false':'true')" "${latest_channel}" "${current_shell}" "${current_runtime}")
+              if [[ "${has_previous_desktop}" == "true" ]]; then
+                previous_shell=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${latest_channel}")
+                shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${current_shell}" "${previous_shell}")
+                if [[ "${shell_change}" == "same" ]]; then
+                  release_kind=runtime-only
+                elif [[ "${shell_change}" == "downgrade" ]]; then
+                  echo "Desktop Shell ${current_shell} is older than stable ${previous_shell}" >&2
+                  exit 1
+                fi
+              fi
             fi
           elif ! grep -q '(HTTP 404)' "${latest_release_error}"; then
             cat "${latest_release_error}" >&2
             exit 1
           fi
           if [[ "${has_previous_desktop}" == "true" ]]; then
-            acceptance_scenarios='["runtime-only","combined","wsl","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
+            if [[ "${release_kind}" == "full" ]]; then
+              acceptance_scenarios='["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
+            else
+              acceptance_scenarios='["runtime-only","combined","wsl","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
+            fi
           else
             acceptance_scenarios='["fresh-native","fresh-wsl"]'
           fi
           echo "has_previous_desktop=${has_previous_desktop}" >> "${GITHUB_OUTPUT}"
+          echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
           echo "acceptance_scenarios=${acceptance_scenarios}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate ephemeral Runtime signing key
@@ -297,13 +314,15 @@ jobs:
           $previous = 'release/desktop-installed-previous'
           $scenario = '${{ matrix.scenario }}'
           $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
+          $releaseKind = '${{ needs.prepare.outputs.release_kind }}'
+          $useRuntimeOnlyChannel = $hasPreviousDesktop -and $releaseKind -eq 'runtime-only' -and $scenario -notin @('combined', 'wsl-combined')
           $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
           $generatedAt = ([DateTimeOffset]$originalChannel.generatedAt).UtcDateTime.ToString(
             'yyyy-MM-ddTHH:mm:ss.fffZ',
             [Globalization.CultureInfo]::InvariantCulture
           )
           $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
-          if ($hasPreviousDesktop -and $scenario -notin @('combined', 'wsl-combined')) {
+          if ($useRuntimeOnlyChannel) {
             pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
             if ($LASTEXITCODE -ne 0) { throw 'Unable to carry forward the previous Shell for the Runtime-only scenario' }
           }
@@ -320,7 +339,7 @@ jobs:
             '--directory', $candidate,
             '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
           )
-          if (-not $hasPreviousDesktop -or $scenario -in @('combined', 'wsl-combined')) {
+          if (-not $useRuntimeOnlyChannel) {
             $validation += @('--release-kind', 'full')
           } else {
             $validation += @(
@@ -348,14 +367,16 @@ jobs:
           }
           $components = if ($scenario -in @('fresh-native', 'fresh-wsl')) {
             ''
+          } elseif ($scenario -eq 'external-sidecar-browser') {
+            ''
+          } elseif ($releaseKind -eq 'full') {
+            'shell,runtime:win32-x64'
           } elseif ($scenario -eq 'combined') {
             'shell,runtime:win32-x64'
           } elseif ($scenario -eq 'wsl-combined') {
             'shell,runtime:win32-x64'
           } elseif ($scenario -eq 'wsl') {
             'runtime:win32-x64'
-          } elseif ($scenario -eq 'external-sidecar-browser') {
-            ''
           } else {
             'runtime:win32-x64'
           }
@@ -427,6 +448,10 @@ jobs:
           }
           pnpm acceptance:desktop:installed @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
+          $reportPath = 'release/desktop-installed-report/${{ matrix.scenario }}.json'
+          $report = Get-Content $reportPath -Raw | ConvertFrom-Json
+          $report | Add-Member -NotePropertyName releaseKind -NotePropertyValue '${{ needs.prepare.outputs.release_kind }}' -Force
+          $report | ConvertTo-Json -Depth 32 | Set-Content $reportPath -Encoding utf8
 
       - name: Upload installed-upgrade report
         if: always()

@@ -244,6 +244,7 @@ describe("GitHub workflow boundaries", () => {
       signing_key_artifact: "${{ steps.channel.outputs.signing_key_artifact }}",
       public_key_artifact: "${{ steps.channel.outputs.public_key_artifact }}",
       has_previous_desktop: "${{ steps.channel.outputs.has_previous_desktop }}",
+      release_kind: "${{ steps.channel.outputs.release_kind }}",
       acceptance_scenarios: "${{ steps.channel.outputs.acceptance_scenarios }}",
     });
     expect(resolveChannel?.run).toContain(
@@ -267,6 +268,10 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain("require('./packages/cli/package.json').version");
     expect(resolveChannel?.run).toContain("channel?.shell?.version===currentShell");
     expect(resolveChannel?.run).toContain("?'false':'true'");
+    expect(resolveChannel?.run).toContain("release_kind=runtime-only");
+    expect(resolveChannel?.run).toContain(
+      'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
+    );
     expect(resolveChannel?.run).toContain('acceptance_scenarios=\'["fresh-native","fresh-wsl"]\'');
     expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
     expect(signingKeyUpload?.with).toMatchObject({
@@ -479,6 +484,8 @@ describe("GitHub workflow boundaries", () => {
     expect(runInstalled?.run).toContain("-SkipAuthenticode");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
+    expect(prepareScenario?.run).toContain("$useRuntimeOnlyChannel");
+    expect(prepareScenario?.run).toContain("$releaseKind -eq 'full'");
     expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
     expect(prepareScenario?.run).toContain("InvariantCulture");
     expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
@@ -524,6 +531,7 @@ describe("GitHub workflow boundaries", () => {
     expect(validateReports?.run).toContain("commitSha");
     expect(validateReports?.run).toContain("wslRuntimeVersion");
     expect(validateReports?.run).toContain("wsl-combined");
+    expect(validateReports?.run).toContain("report.releaseKind !== releaseKind");
     expect(promote?.run?.trim()).toBe(
       'gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest'
     );
@@ -589,6 +597,12 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-native");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
+    expect(steps[desktopReportIndex]?.run).toContain("releaseKinds");
+    expect(steps[desktopReportIndex]?.run).toContain('releaseKind === "full"');
+    expect(steps[desktopReportIndex]?.run).toContain(
+      'report.scenario !== "runtime-health-rollback"'
+    );
+    expect(steps[desktopReportIndex]?.run).toContain("report.rollbackRuntimeVersion");
     expect(steps[desktopReportIndex]?.run).toContain("text.charCodeAt(0) === 0xfeff");
     expect(steps[preserveDesktopIndex]?.if).toBe("inputs.promote");
     expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");

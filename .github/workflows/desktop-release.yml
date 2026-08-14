@@ -673,6 +673,7 @@ jobs:
             return JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
           };
           const channel = parseJson("release/promotion-reports/channel/desktop-channel.json");
+          const releaseKind = "${{ needs.prepare.outputs.release_kind }}";
           const channelSignatureDigest = createHash("sha256")
             .update(channel.signature.value, "utf8")
             .digest("hex");
@@ -699,10 +700,13 @@ jobs:
           if (requiredProductionScenarios.size) throw new Error(`Production reports are missing: ${[...requiredProductionScenarios].join(", ")}`);
           const matrix = readReports("release/promotion-reports/desktop-matrix");
           const requiredScenarios = new Set(${{ needs.prepare.outputs.has_previous_desktop == 'true' }}
-            ? ["runtime-only", "combined", "wsl", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
+            ? releaseKind === "full"
+              ? ["combined", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
+              : ["runtime-only", "combined", "wsl", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
             : ["fresh-native", "fresh-wsl"]);
           for (const report of matrix) {
             if (report.commitSha !== commitSha) throw new Error("Desktop matrix commitSha does not match");
+            if (report.releaseKind !== releaseKind) throw new Error("Desktop matrix releaseKind does not match");
             if ((report.scenario === "fresh-wsl" || report.scenario === "wsl" || report.scenario === "wsl-combined") && report.wslRuntimeVersion !== productVersion) {
               throw new Error("Desktop matrix WSL report does not match the shared Web product version");
             }
