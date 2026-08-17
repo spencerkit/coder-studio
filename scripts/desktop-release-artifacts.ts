@@ -727,6 +727,7 @@ async function validateModernMigrationChannel(
   linux: RuntimeManifestV2,
   previousDirectory: string
 ): Promise<void> {
+  const previousPublicKeyPem = options.previousPublicKeyPem ?? options.publicKeyPem;
   const modern = await readSignedChannel(
     options.directory,
     options.publicKeyPem,
@@ -751,7 +752,7 @@ async function validateModernMigrationChannel(
   await validateDesktop(options.directory, modern.shell.version, "modern.yml");
   assertRuntimePairMatchesChannel(windows, linux, modern);
   await validateEngine(options, modern.shell);
-  await assertTargetShellRunsPreviousRuntime(modern, previousDirectory, options.publicKeyPem);
+  await assertTargetShellRunsPreviousRuntime(modern, previousDirectory, previousPublicKeyPem);
 }
 
 export async function validateDesktopReleaseArtifacts(

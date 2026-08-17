@@ -517,6 +517,40 @@ describe("desktop-release-artifacts", () => {
     const previous = await mkdtemp(join(tmpdir(), "coder-studio-release-migration-previous-"));
     roots.push(previous);
     await cp(fixture.root, previous, { recursive: true });
+    const previousKeys = generateKeyPairSync("ed25519");
+    const previousPublicKeyPem = previousKeys.publicKey
+      .export({ type: "spki", format: "pem" })
+      .toString();
+    for (const filename of [
+      "desktop-channel.json",
+      "coder-studio-runtime-win32-x64.manifest.json",
+      "coder-studio-server-runtime-linux-x64.manifest.json",
+    ]) {
+      const signed = JSON.parse(await readFile(join(previous, filename), "utf8")) as Record<
+        string,
+        unknown
+      >;
+      const unsigned = { ...signed };
+      delete unsigned.signature;
+      await writeFile(
+        join(previous, filename),
+        `${JSON.stringify(
+          {
+            ...unsigned,
+            signature: {
+              algorithm: "ed25519",
+              value: sign(
+                null,
+                canonicalSigningPayload(unsigned),
+                previousKeys.privateKey
+              ).toString("base64"),
+            },
+          },
+          null,
+          2
+        )}\n`
+      );
+    }
     const modernInstallerName = "Coder-Studio-Setup-0.4.0.exe";
     const modernInstaller = Buffer.from("modern-signed-installer");
     const modernInstallerSha = createHash("sha512").update(modernInstaller).digest("base64");
@@ -572,6 +606,7 @@ describe("desktop-release-artifacts", () => {
         ...fixture.options,
         releaseKind: "migration",
         previousReleaseDirectory: previous,
+        previousPublicKeyPem,
       })
     ).resolves.toBeUndefined();
   });
