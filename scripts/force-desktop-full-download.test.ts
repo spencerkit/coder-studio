@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { forceDesktopFullDownload } from "./force-desktop-full-download.js";
+import {
+  forceDesktopFullDownload,
+  parseForceFullDownloadDirectory,
+} from "./force-desktop-full-download.js";
 
 const roots: string[] = [];
 
@@ -29,6 +32,15 @@ afterEach(async () => {
 });
 
 describe("force-desktop-full-download", () => {
+  it("accepts pnpm's optional argument separator", () => {
+    expect(parseForceFullDownloadDirectory(["--directory", "release/desktop"])).toBe(
+      "release/desktop"
+    );
+    expect(parseForceFullDownloadDirectory(["--", "--directory", "release/desktop"])).toBe(
+      "release/desktop"
+    );
+  });
+
   it("marks the target blockmap as incompatible so legacy clients fall back to the full installer", async () => {
     const fixture = await createFixture();
 

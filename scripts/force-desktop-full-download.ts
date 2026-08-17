@@ -98,15 +98,18 @@ export async function forceDesktopFullDownload(
   return { blockmapPath, originalVersion, forcedVersion, changed: true };
 }
 
-function parseDirectory(argv: string[]): string {
-  if (argv.length !== 2 || argv[0] !== "--directory" || !argv[1]) {
+export function parseForceFullDownloadDirectory(argv: string[]): string {
+  const args = argv[0] === "--" ? argv.slice(1) : argv;
+  if (args.length !== 2 || args[0] !== "--directory" || !args[1]) {
     throw new Error("Usage: force-desktop-full-download --directory <release-directory>");
   }
-  return argv[1];
+  return args[1];
 }
 
 async function main(): Promise<void> {
-  const result = await forceDesktopFullDownload(parseDirectory(process.argv.slice(2)));
+  const result = await forceDesktopFullDownload(
+    parseForceFullDownloadDirectory(process.argv.slice(2))
+  );
   success(
     `${result.changed ? "Marked" : "Verified"} Desktop blockmap for full installer download: ${result.blockmapPath}`
   );
