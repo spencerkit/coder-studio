@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.10
+
+### Patch Changes
+
+- [#123](https://github.com/spencerkit/coder-studio/pull/123) [`a72abb7`](https://github.com/spencerkit/coder-studio/commit/a72abb789d04888820979ab008175d23a2580277) Thanks [@pallyoung](https://github.com/pallyoung)! - Ship the dual-channel Desktop migration: keep Shell 0.1.1 on Runtime-only updates, show the one-time Shell 0.1.2 migration guidance, and validate legacy and modern release artifacts independently.
+
 ## 0.5.9
 
 ### Patch Changes
