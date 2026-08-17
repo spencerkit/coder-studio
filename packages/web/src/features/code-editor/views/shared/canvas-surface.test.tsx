@@ -677,15 +677,29 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitFor(() => {
+      expect(container.querySelector(".canvas-overlay-layer__svg text")).toHaveTextContent(
+        "Move me"
+      );
+    });
+
     fireEvent.pointerDown(scene as HTMLDivElement, {
       clientX: 40,
       clientY: 52,
       button: 0,
     });
+    await waitFor(() => {
+      expect(container.querySelector(".canvas-overlay-layer__selection")).toBeTruthy();
+    });
     fireEvent.pointerMove(scene as HTMLDivElement, {
       clientX: 120,
       clientY: 140,
       button: 0,
+    });
+    await waitFor(() => {
+      const text = container.querySelector(".canvas-overlay-layer__svg text");
+      expect(text).toHaveAttribute("x", "120");
+      expect(text).toHaveAttribute("y", "140");
     });
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 120,

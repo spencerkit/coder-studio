@@ -713,6 +713,36 @@ async function startInstallAfterBackgroundCheck(input: {
   );
 }
 
+async function checkAfterBackgroundCheck(input: {
+  deps: Pick<VerifyCliUpdateDeps, "callWs" | "wait">;
+  apiUrl: string;
+  maxAttempts?: number;
+}): Promise<UpdateStateSnapshot> {
+  const maxAttempts = input.maxAttempts ?? 60;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await input.deps.callWs<UpdateStateSnapshot>({
+        apiUrl: input.apiUrl,
+        op: "updates.check",
+        args: {},
+      });
+    } catch (checkError) {
+      lastError = checkError;
+      const message = checkError instanceof Error ? checkError.message : String(checkError);
+      if (!message.startsWith("update_busy: Update check is already in progress")) {
+        throw checkError;
+      }
+      if (attempt < maxAttempts) await input.deps.wait(500);
+    }
+  }
+
+  throw new Error(
+    `CLI updater remained busy while waiting to verify the candidate: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 export async function verifyCliUpdate(
   options: VerifyCliUpdateOptions,
   deps: VerifyCliUpdateDeps = defaultDeps
@@ -782,10 +812,9 @@ export async function verifyCliUpdate(
       throw new Error(`Packaged CLI did not start at exact previous version ${previousVersion}`);
     }
     if (initial.version === 2) {
-      const checked = await deps.callWs<UpdateStateSnapshot>({
+      const checked = await checkAfterBackgroundCheck({
+        deps,
         apiUrl: server.apiUrl,
-        op: "updates.check",
-        args: {},
       });
       if (
         checked.latestVersion !== candidateVersion ||
