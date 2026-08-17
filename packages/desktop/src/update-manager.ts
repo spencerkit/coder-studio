@@ -10,6 +10,7 @@ export interface ShellUpdaterPort {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
   allowPrerelease: boolean;
+  channel: string | null;
   disableDifferentialDownload: boolean;
   disableWebInstaller: boolean;
   on(event: "download-progress", listener: (value: { percent?: number }) => void): unknown;
@@ -37,6 +38,7 @@ export interface DesktopShellUpdateAdapterOptions {
   currentVersion: string;
   isPackaged: boolean;
   allowPrerelease?: boolean;
+  updaterChannel?: string;
   createCancellationToken?: () => ShellCancellationToken;
   logLocations?: string[];
   manualInstallerUrl?: string | null;
@@ -97,6 +99,7 @@ export class DesktopShellUpdateAdapter {
     this.options.updater.autoInstallOnAppQuit = false;
     this.options.updater.disableDifferentialDownload = true;
     this.options.updater.disableWebInstaller = true;
+    this.options.updater.channel = this.options.updaterChannel ?? null;
     this.options.updater.allowPrerelease =
       this.options.allowPrerelease === true || this.options.currentVersion.includes("-");
     this.options.updater.on("download-progress", (progress: { percent?: number }) => {

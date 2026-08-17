@@ -56,7 +56,7 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
     : null;
   const desktopChannelUrl =
     process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim() ??
-    "https://github.com/spencerkit/coder-studio/releases/latest/download/desktop-channel.json";
+    "https://github.com/spencerkit/coder-studio/releases/latest/download/desktop-channel-modern.json";
   const { runtimeUpdateUrl, factoryReleaseBaseUrl } = resolveDesktopRuntimeUrls(process.env);
   const runtimeDefines = {
     __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: JSON.stringify(runtimePublicKey),

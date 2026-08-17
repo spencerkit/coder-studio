@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { create } from "tar";
@@ -170,7 +170,11 @@ async function createCompleteReleaseFixture() {
     return manifest;
   }
 
-  async function writeChannel(overrides: Partial<DesktopChannel> = {}, validSignature = true) {
+  async function writeChannel(
+    overrides: Partial<DesktopChannel> = {},
+    validSignature = true,
+    filename = "desktop-channel.json"
+  ) {
     const unsigned: Omit<DesktopChannel, "signature"> = {
       schemaVersion: 1,
       channel: "stable",
@@ -208,7 +212,7 @@ async function createCompleteReleaseFixture() {
       },
     };
     if (!validSignature) channel.releaseTag = "tampered-channel";
-    await writeFile(join(root, "desktop-channel.json"), `${JSON.stringify(channel, null, 2)}\n`);
+    await writeFile(join(root, filename), `${JSON.stringify(channel, null, 2)}\n`);
   }
 
   await writeRuntime("win32-x64");
@@ -260,6 +264,18 @@ describe("desktop-release-artifacts", () => {
       components: ["wsl-engine", "wsl-runtime"],
       allowUnsigned: true,
     });
+    expect(
+      parseDesktopReleaseCommand([
+        "validate",
+        "--directory",
+        "release/desktop-migration",
+        "--components",
+        "desktop,win-runtime,wsl-engine,wsl-runtime",
+        "--release-kind",
+        "migration",
+        "--allow-resigned-engine",
+      ])
+    ).toMatchObject({ releaseKind: "migration", allowResignedEngine: true });
   });
 
   it("reads electron-updater metadata and rejects unsafe installer paths", () => {
@@ -450,6 +466,26 @@ describe("desktop-release-artifacts", () => {
 
   it("requires a valid prior unified channel and byte-identical Runtime-only base", async () => {
     const fixture = await createCompleteReleaseFixture();
+    await Promise.all([
+      copyFile(join(fixture.root, "latest.yml"), join(fixture.root, "modern.yml")),
+      copyFile(join(fixture.root, "build-info.json"), join(fixture.root, "build-info-modern.json")),
+    ]);
+    await fixture.writeChannel(
+      {
+        shell: {
+          version: "0.3.0",
+          publishedAt,
+          updaterMetadata: "modern.yml",
+          engineVersion: "2",
+          nodeVersion: "24.19.0",
+          runtimeHostApiVersion: 1,
+          apiProtocolVersion: 1,
+          dataSchemaVersion: 1,
+        },
+      },
+      true,
+      "desktop-channel-modern.json"
+    );
     const previous = await mkdtemp(join(tmpdir(), "coder-studio-release-previous-"));
     roots.push(previous);
     await cp(fixture.root, previous, { recursive: true });
@@ -465,6 +501,79 @@ describe("desktop-release-artifacts", () => {
     await expect(validateDesktopReleaseArtifacts(runtimeOnlyOptions)).rejects.toThrow(
       /carried-forward asset/i
     );
+
+    await copyFile(
+      join(previous, "Coder-Studio-Setup-0.3.0.exe.blockmap"),
+      join(fixture.root, "Coder-Studio-Setup-0.3.0.exe.blockmap")
+    );
+    await writeFile(join(fixture.root, "build-info-modern.json"), "{}\n");
+    await expect(validateDesktopReleaseArtifacts(runtimeOnlyOptions)).rejects.toThrow(
+      /modern asset/i
+    );
+  });
+
+  it("validates a legacy Runtime channel alongside a manual modern Shell migration", async () => {
+    const fixture = await createCompleteReleaseFixture();
+    const previous = await mkdtemp(join(tmpdir(), "coder-studio-release-migration-previous-"));
+    roots.push(previous);
+    await cp(fixture.root, previous, { recursive: true });
+    const modernInstallerName = "Coder-Studio-Setup-0.4.0.exe";
+    const modernInstaller = Buffer.from("modern-signed-installer");
+    const modernInstallerSha = createHash("sha512").update(modernInstaller).digest("base64");
+    await Promise.all([
+      writeFile(join(fixture.root, modernInstallerName), modernInstaller),
+      writeFile(join(fixture.root, `${modernInstallerName}.blockmap`), "modern-blockmap"),
+      writeFile(
+        join(fixture.root, "modern.yml"),
+        [
+          "version: 0.4.0",
+          "files:",
+          `  - url: ${modernInstallerName}`,
+          `    sha512: ${modernInstallerSha}`,
+          `    size: ${modernInstaller.byteLength}`,
+          `path: ${modernInstallerName}`,
+          `sha512: ${modernInstallerSha}`,
+        ].join("\n")
+      ),
+      writeFile(
+        join(fixture.root, "build-info-modern.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          shellVersion: "0.4.0",
+          builtAt: "2026-08-08T00:55:00.000Z",
+          publishedAt,
+          engineVersion: "2",
+          nodeVersion: "24.19.0",
+          runtimeHostApiVersion: 1,
+          apiProtocolVersion: 1,
+          dataSchemaVersion: 1,
+        })
+      ),
+    ]);
+    await fixture.writeChannel(
+      {
+        shell: {
+          version: "0.4.0",
+          publishedAt,
+          updaterMetadata: "modern.yml",
+          engineVersion: "2",
+          nodeVersion: "24.19.0",
+          runtimeHostApiVersion: 1,
+          apiProtocolVersion: 1,
+          dataSchemaVersion: 1,
+        },
+      },
+      true,
+      "desktop-channel-modern.json"
+    );
+
+    await expect(
+      validateDesktopReleaseArtifacts({
+        ...fixture.options,
+        releaseKind: "migration",
+        previousReleaseDirectory: previous,
+      })
+    ).resolves.toBeUndefined();
   });
 
   it("rejects symlinked release metadata", async () => {

@@ -18,6 +18,7 @@ interface WorkflowJob {
     uses?: string;
     if?: string;
     run?: string;
+    env?: Record<string, string>;
     with?: Record<string, unknown>;
   }>;
 }
@@ -217,6 +218,12 @@ describe("GitHub workflow boundaries", () => {
     const forceFullDownloadIndex = publishSteps.findIndex(
       (step) => step.name === "Force full Shell installer download"
     );
+    const previousReleaseIndex = publishSteps.findIndex(
+      (step) => step.name === "Download previous immutable Desktop release"
+    );
+    const migrationChannelIndex = publishSteps.findIndex(
+      (step) => step.name === "Build legacy Runtime and manual modern Shell channels"
+    );
     const validation = publishSteps.find(
       (step) => step.name === "Validate complete signed acceptance channel"
     );
@@ -278,8 +285,13 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain("channel?.shell?.version===currentShell");
     expect(resolveChannel?.run).toContain("?'false':'true'");
     expect(resolveChannel?.run).toContain("release_kind=runtime-only");
+    expect(resolveChannel?.run).toContain("release_kind=migration");
+    expect(resolveChannel?.run).toContain("desktop-channel-modern.json");
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
+    );
+    expect(resolveChannel?.run).toContain(
+      'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain('acceptance_scenarios=\'["fresh-native","fresh-wsl"]\'');
     expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
@@ -327,29 +339,28 @@ describe("GitHub workflow boundaries", () => {
       name: "${{ needs.prepare.outputs.public_key_artifact }}",
       path: "release/desktop-ci-signing",
     });
-    expect(previousShellBlockmapIndex).toBeGreaterThan(-1);
-    expect(forceFullDownloadIndex).toBeGreaterThan(previousShellBlockmapIndex);
-    expect(forceFullDownloadIndex).toBeLessThan(validationIndex);
-    expect(publishSteps[previousShellBlockmapIndex]?.if).toBe(
-      "needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'"
+    expect(previousShellBlockmapIndex).toBe(-1);
+    expect(forceFullDownloadIndex).toBe(-1);
+    expect(previousReleaseIndex).toBeGreaterThan(-1);
+    expect(migrationChannelIndex).toBeGreaterThan(previousReleaseIndex);
+    expect(validationIndex).toBeGreaterThan(migrationChannelIndex);
+    expect(publishSteps[previousReleaseIndex]?.if).toBe(
+      "needs.prepare.outputs.release_kind != 'full'"
     );
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
-      '--pattern "${previous_installer}.blockmap"'
+    expect(publishSteps[migrationChannelIndex]?.run).toContain("--prepare-modern-base");
+    expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-modern-from");
+    expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-shell-from");
+    expect(publishSteps[migrationChannelIndex]?.run).toContain(
+      "--output desktop-channel-modern.json"
     );
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("--pattern latest.yml");
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("require('yaml')");
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
-      "--dir release/desktop-acceptance"
+    expect(validation?.run).toContain('--release-kind "${{ needs.prepare.outputs.release_kind }}"');
+    expect(validation?.run).toContain("--previous-release-directory");
+    expect(validation?.run).toContain("--allow-resigned-engine");
+    expect(validation?.env?.CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY).toBe(
+      "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}"
     );
-    expect(publishSteps[forceFullDownloadIndex]?.if).toBe(
-      "needs.prepare.outputs.release_kind == 'full'"
-    );
-    expect(publishSteps[forceFullDownloadIndex]?.run).toContain(
-      "desktop:force-full-download -- --directory release/desktop-acceptance"
-    );
-    expect(validation?.run).toContain(
-      "validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime'"
-    );
+    expect(JSON.stringify(publish)).not.toContain("desktop:force-full-download");
+    expect(publish.outputs?.complete_artifact).toBe("${{ steps.bundle.outputs.name }}");
     expect(release?.run).toContain("gh release create");
     expect(release?.run).toContain("--draft");
     expect(release?.run).toContain(
@@ -427,17 +438,23 @@ describe("GitHub workflow boundaries", () => {
       published_at: "${{ steps.release.outputs.published_at }}",
       release_kind: "${{ steps.release.outputs.release_kind }}",
       has_previous_desktop: "${{ steps.release.outputs.has_previous_desktop }}",
+      installed_targets: "${{ steps.release.outputs.installed_targets }}",
     });
     const resolveRelease = (release.jobs.prepare.steps ?? []).find(
       (step) => step.name === "Resolve versions and release tag"
     );
     expect(resolveRelease?.run).toContain("has_desktop_channel");
-    expect(resolveRelease?.run).toContain("--pattern desktop-channel.json");
+    expect(resolveRelease?.run).toContain('--pattern "${channel_asset}"');
+    expect(resolveRelease?.run).toContain("desktop-channel-modern.json");
     expect(resolveRelease?.run).toContain("shell_change=$(node -e");
     expect(resolveRelease?.run).toContain('if [[ "${shell_change}" == "same" ]]');
     expect(resolveRelease?.run).toContain('elif [[ "${shell_change}" == "downgrade" ]]');
     expect(resolveRelease?.run).toContain("elif ! grep -q '(HTTP 404)'");
     expect(resolveRelease?.run).toContain('release_kind="runtime-only"');
+    expect(resolveRelease?.run).toContain('release_kind="migration"');
+    expect(resolveRelease?.run).toContain(
+      'installed_targets=["native","wsl","fresh-native","fresh-wsl"]'
+    );
     expect(resolveRelease?.run).toContain('echo "release_kind=${release_kind}"');
     const linuxBuild = release.jobs["linux-assets"];
     const windowsBuild = release.jobs["windows-assets"];
@@ -464,8 +481,8 @@ describe("GitHub workflow boundaries", () => {
     const previousIndex = publishSteps.findIndex(
       (step) => step.name === "Download previous immutable release"
     );
-    const carryIndex = publishSteps.findIndex(
-      (step) => step.name === "Carry forward immutable Shell and Engine"
+    const prepareBasesIndex = publishSteps.findIndex(
+      (step) => step.name === "Prepare legacy and modern Shell bases"
     );
     const channelIndex = publishSteps.findIndex(
       (step) => step.name === "Build signed Desktop channel"
@@ -484,33 +501,23 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Publish immutable prerelease"
     );
     expect(previousIndex).toBeGreaterThan(-1);
-    expect(carryIndex).toBeGreaterThan(previousIndex);
-    expect(previousShellBlockmapIndex).toBeGreaterThan(carryIndex);
-    expect(forceFullDownloadIndex).toBeGreaterThan(previousShellBlockmapIndex);
-    expect(channelIndex).toBeGreaterThan(forceFullDownloadIndex);
+    expect(prepareBasesIndex).toBeGreaterThan(previousIndex);
+    expect(previousShellBlockmapIndex).toBe(-1);
+    expect(forceFullDownloadIndex).toBe(-1);
+    expect(channelIndex).toBeGreaterThan(prepareBasesIndex);
     expect(productionValidateIndex).toBeGreaterThan(channelIndex);
     expect(attestIndex).toBeGreaterThan(productionValidateIndex);
     expect(releaseIndex).toBeGreaterThan(attestIndex);
-    expect(publishSteps[previousShellBlockmapIndex]?.if).toBe(
-      "needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'"
-    );
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
-      '--pattern "${previous_installer}.blockmap"'
-    );
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("--pattern latest.yml");
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("require('yaml')");
-    expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
-      "--dir release/desktop-release-final"
-    );
-    expect(publishSteps[forceFullDownloadIndex]?.if).toBe(
-      "needs.prepare.outputs.release_kind == 'full'"
-    );
-    expect(publishSteps[forceFullDownloadIndex]?.run).toContain(
-      "desktop:force-full-download -- --directory release/desktop-release-final"
-    );
+    expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-modern-from");
+    expect(publishSteps[prepareBasesIndex]?.run).toContain("--prepare-modern-base");
+    expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-from");
+    expect(publishSteps[channelIndex]?.run).toContain("--output desktop-channel-modern.json");
     expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
+    expect(publishSteps[productionValidateIndex]?.run).toContain("--previous-release-directory");
     expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
+    expect(publishSteps[releaseIndex]?.run).toContain("must install Coder-Studio-Setup-");
     expect(publishSteps[releaseIndex]?.run).toContain("not Authenticode-signed");
+    expect(JSON.stringify(release.jobs.publish)).not.toContain("desktop:force-full-download");
   });
 
   it("gates Desktop and CLI promotion on immutable installed-upgrade reports", () => {
@@ -538,7 +545,8 @@ describe("GitHub workflow boundaries", () => {
     expect(runInstalled?.run).toContain("-SkipAuthenticode");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
-    expect(prepareScenario?.run).toContain("$useRuntimeOnlyChannel");
+    expect(prepareScenario?.run).toContain("$useModernChannel");
+    expect(prepareScenario?.run).toContain("'desktop-channel-modern.json'");
     expect(prepareScenario?.run).toContain("$releaseKind -eq 'full'");
     expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
     expect(prepareScenario?.run).toContain("InvariantCulture");
@@ -557,6 +565,9 @@ describe("GitHub workflow boundaries", () => {
     const releaseInstalled = release.jobs["installed-upgrade"];
     const promotion = release.jobs.promote;
     expect(releaseInstalled.needs).toEqual(["prepare", "publish"]);
+    expect(releaseInstalled.strategy?.matrix?.target).toBe(
+      "${{ fromJSON(needs.prepare.outputs.installed_targets) }}"
+    );
     const releaseRunInstalled = (releaseInstalled.steps ?? []).find(
       (step) => step.name === "Run production installed Desktop update"
     );
@@ -580,7 +591,13 @@ describe("GitHub workflow boundaries", () => {
     );
     const promote = promotionSteps.find((step) => step.name === "Promote existing prerelease");
     expect(downloadChannel?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
+    expect(downloadChannel?.run).toContain("--pattern 'desktop-channel*.json'");
     expect(validateReports?.run).toContain("channelSignatureDigest");
+    expect(validateReports?.run).toContain("modernChannelSignatureDigest");
+    expect(validateReports?.run).toContain('report.scenario.startsWith("fresh-")');
+    expect(validateReports?.run).toContain(
+      'const expectedProductionCount = releaseKind === "migration" ? 4 : 2'
+    );
     expect(validateReports?.run).toContain("text.charCodeAt(0) === 0xfeff");
     expect(validateReports?.run).toContain("commitSha");
     expect(validateReports?.run).toContain("wslRuntimeVersion");
@@ -656,6 +673,8 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
     expect(steps[desktopReportIndex]?.run).toContain("releaseKinds");
     expect(steps[desktopReportIndex]?.run).toContain('releaseKind === "full"');
+    expect(steps[desktopReportIndex]?.run).toContain('releaseKind !== "migration"');
+    expect(steps[desktopReportIndex]?.run).toContain("reports.length === 2");
     expect(steps[desktopReportIndex]?.run).toContain(
       'report.scenario !== "runtime-health-rollback"'
     );

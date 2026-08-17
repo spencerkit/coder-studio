@@ -56,10 +56,15 @@ jobs:
             has_previous_desktop=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
             if [[ "${has_previous_desktop}" == "true" ]]; then
               latest_tag=$(node -e "const release=require(process.argv[1]); process.stdout.write(release.tag_name)" "${latest_release_json}")
+              has_modern_channel=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel-modern.json')?'true':'false')" "${latest_release_json}")
+              channel_asset=desktop-channel.json
+              if [[ "${has_modern_channel}" == "true" ]]; then
+                channel_asset=desktop-channel-modern.json
+              fi
               latest_channel="${RUNNER_TEMP}/coder-studio-latest-channel.json"
               gh release download "${latest_tag}" \
                 --repo "${GITHUB_REPOSITORY}" \
-                --pattern desktop-channel.json \
+                --pattern "${channel_asset}" \
                 --output "${latest_channel}"
               current_shell=$(node -p "require('./packages/desktop/package.json').version")
               current_runtime=$(node -p "require('./packages/cli/package.json').version")
@@ -72,6 +77,8 @@ jobs:
                 elif [[ "${shell_change}" == "downgrade" ]]; then
                   echo "Desktop Shell ${current_shell} is older than stable ${previous_shell}" >&2
                   exit 1
+                else
+                  release_kind=migration
                 fi
               fi
             fi
@@ -82,8 +89,10 @@ jobs:
           if [[ "${has_previous_desktop}" == "true" ]]; then
             if [[ "${release_kind}" == "full" ]]; then
               acceptance_scenarios='["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
+            elif [[ "${release_kind}" == "migration" ]]; then
+              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]'
             else
-              acceptance_scenarios='["runtime-only","combined","wsl","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
+              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]'
             fi
           else
             acceptance_scenarios='["fresh-native","fresh-wsl"]'
@@ -149,7 +158,7 @@ jobs:
     permissions:
       contents: write
     outputs:
-      complete_artifact: ${{ needs.build-assets.outputs.complete_artifact }}
+      complete_artifact: ${{ steps.bundle.outputs.name }}
 
     steps:
       - name: Checkout repository
@@ -176,26 +185,51 @@ jobs:
           name: ${{ needs.build-assets.outputs.complete_artifact }}
           path: release/desktop-acceptance
 
-      - name: Carry forward previous Shell blockmap for legacy updater fallback
-        if: needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'
+      - name: Download previous immutable Desktop release
+        if: needs.prepare.outputs.release_kind != 'full'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          mkdir -p release/desktop-acceptance-previous
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
-          previous_metadata="${RUNNER_TEMP}/coder-studio-previous-latest.yml"
-          gh release download "${latest_tag}" \
-            --pattern latest.yml \
-            --output "${previous_metadata}"
-          previous_installer=$(node -e "const { readFileSync } = require('node:fs'); const { parse } = require('yaml'); const value = parse(readFileSync(process.argv[1], 'utf8')).path; if (typeof value !== 'string' || !value) process.exit(1); process.stdout.write(value)" "${previous_metadata}")
-          gh release download "${latest_tag}" \
-            --pattern "${previous_installer}.blockmap" \
-            --dir release/desktop-acceptance \
-            --clobber
+          gh release download "${latest_tag}" --dir release/desktop-acceptance-previous
 
-      - name: Force full Shell installer download
-        if: needs.prepare.outputs.release_kind == 'full'
-        run: pnpm desktop:force-full-download -- --directory release/desktop-acceptance
+      - name: Download acceptance private signing key
+        if: needs.prepare.outputs.release_kind != 'full'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Build legacy Runtime and manual modern Shell channels
+        if: needs.prepare.outputs.release_kind != 'full'
+        shell: bash
+        run: |
+          directory=release/desktop-acceptance
+          previous=release/desktop-acceptance-previous
+          generated_at=$(node -e "const channel=require('./release/desktop-acceptance/desktop-channel.json'); process.stdout.write(channel.generatedAt)")
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
+            pnpm desktop:channel -- --directory "${directory}" --prepare-modern-base
+          else
+            pnpm desktop:channel -- --directory "${directory}" --carry-forward-modern-from "${previous}"
+          fi
+          pnpm desktop:channel -- --directory "${directory}" --carry-forward-shell-from "${previous}"
+          pnpm desktop:channel -- \
+            --directory "${directory}" \
+            --release-tag "${{ needs.prepare.outputs.release_tag }}" \
+            --channel prerelease \
+            --generated-at "${generated_at}" \
+            --private-key release/desktop-ci-signing/runtime-private.pem
+          pnpm desktop:channel -- \
+            --directory "${directory}" \
+            --release-tag "${{ needs.prepare.outputs.release_tag }}" \
+            --channel prerelease \
+            --generated-at "${generated_at}" \
+            --private-key release/desktop-ci-signing/runtime-private.pem \
+            --build-info build-info-modern.json \
+            --updater-metadata modern.yml \
+            --output desktop-channel-modern.json
 
       - name: Download acceptance public key
         uses: actions/download-artifact@v4
@@ -213,7 +247,36 @@ jobs:
           } >> "${GITHUB_ENV}"
 
       - name: Validate complete signed acceptance channel
-        run: pnpm desktop:artifacts validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime' --release-kind full
+        shell: bash
+        env:
+          CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+        run: |
+          validation_args=(
+            validate
+            --directory release/desktop-acceptance
+            --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
+            --release-kind "${{ needs.prepare.outputs.release_kind }}"
+          )
+          if [[ "${{ needs.prepare.outputs.release_kind }}" != "full" ]]; then
+            validation_args+=(
+              --previous-release-directory release/desktop-acceptance-previous
+              --allow-resigned-engine
+            )
+          fi
+          pnpm desktop:artifacts "${validation_args[@]}"
+
+      - name: Resolve installed acceptance bundle identity
+        id: bundle
+        shell: bash
+        run: echo "name=desktop-acceptance-channel-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload installed acceptance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.bundle.outputs.name }}
+          path: release/desktop-acceptance/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Publish tag-pinned prerelease
         shell: bash
@@ -330,29 +393,36 @@ jobs:
       - name: Prepare scenario-specific signed channel
         id: scenario
         shell: pwsh
+        env:
+          CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
         run: |
           $candidate = 'release/desktop-installed-candidate'
           $previous = 'release/desktop-installed-previous'
           $scenario = '${{ matrix.scenario }}'
           $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
           $releaseKind = '${{ needs.prepare.outputs.release_kind }}'
-          $useRuntimeOnlyChannel = $hasPreviousDesktop -and $releaseKind -eq 'runtime-only' -and $scenario -notin @('combined', 'wsl-combined')
+          $useModernChannel = $releaseKind -in @('migration', 'runtime-only') -and $scenario -in @('fresh-native', 'fresh-wsl')
           $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
           $generatedAt = ([DateTimeOffset]$originalChannel.generatedAt).UtcDateTime.ToString(
             'yyyy-MM-ddTHH:mm:ss.fffZ',
             [Globalization.CultureInfo]::InvariantCulture
           )
           $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
-          if ($useRuntimeOnlyChannel) {
-            pnpm desktop:channel -- --directory $candidate --carry-forward-from $previous
-            if ($LASTEXITCODE -ne 0) { throw 'Unable to carry forward the previous Shell for the Runtime-only scenario' }
+          $channelArguments = @(
+            '--directory', $candidate,
+            '--release-tag', $scenarioTag,
+            '--channel', 'prerelease',
+            '--generated-at', $generatedAt,
+            '--private-key', 'release/desktop-ci-signing/runtime-private.pem'
+          )
+          if ($useModernChannel) {
+            $channelArguments += @(
+              '--build-info', 'build-info-modern.json',
+              '--updater-metadata', 'modern.yml',
+              '--output', 'desktop-channel-modern.json'
+            )
           }
-          pnpm desktop:channel -- `
-            --directory $candidate `
-            --release-tag $scenarioTag `
-            --channel prerelease `
-            --generated-at $generatedAt `
-            --private-key release/desktop-ci-signing/runtime-private.pem
+          pnpm desktop:channel -- @channelArguments
           if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
           $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
           $validation = @(
@@ -360,19 +430,22 @@ jobs:
             '--directory', $candidate,
             '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
           )
-          if (-not $useRuntimeOnlyChannel) {
-            $validation += @('--release-kind', 'full')
-          } else {
+          if ($releaseKind -in @('migration', 'runtime-only')) {
             $validation += @(
-              '--release-kind', 'runtime-only',
-              '--previous-release-directory', $previous
+              '--release-kind', $releaseKind,
+              '--previous-release-directory', $previous,
+              '--allow-resigned-engine'
             )
+          } else {
+            $validation += @('--release-kind', 'full')
           }
           pnpm @validation
           if ($LASTEXITCODE -ne 0) { throw 'Scenario Desktop channel validation failed' }
 
-          $channel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
-          $candidateMetadata = Get-Content (Join-Path $candidate 'latest.yml') -Raw
+          $channelFile = if ($useModernChannel) { 'desktop-channel-modern.json' } else { 'desktop-channel.json' }
+          $metadataFile = if ($useModernChannel) { 'modern.yml' } else { 'latest.yml' }
+          $channel = Get-Content (Join-Path $candidate $channelFile) -Raw | ConvertFrom-Json
+          $candidateMetadata = Get-Content (Join-Path $candidate $metadataFile) -Raw
           $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
           if ($hasPreviousDesktop) {
             $previousChannel = Get-Content (Join-Path $previous 'desktop-channel.json') -Raw | ConvertFrom-Json
@@ -409,7 +482,7 @@ jobs:
           $portListener.Stop()
           $server = Start-Process python -ArgumentList @('-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $candidate) -PassThru -WindowStyle Hidden
           $server.Id | Set-Content release/desktop-installed-http.pid
-          "channel_url=http://127.0.0.1:$port/desktop-channel.json" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "channel_url=http://127.0.0.1:$port/$channelFile" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "candidate_installer=$candidate/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8

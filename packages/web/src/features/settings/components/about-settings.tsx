@@ -21,6 +21,8 @@ import {
 import type { UpdateController } from "../../updates/types";
 
 const UPDATE_INTERVALS = [3600, 21600, 43200, 86400] as const;
+const DESKTOP_012_INSTALLER_URL =
+  "https://github.com/spencerkit/coder-studio/releases/download/desktop-v0.1.2/Coder-Studio-Setup-0.1.2.exe";
 
 export type AboutSettingsView = "all" | "product" | "update-status" | "auto-update";
 export type ProductUpdatePrimaryAction = "check" | "download" | "cancel" | "prepare" | "retry";
@@ -276,6 +278,25 @@ export function AboutSettings({
         <div className="settings-group">
           <h3 className="settings-group-title">{t("settings.about.update_group")}</h3>
           <p className="settings-group-desc">{t("settings.about.unified_update_group_hint")}</p>
+          {updateState?.diagnostics.shellVersion === "0.1.1" ? (
+            <Notice
+              data-testid="desktop-shell-migration-notice"
+              tone="warning"
+              title={t("settings.about.shell_migration_title")}
+              message={t("settings.about.shell_migration_message")}
+              action={
+                <Button
+                  as="a"
+                  href={DESKTOP_012_INSTALLER_URL}
+                  rel="noreferrer"
+                  target="_blank"
+                  variant="secondary"
+                >
+                  {t("settings.about.shell_migration_download")}
+                </Button>
+              }
+            />
+          ) : null}
           {guidanceKey ? <Notice tone="info" message={t(guidanceKey)} /> : null}
           <div className="settings-info-row">
             <span className="settings-info-label">{t("settings.about.latest_version")}</span>
