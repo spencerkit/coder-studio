@@ -266,6 +266,42 @@ describe("verify-cli-update", () => {
     expect(deps.removePrefix).toHaveBeenCalledWith(prefix);
   });
 
+  it("waits for the startup update check before verifying the exact candidate", async () => {
+    const deps = createDeps();
+    const defaultCallWs = vi.mocked(deps.callWs).getMockImplementation();
+    if (!defaultCallWs) throw new Error("Expected the default WebSocket mock implementation");
+    let checkAttempts = 0;
+    vi.mocked(deps.callWs).mockImplementation(async (input) => {
+      if (input.op === "updates.check") {
+        checkAttempts += 1;
+        if (checkAttempts === 1) {
+          throw new Error("update_busy: Update check is already in progress");
+        }
+      }
+      return await defaultCallWs(input);
+    });
+
+    await expect(
+      verifyCliUpdate(
+        {
+          packageName: "@spencer-kit/coder-studio",
+          previousVersion: "0.5.0",
+          candidateVersion: "0.6.0",
+          registryUrl: "https://registry.npmjs.org/",
+          distTag: "coder-studio-accept-42",
+          prefix: resolve("/tmp/coder-studio-cli-acceptance-background-check"),
+        },
+        deps
+      )
+    ).resolves.toMatchObject({
+      previousVersion: "0.5.0",
+      candidateVersion: "0.6.0",
+      reconciledStatus: "succeeded",
+    });
+    expect(checkAttempts).toBe(2);
+    expect(deps.wait).toHaveBeenCalledWith(500);
+  });
+
   it("bootstraps an exact candidate from a legacy v1 update state", async () => {
     const deps = createDeps();
     let startInstallAttempts = 0;
