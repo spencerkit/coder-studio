@@ -799,4 +799,4 @@ jobs:
       - name: Promote existing prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest
