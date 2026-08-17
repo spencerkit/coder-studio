@@ -14,6 +14,8 @@ param(
   [ValidateSet(
     'fresh-native',
     'fresh-wsl',
+    'legacy-current',
+    'legacy-wsl-current',
     'runtime-only',
     'combined',
     'wsl',
@@ -107,7 +109,7 @@ function Start-AcceptanceDesktop(
     "--user-data-dir=$UserDataDirectory",
     "--coder-studio-environment-root=$UserDataDirectory"
   )
-  if ($ScenarioName -in @('fresh-wsl', 'wsl', 'wsl-combined')) {
+  if ($ScenarioName -in @('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')) {
     $arguments += '--coder-studio-environment-target=wsl'
     $arguments += "--coder-studio-wsl-distro=$Distro"
   } else {
@@ -209,7 +211,7 @@ if (-not $SkipAuthenticode) {
   Assert-Authenticode $candidateInstallerPath 'Candidate installer'
 }
 $isFreshInstall = $Scenario -in @('fresh-native', 'fresh-wsl')
-$isWslScenario = $Scenario -in @('fresh-wsl', 'wsl', 'wsl-combined')
+$isWslScenario = $Scenario -in @('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')
 
 $runId = "coder-studio-installed-acceptance-$([Guid]::NewGuid().ToString('N'))"
 $runRoot = Join-Path ([System.IO.Path]::GetTempPath()) $runId

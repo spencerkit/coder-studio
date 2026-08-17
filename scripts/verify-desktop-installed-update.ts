@@ -14,6 +14,8 @@ const execFileAsync = promisify(execFile);
 export type InstalledDesktopScenarioName =
   | "fresh-native"
   | "fresh-wsl"
+  | "legacy-current"
+  | "legacy-wsl-current"
   | "runtime-only"
   | "combined"
   | "wsl"
@@ -97,7 +99,12 @@ function assertPlanComponents(state: ProductUpdateState, expected: string[]): vo
 }
 
 function isWslScenario(name: InstalledDesktopScenarioName): boolean {
-  return name === "fresh-wsl" || name === "wsl" || name === "wsl-combined";
+  return (
+    name === "fresh-wsl" ||
+    name === "legacy-wsl-current" ||
+    name === "wsl" ||
+    name === "wsl-combined"
+  );
 }
 
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1_000;
@@ -186,6 +193,40 @@ export async function verifyInstalledDesktopScenario(
       rollbackRuntimeVersion: null,
       externalSidecarReadOnly: true,
       logPaths: [],
+    };
+  }
+
+  if (scenario.name === "legacy-current" || scenario.name === "legacy-wsl-current") {
+    const checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates");
+    assertPlanComponents(checked, []);
+    if (checked.status !== "idle" && checked.status !== "succeeded") {
+      throw new Error(`Frozen legacy Desktop channel produced update state ${checked.status}`);
+    }
+    const evidence = await deps.readEvidence();
+    if (
+      evidence.actualShellVersion !== scenario.targetShellVersion ||
+      evidence.actualRuntimeVersion !== scenario.targetRuntimeVersion
+    ) {
+      throw new Error("Frozen legacy Desktop changed an installed component version");
+    }
+    if (scenario.name === "legacy-wsl-current") {
+      if (evidence.wslRuntimeVersion !== scenario.targetRuntimeVersion) {
+        throw new Error("Frozen legacy WSL Runtime did not remain current");
+      }
+      if (evidence.wslNpmMarkerExists) {
+        throw new Error("WSL npm marker was invoked by the frozen legacy channel");
+      }
+    }
+    return {
+      schemaVersion: 1,
+      scenario: scenario.name,
+      confirmationCount: 0,
+      restartCount: 0,
+      expectedComponentIds: [],
+      ...evidence,
+      rollbackRuntimeVersion: evidence.rollbackRuntimeVersion ?? null,
+      externalSidecarReadOnly: evidence.externalSidecarReadOnly ?? false,
+      logPaths: evidence.logPaths ?? [],
     };
   }
 

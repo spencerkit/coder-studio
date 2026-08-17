@@ -12,6 +12,10 @@ import {
 import type { RuntimeManifestV2 } from "../packages/desktop/src/runtime-manifest.js";
 import { canonicalSigningPayload } from "../packages/desktop/src/signed-json.js";
 import {
+  MODERN_LINUX_RUNTIME_MANIFEST,
+  MODERN_WINDOWS_RUNTIME_MANIFEST,
+} from "./build-desktop-channel.js";
+import {
   type DesktopReleaseComponent,
   parseDesktopReleaseCommand,
   parseUpdaterMetadata,
@@ -30,7 +34,7 @@ async function hashEntry(path: string) {
   return { sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength };
 }
 
-async function createCompleteReleaseFixture() {
+async function createCompleteReleaseFixture(runtimeVersion = "0.6.0") {
   const root = await mkdtemp(join(tmpdir(), "coder-studio-release-test-"));
   roots.push(root);
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
@@ -81,8 +85,8 @@ async function createCompleteReleaseFixture() {
         : "coder-studio-server-runtime-linux-x64.manifest.json";
     const packageFile =
       target === "win32-x64"
-        ? "coder-studio-runtime-0.6.0-win32-x64.tgz"
-        : "coder-studio-server-runtime-0.6.0-linux-x64.tgz";
+        ? `coder-studio-runtime-${runtimeVersion}-win32-x64.tgz`
+        : `coder-studio-server-runtime-${runtimeVersion}-linux-x64.tgz`;
     const staging = await mkdtemp(join(tmpdir(), "coder-studio-runtime-fixture-"));
     roots.push(staging);
     await writeFile(join(staging, "server.mjs"), `export const target = "${target}";\n`);
@@ -99,7 +103,7 @@ async function createCompleteReleaseFixture() {
     const unsigned: RuntimeManifestV2 = {
       schemaVersion: 2,
       publishedAt,
-      runtimeVersion: "0.6.0",
+      runtimeVersion,
       minShellVersion: "0.3.0",
       requiredEngineVersion: "2",
       requiredNodeVersion: "24.19.0",
@@ -192,12 +196,12 @@ async function createCompleteReleaseFixture() {
       },
       runtimes: {
         "win32-x64": {
-          version: "0.6.0",
+          version: runtimeVersion,
           publishedAt,
           manifest: "coder-studio-runtime-win32-x64.manifest.json",
         },
         "linux-x64": {
-          version: "0.6.0",
+          version: runtimeVersion,
           publishedAt,
           manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
         },
@@ -514,42 +518,31 @@ describe("desktop-release-artifacts", () => {
 
   it("validates a legacy Runtime channel alongside a manual modern Shell migration", async () => {
     const fixture = await createCompleteReleaseFixture();
-    const previous = await mkdtemp(join(tmpdir(), "coder-studio-release-migration-previous-"));
-    roots.push(previous);
-    await cp(fixture.root, previous, { recursive: true });
-    const previousKeys = generateKeyPairSync("ed25519");
-    const previousPublicKeyPem = previousKeys.publicKey
-      .export({ type: "spki", format: "pem" })
-      .toString();
+    const previousFixture = await createCompleteReleaseFixture("0.5.0");
+    const previous = previousFixture.root;
+    const previousPublicKeyPem = previousFixture.options.publicKeyPem;
+    await Promise.all([
+      copyFile(
+        join(fixture.root, "coder-studio-runtime-win32-x64.manifest.json"),
+        join(fixture.root, MODERN_WINDOWS_RUNTIME_MANIFEST)
+      ),
+      copyFile(
+        join(fixture.root, "coder-studio-server-runtime-linux-x64.manifest.json"),
+        join(fixture.root, MODERN_LINUX_RUNTIME_MANIFEST)
+      ),
+    ]);
     for (const filename of [
-      "desktop-channel.json",
+      "Coder-Studio-Setup-0.3.0.exe",
+      "Coder-Studio-Setup-0.3.0.exe.blockmap",
+      "build-info.json",
+      "coder-studio-runtime-0.5.0-win32-x64.tgz",
       "coder-studio-runtime-win32-x64.manifest.json",
+      "coder-studio-server-runtime-0.5.0-linux-x64.tgz",
       "coder-studio-server-runtime-linux-x64.manifest.json",
+      "desktop-channel.json",
+      "latest.yml",
     ]) {
-      const signed = JSON.parse(await readFile(join(previous, filename), "utf8")) as Record<
-        string,
-        unknown
-      >;
-      const unsigned = { ...signed };
-      delete unsigned.signature;
-      await writeFile(
-        join(previous, filename),
-        `${JSON.stringify(
-          {
-            ...unsigned,
-            signature: {
-              algorithm: "ed25519",
-              value: sign(
-                null,
-                canonicalSigningPayload(unsigned),
-                previousKeys.privateKey
-              ).toString("base64"),
-            },
-          },
-          null,
-          2
-        )}\n`
-      );
+      await copyFile(join(previous, filename), join(fixture.root, filename));
     }
     const modernInstallerName = "Coder-Studio-Setup-0.4.0.exe";
     const modernInstaller = Buffer.from("modern-signed-installer");
@@ -595,6 +588,18 @@ describe("desktop-release-artifacts", () => {
           runtimeHostApiVersion: 1,
           apiProtocolVersion: 1,
           dataSchemaVersion: 1,
+        },
+        runtimes: {
+          "win32-x64": {
+            version: "0.6.0",
+            publishedAt,
+            manifest: MODERN_WINDOWS_RUNTIME_MANIFEST,
+          },
+          "linux-x64": {
+            version: "0.6.0",
+            publishedAt,
+            manifest: MODERN_LINUX_RUNTIME_MANIFEST,
+          },
         },
       },
       true,

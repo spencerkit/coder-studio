@@ -70,15 +70,6 @@ jobs:
                 --repo "${GITHUB_REPOSITORY}" \
                 --pattern "${channel_asset}" \
                 --output "${latest_channel}"
-              legacy_channel="${latest_channel}"
-              if [[ "${has_modern_channel}" == "true" ]]; then
-                legacy_channel="${RUNNER_TEMP}/coder-studio-latest-legacy-channel.json"
-                gh release download "${latest_tag}" \
-                  --repo "${GITHUB_REPOSITORY}" \
-                  --pattern desktop-channel.json \
-                  --output "${legacy_channel}"
-              fi
-              runtime_min_shell_version=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${legacy_channel}")
               has_previous_desktop=$(node -e "const channel=require(process.argv[1]); const currentShell=process.argv[2]; const currentRuntime=process.argv[3]; process.stdout.write(channel?.shell?.version===currentShell&&channel?.runtimes?.['win32-x64']?.version===currentRuntime&&channel?.runtimes?.['linux-x64']?.version===currentRuntime?'false':'true')" "${latest_channel}" "${current_shell}" "${current_runtime}")
               if [[ "${has_previous_desktop}" == "true" ]]; then
                 previous_shell=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${latest_channel}")
@@ -101,7 +92,7 @@ jobs:
             if [[ "${release_kind}" == "full" ]]; then
               acceptance_scenarios='["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
             elif [[ "${release_kind}" == "migration" ]]; then
-              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]'
+              acceptance_scenarios='["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]'
             else
               acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]'
             fi
@@ -225,16 +216,26 @@ jobs:
           generated_at=$(node -e "const channel=require('./release/desktop-acceptance/desktop-channel.json'); process.stdout.write(channel.generatedAt)")
           if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
             pnpm desktop:channel -- --directory "${directory}" --prepare-modern-base
+            pnpm desktop:channel -- --directory "${directory}" --carry-forward-legacy-from "${previous}"
           else
             pnpm desktop:channel -- --directory "${directory}" --carry-forward-modern-from "${previous}"
+            pnpm desktop:channel -- --directory "${directory}" --carry-forward-shell-from "${previous}"
           fi
-          pnpm desktop:channel -- --directory "${directory}" --carry-forward-shell-from "${previous}"
-          pnpm desktop:channel -- \
-            --directory "${directory}" \
-            --release-tag "${{ needs.prepare.outputs.release_tag }}" \
-            --channel prerelease \
-            --generated-at "${generated_at}" \
-            --private-key release/desktop-ci-signing/runtime-private.pem
+          if [[ "${{ needs.prepare.outputs.release_kind }}" != "migration" ]]; then
+            pnpm desktop:channel -- \
+              --directory "${directory}" \
+              --release-tag "${{ needs.prepare.outputs.release_tag }}" \
+              --channel prerelease \
+              --generated-at "${generated_at}" \
+              --private-key release/desktop-ci-signing/runtime-private.pem
+          fi
+          modern_runtime_args=()
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
+            modern_runtime_args+=(
+              --windows-runtime-manifest coder-studio-runtime-modern-win32-x64.manifest.json
+              --linux-runtime-manifest coder-studio-server-runtime-modern-linux-x64.manifest.json
+            )
+          fi
           pnpm desktop:channel -- \
             --directory "${directory}" \
             --release-tag "${{ needs.prepare.outputs.release_tag }}" \
@@ -243,6 +244,7 @@ jobs:
             --private-key release/desktop-ci-signing/runtime-private.pem \
             --build-info build-info-modern.json \
             --updater-metadata modern.yml \
+            "${modern_runtime_args[@]}" \
             --output desktop-channel-modern.json
 
       - name: Download acceptance public key
@@ -420,8 +422,10 @@ jobs:
           $scenario = '${{ matrix.scenario }}'
           $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
           $releaseKind = '${{ needs.prepare.outputs.release_kind }}'
-          $useModernChannel = $releaseKind -in @('migration', 'runtime-only') -and $scenario -in @('fresh-native', 'fresh-wsl')
-          $originalChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $isFrozenLegacy = $releaseKind -eq 'migration' -and $scenario -in @('legacy-current', 'legacy-wsl-current')
+          $useModernChannel = $releaseKind -in @('migration', 'runtime-only') -and $scenario -in @('fresh-native', 'fresh-wsl', 'external-sidecar-browser')
+          $originalChannelFile = if ($useModernChannel) { 'desktop-channel-modern.json' } else { 'desktop-channel.json' }
+          $originalChannel = Get-Content (Join-Path $candidate $originalChannelFile) -Raw | ConvertFrom-Json
           $generatedAt = ([DateTimeOffset]$originalChannel.generatedAt).UtcDateTime.ToString(
             'yyyy-MM-ddTHH:mm:ss.fffZ',
             [Globalization.CultureInfo]::InvariantCulture
@@ -440,10 +444,24 @@ jobs:
               '--updater-metadata', 'modern.yml',
               '--output', 'desktop-channel-modern.json'
             )
+            if ($releaseKind -eq 'migration') {
+              $channelArguments += @(
+                '--windows-runtime-manifest', 'coder-studio-runtime-modern-win32-x64.manifest.json',
+                '--linux-runtime-manifest', 'coder-studio-server-runtime-modern-linux-x64.manifest.json'
+              )
+            }
           }
-          pnpm desktop:channel -- @channelArguments
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
+          if (-not $isFrozenLegacy) {
+            pnpm desktop:channel -- @channelArguments
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
+          }
           $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
+          if ($releaseKind -eq 'migration') {
+            if (-not $env:CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY) {
+              throw 'Previous Runtime public key is required for frozen legacy acceptance'
+            }
+            $env:CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY | Set-Content release/desktop-ci-signing/runtime-previous-public.pem -NoNewline
+          }
           $validation = @(
             'desktop:artifacts', 'validate',
             '--directory', $candidate,
@@ -461,10 +479,11 @@ jobs:
           pnpm @validation
           if ($LASTEXITCODE -ne 0) { throw 'Scenario Desktop channel validation failed' }
 
+          $channelRoot = if ($isFrozenLegacy) { $previous } else { $candidate }
           $channelFile = if ($useModernChannel) { 'desktop-channel-modern.json' } else { 'desktop-channel.json' }
           $metadataFile = if ($useModernChannel) { 'modern.yml' } else { 'latest.yml' }
-          $channel = Get-Content (Join-Path $candidate $channelFile) -Raw | ConvertFrom-Json
-          $candidateMetadata = Get-Content (Join-Path $candidate $metadataFile) -Raw
+          $channel = Get-Content (Join-Path $channelRoot $channelFile) -Raw | ConvertFrom-Json
+          $candidateMetadata = Get-Content (Join-Path $channelRoot $metadataFile) -Raw
           $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
           if ($hasPreviousDesktop) {
             $previousChannel = Get-Content (Join-Path $previous 'desktop-channel.json') -Raw | ConvertFrom-Json
@@ -478,7 +497,7 @@ jobs:
             $previousShell = $channel.shell.version
             $previousRuntime = $channel.runtimes.'win32-x64'.version
           }
-          $components = if ($scenario -in @('fresh-native', 'fresh-wsl')) {
+          $components = if ($scenario -in @('fresh-native', 'fresh-wsl', 'legacy-current', 'legacy-wsl-current')) {
             ''
           } elseif ($scenario -eq 'external-sidecar-browser') {
             ''
@@ -499,11 +518,11 @@ jobs:
           $portListener.Start()
           $port = ([Net.IPEndPoint]$portListener.LocalEndpoint).Port
           $portListener.Stop()
-          $server = Start-Process python -ArgumentList @('-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $candidate) -PassThru -WindowStyle Hidden
+          $server = Start-Process python -ArgumentList @('-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $channelRoot) -PassThru -WindowStyle Hidden
           $server.Id | Set-Content release/desktop-installed-http.pid
           "channel_url=http://127.0.0.1:$port/$channelFile" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "candidate_installer=$candidate/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate_installer=$channelRoot/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "previous_shell=$previousShell" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "previous_runtime=$previousRuntime" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -511,9 +530,11 @@ jobs:
           "target_runtime=$($channel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $publicKeyPath = if ($isFrozenLegacy) { 'release/desktop-ci-signing/runtime-previous-public.pem' } else { 'release/desktop-ci-signing/runtime-public.pem' }
+          "public_key_path=$publicKeyPath" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Prepare disposable WSL distribution
-        if: matrix.scenario == 'fresh-wsl' || matrix.scenario == 'wsl' || matrix.scenario == 'wsl-combined'
+        if: matrix.scenario == 'fresh-wsl' || matrix.scenario == 'legacy-wsl-current' || matrix.scenario == 'wsl' || matrix.scenario == 'wsl-combined'
         id: wsl
         shell: pwsh
         run: |
@@ -541,7 +562,7 @@ jobs:
             '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
             '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
             '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
-            '-PublicKeyPath', 'release/desktop-ci-signing/runtime-public.pem',
+            '-PublicKeyPath', '${{ steps.scenario.outputs.public_key_path }}',
             '-Scenario', '${{ matrix.scenario }}',
             '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
             '-CommitSha', '${{ github.sha }}',
@@ -553,7 +574,7 @@ jobs:
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
             $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
           }
-          if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'wsl', 'wsl-combined')) {
+          if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')) {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
           if ('${{ inputs.windows_signing }}' -ne 'true') {
