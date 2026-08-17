@@ -44,6 +44,7 @@ jobs:
       channel: ${{ steps.release.outputs.channel }}
       release_kind: ${{ steps.release.outputs.release_kind }}
       has_previous_desktop: ${{ steps.release.outputs.has_previous_desktop }}
+      runtime_min_shell_version: ${{ steps.release.outputs.runtime_min_shell_version }}
       installed_targets: ${{ steps.release.outputs.installed_targets }}
 
     steps:
@@ -72,6 +73,7 @@ jobs:
 
           release_kind="full"
           has_previous_desktop=false
+          runtime_min_shell_version="${desktop_version}"
           latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
           latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
           if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
@@ -88,6 +90,14 @@ jobs:
               gh release download "${previous_tag}" \
                 --pattern "${channel_asset}" \
                 --dir release/desktop-release-boundary
+              legacy_channel="./release/desktop-release-boundary/${channel_asset}"
+              if [[ "${has_modern_channel}" == "true" ]]; then
+                legacy_channel="./release/desktop-release-boundary/desktop-channel.json"
+                gh release download "${previous_tag}" \
+                  --pattern desktop-channel.json \
+                  --dir release/desktop-release-boundary
+              fi
+              runtime_min_shell_version=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${legacy_channel}")
               previous_shell_version=$(node -e "const channel=require('./release/desktop-release-boundary/' + process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${channel_asset}")
               shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${desktop_version}" "${previous_shell_version}")
               if [[ "${shell_change}" == "same" ]]; then
@@ -122,6 +132,7 @@ jobs:
           echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
           echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
           echo "has_previous_desktop=${has_previous_desktop}" >> "${GITHUB_OUTPUT}"
+          echo "runtime_min_shell_version=${runtime_min_shell_version}" >> "${GITHUB_OUTPUT}"
           if [[ "${release_kind}" == "migration" ]]; then
             echo 'installed_targets=["native","wsl","fresh-native","fresh-wsl"]' >> "${GITHUB_OUTPUT}"
           else
@@ -145,6 +156,7 @@ jobs:
       CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ needs.prepare.outputs.runtime_min_shell_version }}
 
     steps:
       - name: Checkout repository
@@ -213,6 +225,7 @@ jobs:
       CSC_KEY_PASSWORD: ${{ inputs.windows_signing && secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD || '' }}
       CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.windows_signing && 'true' || 'false' }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ needs.prepare.outputs.runtime_min_shell_version }}
       CODER_STUDIO_FACTORY_RELEASE_BASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/
 
     steps:

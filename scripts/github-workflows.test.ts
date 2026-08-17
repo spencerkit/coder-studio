@@ -97,6 +97,7 @@ describe("GitHub workflow boundaries", () => {
       signing_key_artifact: { type: "string", required: false, default: "" },
       runtime_update_url: { type: "string", required: false, default: "" },
       release_tag: { type: "string", required: false, default: "" },
+      runtime_min_shell_version: { type: "string", required: false, default: "" },
     });
     expect(workflowCall.secrets).toEqual({
       windows_csc_link: { required: false },
@@ -261,6 +262,7 @@ describe("GitHub workflow boundaries", () => {
       public_key_artifact: "${{ steps.channel.outputs.public_key_artifact }}",
       has_previous_desktop: "${{ steps.channel.outputs.has_previous_desktop }}",
       release_kind: "${{ steps.channel.outputs.release_kind }}",
+      runtime_min_shell_version: "${{ steps.channel.outputs.runtime_min_shell_version }}",
       acceptance_scenarios: "${{ steps.channel.outputs.acceptance_scenarios }}",
     });
     expect(resolveChannel?.run).toContain(
@@ -287,6 +289,8 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain("release_kind=runtime-only");
     expect(resolveChannel?.run).toContain("release_kind=migration");
     expect(resolveChannel?.run).toContain("desktop-channel-modern.json");
+    expect(resolveChannel?.run).toContain("coder-studio-latest-legacy-channel.json");
+    expect(resolveChannel?.run).toContain("runtime_min_shell_version=$(node -e");
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
     );
@@ -318,6 +322,7 @@ describe("GitHub workflow boundaries", () => {
         signing_key_artifact: "${{ needs.prepare.outputs.signing_key_artifact }}",
         runtime_update_url: "${{ needs.prepare.outputs.runtime_update_url }}",
         release_tag: "${{ needs.prepare.outputs.release_tag }}",
+        runtime_min_shell_version: "${{ needs.prepare.outputs.runtime_min_shell_version }}",
       },
       secrets: {
         windows_csc_link: "${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}",
@@ -403,6 +408,12 @@ describe("GitHub workflow boundaries", () => {
     expect(linux.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
       "${{ needs.prepare.outputs.published_at }}"
     );
+    expect(windows.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
+      "${{ inputs.runtime_min_shell_version }}"
+    );
+    expect(linux.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
+      "${{ inputs.runtime_min_shell_version }}"
+    );
     expect(merged.needs).toEqual([
       "prepare",
       "desktop-windows-verify",
@@ -438,6 +449,7 @@ describe("GitHub workflow boundaries", () => {
       published_at: "${{ steps.release.outputs.published_at }}",
       release_kind: "${{ steps.release.outputs.release_kind }}",
       has_previous_desktop: "${{ steps.release.outputs.has_previous_desktop }}",
+      runtime_min_shell_version: "${{ steps.release.outputs.runtime_min_shell_version }}",
       installed_targets: "${{ steps.release.outputs.installed_targets }}",
     });
     const resolveRelease = (release.jobs.prepare.steps ?? []).find(
@@ -446,6 +458,7 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveRelease?.run).toContain("has_desktop_channel");
     expect(resolveRelease?.run).toContain('--pattern "${channel_asset}"');
     expect(resolveRelease?.run).toContain("desktop-channel-modern.json");
+    expect(resolveRelease?.run).toContain("runtime_min_shell_version=$(node -e");
     expect(resolveRelease?.run).toContain("shell_change=$(node -e");
     expect(resolveRelease?.run).toContain('if [[ "${shell_change}" == "same" ]]');
     expect(resolveRelease?.run).toContain('elif [[ "${shell_change}" == "downgrade" ]]');
@@ -466,6 +479,12 @@ describe("GitHub workflow boundaries", () => {
     );
     expect(windowsBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
       "${{ needs.prepare.outputs.published_at }}"
+    );
+    expect(linuxBuild.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
+      "${{ needs.prepare.outputs.runtime_min_shell_version }}"
+    );
+    expect(windowsBuild.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
+      "${{ needs.prepare.outputs.runtime_min_shell_version }}"
     );
     expect(windowsBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBe(
       "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/"

@@ -14,6 +14,7 @@ import { CLI_DIR, DESKTOP_DIR } from "./shared/paths.js";
 const originalSigningKey = process.env.CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY;
 const originalPublicKey = process.env.CODER_STUDIO_RUNTIME_PUBLIC_KEY;
 const originalPublishedAt = process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT;
+const originalRuntimeMinShellVersion = process.env.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION;
 const originalRuntimeUpdateUrl = process.env.CODER_STUDIO_RUNTIME_UPDATE_URL;
 const originalFactoryReleaseBaseUrl = process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL;
 
@@ -22,6 +23,7 @@ afterEach(() => {
     ["CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY", originalSigningKey],
     ["CODER_STUDIO_RUNTIME_PUBLIC_KEY", originalPublicKey],
     ["CODER_STUDIO_RELEASE_PUBLISHED_AT", originalPublishedAt],
+    ["CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION", originalRuntimeMinShellVersion],
     ["CODER_STUDIO_RUNTIME_UPDATE_URL", originalRuntimeUpdateUrl],
     ["CODER_STUDIO_FACTORY_RELEASE_BASE_URL", originalFactoryReleaseBaseUrl],
   ] as const) {
@@ -63,6 +65,7 @@ describe("build-desktop-runtime", () => {
       .export({ type: "spki", format: "pem" })
       .toString();
     process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT = "2026-08-08T01:02:03.000Z";
+    process.env.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION = "0.1.1";
 
     const { manifest } = await buildDesktopRuntime({
       includeWeb: false,
@@ -72,6 +75,7 @@ describe("build-desktop-runtime", () => {
     expect(manifest).toMatchObject({
       schemaVersion: 2,
       publishedAt: "2026-08-08T01:02:03.000Z",
+      minShellVersion: "0.1.1",
     });
     expect(
       verifyRuntimeManifestSignature(manifest, process.env.CODER_STUDIO_RUNTIME_PUBLIC_KEY)
