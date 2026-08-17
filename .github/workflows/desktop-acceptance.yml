@@ -168,6 +168,7 @@ jobs:
       - build-assets
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: desktop-production
     permissions:
       contents: write
     outputs:
@@ -264,6 +265,10 @@ jobs:
         env:
           CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
         run: |
+          if [[ "${{ needs.prepare.outputs.release_kind }}" != "full" && -z "${CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY}" ]]; then
+            echo "Previous Desktop Runtime public key is required for migration acceptance" >&2
+            exit 1
+          fi
           validation_args=(
             validate
             --directory release/desktop-acceptance
@@ -336,6 +341,7 @@ jobs:
       - publish
     runs-on: windows-latest
     timeout-minutes: 90
+    environment: desktop-production
     permissions:
       contents: read
     strategy:
