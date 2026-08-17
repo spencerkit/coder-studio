@@ -21,8 +21,15 @@ export interface BuildDesktopChannelOptions {
   privateKeyPem: string;
   buildInfoFile?: string;
   updaterMetadataFile?: DesktopChannel["shell"]["updaterMetadata"];
+  windowsRuntimeManifestFile?: string;
+  linuxRuntimeManifestFile?: string;
   outputFile?: string;
 }
+
+export const MODERN_WINDOWS_RUNTIME_MANIFEST =
+  "coder-studio-runtime-modern-win32-x64.manifest.json";
+export const MODERN_LINUX_RUNTIME_MANIFEST =
+  "coder-studio-server-runtime-modern-linux-x64.manifest.json";
 
 function isInside(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
@@ -91,6 +98,10 @@ export async function buildDesktopChannel(
   await assertReleaseDirectory(directory);
   const buildInfoFile = options.buildInfoFile ?? "build-info.json";
   const updaterMetadataFile = options.updaterMetadataFile ?? "latest.yml";
+  const windowsRuntimeManifestFile =
+    options.windowsRuntimeManifestFile ?? "coder-studio-runtime-win32-x64.manifest.json";
+  const linuxRuntimeManifestFile =
+    options.linuxRuntimeManifestFile ?? "coder-studio-server-runtime-linux-x64.manifest.json";
   const outputFile = options.outputFile ?? "desktop-channel.json";
   const buildInfo = parseDesktopBuildInfo(await readJson(directory, buildInfoFile));
   if (
@@ -110,11 +121,9 @@ export async function buildDesktopChannel(
     throw new Error("Electron updater metadata does not match Shell build info");
   }
   const windows = parseNetworkRuntimeManifest(
-    await readJson(directory, "coder-studio-runtime-win32-x64.manifest.json")
+    await readJson(directory, windowsRuntimeManifestFile)
   );
-  const linux = parseNetworkRuntimeManifest(
-    await readJson(directory, "coder-studio-server-runtime-linux-x64.manifest.json")
-  );
+  const linux = parseNetworkRuntimeManifest(await readJson(directory, linuxRuntimeManifestFile));
   assertRuntimePair(windows, linux);
   const releaseTag = options.releaseTag.trim();
   if (!releaseTag || /[\u0000-\u001f/\\]/.test(releaseTag)) {
@@ -139,12 +148,12 @@ export async function buildDesktopChannel(
       "win32-x64": {
         version: windows.runtimeVersion,
         publishedAt: windows.publishedAt,
-        manifest: "coder-studio-runtime-win32-x64.manifest.json",
+        manifest: windowsRuntimeManifestFile,
       },
       "linux-x64": {
         version: linux.runtimeVersion,
         publishedAt: linux.publishedAt,
-        manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
+        manifest: linuxRuntimeManifestFile,
       },
     },
   };
@@ -200,10 +209,23 @@ export async function prepareModernDesktopBase(directoryValue: string): Promise<
     readRegularFile(directory, updater.path),
     readRegularFile(directory, `${updater.path}.blockmap`),
   ]);
-  const copied = ["build-info-modern.json", "modern.yml"];
+  const copied = [
+    "build-info-modern.json",
+    MODERN_LINUX_RUNTIME_MANIFEST,
+    MODERN_WINDOWS_RUNTIME_MANIFEST,
+    "modern.yml",
+  ];
   await Promise.all([
     copyFile(resolve(directory, "build-info.json"), resolve(directory, "build-info-modern.json")),
     copyFile(resolve(directory, "latest.yml"), resolve(directory, "modern.yml")),
+    copyFile(
+      resolve(directory, "coder-studio-runtime-win32-x64.manifest.json"),
+      resolve(directory, MODERN_WINDOWS_RUNTIME_MANIFEST)
+    ),
+    copyFile(
+      resolve(directory, "coder-studio-server-runtime-linux-x64.manifest.json"),
+      resolve(directory, MODERN_LINUX_RUNTIME_MANIFEST)
+    ),
   ]);
   try {
     await readRegularFile(directory, "desktop-channel.json");
@@ -305,6 +327,46 @@ export async function carryForwardDesktopShellBase(
   );
 }
 
+export async function carryForwardLegacyDesktopBase(
+  previousReleaseDirectory: string,
+  destinationDirectory: string
+): Promise<string[]> {
+  const previous = resolve(previousReleaseDirectory);
+  const destination = resolve(destinationDirectory);
+  if (previous === destination) {
+    throw new Error("Previous and destination release directories must differ");
+  }
+  await assertReleaseDirectory(previous);
+  const updater = parseUpdaterMetadata(
+    (await readRegularFile(previous, "latest.yml")).toString("utf8")
+  );
+  const channel = (await readJson(previous, "desktop-channel.json")) as DesktopChannel;
+  const runtimeAssets: string[] = [];
+  for (const target of ["win32-x64", "linux-x64"] as const) {
+    const manifestFile = channel.runtimes?.[target]?.manifest;
+    if (typeof manifestFile !== "string") {
+      throw new Error(`Previous Desktop channel has no ${target} Runtime manifest`);
+    }
+    const manifest = (await readJson(previous, manifestFile)) as { packageFile?: unknown };
+    if (typeof manifest.packageFile !== "string") {
+      throw new Error(`Previous ${target} Runtime manifest has no packageFile`);
+    }
+    runtimeAssets.push(manifestFile, manifest.packageFile);
+  }
+  return copyRegularFiles(
+    previous,
+    destination,
+    [
+      updater.path,
+      `${updater.path}.blockmap`,
+      "build-info.json",
+      "desktop-channel.json",
+      "latest.yml",
+      ...runtimeAssets,
+    ].sort()
+  );
+}
+
 function readArgumentValue(argv: string[], index: number, option: string): string {
   const value = argv[index];
   if (!value || value.startsWith("--")) throw new Error(`${option} requires a value`);
@@ -324,10 +386,13 @@ async function main(): Promise<void> {
   let privateKeyPath = "";
   let carryForwardFrom = "";
   let carryForwardShellFrom = "";
+  let carryForwardLegacyFrom = "";
   let carryForwardModernFrom = "";
   let prepareModernBase = false;
   let buildInfoFile = "build-info.json";
   let updaterMetadataFile: DesktopChannel["shell"]["updaterMetadata"] = "latest.yml";
+  let windowsRuntimeManifestFile = "coder-studio-runtime-win32-x64.manifest.json";
+  let linuxRuntimeManifestFile = "coder-studio-server-runtime-linux-x64.manifest.json";
   let outputFile = "desktop-channel.json";
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -346,11 +411,17 @@ async function main(): Promise<void> {
       }
       updaterMetadataFile = value;
     } else if (argument === "--output") outputFile = readArgumentValue(argv, ++index, argument);
+    else if (argument === "--windows-runtime-manifest")
+      windowsRuntimeManifestFile = readArgumentValue(argv, ++index, argument);
+    else if (argument === "--linux-runtime-manifest")
+      linuxRuntimeManifestFile = readArgumentValue(argv, ++index, argument);
     else if (argument === "--prepare-modern-base") prepareModernBase = true;
     else if (argument === "--carry-forward-from") {
       carryForwardFrom = readArgumentValue(argv, ++index, argument);
     } else if (argument === "--carry-forward-shell-from") {
       carryForwardShellFrom = readArgumentValue(argv, ++index, argument);
+    } else if (argument === "--carry-forward-legacy-from") {
+      carryForwardLegacyFrom = readArgumentValue(argv, ++index, argument);
     } else if (argument === "--carry-forward-modern-from") {
       carryForwardModernFrom = readArgumentValue(argv, ++index, argument);
     } else if (argument === "--channel") {
@@ -359,11 +430,18 @@ async function main(): Promise<void> {
       channel = value;
     } else throw new Error(`Unknown Desktop channel option: ${argument}`);
   }
-  if (prepareModernBase || carryForwardFrom || carryForwardShellFrom || carryForwardModernFrom) {
+  if (
+    prepareModernBase ||
+    carryForwardFrom ||
+    carryForwardShellFrom ||
+    carryForwardLegacyFrom ||
+    carryForwardModernFrom
+  ) {
     const operationCount = [
       prepareModernBase,
       Boolean(carryForwardFrom),
       Boolean(carryForwardShellFrom),
+      Boolean(carryForwardLegacyFrom),
       Boolean(carryForwardModernFrom),
     ].filter(Boolean).length;
     if (
@@ -375,6 +453,8 @@ async function main(): Promise<void> {
       privateKeyPath ||
       buildInfoFile !== "build-info.json" ||
       updaterMetadataFile !== "latest.yml" ||
+      windowsRuntimeManifestFile !== "coder-studio-runtime-win32-x64.manifest.json" ||
+      linuxRuntimeManifestFile !== "coder-studio-server-runtime-linux-x64.manifest.json" ||
       outputFile !== "desktop-channel.json"
     ) {
       throw new Error("Desktop base operations require only --directory and one base option");
@@ -388,6 +468,9 @@ async function main(): Promise<void> {
     } else if (carryForwardShellFrom) {
       await carryForwardDesktopShellBase(carryForwardShellFrom, directory);
       success(`Immutable legacy Desktop Shell carried forward to ${resolve(directory)}`);
+    } else if (carryForwardLegacyFrom) {
+      await carryForwardLegacyDesktopBase(carryForwardLegacyFrom, directory);
+      success(`Frozen legacy Desktop channel carried forward to ${resolve(directory)}`);
     } else {
       await carryForwardDesktopBase(carryForwardFrom, directory);
       success(`Immutable legacy Desktop base carried forward to ${resolve(directory)}`);
@@ -407,6 +490,8 @@ async function main(): Promise<void> {
     privateKeyPem: await readFile(resolve(privateKeyPath), "utf8"),
     buildInfoFile,
     updaterMetadataFile,
+    windowsRuntimeManifestFile,
+    linuxRuntimeManifestFile,
     outputFile,
   });
   success(`Signed Desktop channel written to ${resolve(directory, outputFile)}`);

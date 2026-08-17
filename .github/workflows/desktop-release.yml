@@ -90,14 +90,6 @@ jobs:
               gh release download "${previous_tag}" \
                 --pattern "${channel_asset}" \
                 --dir release/desktop-release-boundary
-              legacy_channel="./release/desktop-release-boundary/${channel_asset}"
-              if [[ "${has_modern_channel}" == "true" ]]; then
-                legacy_channel="./release/desktop-release-boundary/desktop-channel.json"
-                gh release download "${previous_tag}" \
-                  --pattern desktop-channel.json \
-                  --dir release/desktop-release-boundary
-              fi
-              runtime_min_shell_version=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${legacy_channel}")
               previous_shell_version=$(node -e "const channel=require('./release/desktop-release-boundary/' + process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${channel_asset}")
               shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${desktop_version}" "${previous_shell_version}")
               if [[ "${shell_change}" == "same" ]]; then
@@ -370,7 +362,11 @@ jobs:
             pnpm desktop:channel -- --directory "${directory}" --prepare-modern-base
           fi
           if [[ "${{ needs.prepare.outputs.has_previous_desktop }}" == "true" ]]; then
-            pnpm desktop:channel -- --directory "${directory}" --carry-forward-from "${previous}"
+            if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
+              pnpm desktop:channel -- --directory "${directory}" --carry-forward-legacy-from "${previous}"
+            else
+              pnpm desktop:channel -- --directory "${directory}" --carry-forward-from "${previous}"
+            fi
           fi
 
       - name: Build signed Desktop channel
@@ -379,12 +375,21 @@ jobs:
           key_file=$(mktemp)
           trap 'shred -u "${key_file}"' EXIT
           printf '%s' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" > "${key_file}"
-          pnpm desktop:channel -- \
-            --directory release/desktop-release-final \
-            --release-tag "${{ needs.prepare.outputs.tag }}" \
-            --channel "${{ needs.prepare.outputs.channel }}" \
-            --generated-at "${{ needs.prepare.outputs.published_at }}" \
-            --private-key "${key_file}"
+          if [[ "${{ needs.prepare.outputs.release_kind }}" != "migration" ]]; then
+            pnpm desktop:channel -- \
+              --directory release/desktop-release-final \
+              --release-tag "${{ needs.prepare.outputs.tag }}" \
+              --channel "${{ needs.prepare.outputs.channel }}" \
+              --generated-at "${{ needs.prepare.outputs.published_at }}" \
+              --private-key "${key_file}"
+          fi
+          modern_runtime_args=()
+          if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
+            modern_runtime_args+=(
+              --windows-runtime-manifest coder-studio-runtime-modern-win32-x64.manifest.json
+              --linux-runtime-manifest coder-studio-server-runtime-modern-linux-x64.manifest.json
+            )
+          fi
           pnpm desktop:channel -- \
             --directory release/desktop-release-final \
             --release-tag "${{ needs.prepare.outputs.tag }}" \
@@ -393,6 +398,7 @@ jobs:
             --private-key "${key_file}" \
             --build-info build-info-modern.json \
             --updater-metadata modern.yml \
+            "${modern_runtime_args[@]}" \
             --output desktop-channel-modern.json
 
       - name: Validate complete production release
@@ -421,7 +427,7 @@ jobs:
           release_notes=""
           if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
             release_notes="> [!IMPORTANT]
-          > Existing Shell 0.1.1 installations receive Runtime ${{ needs.prepare.outputs.runtime_version }} automatically, but must install Coder-Studio-Setup-${{ needs.prepare.outputs.desktop_version }}.exe once to move to the reliable modern Shell update channel."
+          > Existing Shell 0.1.1 installations remain on their frozen Runtime and do not download this migration automatically. Install Coder-Studio-Setup-${{ needs.prepare.outputs.desktop_version }}.exe once to move to the reliable modern Shell update channel and Runtime ${{ needs.prepare.outputs.runtime_version }}."
           fi
           if [[ "${{ needs.prepare.outputs.release_kind }}" != "runtime-only" && "${{ inputs.windows_signing }}" != "true" ]]; then
             if [[ -n "${release_notes}" ]]; then
@@ -550,6 +556,8 @@ jobs:
             if ($isWsl) { 'fresh-wsl' } else { 'fresh-native' }
           } elseif (-not $hasPreviousDesktop) {
             if ($isWsl) { 'fresh-wsl' } else { 'fresh-native' }
+          } elseif ('${{ needs.prepare.outputs.release_kind }}' -eq 'migration') {
+            if ($isWsl) { 'legacy-wsl-current' } else { 'legacy-current' }
           } elseif ($isWsl) {
             'wsl'
           } elseif ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') {
@@ -557,7 +565,7 @@ jobs:
           } else {
             'runtime-only'
           }
-          $components = if ($isFresh -or -not $hasPreviousDesktop) {
+          $components = if ($isFresh -or -not $hasPreviousDesktop -or '${{ needs.prepare.outputs.release_kind }}' -eq 'migration') {
             ''
           } elseif ($isWsl) {
             if ('${{ needs.prepare.outputs.release_kind }}' -eq 'full') { 'shell,runtime:linux-x64' } else { 'runtime:win32-x64' }
@@ -720,6 +728,10 @@ jobs:
           };
           const channel = parseJson("release/promotion-reports/channel/desktop-channel.json");
           const releaseKind = "${{ needs.prepare.outputs.release_kind }}";
+          const legacyProductVersion = channel.runtimes["win32-x64"].version;
+          const modernProductVersion = releaseKind === "migration"
+            ? parseJson("release/promotion-reports/channel/desktop-channel-modern.json").runtimes["win32-x64"].version
+            : legacyProductVersion;
           const channelSignatureDigest = createHash("sha256")
             .update(channel.signature.value, "utf8")
             .digest("hex");
@@ -735,7 +747,7 @@ jobs:
           const expectedProductionCount = releaseKind === "migration" ? 4 : 2;
           if (production.length !== expectedProductionCount) throw new Error(`Expected ${expectedProductionCount} production reports`);
           const requiredProductionScenarios = new Set(releaseKind === "migration"
-            ? ["runtime-only", "wsl", "fresh-native", "fresh-wsl"]
+            ? ["legacy-current", "legacy-wsl-current", "fresh-native", "fresh-wsl"]
             : ${{ needs.prepare.outputs.has_previous_desktop == 'true' }}
             ? [releaseKind === "full" ? "combined" : "runtime-only", "wsl"]
             : ["fresh-native", "fresh-wsl"]);
@@ -746,10 +758,13 @@ jobs:
             const expectedSignatureDigest = report.scenario.startsWith("fresh-")
               ? modernChannelSignatureDigest
               : channelSignatureDigest;
-            if (report.actualRuntimeVersion !== productVersion || report.channelSignatureDigest !== expectedSignatureDigest) {
+            const expectedRuntimeVersion = report.scenario.startsWith("fresh-")
+              ? modernProductVersion
+              : legacyProductVersion;
+            if (report.actualRuntimeVersion !== expectedRuntimeVersion || report.channelSignatureDigest !== expectedSignatureDigest) {
               throw new Error("Production report product version or channelSignatureDigest does not match");
             }
-            if ((report.scenario === "fresh-wsl" || report.scenario === "wsl") && report.wslRuntimeVersion !== productVersion) {
+            if ((report.scenario === "fresh-wsl" || report.scenario === "legacy-wsl-current" || report.scenario === "wsl") && report.wslRuntimeVersion !== expectedRuntimeVersion) {
               throw new Error("Production WSL report does not match the shared Web product version");
             }
             requiredProductionScenarios.delete(report.scenario);
@@ -758,7 +773,7 @@ jobs:
           const matrix = readReports("release/promotion-reports/desktop-matrix");
           const requiredScenarios = new Set(${{ needs.prepare.outputs.has_previous_desktop == 'true' }}
             ? releaseKind === "migration"
-              ? ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "fresh-native", "fresh-wsl", "external-sidecar-browser"]
+              ? ["legacy-current", "legacy-wsl-current", "fresh-native", "fresh-wsl", "external-sidecar-browser"]
               : releaseKind === "full"
               ? ["combined", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
               : ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "fresh-native", "fresh-wsl", "external-sidecar-browser"]
@@ -766,7 +781,10 @@ jobs:
           for (const report of matrix) {
             if (report.commitSha !== commitSha) throw new Error("Desktop matrix commitSha does not match");
             if (report.releaseKind !== releaseKind) throw new Error("Desktop matrix releaseKind does not match");
-            if ((report.scenario === "fresh-wsl" || report.scenario === "wsl" || report.scenario === "wsl-combined") && report.wslRuntimeVersion !== productVersion) {
+            const expectedMatrixRuntime = report.scenario.startsWith("legacy-")
+              ? legacyProductVersion
+              : productVersion;
+            if ((report.scenario === "fresh-wsl" || report.scenario === "legacy-wsl-current" || report.scenario === "wsl" || report.scenario === "wsl-combined") && report.wslRuntimeVersion !== expectedMatrixRuntime) {
               throw new Error("Desktop matrix WSL report does not match the shared Web product version");
             }
             requiredScenarios.delete(report.scenario);

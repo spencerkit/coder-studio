@@ -108,6 +108,7 @@ describe("verify-desktop-installed-update", () => {
       'probeUserShell: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1"'
     );
     expect(runner).toContain("$Scenario -eq 'wsl-combined'");
+    expect(runner).toContain("'legacy-wsl-current'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");
     expect(runner).toContain("$report.logPaths = @($preservedPaths)");
@@ -179,6 +180,71 @@ describe("verify-desktop-installed-update", () => {
       wslNpmMarkerExists: false,
     });
     expect(deps.invoke).not.toHaveBeenCalled();
+  });
+
+  it("keeps a frozen legacy installation current without downloading or restarting", async () => {
+    const deps = createDeps({
+      invoke: vi.fn(async (method) => {
+        if (method === "checkForUpdates") return { status: "idle", components: [] };
+        if (method === "getUpdateState") return { status: "idle", components: [] };
+        throw new Error(`Unexpected method: ${method}`);
+      }),
+      readEvidence: vi.fn(async () => ({
+        actualShellVersion: "0.2.0",
+        actualRuntimeVersion: "0.5.0",
+        wslRuntimeVersion: null,
+        wslNpmMarkerExists: false,
+        journalRecovered: false,
+      })),
+    });
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "legacy-current",
+      expectedComponentIds: [],
+      targetShellVersion: "0.2.0",
+      targetRuntimeVersion: "0.5.0",
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps);
+
+    expect(deps.invoke).toHaveBeenCalledOnce();
+    expect(deps.invoke).toHaveBeenCalledWith("checkForUpdates");
+    expect(report).toMatchObject({
+      scenario: "legacy-current",
+      confirmationCount: 0,
+      restartCount: 0,
+      actualShellVersion: "0.2.0",
+      actualRuntimeVersion: "0.5.0",
+    });
+  });
+
+  it("keeps a frozen legacy WSL Runtime current", async () => {
+    const deps = createDeps({
+      invoke: vi.fn(async (method) => {
+        if (method === "checkForUpdates") return { status: "idle", components: [] };
+        if (method === "getUpdateState") return { status: "idle", components: [] };
+        throw new Error(`Unexpected method: ${method}`);
+      }),
+      readEvidence: vi.fn(async () => ({
+        actualShellVersion: "0.2.0",
+        actualRuntimeVersion: "0.5.0",
+        wslRuntimeVersion: "0.5.0",
+        wslNpmMarkerExists: false,
+        journalRecovered: false,
+      })),
+    });
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "legacy-wsl-current",
+      expectedComponentIds: [],
+      targetShellVersion: "0.2.0",
+      targetRuntimeVersion: "0.5.0",
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps);
+
+    expect(report.wslRuntimeVersion).toBe("0.5.0");
+    expect(report.wslNpmMarkerExists).toBe(false);
   });
 
   it("keeps an external sidecar browser read-only without invoking Desktop mutation methods", async () => {

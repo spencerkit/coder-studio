@@ -722,12 +722,81 @@ async function validateModernRuntimeOnlyCarryForward(
 
 async function validateModernMigrationChannel(
   options: ValidateDesktopReleaseOptions & { directory: string; publicKeyPem: string },
-  legacyChannel: DesktopChannel,
-  windows: RuntimeManifestV2,
-  linux: RuntimeManifestV2,
   previousDirectory: string
 ): Promise<void> {
   const previousPublicKeyPem = options.previousPublicKeyPem ?? options.publicKeyPem;
+  const legacyChannel = await readSignedChannel(
+    options.directory,
+    previousPublicKeyPem,
+    "desktop-channel.json"
+  );
+  const previousLegacyChannel = await readSignedChannel(
+    previousDirectory,
+    previousPublicKeyPem,
+    "desktop-channel.json"
+  );
+  if (JSON.stringify(legacyChannel) !== JSON.stringify(previousLegacyChannel)) {
+    throw new Error("Migration release changed the frozen legacy Desktop channel");
+  }
+  const previousUpdater = parseUpdaterMetadata(
+    (await readRegularFile(resolve(previousDirectory, "latest.yml"))).toString("utf8")
+  );
+  const frozenAssets = new Set<string>([
+    "desktop-channel.json",
+    "build-info.json",
+    "latest.yml",
+    previousUpdater.path,
+    `${previousUpdater.path}.blockmap`,
+  ]);
+  for (const target of ["win32-x64", "linux-x64"] as const) {
+    const manifestFile = previousLegacyChannel.runtimes[target].manifest;
+    const manifest = parseNetworkRuntimeManifest(
+      await readJson(resolve(previousDirectory, manifestFile))
+    );
+    frozenAssets.add(manifestFile);
+    if (!manifest.packageFile) {
+      throw new Error(`Previous ${target} Runtime manifest has no packageFile`);
+    }
+    frozenAssets.add(manifest.packageFile);
+  }
+  for (const filename of frozenAssets) {
+    const [previousHash, currentHash] = await Promise.all([
+      fileSha256(resolve(previousDirectory, filename)),
+      fileSha256(resolve(options.directory, filename)),
+    ]);
+    if (previousHash !== currentHash) {
+      throw new Error(`Migration release changed frozen legacy asset: ${filename}`);
+    }
+  }
+
+  const legacyBuildInfo = parseDesktopBuildInfo(
+    await readJson(resolve(options.directory, "build-info.json"))
+  );
+  assertBuildInfoMatchesChannel(legacyBuildInfo, legacyChannel);
+  await validateDesktop(options.directory, legacyChannel.shell.version);
+  const legacyOptions = { ...options, publicKeyPem: previousPublicKeyPem };
+  const legacyWindows = await validateRuntime(
+    legacyOptions,
+    legacyChannel.runtimes["win32-x64"].manifest,
+    {
+      platform: "win32",
+      web: true,
+      channel: legacyChannel.runtimes["win32-x64"],
+      shellVersion: legacyChannel.shell.version,
+    }
+  );
+  const legacyLinux = await validateRuntime(
+    legacyOptions,
+    legacyChannel.runtimes["linux-x64"].manifest,
+    {
+      platform: "linux",
+      web: false,
+      channel: legacyChannel.runtimes["linux-x64"],
+      shellVersion: legacyChannel.shell.version,
+    }
+  );
+  assertRuntimePairMatchesChannel(legacyWindows, legacyLinux, legacyChannel);
+
   const modern = await readSignedChannel(
     options.directory,
     options.publicKeyPem,
@@ -742,16 +811,26 @@ async function validateModernMigrationChannel(
   if (compareVersions(modern.shell.version, legacyChannel.shell.version) <= 0) {
     throw new Error("Modern migration Shell must be newer than the legacy Shell");
   }
-  if (JSON.stringify(modern.runtimes) !== JSON.stringify(legacyChannel.runtimes)) {
-    throw new Error("Legacy and modern migration channels must publish the same Runtime pair");
-  }
   const modernBuildInfo = parseDesktopBuildInfo(
     await readJson(resolve(options.directory, "build-info-modern.json"))
   );
   assertBuildInfoMatchesChannel(modernBuildInfo, modern);
   await validateDesktop(options.directory, modern.shell.version, "modern.yml");
-  assertRuntimePairMatchesChannel(windows, linux, modern);
+  const modernWindows = await validateRuntime(options, modern.runtimes["win32-x64"].manifest, {
+    platform: "win32",
+    web: true,
+    channel: modern.runtimes["win32-x64"],
+    shellVersion: modern.shell.version,
+  });
+  const modernLinux = await validateRuntime(options, modern.runtimes["linux-x64"].manifest, {
+    platform: "linux",
+    web: false,
+    channel: modern.runtimes["linux-x64"],
+    shellVersion: modern.shell.version,
+  });
+  assertRuntimePairMatchesChannel(modernWindows, modernLinux, modern);
   await validateEngine(options, modern.shell);
+  await validateEngine(options, legacyChannel.shell);
   await assertTargetShellRunsPreviousRuntime(modern, previousDirectory, previousPublicKeyPem);
 }
 
@@ -767,6 +846,18 @@ export async function validateDesktopReleaseArtifacts(
     throw new Error("CODER_STUDIO_RUNTIME_PUBLIC_KEY is required for the signed Desktop channel");
   }
   const normalizedOptions = { ...options, directory };
+  const releaseKind = options.releaseKind ?? "full";
+  if (releaseKind === "migration") {
+    if (!options.previousReleaseDirectory || !options.publicKeyPem) {
+      throw new Error("Migration release requires a previous signed unified channel");
+    }
+    await validateModernMigrationChannel(
+      { ...normalizedOptions, publicKeyPem: options.publicKeyPem },
+      resolve(options.previousReleaseDirectory)
+    );
+    success(`Desktop release artifacts are valid: ${directory}`);
+    return;
+  }
   const channel = parseDesktopChannel(
     await readJson(resolve(directory, "desktop-channel.json")),
     options.publicKeyPem ?? "",
@@ -796,7 +887,6 @@ export async function validateDesktopReleaseArtifacts(
   info("Validating Desktop release component: wsl-engine");
   await validateEngine(normalizedOptions, channel.shell);
 
-  const releaseKind = options.releaseKind ?? "full";
   if (releaseKind === "runtime-only") {
     if (!options.previousReleaseDirectory || !options.publicKeyPem) {
       throw new Error("Runtime-only release requires a previous signed unified channel");
@@ -804,19 +894,6 @@ export async function validateDesktopReleaseArtifacts(
     const previousDirectory = resolve(options.previousReleaseDirectory);
     await validateRuntimeOnlyCarryForward(normalizedOptions, channel, previousDirectory);
     await validateModernRuntimeOnlyCarryForward(
-      { ...normalizedOptions, publicKeyPem: options.publicKeyPem },
-      channel,
-      windows,
-      linux,
-      previousDirectory
-    );
-  } else if (releaseKind === "migration") {
-    if (!options.previousReleaseDirectory || !options.publicKeyPem) {
-      throw new Error("Migration release requires a previous signed unified channel");
-    }
-    const previousDirectory = resolve(options.previousReleaseDirectory);
-    await validateRuntimeOnlyCarryForward(normalizedOptions, channel, previousDirectory);
-    await validateModernMigrationChannel(
       { ...normalizedOptions, publicKeyPem: options.publicKeyPem },
       channel,
       windows,

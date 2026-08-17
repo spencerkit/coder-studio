@@ -12,7 +12,10 @@ import {
   buildDesktopChannel,
   carryForwardDesktopBase,
   carryForwardDesktopShellBase,
+  carryForwardLegacyDesktopBase,
   carryForwardModernDesktopBase,
+  MODERN_LINUX_RUNTIME_MANIFEST,
+  MODERN_WINDOWS_RUNTIME_MANIFEST,
   normalizeDesktopChannelArgs,
   prepareModernDesktopBase,
 } from "./build-desktop-channel.js";
@@ -146,10 +149,14 @@ describe("build-desktop-channel", () => {
       privateKeyPem: fixture.privateKeyPem,
       buildInfoFile: "build-info-modern.json",
       updaterMetadataFile: "modern.yml",
+      windowsRuntimeManifestFile: MODERN_WINDOWS_RUNTIME_MANIFEST,
+      linuxRuntimeManifestFile: MODERN_LINUX_RUNTIME_MANIFEST,
       outputFile: "desktop-channel-modern.json",
     });
 
     expect(channel.shell.updaterMetadata).toBe("modern.yml");
+    expect(channel.runtimes["win32-x64"].manifest).toBe(MODERN_WINDOWS_RUNTIME_MANIFEST);
+    expect(channel.runtimes["linux-x64"].manifest).toBe(MODERN_LINUX_RUNTIME_MANIFEST);
     expect(
       verifyEd25519Payload(
         canonicalSigningPayload(channel),
@@ -263,6 +270,43 @@ describe("build-desktop-channel", () => {
       "Coder-Studio-Setup-0.3.0.exe",
       "Coder-Studio-Setup-0.3.0.exe.blockmap",
       "build-info.json",
+      "desktop-channel.json",
+      "latest.yml",
+    ]);
+    await expect(
+      readFile(join(nextRoot, "coder-studio-engine-linux-x64.manifest.json"), "utf8")
+    ).resolves.toBe("acceptance");
+  });
+
+  it("freezes legacy Shell and Runtime assets without replacing the acceptance Engine", async () => {
+    const previous = await createChannelFixture();
+    const nextRoot = await mkdtemp(join(tmpdir(), "coder-studio-channel-legacy-next-"));
+    roots.push(nextRoot);
+    await Promise.all([
+      writeFile(join(previous.root, "Coder-Studio-Setup-0.3.0.exe"), "installer"),
+      writeFile(join(previous.root, "Coder-Studio-Setup-0.3.0.exe.blockmap"), "blockmap"),
+      writeFile(join(previous.root, "coder-studio-runtime-0.6.0-win32-x64.tgz"), "windows"),
+      writeFile(join(previous.root, "coder-studio-server-runtime-0.6.0-linux-x64.tgz"), "linux"),
+      buildDesktopChannel({
+        directory: previous.root,
+        releaseTag: "desktop-v0.3.0",
+        channel: "stable",
+        generatedAt: releaseTime,
+        privateKeyPem: previous.privateKeyPem,
+      }),
+      writeFile(join(nextRoot, "coder-studio-engine-linux-x64.manifest.json"), "acceptance"),
+    ]);
+
+    const copied = await carryForwardLegacyDesktopBase(previous.root, nextRoot);
+
+    expect(copied).toEqual([
+      "Coder-Studio-Setup-0.3.0.exe",
+      "Coder-Studio-Setup-0.3.0.exe.blockmap",
+      "build-info.json",
+      "coder-studio-runtime-0.6.0-win32-x64.tgz",
+      "coder-studio-runtime-win32-x64.manifest.json",
+      "coder-studio-server-runtime-0.6.0-linux-x64.tgz",
+      "coder-studio-server-runtime-linux-x64.manifest.json",
       "desktop-channel.json",
       "latest.yml",
     ]);

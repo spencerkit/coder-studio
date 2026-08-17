@@ -289,13 +289,15 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain("release_kind=runtime-only");
     expect(resolveChannel?.run).toContain("release_kind=migration");
     expect(resolveChannel?.run).toContain("desktop-channel-modern.json");
-    expect(resolveChannel?.run).toContain("coder-studio-latest-legacy-channel.json");
-    expect(resolveChannel?.run).toContain("runtime_min_shell_version=$(node -e");
+    expect(resolveChannel?.run).toContain('runtime_min_shell_version="${current_shell}"');
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]\''
+    );
+    expect(resolveChannel?.run).toContain(
+      'acceptance_scenarios=\'["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain('acceptance_scenarios=\'["fresh-native","fresh-wsl"]\'');
     expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
@@ -356,6 +358,10 @@ describe("GitHub workflow boundaries", () => {
     expect(publishSteps[migrationChannelIndex]?.run).toContain("--prepare-modern-base");
     expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-modern-from");
     expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-shell-from");
+    expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-legacy-from");
+    expect(publishSteps[migrationChannelIndex]?.run).toContain(
+      "coder-studio-runtime-modern-win32-x64.manifest.json"
+    );
     expect(publishSteps[migrationChannelIndex]?.run).toContain(
       "--output desktop-channel-modern.json"
     );
@@ -460,7 +466,7 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveRelease?.run).toContain("has_desktop_channel");
     expect(resolveRelease?.run).toContain('--pattern "${channel_asset}"');
     expect(resolveRelease?.run).toContain("desktop-channel-modern.json");
-    expect(resolveRelease?.run).toContain("runtime_min_shell_version=$(node -e");
+    expect(resolveRelease?.run).toContain('runtime_min_shell_version="${desktop_version}"');
     expect(resolveRelease?.run).toContain("shell_change=$(node -e");
     expect(resolveRelease?.run).toContain('if [[ "${shell_change}" == "same" ]]');
     expect(resolveRelease?.run).toContain('elif [[ "${shell_change}" == "downgrade" ]]');
@@ -532,11 +538,15 @@ describe("GitHub workflow boundaries", () => {
     expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-modern-from");
     expect(publishSteps[prepareBasesIndex]?.run).toContain("--prepare-modern-base");
     expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-from");
+    expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-legacy-from");
     expect(publishSteps[channelIndex]?.run).toContain("--output desktop-channel-modern.json");
+    expect(publishSteps[channelIndex]?.run).toContain(
+      "coder-studio-runtime-modern-win32-x64.manifest.json"
+    );
     expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
     expect(publishSteps[productionValidateIndex]?.run).toContain("--previous-release-directory");
     expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
-    expect(publishSteps[releaseIndex]?.run).toContain("must install Coder-Studio-Setup-");
+    expect(publishSteps[releaseIndex]?.run).toContain("Install Coder-Studio-Setup-");
     expect(publishSteps[releaseIndex]?.run).toContain("not Authenticode-signed");
     expect(JSON.stringify(release.jobs.publish)).not.toContain("desktop:force-full-download");
   });
@@ -568,13 +578,17 @@ describe("GitHub workflow boundaries", () => {
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
     expect(prepareScenario?.run).toContain("$useModernChannel");
+    expect(prepareScenario?.run).toContain("$isFrozenLegacy");
+    expect(prepareScenario?.run).toContain("runtime-previous-public.pem");
     expect(prepareScenario?.run).toContain("'desktop-channel-modern.json'");
     expect(prepareScenario?.run).toContain("$releaseKind -eq 'full'");
     expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
     expect(prepareScenario?.run).toContain("InvariantCulture");
     expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
     expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
-    expect(runInstalled?.run).toContain("@('fresh-wsl', 'wsl', 'wsl-combined')");
+    expect(runInstalled?.run).toContain(
+      "@('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')"
+    );
     expect(prepareWsl?.run).toContain("systemd=false");
     expect(prepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
     expect(prepareWsl?.run).toContain("default=coderstudio");
@@ -624,6 +638,7 @@ describe("GitHub workflow boundaries", () => {
     expect(validateReports?.run).toContain("commitSha");
     expect(validateReports?.run).toContain("wslRuntimeVersion");
     expect(validateReports?.run).toContain("wsl-combined");
+    expect(validateReports?.run).toContain("legacy-wsl-current");
     expect(validateReports?.run).toContain("report.releaseKind !== releaseKind");
     expect(promote?.run?.trim()).toBe(
       'gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest'
@@ -693,6 +708,8 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-native");
     expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
+    expect(steps[desktopReportIndex]?.run).toContain("legacy-current");
+    expect(steps[desktopReportIndex]?.run).toContain("legacy-wsl-current");
     expect(steps[desktopReportIndex]?.run).toContain("releaseKinds");
     expect(steps[desktopReportIndex]?.run).toContain('releaseKind === "full"');
     expect(steps[desktopReportIndex]?.run).toContain('releaseKind !== "migration"');
