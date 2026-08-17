@@ -238,6 +238,20 @@ function renderCanvasSurface(options: { sourcePath?: string; title?: string } = 
   return { store, ...view };
 }
 
+async function waitForOverlayObjectCount(container: HTMLElement, expectedCount: number) {
+  await waitFor(() => {
+    const svg = container.querySelector(".canvas-overlay-layer__svg");
+    expect(svg).toBeTruthy();
+    expect(svg?.children).toHaveLength(expectedCount);
+  });
+}
+
+async function waitForOverlaySelection(container: HTMLElement) {
+  await waitFor(() => {
+    expect(container.querySelector(".canvas-overlay-layer__selection")).toBeTruthy();
+  });
+}
+
 describe("CanvasSurface", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -402,11 +416,14 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 2);
+
     fireEvent.pointerDown(scene as HTMLDivElement, {
       clientX: 40,
       clientY: 52,
       button: 0,
     });
+    await waitForOverlaySelection(container);
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 40,
       clientY: 52,
@@ -455,11 +472,13 @@ describe("CanvasSurface", () => {
       objects: [],
     });
 
-    renderCanvasSurface();
+    const { container } = renderCanvasSurface();
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Runtime Flow" })).toBeInTheDocument();
     });
+
+    await waitForOverlayObjectCount(container, 2);
 
     fireEvent.click(screen.getByRole("button", { name: "Clear annotations" }));
 
@@ -514,6 +533,8 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
+
     fireEvent.click(screen.getByRole("button", { name: "Clear annotations" }));
 
     await waitFor(() => {
@@ -538,10 +559,16 @@ describe("CanvasSurface", () => {
       clientY: 80,
       button: 0,
     });
+    await waitForOverlayObjectCount(container, 1);
     fireEvent.pointerMove(scene as HTMLDivElement, {
       clientX: 300,
       clientY: 150,
       button: 0,
+    });
+    await waitFor(() => {
+      const rect = container.querySelector(".canvas-overlay-layer__svg > rect:not([class])");
+      expect(rect).toHaveAttribute("width", "80");
+      expect(rect).toHaveAttribute("height", "70");
     });
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 300,
@@ -612,6 +639,8 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
+
     fireEvent.click(screen.getByRole("button", { name: "Delete annotation" }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -620,6 +649,7 @@ describe("CanvasSurface", () => {
       clientY: 60,
       button: 0,
     });
+    await waitForOverlaySelection(container);
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 60,
       clientY: 60,
@@ -677,6 +707,7 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
     await waitFor(() => {
       expect(container.querySelector(".canvas-overlay-layer__svg text")).toHaveTextContent(
         "Move me"
@@ -688,9 +719,7 @@ describe("CanvasSurface", () => {
       clientY: 52,
       button: 0,
     });
-    await waitFor(() => {
-      expect(container.querySelector(".canvas-overlay-layer__selection")).toBeTruthy();
-    });
+    await waitForOverlaySelection(container);
     fireEvent.pointerMove(scene as HTMLDivElement, {
       clientX: 120,
       clientY: 140,
@@ -769,15 +798,25 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
+
     fireEvent.pointerDown(scene as HTMLDivElement, {
       clientX: 90,
       clientY: 90,
       button: 0,
     });
+    await waitForOverlaySelection(container);
     fireEvent.pointerMove(scene as HTMLDivElement, {
       clientX: 150,
       clientY: 140,
       button: 0,
+    });
+    await waitFor(() => {
+      const line = container.querySelector(".canvas-overlay-layer__svg > g line");
+      expect(line).toHaveAttribute("x1", "100");
+      expect(line).toHaveAttribute("y1", "110");
+      expect(line).toHaveAttribute("x2", "200");
+      expect(line).toHaveAttribute("y2", "170");
     });
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 150,
@@ -849,6 +888,8 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
+
     fireEvent.pointerDown(scene as HTMLDivElement, {
       clientX: 60,
       clientY: 60,
@@ -874,6 +915,11 @@ describe("CanvasSurface", () => {
       clientX: 220,
       clientY: 160,
       button: 0,
+    });
+    await waitFor(() => {
+      const rect = container.querySelector(".canvas-overlay-layer__svg > rect:not([class])");
+      expect(rect).toHaveAttribute("width", "200");
+      expect(rect).toHaveAttribute("height", "136");
     });
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 220,
@@ -942,6 +988,8 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
+
     fireEvent.pointerDown(scene as HTMLDivElement, {
       clientX: 90,
       clientY: 90,
@@ -953,8 +1001,10 @@ describe("CanvasSurface", () => {
       button: 0,
     });
 
+    await waitFor(() => {
+      expect(container.querySelector(".canvas-overlay-layer__handle--arrow-to")).toBeTruthy();
+    });
     const endpointHandle = container.querySelector(".canvas-overlay-layer__handle--arrow-to");
-    expect(endpointHandle).toBeTruthy();
 
     fireEvent.pointerDown(endpointHandle as Element, {
       clientX: 140,
@@ -965,6 +1015,11 @@ describe("CanvasSurface", () => {
       clientX: 220,
       clientY: 180,
       button: 0,
+    });
+    await waitFor(() => {
+      const line = container.querySelector(".canvas-overlay-layer__svg > g line");
+      expect(line).toHaveAttribute("x2", "220");
+      expect(line).toHaveAttribute("y2", "180");
     });
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 220,
@@ -1039,15 +1094,24 @@ describe("CanvasSurface", () => {
       toJSON: () => undefined,
     });
 
+    await waitForOverlayObjectCount(container, 1);
+
     fireEvent.pointerDown(scene as HTMLDivElement, {
       clientX: 55,
       clientY: 60,
       button: 0,
     });
+    await waitForOverlaySelection(container);
     fireEvent.pointerMove(scene as HTMLDivElement, {
       clientX: 115,
       clientY: 115,
       button: 0,
+    });
+    await waitFor(() => {
+      const stroke = container.querySelector(
+        ".canvas-overlay-layer__svg > polyline:not(.canvas-overlay-layer__selection)"
+      );
+      expect(stroke).toHaveAttribute("points", "90,95 115,115 140,145");
     });
     fireEvent.pointerUp(scene as HTMLDivElement, {
       clientX: 115,
