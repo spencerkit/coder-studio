@@ -641,7 +641,7 @@ describe("GitHub workflow boundaries", () => {
     expect(validateReports?.run).toContain("legacy-wsl-current");
     expect(validateReports?.run).toContain("report.releaseKind !== releaseKind");
     expect(promote?.run?.trim()).toBe(
-      'gh release edit "${{ needs.prepare.outputs.tag }}" --prerelease=false --latest'
+      'gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest'
     );
     const promotionText = JSON.stringify(promotion);
     expect(promotionText).not.toMatch(/pnpm (build|dist)|gh release upload|--clobber/);
