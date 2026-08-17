@@ -330,6 +330,7 @@ describe("GitHub workflow boundaries", () => {
       },
     });
     expect(publish.needs).toEqual(["prepare", "repository-verify", "build-assets"]);
+    expect(publish.environment).toBe("desktop-production");
     expect(publish.permissions).toEqual({ contents: "write" });
     for (const [name, job] of Object.entries(workflow.jobs)) {
       if (name !== "publish") expect(job.permissions?.contents).not.toBe("write");
@@ -361,6 +362,7 @@ describe("GitHub workflow boundaries", () => {
     expect(validation?.run).toContain('--release-kind "${{ needs.prepare.outputs.release_kind }}"');
     expect(validation?.run).toContain("--previous-release-directory");
     expect(validation?.run).toContain("--allow-resigned-engine");
+    expect(validation?.run).toContain("Previous Desktop Runtime public key is required");
     expect(validation?.env?.CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY).toBe(
       "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}"
     );
@@ -553,6 +555,7 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Prepare disposable WSL distribution"
     );
     expect(installed.needs).toEqual(["prepare", "publish"]);
+    expect(installed.environment).toBe("desktop-production");
     expect(installed.strategy?.matrix?.scenario).toBe(
       "${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}"
     );
