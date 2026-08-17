@@ -23,6 +23,10 @@ on:
         type: string
         required: false
         default: ""
+      runtime_min_shell_version:
+        type: string
+        required: false
+        default: ""
     secrets:
       windows_csc_link:
         required: false
@@ -118,6 +122,7 @@ jobs:
     timeout-minutes: 60
     env:
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ inputs.runtime_min_shell_version }}
       CSC_LINK: ${{ inputs.windows_signing && secrets.windows_csc_link || '' }}
       CSC_KEY_PASSWORD: ${{ inputs.windows_signing && secrets.windows_csc_key_password || '' }}
       CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.windows_signing && 'true' || 'false' }}
@@ -225,6 +230,7 @@ jobs:
     timeout-minutes: 45
     env:
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ inputs.runtime_min_shell_version }}
     outputs:
       artifact_name: ${{ steps.artifact_name.outputs.value }}
 

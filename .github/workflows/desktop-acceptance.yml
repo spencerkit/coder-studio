@@ -26,6 +26,7 @@ jobs:
       public_key_artifact: ${{ steps.channel.outputs.public_key_artifact }}
       has_previous_desktop: ${{ steps.channel.outputs.has_previous_desktop }}
       release_kind: ${{ steps.channel.outputs.release_kind }}
+      runtime_min_shell_version: ${{ steps.channel.outputs.runtime_min_shell_version }}
       acceptance_scenarios: ${{ steps.channel.outputs.acceptance_scenarios }}
 
     steps:
@@ -50,6 +51,9 @@ jobs:
           echo "public_key_artifact=${public_key_artifact}" >> "${GITHUB_OUTPUT}"
           latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
           latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
+          current_shell=$(node -p "require('./packages/desktop/package.json').version")
+          current_runtime=$(node -p "require('./packages/cli/package.json').version")
+          runtime_min_shell_version="${current_shell}"
           has_previous_desktop=false
           release_kind=full
           if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
@@ -66,8 +70,15 @@ jobs:
                 --repo "${GITHUB_REPOSITORY}" \
                 --pattern "${channel_asset}" \
                 --output "${latest_channel}"
-              current_shell=$(node -p "require('./packages/desktop/package.json').version")
-              current_runtime=$(node -p "require('./packages/cli/package.json').version")
+              legacy_channel="${latest_channel}"
+              if [[ "${has_modern_channel}" == "true" ]]; then
+                legacy_channel="${RUNNER_TEMP}/coder-studio-latest-legacy-channel.json"
+                gh release download "${latest_tag}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --pattern desktop-channel.json \
+                  --output "${legacy_channel}"
+              fi
+              runtime_min_shell_version=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${legacy_channel}")
               has_previous_desktop=$(node -e "const channel=require(process.argv[1]); const currentShell=process.argv[2]; const currentRuntime=process.argv[3]; process.stdout.write(channel?.shell?.version===currentShell&&channel?.runtimes?.['win32-x64']?.version===currentRuntime&&channel?.runtimes?.['linux-x64']?.version===currentRuntime?'false':'true')" "${latest_channel}" "${current_shell}" "${current_runtime}")
               if [[ "${has_previous_desktop}" == "true" ]]; then
                 previous_shell=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${latest_channel}")
@@ -99,6 +110,7 @@ jobs:
           fi
           echo "has_previous_desktop=${has_previous_desktop}" >> "${GITHUB_OUTPUT}"
           echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
+          echo "runtime_min_shell_version=${runtime_min_shell_version}" >> "${GITHUB_OUTPUT}"
           echo "acceptance_scenarios=${acceptance_scenarios}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate ephemeral Runtime signing key
@@ -143,6 +155,7 @@ jobs:
       signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
       runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
       release_tag: ${{ needs.prepare.outputs.release_tag }}
+      runtime_min_shell_version: ${{ needs.prepare.outputs.runtime_min_shell_version }}
     secrets:
       windows_csc_link: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
       windows_csc_key_password: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
