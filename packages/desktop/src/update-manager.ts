@@ -10,6 +10,8 @@ export interface ShellUpdaterPort {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
   allowPrerelease: boolean;
+  disableDifferentialDownload: boolean;
+  disableWebInstaller: boolean;
   on(event: "download-progress", listener: (value: { percent?: number }) => void): unknown;
   on(event: "update-downloaded", listener: (value: { version?: string }) => void): unknown;
   on(event: "error", listener: (value: unknown) => void): unknown;
@@ -38,6 +40,7 @@ export interface DesktopShellUpdateAdapterOptions {
   createCancellationToken?: () => ShellCancellationToken;
   logLocations?: string[];
   manualInstallerUrl?: string | null;
+  downloadInactivityTimeoutMs?: number;
 }
 
 interface ActiveDownload {
@@ -46,7 +49,10 @@ interface ActiveDownload {
   onProgress: (percent: number) => void;
   resolve: () => void;
   reject: (error: Error) => void;
+  inactivityTimer: ReturnType<typeof setTimeout> | null;
 }
+
+const DEFAULT_DOWNLOAD_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1_000;
 
 class LocalCancellationToken extends EventEmitter implements ShellCancellationToken {
   cancelled = false;
@@ -70,6 +76,13 @@ export class ShellCancellationError extends Error {
   }
 }
 
+export class ShellDownloadTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Desktop Shell download made no progress for ${Math.ceil(timeoutMs / 1_000)} seconds`);
+    this.name = "TimeoutError";
+  }
+}
+
 export class DesktopShellUpdateAdapter {
   private started = false;
   private activeDownload: ActiveDownload | null = null;
@@ -82,16 +95,18 @@ export class DesktopShellUpdateAdapter {
     this.started = true;
     this.options.updater.autoDownload = false;
     this.options.updater.autoInstallOnAppQuit = false;
+    this.options.updater.disableDifferentialDownload = true;
+    this.options.updater.disableWebInstaller = true;
     this.options.updater.allowPrerelease =
       this.options.allowPrerelease === true || this.options.currentVersion.includes("-");
     this.options.updater.on("download-progress", (progress: { percent?: number }) => {
       if (!this.activeDownload || typeof progress.percent !== "number") return;
+      this.resetDownloadInactivityTimer(this.activeDownload);
       this.activeDownload.onProgress(Math.max(0, Math.min(100, progress.percent)));
     });
     this.options.updater.on("update-downloaded", (info: { version?: string }) => {
-      const active = this.activeDownload;
+      const active = this.takeActiveDownload();
       if (!active) return;
-      this.activeDownload = null;
       if (info.version !== active.expectedVersion) {
         active.reject(new Error("Downloaded Desktop Shell does not match signed Desktop channel"));
         return;
@@ -99,11 +114,35 @@ export class DesktopShellUpdateAdapter {
       active.resolve();
     });
     this.options.updater.on("error", (error: unknown) => {
-      const active = this.activeDownload;
+      const active = this.takeActiveDownload();
       if (!active) return;
-      this.activeDownload = null;
       active.reject(error instanceof Error ? error : new Error(String(error)));
     });
+  }
+
+  private takeActiveDownload(): ActiveDownload | null {
+    const active = this.activeDownload;
+    if (!active) return null;
+    this.activeDownload = null;
+    if (active.inactivityTimer) clearTimeout(active.inactivityTimer);
+    active.inactivityTimer = null;
+    return active;
+  }
+
+  private resetDownloadInactivityTimer(active: ActiveDownload): void {
+    if (active.inactivityTimer) clearTimeout(active.inactivityTimer);
+    const timeoutMs =
+      this.options.downloadInactivityTimeoutMs ?? DEFAULT_DOWNLOAD_INACTIVITY_TIMEOUT_MS;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      active.inactivityTimer = null;
+      return;
+    }
+    active.inactivityTimer = setTimeout(() => {
+      if (this.activeDownload !== active) return;
+      this.takeActiveDownload();
+      active.token.cancel();
+      active.reject(new ShellDownloadTimeoutError(timeoutMs));
+    }, timeoutMs);
   }
 
   async checkMetadata(expected: DesktopChannel["shell"]): Promise<ShellUpdateMetadata> {
@@ -149,20 +188,21 @@ export class DesktopShellUpdateAdapter {
         onProgress,
         resolve,
         reject,
+        inactivityTimer: null,
       };
+      this.resetDownloadInactivityTimer(this.activeDownload);
       void this.options.updater.downloadUpdate(token).catch((error: unknown) => {
         const active = this.activeDownload;
         if (!active || active.token !== token) return;
-        this.activeDownload = null;
-        active.reject(error instanceof Error ? error : new Error(String(error)));
+        const failed = this.takeActiveDownload();
+        failed?.reject(error instanceof Error ? error : new Error(String(error)));
       });
     });
   }
 
   cancelDownload(): boolean {
-    const active = this.activeDownload;
+    const active = this.takeActiveDownload();
     if (!active) return false;
-    this.activeDownload = null;
     active.token.cancel();
     active.reject(new ShellCancellationError());
     return true;

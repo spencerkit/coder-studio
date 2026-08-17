@@ -8,6 +8,8 @@ function createUpdater() {
     autoDownload: true,
     autoInstallOnAppQuit: true,
     allowPrerelease: false,
+    disableDifferentialDownload: false,
+    disableWebInstaller: false,
     on: (event: string, listener: (value: unknown) => void) => {
       emitter.on(event, listener);
       return updater;
@@ -49,6 +51,8 @@ describe("DesktopShellUpdateAdapter", () => {
     });
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(false);
+    expect(updater.disableDifferentialDownload).toBe(true);
+    expect(updater.disableWebInstaller).toBe(true);
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
@@ -125,5 +129,35 @@ describe("DesktopShellUpdateAdapter", () => {
       logLocations: ["updates.log"],
       recoveryAction: "https://releases.example/desktop",
     });
+  });
+
+  it("cancels a Shell download that stops reporting progress", async () => {
+    vi.useFakeTimers();
+    try {
+      const updater = createUpdater();
+      const token = { cancel: vi.fn() };
+      const adapter = new DesktopShellUpdateAdapter({
+        updater,
+        currentVersion: "0.2.0",
+        isPackaged: true,
+        createCancellationToken: () => token,
+        downloadInactivityTimeoutMs: 1_000,
+      });
+      const metadata = await adapter.checkMetadata(expectedShell);
+      const download = adapter.download(metadata, vi.fn());
+      const rejected = expect(download).rejects.toMatchObject({ name: "TimeoutError" });
+
+      await vi.advanceTimersByTimeAsync(900);
+      updater.emit("download-progress", { percent: 1 });
+      await vi.advanceTimersByTimeAsync(900);
+      expect(token.cancel).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(100);
+
+      await rejected;
+      expect(token.cancel).toHaveBeenCalledTimes(1);
+      expect(adapter.cancelDownload()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -176,7 +176,7 @@ jobs:
           name: ${{ needs.build-assets.outputs.complete_artifact }}
           path: release/desktop-acceptance
 
-      - name: Carry forward previous Shell blockmap for differential updates
+      - name: Carry forward previous Shell blockmap for legacy updater fallback
         if: needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'
         shell: bash
         env:
@@ -192,6 +192,10 @@ jobs:
             --pattern "${previous_installer}.blockmap" \
             --dir release/desktop-acceptance \
             --clobber
+
+      - name: Force full Shell installer download
+        if: needs.prepare.outputs.release_kind == 'full'
+        run: pnpm desktop:force-full-download -- --directory release/desktop-acceptance
 
       - name: Download acceptance public key
         uses: actions/download-artifact@v4

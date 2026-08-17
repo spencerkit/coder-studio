@@ -310,4 +310,18 @@ describe("verify-desktop-installed-update", () => {
       "component"
     );
   });
+
+  it("fails a stalled download internally so the runner can preserve diagnostics", async () => {
+    const deps = createDeps({
+      invoke: vi.fn(async (method) => {
+        if (method === "checkForUpdates") return state("available");
+        if (method === "downloadUpdate") return new Promise(() => undefined);
+        throw new Error(`Unexpected method: ${method}`);
+      }),
+    });
+
+    await expect(
+      verifyInstalledDesktopScenario(combinedScenario, deps, { downloadTimeoutMs: 0 })
+    ).rejects.toThrow("downloadUpdate timed out");
+  });
 });

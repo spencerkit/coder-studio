@@ -351,7 +351,7 @@ jobs:
           path: release/desktop-release-final
           merge-multiple: true
 
-      - name: Carry forward previous Shell blockmap for differential updates
+      - name: Carry forward previous Shell blockmap for legacy updater fallback
         if: needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'
         shell: bash
         env:
@@ -367,6 +367,10 @@ jobs:
             --pattern "${previous_installer}.blockmap" \
             --dir release/desktop-release-final \
             --clobber
+
+      - name: Force full Shell installer download
+        if: needs.prepare.outputs.release_kind == 'full'
+        run: pnpm desktop:force-full-download -- --directory release/desktop-release-final
 
       - name: Build signed Desktop channel
         shell: bash

@@ -212,7 +212,10 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Download acceptance public key"
     );
     const previousShellBlockmapIndex = publishSteps.findIndex(
-      (step) => step.name === "Carry forward previous Shell blockmap for differential updates"
+      (step) => step.name === "Carry forward previous Shell blockmap for legacy updater fallback"
+    );
+    const forceFullDownloadIndex = publishSteps.findIndex(
+      (step) => step.name === "Force full Shell installer download"
     );
     const validation = publishSteps.find(
       (step) => step.name === "Validate complete signed acceptance channel"
@@ -325,7 +328,8 @@ describe("GitHub workflow boundaries", () => {
       path: "release/desktop-ci-signing",
     });
     expect(previousShellBlockmapIndex).toBeGreaterThan(-1);
-    expect(previousShellBlockmapIndex).toBeLessThan(validationIndex);
+    expect(forceFullDownloadIndex).toBeGreaterThan(previousShellBlockmapIndex);
+    expect(forceFullDownloadIndex).toBeLessThan(validationIndex);
     expect(publishSteps[previousShellBlockmapIndex]?.if).toBe(
       "needs.prepare.outputs.has_previous_desktop == 'true' && needs.prepare.outputs.release_kind == 'full'"
     );
@@ -336,6 +340,12 @@ describe("GitHub workflow boundaries", () => {
     expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("require('yaml')");
     expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
       "--dir release/desktop-acceptance"
+    );
+    expect(publishSteps[forceFullDownloadIndex]?.if).toBe(
+      "needs.prepare.outputs.release_kind == 'full'"
+    );
+    expect(publishSteps[forceFullDownloadIndex]?.run).toContain(
+      "desktop:force-full-download -- --directory release/desktop-acceptance"
     );
     expect(validation?.run).toContain(
       "validate --directory release/desktop-acceptance --components 'desktop,win-runtime,wsl-engine,wsl-runtime'"
@@ -461,7 +471,10 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Build signed Desktop channel"
     );
     const previousShellBlockmapIndex = publishSteps.findIndex(
-      (step) => step.name === "Carry forward previous Shell blockmap for differential updates"
+      (step) => step.name === "Carry forward previous Shell blockmap for legacy updater fallback"
+    );
+    const forceFullDownloadIndex = publishSteps.findIndex(
+      (step) => step.name === "Force full Shell installer download"
     );
     const productionValidateIndex = publishSteps.findIndex(
       (step) => step.name === "Validate complete production release"
@@ -473,7 +486,8 @@ describe("GitHub workflow boundaries", () => {
     expect(previousIndex).toBeGreaterThan(-1);
     expect(carryIndex).toBeGreaterThan(previousIndex);
     expect(previousShellBlockmapIndex).toBeGreaterThan(carryIndex);
-    expect(channelIndex).toBeGreaterThan(previousShellBlockmapIndex);
+    expect(forceFullDownloadIndex).toBeGreaterThan(previousShellBlockmapIndex);
+    expect(channelIndex).toBeGreaterThan(forceFullDownloadIndex);
     expect(productionValidateIndex).toBeGreaterThan(channelIndex);
     expect(attestIndex).toBeGreaterThan(productionValidateIndex);
     expect(releaseIndex).toBeGreaterThan(attestIndex);
@@ -487,6 +501,12 @@ describe("GitHub workflow boundaries", () => {
     expect(publishSteps[previousShellBlockmapIndex]?.run).toContain("require('yaml')");
     expect(publishSteps[previousShellBlockmapIndex]?.run).toContain(
       "--dir release/desktop-release-final"
+    );
+    expect(publishSteps[forceFullDownloadIndex]?.if).toBe(
+      "needs.prepare.outputs.release_kind == 'full'"
+    );
+    expect(publishSteps[forceFullDownloadIndex]?.run).toContain(
+      "desktop:force-full-download -- --directory release/desktop-release-final"
     );
     expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
     expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");

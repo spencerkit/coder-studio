@@ -65,6 +65,10 @@ export interface VerifyInstalledDesktopDeps {
   readEvidence(): Promise<InstalledEvidence>;
 }
 
+export interface VerifyInstalledDesktopOptions {
+  downloadTimeoutMs?: number;
+}
+
 export interface InstalledDesktopScenarioReport extends InstalledEvidence {
   schemaVersion: 1;
   scenario: InstalledDesktopScenarioName;
@@ -96,9 +100,38 @@ function isWslScenario(name: InstalledDesktopScenarioName): boolean {
   return name === "fresh-wsl" || name === "wsl" || name === "wsl-combined";
 }
 
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1_000;
+
+async function downloadUpdateWithTimeout(
+  deps: VerifyInstalledDesktopDeps,
+  timeoutMs: number
+): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      deps.invoke("downloadUpdate"),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => {
+            reject(
+              new Error(
+                `Installed Desktop downloadUpdate timed out after ${Math.ceil(timeoutMs / 1_000)} seconds`
+              )
+            );
+          },
+          Math.max(0, timeoutMs)
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function verifyInstalledDesktopScenario(
   scenario: InstalledDesktopScenario,
-  deps: VerifyInstalledDesktopDeps
+  deps: VerifyInstalledDesktopDeps,
+  options: VerifyInstalledDesktopOptions = {}
 ): Promise<InstalledDesktopScenarioReport> {
   if (scenario.name === "fresh-native" || scenario.name === "fresh-wsl") {
     const evidence = await deps.readEvidence();
@@ -160,13 +193,14 @@ export async function verifyInstalledDesktopScenario(
     isWslScenario(scenario.name) && scenario.expectedComponentIds.includes("runtime:win32-x64");
   let checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates");
   assertPlanComponents(checked, scenario.expectedComponentIds);
-  await deps.invoke("downloadUpdate");
+  const downloadTimeoutMs = options.downloadTimeoutMs ?? DEFAULT_DOWNLOAD_TIMEOUT_MS;
+  await downloadUpdateWithTimeout(deps, downloadTimeoutMs);
   if (scenario.name === "interrupted-download") {
     await deps.interruptAtPhase("downloading");
     await deps.reconnectAfterRestart();
     checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates after interruption");
     assertPlanComponents(checked, scenario.expectedComponentIds);
-    await deps.invoke("downloadUpdate");
+    await downloadUpdateWithTimeout(deps, downloadTimeoutMs);
   }
   await deps.waitForState("ready");
   await deps.prepareActivity();
