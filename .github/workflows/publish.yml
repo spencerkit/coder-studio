@@ -230,13 +230,13 @@ jobs:
           const reports = readdirSync(root, { recursive: true })
             .filter((name) => String(name).endsWith(".json"))
             .map((name) => parseJson(join(root, String(name))));
-          const bootstrap = reports.some((report) => report.scenario === "fresh-native");
           const releaseKinds = new Set(reports.map((report) => report.releaseKind));
           if (releaseKinds.size !== 1) throw new Error("Desktop reports do not agree on releaseKind");
           const releaseKind = [...releaseKinds][0];
-          if (releaseKind !== "full" && releaseKind !== "runtime-only") {
+          if (releaseKind !== "full" && releaseKind !== "runtime-only" && releaseKind !== "migration") {
             throw new Error(`Desktop report releaseKind is invalid: ${releaseKind}`);
           }
+          const bootstrap = reports.length === 2 && reports.every((report) => report.scenario === "fresh-native" || report.scenario === "fresh-wsl");
           if (bootstrap && releaseKind !== "full") {
             throw new Error("Fresh Desktop acceptance must use a full release");
           }
@@ -244,7 +244,7 @@ jobs:
             ? ["fresh-native", "fresh-wsl"]
             : releaseKind === "full"
               ? ["combined", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
-              : ["runtime-only", "combined", "wsl", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]);
+              : ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "fresh-native", "fresh-wsl", "external-sidecar-browser"]);
           for (const report of reports) {
             if (report.commitSha !== process.env.GITHUB_SHA) throw new Error("Desktop report commitSha does not match");
             if (report.releaseKind !== releaseKind) throw new Error("Desktop report releaseKind does not match");

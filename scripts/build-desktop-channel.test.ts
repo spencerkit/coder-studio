@@ -11,7 +11,10 @@ import {
 import {
   buildDesktopChannel,
   carryForwardDesktopBase,
+  carryForwardDesktopShellBase,
+  carryForwardModernDesktopBase,
   normalizeDesktopChannelArgs,
+  prepareModernDesktopBase,
 } from "./build-desktop-channel.js";
 
 const releaseTime = "2026-08-08T01:02:03.000Z";
@@ -127,6 +130,40 @@ describe("build-desktop-channel", () => {
     ).resolves.toEqual(channel);
   });
 
+  it("builds a separately signed modern channel from the current Shell base", async () => {
+    const fixture = await createChannelFixture();
+    await Promise.all([
+      writeFile(join(fixture.root, "Coder-Studio-Setup-0.3.0.exe"), "installer"),
+      writeFile(join(fixture.root, "Coder-Studio-Setup-0.3.0.exe.blockmap"), "blockmap"),
+    ]);
+    await prepareModernDesktopBase(fixture.root);
+
+    const channel = await buildDesktopChannel({
+      directory: fixture.root,
+      releaseTag: "desktop-v0.3.0",
+      channel: "stable",
+      generatedAt: releaseTime,
+      privateKeyPem: fixture.privateKeyPem,
+      buildInfoFile: "build-info-modern.json",
+      updaterMetadataFile: "modern.yml",
+      outputFile: "desktop-channel-modern.json",
+    });
+
+    expect(channel.shell.updaterMetadata).toBe("modern.yml");
+    expect(
+      verifyEd25519Payload(
+        canonicalSigningPayload(channel),
+        channel.signature,
+        fixture.publicKeyPem
+      )
+    ).toBe(true);
+    await expect(
+      readFile(join(fixture.root, "desktop-channel-modern.json"), "utf8").then(
+        (value) => JSON.parse(value) as DesktopChannel
+      )
+    ).resolves.toEqual(channel);
+  });
+
   it("rejects a product-version or release-time split between Runtime targets", async () => {
     const fixture = await createChannelFixture();
     await writeFile(
@@ -182,6 +219,56 @@ describe("build-desktop-channel", () => {
         .digest("hex")
     ).toBe(createHash("sha256").update(installer).digest("hex"));
     await expect(readFile(join(nextRoot, "not-allowlisted.pem"))).rejects.toThrow();
+  });
+
+  it("carries forward the immutable modern Shell base for Runtime-only releases", async () => {
+    const previous = await createChannelFixture();
+    const nextRoot = await mkdtemp(join(tmpdir(), "coder-studio-channel-modern-next-"));
+    roots.push(nextRoot);
+    await Promise.all([
+      writeFile(join(previous.root, "Coder-Studio-Setup-0.3.0.exe"), "installer"),
+      writeFile(join(previous.root, "Coder-Studio-Setup-0.3.0.exe.blockmap"), "blockmap"),
+      writeFile(join(previous.root, "desktop-channel.json"), "{}\n"),
+    ]);
+    await prepareModernDesktopBase(previous.root);
+
+    const copied = await carryForwardModernDesktopBase(previous.root, nextRoot);
+
+    expect(copied).toEqual([
+      "Coder-Studio-Setup-0.3.0.exe",
+      "Coder-Studio-Setup-0.3.0.exe.blockmap",
+      "build-info-modern.json",
+      "desktop-channel-modern.json",
+      "modern.yml",
+    ]);
+    await expect(readFile(join(nextRoot, "modern.yml"), "utf8")).resolves.toContain(
+      "version: 0.3.0"
+    );
+  });
+
+  it("carries forward the legacy Shell without replacing the acceptance Engine", async () => {
+    const previous = await createChannelFixture();
+    const nextRoot = await mkdtemp(join(tmpdir(), "coder-studio-channel-shell-next-"));
+    roots.push(nextRoot);
+    await Promise.all([
+      writeFile(join(previous.root, "Coder-Studio-Setup-0.3.0.exe"), "installer"),
+      writeFile(join(previous.root, "Coder-Studio-Setup-0.3.0.exe.blockmap"), "blockmap"),
+      writeFile(join(previous.root, "desktop-channel.json"), "{}\n"),
+      writeFile(join(nextRoot, "coder-studio-engine-linux-x64.manifest.json"), "acceptance"),
+    ]);
+
+    const copied = await carryForwardDesktopShellBase(previous.root, nextRoot);
+
+    expect(copied).toEqual([
+      "Coder-Studio-Setup-0.3.0.exe",
+      "Coder-Studio-Setup-0.3.0.exe.blockmap",
+      "build-info.json",
+      "desktop-channel.json",
+      "latest.yml",
+    ]);
+    await expect(
+      readFile(join(nextRoot, "coder-studio-engine-linux-x64.manifest.json"), "utf8")
+    ).resolves.toBe("acceptance");
   });
 
   it("rejects a symlinked release directory", async () => {

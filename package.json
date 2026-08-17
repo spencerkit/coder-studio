@@ -19,7 +19,6 @@
     "smoke:desktop": "tsx scripts/smoke-desktop-package.ts",
     "desktop:channel": "tsx scripts/build-desktop-channel.ts",
     "desktop:artifacts": "tsx scripts/desktop-release-artifacts.ts",
-    "desktop:force-full-download": "tsx scripts/force-desktop-full-download.ts",
     "changeset": "changeset",
     "changeset:validate": "tsx scripts/validate-changesets.ts",
     "version-packages": "changeset version",

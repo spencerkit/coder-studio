@@ -202,6 +202,21 @@ describe("AboutSettings unified updates", () => {
     expect(screen.getByTestId("latest-version")).toHaveTextContent("v0.6.0");
   });
 
+  it("offers the manual 0.1.2 migration only to legacy Desktop Shell 0.1.1", () => {
+    const state = desktopState({
+      diagnostics: { ...desktopState().diagnostics, shellVersion: "0.1.1" },
+    });
+    renderAbout({ state, controller: createController(state), view: "update-status" });
+
+    expect(screen.getByTestId("desktop-shell-migration-notice")).toHaveTextContent(
+      "Desktop Shell reinstall required"
+    );
+    expect(screen.getByRole("link", { name: "Download Shell 0.1.2" })).toHaveAttribute(
+      "href",
+      "https://github.com/spencerkit/coder-studio/releases/download/desktop-v0.1.2/Coder-Studio-Setup-0.1.2.exe"
+    );
+  });
+
   it("renders trusted UTC release time locally and preserves unknown", () => {
     const known = renderAbout();
     expect(screen.getByTestId("product-release-time")).toHaveTextContent("2026");

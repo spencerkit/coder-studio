@@ -16,7 +16,7 @@ export interface DesktopChannel {
   shell: {
     version: string;
     publishedAt: string;
-    updaterMetadata: "latest.yml";
+    updaterMetadata: "latest.yml" | "modern.yml";
     engineVersion: string;
     nodeVersion: string;
     runtimeHostApiVersion: number;
@@ -119,8 +119,8 @@ export function parseDesktopChannel(
     throw new Error("Desktop channel runtimes must be an object");
   }
   const shellValue = candidate.shell as Record<string, unknown>;
-  if (shellValue.updaterMetadata !== "latest.yml") {
-    throw new Error("Desktop channel updaterMetadata must be latest.yml");
+  if (shellValue.updaterMetadata !== "latest.yml" && shellValue.updaterMetadata !== "modern.yml") {
+    throw new Error("Desktop channel updaterMetadata is unsupported");
   }
   const runtimeValues = candidate.runtimes as Record<string, unknown>;
   const windows = parseRuntime(runtimeValues["win32-x64"], "win32-x64");
@@ -139,7 +139,7 @@ export function parseDesktopChannel(
     shell: {
       version: readString(shellValue.version, "shell.version"),
       publishedAt: normalizeUtcTimestamp(shellValue.publishedAt, "shell.publishedAt"),
-      updaterMetadata: "latest.yml",
+      updaterMetadata: shellValue.updaterMetadata,
       engineVersion: readString(shellValue.engineVersion, "shell.engineVersion"),
       nodeVersion: readString(shellValue.nodeVersion, "shell.nodeVersion"),
       runtimeHostApiVersion: readPositiveInteger(

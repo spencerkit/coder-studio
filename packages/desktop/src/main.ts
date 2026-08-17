@@ -810,6 +810,7 @@ async function startApplication(): Promise<void> {
       currentVersion: app.getVersion(),
       isPackaged: true,
       allowPrerelease: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1",
+      updaterChannel: "modern",
       createCancellationToken: () => new CancellationToken(),
       logLocations: [join(app.getPath("logs"), "main.log")],
       manualInstallerUrl: "https://github.com/spencerkit/coder-studio/releases",

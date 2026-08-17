@@ -8,6 +8,7 @@ function createUpdater() {
     autoDownload: true,
     autoInstallOnAppQuit: true,
     allowPrerelease: false,
+    channel: null,
     disableDifferentialDownload: false,
     disableWebInstaller: false,
     on: (event: string, listener: (value: unknown) => void) => {
@@ -40,6 +41,7 @@ describe("DesktopShellUpdateAdapter", () => {
       updater,
       currentVersion: "0.2.0",
       isPackaged: true,
+      updaterChannel: "modern",
     });
     adapter.start();
 
@@ -53,6 +55,7 @@ describe("DesktopShellUpdateAdapter", () => {
     expect(updater.autoInstallOnAppQuit).toBe(false);
     expect(updater.disableDifferentialDownload).toBe(true);
     expect(updater.disableWebInstaller).toBe(true);
+    expect(updater.channel).toBe("modern");
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
