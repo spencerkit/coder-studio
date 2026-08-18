@@ -8,7 +8,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom, lastViewedTargetAtom, localeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from "../atoms/connection";
-import { workspacesAtom, workspacesLoadStateAtom } from "../atoms/workspaces";
+import {
+  activeWorkspaceIdAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../atoms/workspaces";
 import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import {
   activeEditorTabAtomFamily,
@@ -308,6 +312,65 @@ describe("useBootstrap", () => {
           leafKind: "editor",
         },
       ],
+    });
+  });
+
+  it("prefetches workspace bootstrap data before activation becomes active", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.list") {
+        return [
+          {
+            id: "ws-1",
+            path: "/workspace",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        return {
+          workspaceId: "ws-1",
+          updatedAt: 10,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(activationStatusAtom, "idle");
+    store.set(authenticatedAtom, true);
+    store.set(localeAtom, "en");
+
+    renderHook(() => useBootstrap(), {
+      wrapper: wrapperFor(store),
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("workspace.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("workspace.lastViewedTarget.get", {}, undefined);
+    });
+
+    expect(store.get(workspacesLoadStateAtom)).toBe("loading");
+    expect(store.get(workspacesAtom)).toEqual({});
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await waitFor(() => {
+      expect(store.get(workspacesLoadStateAtom)).toBe("ready");
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-1");
     });
   });
 });

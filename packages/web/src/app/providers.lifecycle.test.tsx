@@ -1199,6 +1199,51 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("falls back to auth disabled after a short /auth/status timeout", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn().mockImplementation((_input, init) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+
+      return new Promise((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException("Aborted", "AbortError"));
+          return;
+        }
+
+        signal?.addEventListener(
+          "abort",
+          () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          },
+          { once: true }
+        );
+      });
+    }) as unknown as typeof fetch;
+
+    const store = createStore();
+    renderProviders(store);
+
+    expect(store.get(authEnabledAtom)).toBeNull();
+    expect(wsState.client?.connect).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1199);
+    });
+
+    expect(store.get(authEnabledAtom)).toBeNull();
+    expect(wsState.client?.connect).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+
+    await vi.waitFor(() => {
+      expect(store.get(authEnabledAtom)).toBe(false);
+      expect(store.get(authenticatedAtom)).toBe(false);
+      expect(wsState.client?.connect).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("does not connect or recover the websocket before login when auth is required", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: async () => ({ authEnabled: true, authenticated: false }),

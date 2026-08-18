@@ -132,6 +132,7 @@ const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   markTreeStale: false,
   refreshEditorBuffers: false,
 };
+const AUTH_STATUS_TIMEOUT_MS = 1200;
 const FOREGROUND_RECOVERY_COOLDOWN_MS = 250;
 const THEME_ID_STORAGE_KEY = "ui.themeId";
 const LEGACY_THEME_STORAGE_KEY = "ui.theme";
@@ -670,19 +671,41 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [store]);
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, AUTH_STATUS_TIMEOUT_MS);
+
     const loadAuthStatus = async () => {
       try {
-        const response = await fetch("/auth/status");
+        const response = await fetch("/auth/status", {
+          signal: controller.signal,
+        });
         const data = await response.json();
+        if (cancelled) {
+          return;
+        }
         setAuthEnabled(Boolean(data.authEnabled));
         store.set(authenticatedAtom, Boolean(data.authenticated) || data.authEnabled === false);
       } catch {
+        if (cancelled) {
+          return;
+        }
         setAuthEnabled(false);
         store.set(authenticatedAtom, false);
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
     void loadAuthStatus();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [setAuthEnabled, store]);
 
   useEffect(() => {
@@ -1279,6 +1302,13 @@ function storeServerMetadata(
     return false;
   }
 
+  if (typeof data.authEnabled === "boolean") {
+    store.set(authEnabledAtom, data.authEnabled);
+    if (data.authEnabled === false) {
+      store.set(authenticatedAtom, true);
+    }
+  }
+
   store.set(serverInfoAtom, {
     version: data.version,
     serverInstanceId: data.serverInstanceId,
@@ -1317,9 +1347,6 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
     };
     if (data.status === "connected") {
       storeServerMetadata(payload, store);
-    }
-    if (data.status === "connected" && data.authEnabled === false) {
-      store.set(authenticatedAtom, true);
     }
     if (data.status === "error" && data.message) {
       store.set(connectionErrorAtom, data.message);

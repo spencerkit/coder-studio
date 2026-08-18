@@ -262,6 +262,7 @@ const ACTIVATION_ALLOWLIST = new Set([
   "terminal.read",
   "uiAction.capabilities",
   "uiAction.dispatch",
+  "workspace.lastViewedTarget.get",
   "workspace.list",
 ]);
 

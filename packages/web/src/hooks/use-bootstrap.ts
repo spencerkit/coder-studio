@@ -23,12 +23,20 @@ import {
 } from "../features/workspace/actions/open-editor-state";
 import { useTranslation } from "../lib/i18n";
 
+interface BootstrapWorkspaceState {
+  savedTarget: WorkspaceLastViewedTarget | null;
+  workspaces: Record<string, Workspace>;
+  workspaceOrder: string[];
+}
+
 export function useBootstrap() {
   const t = useTranslation();
   const bootstrapRequestIdRef = useRef(0);
   const navigate = useNavigate();
   const location = useLocation();
   const activationStatus = useAtomValue(activationStatusAtom);
+  const activationStatusRef = useRef(activationStatus);
+  const prefetchedWorkspaceStateRef = useRef<BootstrapWorkspaceState | null>(null);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
@@ -42,6 +50,10 @@ export function useBootstrap() {
   const setWorkspacesLoadState = useSetAtom(workspacesLoadStateAtom);
   const setWorkspacesLoadError = useSetAtom(workspacesLoadErrorAtom);
   const store = useStore();
+
+  useEffect(() => {
+    activationStatusRef.current = activationStatus;
+  }, [activationStatus]);
 
   useEffect(() => {
     if (authEnabled === null) {
@@ -79,7 +91,57 @@ export function useBootstrap() {
       return;
     }
 
-    if (activationStatus !== "active") {
+    const commitBootstrapState = (nextState: BootstrapWorkspaceState) => {
+      prefetchedWorkspaceStateRef.current = null;
+      setWorkspaces(nextState.workspaces);
+      setWorkspaceOrder(nextState.workspaceOrder);
+      setLastViewedTarget(nextState.savedTarget);
+      if (nextState.savedTarget?.workspaceId) {
+        setActiveWorkspaceId(nextState.savedTarget.workspaceId);
+      }
+      setWorkspacesLoadState("ready");
+      setWorkspacesLoadError(null);
+    };
+
+    const buildBootstrapState = (
+      listResult: { ok: boolean; data?: Workspace[]; error?: { message: string } },
+      targetResult: {
+        ok: boolean;
+        data?: WorkspaceLastViewedTarget | null;
+      }
+    ): BootstrapWorkspaceState => {
+      const nextWorkspaces = (Array.isArray(listResult.data) ? listResult.data : []).map(
+        (workspace) => ({
+          ...workspace,
+          uiState: normalizeWorkspaceEditorUiState(workspace.uiState),
+        })
+      );
+      const wsMap: Record<string, Workspace> = {};
+      for (const workspace of nextWorkspaces) {
+        wsMap[workspace.id] = workspace;
+        hydrateWorkspaceEditorState(store, workspace.id, workspace.uiState);
+        const paneLayout = normalizePaneLayout(workspace.uiState?.paneLayout);
+        if (paneLayout) {
+          store.set(paneLayoutAtomFamily(workspace.id), paneLayout);
+        }
+      }
+
+      const savedTarget =
+        targetResult.ok && targetResult.data && wsMap[targetResult.data.workspaceId]
+          ? targetResult.data
+          : null;
+
+      return {
+        savedTarget,
+        workspaces: wsMap,
+        workspaceOrder: nextWorkspaces.map((workspace) => workspace.id),
+      };
+    };
+
+    if (workspacesLoadState === "loading") {
+      if (activationStatus === "active" && prefetchedWorkspaceStateRef.current) {
+        commitBootstrapState(prefetchedWorkspaceStateRef.current);
+      }
       return;
     }
 
@@ -107,6 +169,7 @@ export function useBootstrap() {
           const [listResult, targetResult] = result;
 
           if (!listResult.ok) {
+            prefetchedWorkspaceStateRef.current = null;
             setWorkspacesLoadState("error");
             setWorkspacesLoadError(
               listResult.error?.message ?? t("workspace.load_failed_description")
@@ -114,39 +177,17 @@ export function useBootstrap() {
             return;
           }
 
-          const nextWorkspaces = (Array.isArray(listResult.data) ? listResult.data : []).map(
-            (workspace) => ({
-              ...workspace,
-              uiState: normalizeWorkspaceEditorUiState(workspace.uiState),
-            })
-          );
-          const wsMap: Record<string, Workspace> = {};
-          for (const workspace of nextWorkspaces) {
-            wsMap[workspace.id] = workspace;
-            hydrateWorkspaceEditorState(store, workspace.id, workspace.uiState);
-            const paneLayout = normalizePaneLayout(workspace.uiState?.paneLayout);
-            if (paneLayout) {
-              store.set(paneLayoutAtomFamily(workspace.id), paneLayout);
-            }
+          const nextState = buildBootstrapState(listResult, targetResult);
+          prefetchedWorkspaceStateRef.current = nextState;
+          if (activationStatusRef.current === "active") {
+            commitBootstrapState(nextState);
           }
-
-          setWorkspaces(wsMap);
-          setWorkspaceOrder(nextWorkspaces.map((workspace) => workspace.id));
-          const savedTarget =
-            targetResult.ok && targetResult.data && wsMap[targetResult.data.workspaceId]
-              ? targetResult.data
-              : null;
-          setLastViewedTarget(savedTarget);
-          if (savedTarget?.workspaceId) {
-            setActiveWorkspaceId(savedTarget.workspaceId);
-          }
-          setWorkspacesLoadState("ready");
-          setWorkspacesLoadError(null);
         })
         .catch((error) => {
           if (bootstrapRequestIdRef.current !== requestId) {
             return;
           }
+          prefetchedWorkspaceStateRef.current = null;
           setWorkspacesLoadState("error");
           setWorkspacesLoadError(
             error instanceof Error ? error.message : t("workspace.load_failed_description")
@@ -156,6 +197,10 @@ export function useBootstrap() {
     }
 
     if (workspacesLoadState !== "ready") {
+      return;
+    }
+
+    if (activationStatus !== "active") {
       return;
     }
 

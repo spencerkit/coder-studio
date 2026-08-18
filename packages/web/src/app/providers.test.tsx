@@ -1,7 +1,14 @@
 import type { Supervisor, UpdateStateView } from "@coder-studio/core";
 import { createStore } from "jotai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isWriterAtom, serverInfoAtom, sessionsAtom, workspacesAtom } from "../atoms";
+import {
+  authEnabledAtom,
+  isWriterAtom,
+  serverInfoAtom,
+  sessionsAtom,
+  workspacesAtom,
+} from "../atoms";
+import { authenticatedAtom } from "../atoms/app-ui";
 import {
   activeWorkspaceAtom,
   activeWorkspaceIdAtom,
@@ -82,7 +89,31 @@ describe("routeEventToAtom", () => {
       serverInstanceId: "server-123",
       authEnabled: false,
     });
+    expect(store.get(authEnabledAtom)).toBe(false);
+    expect(store.get(authenticatedAtom)).toBe(true);
     expect(store.get(isWriterAtom)).toBe(true);
+  });
+
+  it("hydrates authEnabled from connection.ready metadata", () => {
+    const store = createStore();
+    store.set(authEnabledAtom, false);
+
+    routeEventToAtom(
+      "connection.ready",
+      {
+        authEnabled: true,
+        version: "0.3.0",
+        serverInstanceId: "server-123",
+      },
+      store
+    );
+
+    expect(store.get(authEnabledAtom)).toBe(true);
+    expect(store.get(serverInfoAtom)).toEqual({
+      version: "0.3.0",
+      serverInstanceId: "server-123",
+      authEnabled: true,
+    });
   });
 
   it("stores update state from update.state.changed events", () => {

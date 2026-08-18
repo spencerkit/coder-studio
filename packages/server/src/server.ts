@@ -109,6 +109,15 @@ import { FencingManager } from "./ws/fencing.js";
 import { WsHub } from "./ws/hub.js";
 
 const WS_KEEPALIVE_INTERVAL_MS = 15_000;
+const INITIAL_WATCHER_RESTORE_COUNT = 2;
+const WATCHER_RESTORE_BATCH_SIZE = 2;
+const WATCHER_RESTORE_BATCH_INTERVAL_MS = 750;
+const INITIAL_AGENT_SYNC_COUNT = 1;
+const AGENT_SYNC_BATCH_SIZE = 2;
+const AGENT_SYNC_BATCH_INTERVAL_MS = 1_000;
+const POST_LISTEN_AGENT_SYNC_DELAY_MS = 1_000;
+const POST_LISTEN_UPDATE_SERVICE_DELAY_MS = 5_000;
+const POST_LISTEN_WORK_ANALYSIS_DELAY_MS = 10_000;
 
 function logStartupPhase(app: FastifyInstance | null, label: string, startedAt: number): void {
   const elapsedMs = Date.now() - startedAt;
@@ -412,7 +421,6 @@ export async function createServer(
       providerConfigRepo,
     }),
   });
-  workAnalysisService.startAutoScan();
 
   workspaceMgr = new WorkspaceManager({
     workspaceRepo,
@@ -803,16 +811,108 @@ export async function createServer(
   }
   logStartupPhase(app, "runtimeConfigWritten", startupAt);
 
-  const runPostListenWarmup = async (): Promise<void> => {
-    workAnalysisService.startAutoScan();
-    workspaceMgr.hydrateWatchers();
-    await agentInstructionPublisher.syncAllOpenWorkspaces();
-    updateService.start();
-    monitoringService.start();
+  const readyAgentInstructionPublisher = agentInstructionPublisher!;
+  const readyUpdateService = updateService;
+  const readyMonitoringService = monitoringService;
+  const persistedWorkspaces = workspaceMgr.list();
+  const isTestEnv =
+    process.env.NODE_ENV === "test" ||
+    process.env.VITEST === "true" ||
+    process.env.VITEST_WORKER_ID !== undefined;
+  const immediateWatcherRestoreCount = isTestEnv
+    ? persistedWorkspaces.length
+    : INITIAL_WATCHER_RESTORE_COUNT;
+  const watcherRestoreBatchSize = isTestEnv
+    ? persistedWorkspaces.length
+    : WATCHER_RESTORE_BATCH_SIZE;
+  const watcherRestoreBatchIntervalMs = isTestEnv ? 0 : WATCHER_RESTORE_BATCH_INTERVAL_MS;
+  const immediateAgentSyncCount = isTestEnv ? persistedWorkspaces.length : INITIAL_AGENT_SYNC_COUNT;
+  const agentSyncBatchSize = isTestEnv ? persistedWorkspaces.length : AGENT_SYNC_BATCH_SIZE;
+  const agentSyncBatchIntervalMs = isTestEnv ? 0 : AGENT_SYNC_BATCH_INTERVAL_MS;
+  const agentSyncDelayMs = isTestEnv ? 0 : POST_LISTEN_AGENT_SYNC_DELAY_MS;
+  const updateServiceDelayMs = isTestEnv ? 0 : POST_LISTEN_UPDATE_SERVICE_DELAY_MS;
+  const workAnalysisDelayMs = isTestEnv ? 0 : POST_LISTEN_WORK_ANALYSIS_DELAY_MS;
+  let stopped = false;
+  const warmupTimers = new Set<ReturnType<typeof setTimeout>>();
+  const runWarmupTask = (task: string, runner: () => unknown): void => {
+    if (stopped) {
+      return;
+    }
+
+    try {
+      const result = runner();
+      if (result && typeof (result as Promise<unknown>).catch === "function") {
+        void (result as Promise<unknown>).catch((error) => {
+          app.log.warn({ err: error, task }, "post-listen warmup failed");
+        });
+      }
+    } catch (error) {
+      app.log.warn({ err: error, task }, "post-listen warmup failed");
+    }
+  };
+  const scheduleWarmupTask = (task: string, delayMs: number, runner: () => unknown): void => {
+    if (delayMs <= 0) {
+      runWarmupTask(task, runner);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      warmupTimers.delete(timer);
+      runWarmupTask(task, runner);
+    }, delayMs);
+    timer.unref?.();
+    warmupTimers.add(timer);
   };
 
-  void runPostListenWarmup().catch((error) => {
-    app.log.warn({ err: error }, "post-listen warmup failed");
+  scheduleWarmupTask("workspaceWatchers:recent", 0, () => {
+    workspaceMgr.hydrateWatchers({
+      workspaces: persistedWorkspaces.slice(0, immediateWatcherRestoreCount),
+    });
+  });
+  for (
+    let offset = immediateWatcherRestoreCount;
+    offset < persistedWorkspaces.length;
+    offset += watcherRestoreBatchSize
+  ) {
+    const batch = persistedWorkspaces.slice(offset, offset + watcherRestoreBatchSize);
+    const batchIndex =
+      Math.floor((offset - immediateWatcherRestoreCount) / watcherRestoreBatchSize) + 1;
+    scheduleWarmupTask(
+      `workspaceWatchers:batch:${batchIndex}`,
+      watcherRestoreBatchIntervalMs * batchIndex,
+      () => {
+        workspaceMgr.hydrateWatchers({ workspaces: batch });
+      }
+    );
+  }
+  scheduleWarmupTask("monitoringService", 0, () => {
+    readyMonitoringService.start();
+  });
+  const syncWorkspaceBatch = (batch: typeof persistedWorkspaces) =>
+    Promise.all(
+      batch.map((workspace) => readyAgentInstructionPublisher.syncWorkspace(workspace.id))
+    );
+  scheduleWarmupTask("workspaceInstructionSync:recent", agentSyncDelayMs, () =>
+    syncWorkspaceBatch(persistedWorkspaces.slice(0, immediateAgentSyncCount))
+  );
+  for (
+    let offset = immediateAgentSyncCount;
+    offset < persistedWorkspaces.length;
+    offset += agentSyncBatchSize
+  ) {
+    const batch = persistedWorkspaces.slice(offset, offset + agentSyncBatchSize);
+    const batchIndex = Math.floor((offset - immediateAgentSyncCount) / agentSyncBatchSize) + 1;
+    scheduleWarmupTask(
+      `workspaceInstructionSync:batch:${batchIndex}`,
+      agentSyncDelayMs + agentSyncBatchIntervalMs * batchIndex,
+      () => syncWorkspaceBatch(batch)
+    );
+  }
+  scheduleWarmupTask("updateService", updateServiceDelayMs, () => {
+    readyUpdateService.start();
+  });
+  scheduleWarmupTask("workAnalysisAutoScan", workAnalysisDelayMs, () => {
+    workAnalysisService.startAutoScan();
   });
   logStartupPhase(app, "postListenWarmupScheduled", startupAt);
 
@@ -828,13 +928,16 @@ export async function createServer(
   }, WS_KEEPALIVE_INTERVAL_MS);
   wsKeepaliveTimer.unref();
 
-  let stopped = false;
   const stopServer = async () => {
     if (stopped) return;
     stopped = true;
 
     clearTimeout(gcTimer);
     clearInterval(wsKeepaliveTimer);
+    for (const timer of warmupTimers) {
+      clearTimeout(timer);
+    }
+    warmupTimers.clear();
     await app.close();
     await lspMgr?.disposeAll();
     autoFetch.stop();

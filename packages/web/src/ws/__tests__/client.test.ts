@@ -1214,6 +1214,31 @@ describe("web WsClient", () => {
     }
   });
 
+  it("uses a short default backoff for the first reconnect attempt", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const client = new WsClient("ws://127.0.0.1:4173/ws");
+      const connectPromise = client.connect();
+      const firstSocket = MockWebSocket.instances[0]!;
+      firstSocket.triggerOpen();
+      await connectPromise;
+
+      firstSocket.triggerClose(1006, "network_lost");
+
+      expect(client.getStatus()).toBe("reconnecting");
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(249);
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(MockWebSocket.instances).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps retrying reconnect attempts after extended outages", async () => {
     vi.useFakeTimers();
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
