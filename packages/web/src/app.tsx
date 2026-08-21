@@ -9,19 +9,17 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ShellDeferredFallback } from "./shells/shared/shell-deferred-fallback";
 
 const DeferredRuntimeShell = lazy(async () => {
-  const module = await import(/* @vite-ignore */ "./app/runtime-shell");
+  const module = await import("./app/runtime-shell");
   return { default: module.RuntimeShell };
 });
 
 const DeferredEmbeddedCanvasRoute = lazy(async () => {
-  const module = await import(/* @vite-ignore */ "./features/canvas/routes/embedded-canvas-route");
+  const module = await import("./features/canvas/routes/embedded-canvas-route");
   return { default: module.EmbeddedCanvasRoute };
 });
 
 const DeferredEmbeddedCanvasSnapshotRoute = lazy(async () => {
-  const module = await import(
-    /* @vite-ignore */ "./features/canvas/routes/embedded-canvas-snapshot-route"
-  );
+  const module = await import("./features/canvas/routes/embedded-canvas-snapshot-route");
   return { default: module.EmbeddedCanvasSnapshotRoute };
 });
 
