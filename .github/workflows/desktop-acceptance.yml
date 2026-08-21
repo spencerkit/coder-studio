@@ -404,10 +404,13 @@ jobs:
           }
           $patterns = @(
             'latest.yml',
+            'modern.yml',
             'Coder-Studio-Setup-*.exe',
             '*.blockmap',
             'build-info.json',
+            'build-info-modern.json',
             'desktop-channel.json',
+            'desktop-channel-modern.json',
             'coder-studio-engine-linux-x64.manifest.json',
             'coder-studio-engine-*-linux-x64.tgz',
             'coder-studio-runtime-win32-x64.manifest.json',
