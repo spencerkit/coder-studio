@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.11
+
+### Patch Changes
+
+- [#131](https://github.com/spencerkit/coder-studio/pull/131) [`a51681a`](https://github.com/spencerkit/coder-studio/commit/a51681a503aea4b61160850bd5388a0f0ab945a7) Thanks [@pallyoung](https://github.com/pallyoung)! - Reduce runtime startup blocking work by deferring more shell and bootstrap setup off the initial
+  path, and revalidate the server-backed workspace last viewed target before committing inactive
+  bootstrap prefetch state after activation resumes. This preserves the faster workspace list
+  prefetch path while avoiding stale workspace restoration when another tab changed the target during
+  inactivity.
+
 ## 0.5.10
 
 ### Patch Changes
