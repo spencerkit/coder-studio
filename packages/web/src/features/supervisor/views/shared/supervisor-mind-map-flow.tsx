@@ -58,6 +58,14 @@ interface MindMapNodePosition {
   y: number;
 }
 
+type SupervisorMindMapDomAttributes = NonNullable<SupervisorMindMapNode["domAttributes"]> & {
+  "data-active-node"?: "true";
+  "data-active-path"?: "true";
+  "data-plan-status"?: SupervisorPlanNodeStatus;
+  "data-root-node"?: "true";
+  "data-selected-node"?: "true";
+};
+
 function formatMindMapZoom(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -431,10 +439,11 @@ function SupervisorMindMapFlowInner({
     () =>
       baseNodes.map((node) => {
         const isSelected = node.id === selectedNodeId;
+        const domAttributes = node.domAttributes as SupervisorMindMapDomAttributes | undefined;
 
         if (
           node.data.isSelected === isSelected &&
-          node.domAttributes?.["data-selected-node"] === (isSelected ? "true" : undefined)
+          domAttributes?.["data-selected-node"] === (isSelected ? "true" : undefined)
         ) {
           return node;
         }
@@ -446,9 +455,9 @@ function SupervisorMindMapFlowInner({
             isSelected,
           },
           domAttributes: {
-            ...node.domAttributes,
+            ...domAttributes,
             "data-selected-node": isSelected ? "true" : undefined,
-          },
+          } as SupervisorMindMapDomAttributes,
         };
       }),
     [baseNodes, selectedNodeId]

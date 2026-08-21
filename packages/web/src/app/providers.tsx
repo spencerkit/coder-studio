@@ -213,7 +213,7 @@ function resetServerProjectedState(store: Store): void {
   for (const workspaceId of workspaceIds) {
     const workspace = workspaces[workspaceId];
     if (workspace) {
-      monacoModelRegistry.disposeWorkspace(workspace.path);
+      monacoModelRegistry?.disposeWorkspace(workspace.path);
     }
     store.set(fileTreeAtomFamily(workspaceId), null);
     store.set(loadedDirsAtomFamily(workspaceId), new Set());

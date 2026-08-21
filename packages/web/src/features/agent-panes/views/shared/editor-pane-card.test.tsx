@@ -217,7 +217,9 @@ describe("EditorPaneCard", () => {
     fireEvent(editorPane, dragOver);
 
     expect(dragOver.defaultPrevented).toBe(true);
-    const fileDropOverlay = screen.getByText("Open in editor").closest(".pane-drop-overlay");
+    const fileDropOverlay = screen
+      .getByText("Open in editor")
+      .closest(".pane-drop-overlay") as HTMLElement | null;
     expect(fileDropOverlay).toHaveClass("editor-pane-card__file-drop-overlay");
 
     const drop = new Event("drop", { bubbles: true, cancelable: true });
@@ -555,10 +557,13 @@ describe("EditorPaneCard", () => {
       </Provider>
     );
 
-    const header = screen.getByTestId("editor-pane-pane-1").querySelector(".code-editor-tabbar");
-    const emptyTabs = header?.querySelector(".code-editor-tabs--empty");
-    const emptyLabel = header?.querySelector(".code-file-path");
-    const headerActions = header?.querySelector(".code-editor-tabbar__actions");
+    const header =
+      screen.getByTestId("editor-pane-pane-1").querySelector<HTMLElement>(".code-editor-tabbar") ??
+      null;
+    const emptyTabs = header?.querySelector<HTMLElement>(".code-editor-tabs--empty") ?? null;
+    const emptyLabel = header?.querySelector<HTMLElement>(".code-file-path") ?? null;
+    const headerActions =
+      header?.querySelector<HTMLElement>(".code-editor-tabbar__actions") ?? null;
 
     expect(emptyTabs).toContainElement(emptyLabel);
     expect(emptyTabs?.nextElementSibling).toBe(headerActions);

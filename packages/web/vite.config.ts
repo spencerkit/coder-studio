@@ -12,6 +12,13 @@ export default defineConfig(({ command, isPreview, mode }) => {
   }
 
   const isUiPreviewBuild = command === "build" && mode === "ui-preview";
+  const buildInput: Record<string, string> = isUiPreviewBuild
+    ? {
+        "ui-preview": path.resolve(__dirname, "ui-preview.html"),
+      }
+    : {
+        main: path.resolve(__dirname, "index.html"),
+      };
 
   return {
     plugins: [react()],
@@ -54,13 +61,7 @@ export default defineConfig(({ command, isPreview, mode }) => {
       modulePreload: false,
       sourcemap: true,
       rollupOptions: {
-        input: isUiPreviewBuild
-          ? {
-              "ui-preview": path.resolve(__dirname, "ui-preview.html"),
-            }
-          : {
-              main: path.resolve(__dirname, "index.html"),
-            },
+        input: buildInput,
         output: {
           manualChunks(id) {
             const normalizedId = id.split(path.sep).join("/");
