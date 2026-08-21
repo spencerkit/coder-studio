@@ -588,6 +588,17 @@ describe("GitHub workflow boundaries", () => {
     expect(downloadPrevious?.run).toContain("'desktop-channel-modern.json'");
     expect(runInstalled?.run).toContain("if ('${{ steps.scenario.outputs.components }}')");
     expect(runInstalled?.run).toContain("-SkipAuthenticode");
+    expect(runInstalled?.run).toContain("scripts/serve-static-http.mjs");
+    expect(runInstalled?.run).toContain("Invoke-WebRequest -UseBasicParsing -Method Head");
+    expect(runInstalled?.run).toContain(
+      "desktop-installed-report/${{ matrix.scenario }}.http.stderr.log"
+    );
+    expect(runInstalled?.run).toContain("try {");
+    expect(runInstalled?.run).toContain("} finally {");
+    expect(runInstalled?.run).toContain("'-ChannelUrl', $channelUrl");
+    expect(runInstalled?.run).toContain("${{ steps.scenario.outputs.channel_root }}");
+    expect(runInstalled?.run).toContain("${{ steps.scenario.outputs.channel_file }}");
+    expect(runInstalled?.run).not.toContain("steps.scenario.outputs.channel_url");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
     expect(prepareScenario?.run).toContain("'wsl-combined'");
     expect(prepareScenario?.run).toContain("$useModernChannel");
@@ -599,9 +610,9 @@ describe("GitHub workflow boundaries", () => {
     expect(prepareScenario?.run).toContain("InvariantCulture");
     expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
     expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
-    expect(prepareScenario?.run).toContain("scripts/serve-static-http.mjs");
-    expect(prepareScenario?.run).toContain("Invoke-WebRequest -UseBasicParsing -Method Head");
-    expect(prepareScenario?.run).toContain("desktop-installed-http.stderr.log");
+    expect(prepareScenario?.run).toContain('"channel_root=$channelRoot"');
+    expect(prepareScenario?.run).toContain('"channel_file=$channelFile"');
+    expect(prepareScenario?.run).not.toContain("scripts/serve-static-http.mjs");
     expect(runInstalled?.run).toContain(
       "@('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')"
     );

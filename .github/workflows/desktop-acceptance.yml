@@ -526,41 +526,8 @@ jobs:
           }
           $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$channel.signature.value)
           $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
-          $portListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
-          $portListener.Start()
-          $port = ([Net.IPEndPoint]$portListener.LocalEndpoint).Port
-          $portListener.Stop()
-          $serverStdout = 'release/desktop-installed-http.stdout.log'
-          $serverStderr = 'release/desktop-installed-http.stderr.log'
-          $server = Start-Process node -ArgumentList @(
-            'scripts/serve-static-http.mjs',
-            '--host', '127.0.0.1',
-            '--port', "$port",
-            '--directory', $channelRoot
-          ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverStdout -RedirectStandardError $serverStderr
-          $deadline = (Get-Date).AddSeconds(15)
-          $channelUrl = "http://127.0.0.1:$port/$channelFile"
-          while ((Get-Date) -lt $deadline) {
-            if ($server.HasExited) {
-              $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
-              $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
-              throw "Installed Desktop channel server exited early with code $($server.ExitCode).`n$stdout`n$stderr"
-            }
-            try {
-              $probe = Invoke-WebRequest -UseBasicParsing -Method Head $channelUrl -TimeoutSec 2
-              if ($probe.StatusCode -eq 200) { break }
-            } catch {
-            }
-            Start-Sleep -Milliseconds 200
-            $server.Refresh()
-          }
-          if ($server.HasExited) {
-            $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
-            $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
-            throw "Installed Desktop channel server exited before it became ready.`n$stdout`n$stderr"
-          }
-          $server.Id | Set-Content release/desktop-installed-http.pid
-          "channel_url=$channelUrl" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "channel_root=$channelRoot" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "channel_file=$channelFile" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "candidate_installer=$channelRoot/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -593,39 +560,89 @@ jobs:
       - name: Run installed Desktop update scenario
         shell: pwsh
         run: |
-          $arguments = @(
-            '-PreviousInstaller', '${{ steps.scenario.outputs.previous_installer }}',
-            '-CandidateInstaller', '${{ steps.scenario.outputs.candidate_installer }}',
-            '-CandidateTag', '${{ steps.scenario.outputs.scenario_tag }}',
-            '-ChannelUrl', '${{ steps.scenario.outputs.channel_url }}',
-            '-PreviousShellVersion', '${{ steps.scenario.outputs.previous_shell }}',
-            '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
-            '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
-            '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
-            '-PublicKeyPath', '${{ steps.scenario.outputs.public_key_path }}',
-            '-Scenario', '${{ matrix.scenario }}',
-            '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
-            '-CommitSha', '${{ github.sha }}',
-            '-ChannelSignatureDigest', '${{ steps.scenario.outputs.signature_digest }}'
-          )
-          if ('${{ steps.scenario.outputs.components }}') {
-            $arguments += @('-ExpectedComponents', '${{ steps.scenario.outputs.components }}')
+          New-Item -ItemType Directory -Force -Path 'release/desktop-installed-report' | Out-Null
+          $channelRoot = '${{ steps.scenario.outputs.channel_root }}'
+          $channelFile = '${{ steps.scenario.outputs.channel_file }}'
+          $portListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+          $portListener.Start()
+          $port = ([Net.IPEndPoint]$portListener.LocalEndpoint).Port
+          $portListener.Stop()
+          $serverStdout = 'release/desktop-installed-report/${{ matrix.scenario }}.http.stdout.log'
+          $serverStderr = 'release/desktop-installed-report/${{ matrix.scenario }}.http.stderr.log'
+          $server = Start-Process node -ArgumentList @(
+            'scripts/serve-static-http.mjs',
+            '--host', '127.0.0.1',
+            '--port', "$port",
+            '--directory', $channelRoot
+          ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverStdout -RedirectStandardError $serverStderr
+          try {
+            $deadline = (Get-Date).AddSeconds(15)
+            $channelUrl = "http://127.0.0.1:$port/$channelFile"
+            $serverReady = $false
+            while ((Get-Date) -lt $deadline) {
+              $server.Refresh()
+              if ($server.HasExited) {
+                $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
+                $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
+                throw "Installed Desktop channel server exited early with code $($server.ExitCode).`n$stdout`n$stderr"
+              }
+              try {
+                $probe = Invoke-WebRequest -UseBasicParsing -Method Head $channelUrl -TimeoutSec 2
+                if ($probe.StatusCode -eq 200) {
+                  $serverReady = $true
+                  break
+                }
+              } catch {
+              }
+              Start-Sleep -Milliseconds 200
+            }
+            if (-not $serverReady) {
+              $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
+              $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
+              throw "Installed Desktop channel server did not become ready in time.`n$stdout`n$stderr"
+            }
+
+            $arguments = @(
+              '-PreviousInstaller', '${{ steps.scenario.outputs.previous_installer }}',
+              '-CandidateInstaller', '${{ steps.scenario.outputs.candidate_installer }}',
+              '-CandidateTag', '${{ steps.scenario.outputs.scenario_tag }}',
+              '-ChannelUrl', $channelUrl,
+              '-PreviousShellVersion', '${{ steps.scenario.outputs.previous_shell }}',
+              '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
+              '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
+              '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
+              '-PublicKeyPath', '${{ steps.scenario.outputs.public_key_path }}',
+              '-Scenario', '${{ matrix.scenario }}',
+              '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
+              '-CommitSha', '${{ github.sha }}',
+              '-ChannelSignatureDigest', '${{ steps.scenario.outputs.signature_digest }}'
+            )
+            if ('${{ steps.scenario.outputs.components }}') {
+              $arguments += @('-ExpectedComponents', '${{ steps.scenario.outputs.components }}')
+            }
+            if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
+              $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
+            }
+            if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')) {
+              $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+            }
+            if ('${{ inputs.windows_signing }}' -ne 'true') {
+              $arguments += '-SkipAuthenticode'
+            }
+            pnpm acceptance:desktop:installed @arguments
+            if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
+            $reportPath = 'release/desktop-installed-report/${{ matrix.scenario }}.json'
+            $report = Get-Content $reportPath -Raw | ConvertFrom-Json
+            $report | Add-Member -NotePropertyName releaseKind -NotePropertyValue '${{ needs.prepare.outputs.release_kind }}' -Force
+            $report | ConvertTo-Json -Depth 32 | Set-Content $reportPath -Encoding utf8
+          } finally {
+            if ($server) {
+              $server.Refresh()
+              if (-not $server.HasExited) {
+                Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+              }
+            }
           }
-          if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
-            $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
-          }
-          if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')) {
-            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
-          }
-          if ('${{ inputs.windows_signing }}' -ne 'true') {
-            $arguments += '-SkipAuthenticode'
-          }
-          pnpm acceptance:desktop:installed @arguments
-          if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
-          $reportPath = 'release/desktop-installed-report/${{ matrix.scenario }}.json'
-          $report = Get-Content $reportPath -Raw | ConvertFrom-Json
-          $report | Add-Member -NotePropertyName releaseKind -NotePropertyValue '${{ needs.prepare.outputs.release_kind }}' -Force
-          $report | ConvertTo-Json -Depth 32 | Set-Content $reportPath -Encoding utf8
 
       - name: Upload installed-upgrade report
         if: always()
@@ -640,9 +657,5 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          if (Test-Path release/desktop-installed-http.pid) {
-            $serverPid = Get-Content release/desktop-installed-http.pid
-            Stop-Process -Id $serverPid -Force -ErrorAction SilentlyContinue
-          }
           $distro = '${{ steps.wsl.outputs.name }}'
           if ($distro) { wsl.exe --unregister $distro 2>$null }
