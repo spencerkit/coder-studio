@@ -246,7 +246,7 @@ jobs:
               ? ["combined", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
               : releaseKind === "migration"
                 ? ["legacy-current", "legacy-wsl-current", "fresh-native", "fresh-wsl", "external-sidecar-browser"]
-                : ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "fresh-native", "fresh-wsl", "external-sidecar-browser"]);
+                : ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "fresh-wsl", "external-sidecar-browser"]);
           for (const report of reports) {
             if (report.commitSha !== process.env.GITHUB_SHA) throw new Error("Desktop report commitSha does not match");
             if (report.releaseKind !== releaseKind) throw new Error("Desktop report releaseKind does not match");

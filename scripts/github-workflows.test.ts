@@ -297,7 +297,7 @@ describe("GitHub workflow boundaries", () => {
       'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain(
-      'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]\''
+      'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-wsl","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]\''

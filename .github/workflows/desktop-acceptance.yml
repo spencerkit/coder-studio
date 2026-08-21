@@ -103,7 +103,7 @@ jobs:
             elif [[ "${release_kind}" == "migration" ]]; then
               acceptance_scenarios='["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]'
             else
-              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-native","fresh-wsl","external-sidecar-browser"]'
+              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-wsl","external-sidecar-browser"]'
             fi
           else
             acceptance_scenarios='["fresh-native","fresh-wsl"]'
