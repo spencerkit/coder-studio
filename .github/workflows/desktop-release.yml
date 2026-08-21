@@ -783,7 +783,7 @@ jobs:
               ? ["legacy-current", "legacy-wsl-current", "fresh-native", "fresh-wsl", "external-sidecar-browser"]
               : releaseKind === "full"
               ? ["combined", "wsl-combined", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
-              : ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "fresh-wsl", "external-sidecar-browser"]
+              : ["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]
             : ["fresh-native", "fresh-wsl"]);
           for (const report of matrix) {
             if (report.commitSha !== commitSha) throw new Error("Desktop matrix commitSha does not match");

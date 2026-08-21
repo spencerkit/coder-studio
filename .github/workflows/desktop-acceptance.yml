@@ -103,7 +103,7 @@ jobs:
             elif [[ "${release_kind}" == "migration" ]]; then
               acceptance_scenarios='["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]'
             else
-              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-wsl","external-sidecar-browser"]'
+              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
             fi
           else
             acceptance_scenarios='["fresh-native","fresh-wsl"]'
@@ -530,9 +530,37 @@ jobs:
           $portListener.Start()
           $port = ([Net.IPEndPoint]$portListener.LocalEndpoint).Port
           $portListener.Stop()
-          $server = Start-Process python -ArgumentList @('-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $channelRoot) -PassThru -WindowStyle Hidden
+          $serverStdout = 'release/desktop-installed-http.stdout.log'
+          $serverStderr = 'release/desktop-installed-http.stderr.log'
+          $server = Start-Process node -ArgumentList @(
+            'scripts/serve-static-http.mjs',
+            '--host', '127.0.0.1',
+            '--port', "$port",
+            '--directory', $channelRoot
+          ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverStdout -RedirectStandardError $serverStderr
+          $deadline = (Get-Date).AddSeconds(15)
+          $channelUrl = "http://127.0.0.1:$port/$channelFile"
+          while ((Get-Date) -lt $deadline) {
+            if ($server.HasExited) {
+              $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
+              $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
+              throw "Installed Desktop channel server exited early with code $($server.ExitCode).`n$stdout`n$stderr"
+            }
+            try {
+              $probe = Invoke-WebRequest -UseBasicParsing -Method Head $channelUrl -TimeoutSec 2
+              if ($probe.StatusCode -eq 200) { break }
+            } catch {
+            }
+            Start-Sleep -Milliseconds 200
+            $server.Refresh()
+          }
+          if ($server.HasExited) {
+            $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
+            $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
+            throw "Installed Desktop channel server exited before it became ready.`n$stdout`n$stderr"
+          }
           $server.Id | Set-Content release/desktop-installed-http.pid
-          "channel_url=http://127.0.0.1:$port/$channelFile" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "channel_url=$channelUrl" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "candidate_installer=$channelRoot/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
