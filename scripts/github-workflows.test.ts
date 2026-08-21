@@ -653,6 +653,9 @@ describe("GitHub workflow boundaries", () => {
       (step) => step.name === "Download immutable channel identity"
     );
     const promote = promotionSteps.find((step) => step.name === "Promote existing prerelease");
+    const cleanupAcceptance = promotionSteps.find(
+      (step) => step.name === "Delete consumed Desktop acceptance prereleases"
+    );
     expect(downloadChannel?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
     expect(downloadChannel?.run).toContain("--pattern 'desktop-channel*.json'");
     expect(validateReports?.run).toContain("channelSignatureDigest");
@@ -670,8 +673,17 @@ describe("GitHub workflow boundaries", () => {
     expect(validateReports?.run).toContain(
       '["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]'
     );
-    expect(promote?.run?.trim()).toBe(
-      'gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest'
+    expect(promote?.run).toContain('gh release edit "${{ needs.prepare.outputs.tag }}"');
+    expect(promote?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
+    expect(promote?.run).toContain("--prerelease=false --latest");
+    expect(cleanupAcceptance?.run).toContain(
+      'prefix="desktop-ci-${{ inputs.desktop_acceptance_run_id }}-"'
+    );
+    expect(cleanupAcceptance?.run).toContain("gh release list");
+    expect(cleanupAcceptance?.run).toContain('startswith(\\"${prefix}\\")');
+    expect(cleanupAcceptance?.run).toContain('gh release delete "${tag}"');
+    expect(cleanupAcceptance?.run).toContain(
+      "::warning title=Desktop acceptance release cleanup failed"
     );
     const promotionText = JSON.stringify(promotion);
     expect(promotionText).not.toMatch(/pnpm (build|dist)|gh release upload|--clobber/);

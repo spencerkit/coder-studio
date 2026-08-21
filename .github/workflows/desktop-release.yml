@@ -807,3 +807,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest
+
+      - name: Delete consumed Desktop acceptance prereleases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          prefix="desktop-ci-${{ inputs.desktop_acceptance_run_id }}-"
+          acceptance_tags=$(gh release list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --limit 100 \
+            --json tagName \
+            --jq ".[] | select(.tagName | startswith(\"${prefix}\")) | .tagName")
+          if [[ -z "${acceptance_tags}" ]]; then
+            echo "No Desktop acceptance prereleases found for ${prefix}"
+            exit 0
+          fi
+          while IFS= read -r tag; do
+            [[ -n "${tag}" ]] || continue
+            if ! gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes; then
+              echo "::warning title=Desktop acceptance release cleanup failed::Unable to delete ${tag}; clean it up manually."
+            fi
+          done <<< "${acceptance_tags}"
