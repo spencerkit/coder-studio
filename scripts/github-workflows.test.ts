@@ -290,6 +290,9 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveChannel?.run).toContain("release_kind=migration");
     expect(resolveChannel?.run).toContain("desktop-channel-modern.json");
     expect(resolveChannel?.run).toContain('runtime_min_shell_version="${current_shell}"');
+    expect(resolveChannel?.run).toContain('runtime_min_shell_version="${previous_shell}"');
+    expect(resolveChannel?.run).toContain("latest_legacy_channel");
+    expect(resolveChannel?.run).toContain("--pattern 'desktop-channel.json'");
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
     );
@@ -467,6 +470,10 @@ describe("GitHub workflow boundaries", () => {
     expect(resolveRelease?.run).toContain('--pattern "${channel_asset}"');
     expect(resolveRelease?.run).toContain("desktop-channel-modern.json");
     expect(resolveRelease?.run).toContain('runtime_min_shell_version="${desktop_version}"');
+    expect(resolveRelease?.run).toContain('runtime_min_shell_version="${previous_shell_version}"');
+    expect(resolveRelease?.run).toContain(
+      "require('./release/desktop-release-boundary/desktop-channel.json')"
+    );
     expect(resolveRelease?.run).toContain("shell_change=$(node -e");
     expect(resolveRelease?.run).toContain('if [[ "${shell_change}" == "same" ]]');
     expect(resolveRelease?.run).toContain('elif [[ "${shell_change}" == "downgrade" ]]');

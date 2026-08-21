@@ -76,6 +76,15 @@ jobs:
                 shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${current_shell}" "${previous_shell}")
                 if [[ "${shell_change}" == "same" ]]; then
                   release_kind=runtime-only
+                  runtime_min_shell_version="${previous_shell}"
+                  if [[ "${has_modern_channel}" == "true" ]]; then
+                    latest_legacy_channel="${RUNNER_TEMP}/coder-studio-latest-legacy-channel.json"
+                    gh release download "${latest_tag}" \
+                      --repo "${GITHUB_REPOSITORY}" \
+                      --pattern 'desktop-channel.json' \
+                      --output "${latest_legacy_channel}"
+                    runtime_min_shell_version=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${latest_legacy_channel}")
+                  fi
                 elif [[ "${shell_change}" == "downgrade" ]]; then
                   echo "Desktop Shell ${current_shell} is older than stable ${previous_shell}" >&2
                   exit 1
