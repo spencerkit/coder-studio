@@ -1,5 +1,11 @@
 # @coder-studio/desktop
 
+## 0.1.3
+
+### Patch Changes
+
+- [#138](https://github.com/spencerkit/coder-studio/pull/138) [`262fe0b`](https://github.com/spencerkit/coder-studio/commit/262fe0b4fa073ac010893bac4676f3ed7a88e03c) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix the Desktop runtime rollback trust path so runtime-only updates preserve the bundled Factory Runtime as a trusted rollback candidate.
+
 ## 0.1.2
 
 ### Patch Changes
