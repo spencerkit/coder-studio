@@ -308,7 +308,10 @@ export class RuntimeStore {
     await this.initialize();
     const current = await this.readActiveState();
     if (current?.active) return;
-    const manifest = await this.validateRuntimeRoot(runtime.root, false);
+    // The bundled Factory Runtime is already the trusted launch source for the
+    // current Shell, so preserve its verified contents without requiring it to
+    // validate against the current network-update public key.
+    const manifest = await this.validateRuntimeRoot(runtime.root, true);
     const pointer: RuntimePointer = {
       id: createHash("sha256")
         .update(getRuntimeManifestSigningPayload(manifest))
