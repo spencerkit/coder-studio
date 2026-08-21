@@ -122,7 +122,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("SettingsPage")).not.toBeInTheDocument();
   });
 
-  it("renders DiagnosticsPage on /diagnostics while auth status is still unknown", () => {
+  it("renders DiagnosticsPage on /diagnostics while auth status is still unknown", async () => {
     window.history.replaceState({}, "", "/diagnostics?context=manual_check");
 
     const store = createStore();
@@ -132,11 +132,11 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
+    expect(await screen.findByText("DiagnosticsPage")).toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders WorkAnalyticsPage on /analytics while auth status is still unknown", () => {
+  it("renders WorkAnalyticsPage on /analytics while auth status is still unknown", async () => {
     window.history.replaceState({}, "", "/analytics");
 
     const store = createStore();
@@ -146,7 +146,7 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("WorkAnalyticsPage")).toBeInTheDocument();
+    expect(await screen.findByText("WorkAnalyticsPage")).toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
@@ -164,7 +164,7 @@ describe("DesktopShell auth gating", () => {
     expect(screen.queryByText("Page not found")).toBeNull();
   });
 
-  it("renders MonitoringPage on /monitoring while auth status is still unknown", () => {
+  it("renders MonitoringPage on /monitoring while auth status is still unknown", async () => {
     window.history.replaceState({}, "", "/monitoring");
 
     const store = createStore();
@@ -174,12 +174,12 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(await screen.findByText("MonitoringPage")).toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
     expect(document.querySelector(".app-loading-shell")).toBeNull();
   });
 
-  it("renders MonitoringPage on /monitoring once auth status is resolved", () => {
+  it("renders MonitoringPage on /monitoring once auth status is resolved", async () => {
     window.history.replaceState({}, "", "/monitoring");
 
     const store = createStore();
@@ -189,7 +189,7 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(await screen.findByText("MonitoringPage")).toBeInTheDocument();
     expect(screen.queryByText("Page not found")).not.toBeInTheDocument();
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
@@ -252,7 +252,7 @@ describe("DesktopShell auth gating", () => {
     });
   });
 
-  it("renders WorkspacePage on /workspace", () => {
+  it("renders WorkspacePage on /workspace", async () => {
     window.history.replaceState({}, "", "/workspace");
 
     const store = createStore();
@@ -274,10 +274,10 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("WorkspacePage")).toBeInTheDocument();
+    expect(await screen.findByText("WorkspacePage")).toBeInTheDocument();
   });
 
-  it("mounts QuickOpen beside CommandPalette on desktop", () => {
+  it("mounts QuickOpen beside CommandPalette on desktop", async () => {
     window.history.replaceState({}, "", "/workspace");
 
     const store = createStore();
@@ -304,7 +304,7 @@ describe("DesktopShell auth gating", () => {
 
     renderShell(store);
 
-    expect(screen.getByText("QuickOpen")).toBeInTheDocument();
+    expect(await screen.findByText("QuickOpen")).toBeInTheDocument();
   });
 
   it("shows the shared workspace gate on desktop while /workspace is unresolved", () => {

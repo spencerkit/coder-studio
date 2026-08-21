@@ -5,12 +5,8 @@ import App from "./app";
 import { authenticatedAtom } from "./atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom } from "./atoms/connection";
 
-vi.mock("./shells/desktop-shell", () => ({
-  DesktopShell: () => <div data-testid="desktop-shell">DesktopShell</div>,
-}));
-
-vi.mock("./shells/mobile-shell", () => ({
-  MobileShell: () => <div data-testid="mobile-shell">MobileShell</div>,
+vi.mock("./app/runtime-shell", () => ({
+  RuntimeShell: () => <div data-testid="runtime-shell">RuntimeShell</div>,
 }));
 
 vi.mock("./features/canvas/routes/embedded-canvas-route", () => ({
@@ -34,18 +30,15 @@ function setMatchMediaMock(predicate: (query: string) => boolean) {
 }
 
 describe("App shell selection", () => {
-  let originalMatchMedia: typeof window.matchMedia;
-
   beforeEach(() => {
-    originalMatchMedia = window.matchMedia;
     window.history.replaceState({}, "", "/");
   });
 
   afterEach(() => {
-    window.matchMedia = originalMatchMedia;
+    vi.clearAllMocks();
   });
 
-  it("renders DesktopShell on a wide viewport with fine pointer", () => {
+  it("renders the runtime shell on the app route", async () => {
     setMatchMediaMock(() => false);
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
@@ -58,45 +51,10 @@ describe("App shell selection", () => {
       </Provider>
     );
 
-    expect(screen.getByTestId("desktop-shell")).toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("runtime-shell")).toBeInTheDocument();
   });
 
-  it("renders MobileShell when viewport is narrow", () => {
-    setMatchMediaMock((query) => query.includes("max-width: 899px"));
-    const store = createStore();
-    store.set(connectionStatusAtom, "connected");
-    store.set(authEnabledAtom, false);
-    store.set(authenticatedAtom, true);
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(screen.getByTestId("mobile-shell")).toBeInTheDocument();
-    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
-  });
-
-  it("renders MobileShell on wide coarse-pointer devices", () => {
-    setMatchMediaMock((query) => query.includes("pointer: coarse"));
-    const store = createStore();
-    store.set(connectionStatusAtom, "connected");
-    store.set(authEnabledAtom, false);
-    store.set(authenticatedAtom, true);
-
-    render(
-      <Provider store={store}>
-        <App />
-      </Provider>
-    );
-
-    expect(screen.getByTestId("mobile-shell")).toBeInTheDocument();
-    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
-  });
-
-  it("renders the embedded canvas route outside the app shells", () => {
+  it("renders the embedded canvas route outside the app shells", async () => {
     setMatchMediaMock(() => false);
     window.history.replaceState(
       {},
@@ -114,12 +72,11 @@ describe("App shell selection", () => {
       </Provider>
     );
 
-    expect(screen.getByTestId("embedded-canvas-route")).toBeInTheDocument();
-    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("embedded-canvas-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("runtime-shell")).not.toBeInTheDocument();
   });
 
-  it("renders the embedded canvas snapshot route outside the app shells", () => {
+  it("renders the embedded canvas snapshot route outside the app shells", async () => {
     setMatchMediaMock(() => false);
     window.history.replaceState({}, "", "/embedded/canvas-snapshot/snapshot_123");
     const store = createStore();
@@ -133,8 +90,7 @@ describe("App shell selection", () => {
       </Provider>
     );
 
-    expect(screen.getByTestId("embedded-canvas-snapshot-route")).toBeInTheDocument();
-    expect(screen.queryByTestId("desktop-shell")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-shell")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("embedded-canvas-snapshot-route")).toBeInTheDocument();
+    expect(screen.queryByTestId("runtime-shell")).not.toBeInTheDocument();
   });
 });

@@ -6,10 +6,11 @@
  */
 
 import type { FC } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
+import { logStartupTraceOnce } from "../../startup-trace";
 import type { IconSemantic } from "../../theme";
 import { EnvironmentSwitcher } from "../desktop-environment";
 import { WorkspaceLaunchModal } from "../workspace/views/shared/workspace-launch-modal";
@@ -32,6 +33,11 @@ export const WelcomePage: FC = () => {
   const t = useTranslation();
   const [workspaceLaunchOpen, setWorkspaceLaunchOpen] = useState(false);
   const isMobile = useViewport() === "mobile";
+  useEffect(() => {
+    logStartupTraceOnce("route:welcome_visible", {
+      shell: isMobile ? "mobile" : "desktop",
+    });
+  }, [isMobile]);
   const features: FeatureItem[] = [
     {
       iconSemantic: "state.welcome.git",

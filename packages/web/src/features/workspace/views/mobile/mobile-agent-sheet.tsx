@@ -10,7 +10,7 @@ import {
   type ProviderId,
   useProviderLauncher,
 } from "../../../agent-panes/actions/use-provider-launcher";
-import { buildDiagnosticsPath } from "../../../diagnostics";
+import { buildDiagnosticsPath } from "../../../diagnostics/navigation";
 import { MobileSelectSheet } from "../../../mobile-select";
 import { usePersistWorkspaceLastViewedTarget } from "../../actions/use-persist-workspace-last-viewed-target";
 

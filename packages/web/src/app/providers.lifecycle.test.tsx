@@ -21,6 +21,7 @@ import {
   workspacesAtom,
   workspacesLoadStateAtom,
 } from "../atoms/workspaces";
+import { setGlobalMonacoModelRegistry } from "../features/code-editor/monaco/model-registry-bridge";
 import { toastsAtom } from "../features/notifications/atoms";
 import { terminalPreferencesAtom } from "../features/terminal-panel/preferences";
 import { getGlobalRecoveryCoordinator } from "../features/terminal-panel/recovery-singleton";
@@ -69,15 +70,6 @@ vi.mock("../ws", () => ({
 
 vi.mock("../features/notifications", () => ({
   useSessionNotifications: () => {},
-}));
-
-vi.mock("../features/code-editor/monaco/model-registry", () => ({
-  monacoModelRegistry: {
-    getOrCreate: vi.fn(),
-    updateFromDisk: vi.fn(),
-    disposeFile: vi.fn(),
-    disposeWorkspace: mockDisposeWorkspace,
-  },
 }));
 
 function renderProviders(store = createStore()) {
@@ -190,6 +182,9 @@ describe("AppProviders lifecycle recovery", () => {
   beforeEach(() => {
     resetAppProvidersSingletonsForTests();
     mockDisposeWorkspace.mockClear();
+    setGlobalMonacoModelRegistry({
+      disposeWorkspace: mockDisposeWorkspace,
+    });
     document.documentElement.removeAttribute("data-theme");
     localStorage.removeItem("ui.theme");
     localStorage.removeItem("ui.themeId");

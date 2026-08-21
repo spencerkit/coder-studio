@@ -8,6 +8,7 @@
     "dev:desktop": "tsx scripts/dev-desktop.ts",
     "build": "tsx scripts/build.ts",
     "build:web": "tsx scripts/build-web.ts",
+    "build:web:ui-preview": "pnpm --filter @coder-studio/web run build:ui-preview",
     "build:cli": "tsx scripts/build-cli.ts",
     "build:desktop": "tsx scripts/build-desktop.ts",
     "build:desktop-runtime": "tsx scripts/build-desktop-runtime.ts",

@@ -10,6 +10,7 @@ import { connectionStatusAtom, dispatchCommandAtom } from "../../../../atoms/con
 import { sessionsAtom } from "../../../../atoms/sessions";
 import { Sheet } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { logStartupTraceOnce } from "../../../../startup-trace";
 import { SessionCard } from "../../../agent-panes/views/shared/session-card";
 import { useCodeEditorActions } from "../../../code-editor/actions/use-code-editor-actions";
 import { CodeEditorHeaderActions } from "../../../code-editor/views/shared/code-editor-host";
@@ -123,6 +124,16 @@ export function WorkspaceMobileView() {
   const layoutMode = useMobileLayoutMode();
   const motionMode = useMobileMotionMode();
   const mobileEditorState = useCodeEditorActions();
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    logStartupTraceOnce("route:workspace_visible", {
+      shell: "mobile",
+      workspaceId: workspace.id,
+    });
+  }, [workspace]);
 
   const preferredSessionId = workspace?.uiState?.activeSessionId ?? null;
   const preferredGlobalSessionId =

@@ -19,7 +19,7 @@ import {
   getWorkspacePathDragPayload,
   hasWorkspacePathDragType,
 } from "../../../../lib/workspace-path-drag";
-import { buildDiagnosticsPath } from "../../../diagnostics";
+import { buildDiagnosticsPath } from "../../../diagnostics/navigation";
 import type { PaneDropIntent, PaneDropPlacement } from "../../actions/pane-drag-types";
 import type { PaneDragSourceSnapshot } from "../../actions/use-pane-drag-controller";
 import { usePaneDragEnabled } from "../../actions/use-pane-drag-enabled";

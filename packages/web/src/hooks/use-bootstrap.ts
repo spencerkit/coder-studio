@@ -22,6 +22,7 @@ import {
   normalizeWorkspaceEditorUiState,
 } from "../features/workspace/actions/open-editor-state";
 import { useTranslation } from "../lib/i18n";
+import { logStartupTraceOnce } from "../startup-trace";
 
 interface BootstrapWorkspaceState {
   savedTarget: WorkspaceLastViewedTarget | null;
@@ -37,6 +38,7 @@ export function useBootstrap() {
   const activationStatus = useAtomValue(activationStatusAtom);
   const activationStatusRef = useRef(activationStatus);
   const prefetchedWorkspaceStateRef = useRef<BootstrapWorkspaceState | null>(null);
+  const prefetchedWorkspaceTargetRefreshPendingRef = useRef(false);
   const connectionStatus = useAtomValue(connectionStatusAtom);
   const dispatch = useAtomValue(dispatchCommandAtom);
   const workspaces = useAtomValue(orderedWorkspacesAtom);
@@ -92,7 +94,12 @@ export function useBootstrap() {
     }
 
     const commitBootstrapState = (nextState: BootstrapWorkspaceState) => {
+      logStartupTraceOnce("bootstrap:state_committed", {
+        hasSavedTarget: Boolean(nextState.savedTarget),
+        workspaceCount: nextState.workspaceOrder.length,
+      });
       prefetchedWorkspaceStateRef.current = null;
+      prefetchedWorkspaceTargetRefreshPendingRef.current = false;
       setWorkspaces(nextState.workspaces);
       setWorkspaceOrder(nextState.workspaceOrder);
       setLastViewedTarget(nextState.savedTarget);
@@ -102,6 +109,17 @@ export function useBootstrap() {
       setWorkspacesLoadState("ready");
       setWorkspacesLoadError(null);
     };
+
+    const resolveSavedTarget = (
+      targetResult: {
+        ok: boolean;
+        data?: WorkspaceLastViewedTarget | null;
+      },
+      nextWorkspaces: Record<string, Workspace>
+    ) =>
+      targetResult.ok && targetResult.data && nextWorkspaces[targetResult.data.workspaceId]
+        ? targetResult.data
+        : null;
 
     const buildBootstrapState = (
       listResult: { ok: boolean; data?: Workspace[]; error?: { message: string } },
@@ -126,21 +144,41 @@ export function useBootstrap() {
         }
       }
 
-      const savedTarget =
-        targetResult.ok && targetResult.data && wsMap[targetResult.data.workspaceId]
-          ? targetResult.data
-          : null;
-
       return {
-        savedTarget,
+        savedTarget: resolveSavedTarget(targetResult, wsMap),
         workspaces: wsMap,
         workspaceOrder: nextWorkspaces.map((workspace) => workspace.id),
       };
     };
 
     if (workspacesLoadState === "loading") {
-      if (activationStatus === "active" && prefetchedWorkspaceStateRef.current) {
-        commitBootstrapState(prefetchedWorkspaceStateRef.current);
+      if (
+        activationStatus === "active" &&
+        prefetchedWorkspaceStateRef.current &&
+        !prefetchedWorkspaceTargetRefreshPendingRef.current
+      ) {
+        const prefetchedState = prefetchedWorkspaceStateRef.current;
+        const requestId = bootstrapRequestIdRef.current;
+        prefetchedWorkspaceTargetRefreshPendingRef.current = true;
+        void dispatch<WorkspaceLastViewedTarget | null>("workspace.lastViewedTarget.get", {})
+          .then((targetResult) => {
+            if (bootstrapRequestIdRef.current !== requestId) {
+              return;
+            }
+            commitBootstrapState({
+              ...prefetchedState,
+              savedTarget: resolveSavedTarget(targetResult, prefetchedState.workspaces),
+            });
+          })
+          .catch(() => {
+            if (bootstrapRequestIdRef.current !== requestId) {
+              return;
+            }
+            commitBootstrapState({
+              ...prefetchedState,
+              savedTarget: null,
+            });
+          });
       }
       return;
     }
@@ -153,9 +191,13 @@ export function useBootstrap() {
 
       const requestId = bootstrapRequestIdRef.current + 1;
       bootstrapRequestIdRef.current = requestId;
+      prefetchedWorkspaceTargetRefreshPendingRef.current = false;
 
       setWorkspacesLoadState("loading");
       setWorkspacesLoadError(null);
+      logStartupTraceOnce("bootstrap:prefetch_started", {
+        path: location.pathname,
+      });
 
       Promise.all([
         dispatch<Workspace[]>("workspace.list", {}),
@@ -170,6 +212,7 @@ export function useBootstrap() {
 
           if (!listResult.ok) {
             prefetchedWorkspaceStateRef.current = null;
+            prefetchedWorkspaceTargetRefreshPendingRef.current = false;
             setWorkspacesLoadState("error");
             setWorkspacesLoadError(
               listResult.error?.message ?? t("workspace.load_failed_description")
@@ -178,6 +221,11 @@ export function useBootstrap() {
           }
 
           const nextState = buildBootstrapState(listResult, targetResult);
+          logStartupTraceOnce("bootstrap:prefetch_resolved", {
+            activationStatus: activationStatusRef.current,
+            hasSavedTarget: Boolean(nextState.savedTarget),
+            workspaceCount: nextState.workspaceOrder.length,
+          });
           prefetchedWorkspaceStateRef.current = nextState;
           if (activationStatusRef.current === "active") {
             commitBootstrapState(nextState);
@@ -188,10 +236,12 @@ export function useBootstrap() {
             return;
           }
           prefetchedWorkspaceStateRef.current = null;
+          prefetchedWorkspaceTargetRefreshPendingRef.current = false;
           setWorkspacesLoadState("error");
           setWorkspacesLoadError(
             error instanceof Error ? error.message : t("workspace.load_failed_description")
           );
+          logStartupTraceOnce("bootstrap:prefetch_failed");
         });
       return;
     }
@@ -206,6 +256,9 @@ export function useBootstrap() {
 
     // Route based on workspace state
     if (location.pathname === "/" && workspaces.length > 0) {
+      logStartupTraceOnce("bootstrap:navigate_workspace", {
+        workspaceCount: workspaces.length,
+      });
       navigate("/workspace", { replace: true });
       return;
     }

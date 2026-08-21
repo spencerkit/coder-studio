@@ -38,7 +38,7 @@ import {
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { Check, ChevronRight } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useId, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   type AppearanceBackgroundFit,
@@ -58,8 +58,7 @@ import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
 import { lspRuntimeModeAtom } from "../../code-editor/lsp/runtime-mode";
-import { DiagnosticsPage } from "../../diagnostics";
-import { useMonitoringData } from "../../monitoring";
+import { useMonitoringData } from "../../monitoring/page";
 import { notificationPreferencesAtom } from "../../notifications/atoms";
 import { MobilePageHeader } from "../../shared/components/mobile-page-header";
 import { PageHeader } from "../../shared/components/page-header";
@@ -73,7 +72,6 @@ import {
   terminalPreferencesAtom,
 } from "../../terminal-panel/preferences";
 import { updateControllerAtom } from "../../updates/atoms";
-import { WorkAnalyticsSettingsSection } from "../../work-analysis";
 import { AboutSettings, type AboutSettingsView } from "./about-settings";
 import { MonitoringSettingsSubpage } from "./monitoring-settings-subpage";
 import { type ProviderInfo, ProviderSettings } from "./provider-settings";
@@ -142,7 +140,21 @@ const PERSONALIZATION_OVERRIDE_FIELDS = [
   "surfaceOpacity",
 ] as const;
 
+const DeferredDiagnosticsPage = lazy(async () => {
+  const module = await import("../../diagnostics");
+  return { default: module.DiagnosticsPage };
+});
+
+const DeferredWorkAnalyticsSettingsSection = lazy(async () => {
+  const module = await import("../../work-analysis");
+  return { default: module.WorkAnalyticsSettingsSection };
+});
+
 type PersonalizationOverrideField = (typeof PERSONALIZATION_OVERRIDE_FIELDS)[number];
+
+function DeferredSettingsContent({ children }: { children: ReactNode }) {
+  return <Suspense fallback={null}>{children}</Suspense>;
+}
 
 function isStandaloneWebApp(): boolean {
   if (typeof window === "undefined") {
@@ -1156,17 +1168,23 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
           />
         );
       case "analysis":
-        return <WorkAnalyticsSettingsSection />;
+        return (
+          <DeferredSettingsContent>
+            <DeferredWorkAnalyticsSettingsSection />
+          </DeferredSettingsContent>
+        );
       case "diagnostics":
         return (
           <div className="settings-section">
-            <DiagnosticsPage
-              embedded
-              intent={{
-                context: "manual_check",
-                workspaceId: activeWorkspaceId ?? undefined,
-              }}
-            />
+            <DeferredSettingsContent>
+              <DeferredDiagnosticsPage
+                embedded
+                intent={{
+                  context: "manual_check",
+                  workspaceId: activeWorkspaceId ?? undefined,
+                }}
+              />
+            </DeferredSettingsContent>
           </div>
         );
       case "providers":

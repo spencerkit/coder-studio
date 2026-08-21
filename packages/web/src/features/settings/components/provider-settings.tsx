@@ -10,7 +10,7 @@ import { activationStatusAtom } from "../../../atoms/activation";
 import { connectionStatusAtom } from "../../../atoms/connection";
 import { Button, Notice, SegmentedControl, Tag, Textarea } from "../../../components/ui";
 import { useTranslation } from "../../../lib/i18n";
-import { buildDiagnosticsPath } from "../../diagnostics";
+import { buildDiagnosticsPath } from "../../diagnostics/navigation";
 import { ConfigEditor, type ConfigType } from "./config-editor";
 import { useSessionGateDispatch } from "./use-session-gate-dispatch";
 

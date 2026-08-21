@@ -23,6 +23,7 @@ import { EventBus } from "../bus/event-bus.js";
 import { clearPendingTerminalInput, registerPendingTerminalInput } from "../commands/terminal.js";
 import type { ServerConfig } from "../config.js";
 import type { HostCommandContext } from "../host/context.js";
+import { logStartupTraceOnce } from "../startup-trace.js";
 import { ClientId, WsClient } from "./client.js";
 import { dispatch } from "./dispatch.js";
 import type { FencingManager } from "./fencing.js";
@@ -111,6 +112,10 @@ export class WsHub implements Broadcaster {
     });
     this.clients.set(client.id, client);
     this.clientRequests.set(client.id, req);
+    logStartupTraceOnce("ws:firstConnection", {
+      authMode: req.coderStudioAuthContext?.mode ?? "browser",
+      path: req.url,
+    });
 
     // Send initial connection metadata. Writer status is established later by
     // fencing.request, but the UI still needs the app version immediately.

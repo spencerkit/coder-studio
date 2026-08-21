@@ -62,6 +62,7 @@ import { SkillInstallManager } from "./skills/install-manager.js";
 import { resolveDefaultLocalSkillRoots } from "./skills/local-skill-scanner.js";
 import { SkillMountManager } from "./skills/mount-manager.js";
 import { SkillsHubClient } from "./skills/skills-hub-client.js";
+import { getStartupTraceDurationMs, logStartupTrace } from "./startup-trace.js";
 import { AppearanceAssetRepo } from "./storage/repositories/appearance-asset-repo.js";
 import { AuthLoginBlockRepo } from "./storage/repositories/auth-login-block-repo.js";
 import { AuthSessionRepo } from "./storage/repositories/auth-session-repo.js";
@@ -122,6 +123,7 @@ const POST_LISTEN_WORK_ANALYSIS_DELAY_MS = 10_000;
 function logStartupPhase(app: FastifyInstance | null, label: string, startedAt: number): void {
   const elapsedMs = Date.now() - startedAt;
   const message = `[startup] ${label}=${elapsedMs}ms`;
+  logStartupTrace(`phase:${label}`);
   if (app) {
     app.log.info(message);
     return;
@@ -839,14 +841,36 @@ export async function createServer(
       return;
     }
 
+    const traceLabel = `warmup:${task}`;
+    const traceStartedAt = process.hrtime.bigint();
+    logStartupTrace(`${traceLabel}:start`);
+    const finishTrace = (status: "done" | "failed", data: Record<string, unknown> = {}) => {
+      logStartupTrace(`${traceLabel}:${status}`, {
+        durationMs: getStartupTraceDurationMs(traceStartedAt),
+        ...data,
+      });
+    };
+
     try {
       const result = runner();
-      if (result && typeof (result as Promise<unknown>).catch === "function") {
-        void (result as Promise<unknown>).catch((error) => {
-          app.log.warn({ err: error, task }, "post-listen warmup failed");
-        });
+      if (result && typeof (result as Promise<unknown>).then === "function") {
+        void (result as Promise<unknown>)
+          .then(() => {
+            finishTrace("done");
+          })
+          .catch((error) => {
+            finishTrace("failed", {
+              message: error instanceof Error ? error.message : String(error),
+            });
+            app.log.warn({ err: error, task }, "post-listen warmup failed");
+          });
+        return;
       }
+      finishTrace("done");
     } catch (error) {
+      finishTrace("failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
       app.log.warn({ err: error, task }, "post-listen warmup failed");
     }
   };

@@ -628,6 +628,22 @@ function renderMobileShell({
   return { store, sendCommand, sendTerminalInput, ...view };
 }
 
+let mobileShellDeferredRoutesPrimed = false;
+
+async function primeMobileShellDeferredRoutes() {
+  if (mobileShellDeferredRoutesPrimed) {
+    return;
+  }
+
+  const { unmount } = renderMobileShell();
+  await act(async () => {
+    await vi.dynamicImportSettled();
+  });
+  unmount();
+  window.localStorage.clear();
+  mobileShellDeferredRoutesPrimed = true;
+}
+
 async function openWorkspaceDrawer(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Switch workspace" }));
   return screen.findByRole("complementary", { name: "Workspace drawer" });
@@ -645,7 +661,7 @@ function getWorkspaceDrawerSessionRow(sessionName: string) {
     .closest(".mobile-workspace-drawer__child-session-row");
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   window.matchMedia = vi.fn((query: string) => ({
     matches: query === "(max-width: 899px), (pointer: coarse)",
     media: query,
@@ -656,6 +672,8 @@ beforeEach(() => {
     addListener: vi.fn(),
     removeListener: vi.fn(),
   })) as unknown as typeof window.matchMedia;
+
+  await primeMobileShellDeferredRoutes();
 });
 
 afterEach(() => {
@@ -1223,7 +1241,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.getByTestId("location-display")).toHaveTextContent("/settings");
   });
 
-  it("renders DiagnosticsPage on mobile /diagnostics while auth status is still unknown", () => {
+  it("renders DiagnosticsPage on mobile /diagnostics while auth status is still unknown", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, null);
@@ -1238,12 +1256,12 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("DiagnosticsPage")).toBeInTheDocument();
+    expect(await screen.findByText("DiagnosticsPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/diagnostics");
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders WorkAnalyticsPage on mobile /analytics while auth status is still unknown", () => {
+  it("renders WorkAnalyticsPage on mobile /analytics while auth status is still unknown", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, null);
@@ -1258,7 +1276,7 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("WorkAnalyticsPage")).toBeInTheDocument();
+    expect(await screen.findByText("WorkAnalyticsPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/analytics");
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
@@ -1281,7 +1299,7 @@ describe("MobileShell Phase 2 workspace", () => {
     expect(screen.queryByText("正在连接工作区...")).toBeNull();
   });
 
-  it("renders MonitoringPage on mobile /monitoring while auth status is still unknown", () => {
+  it("renders MonitoringPage on mobile /monitoring while auth status is still unknown", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, null);
@@ -1296,12 +1314,12 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(await screen.findByText("MonitoringPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });
 
-  it("renders MonitoringPage on mobile /monitoring once auth status is resolved", () => {
+  it("renders MonitoringPage on mobile /monitoring once auth status is resolved", async () => {
     const store = createStore();
     store.set(connectionStatusAtom, "connected");
     store.set(authEnabledAtom, false);
@@ -1316,7 +1334,7 @@ describe("MobileShell Phase 2 workspace", () => {
       </Provider>
     );
 
-    expect(screen.getByText("MonitoringPage")).toBeInTheDocument();
+    expect(await screen.findByText("MonitoringPage")).toBeInTheDocument();
     expect(screen.getByTestId("location-display")).toHaveTextContent("/monitoring");
     expect(screen.queryByText("正在连接工作区...")).not.toBeInTheDocument();
   });

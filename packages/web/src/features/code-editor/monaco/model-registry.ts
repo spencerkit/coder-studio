@@ -1,4 +1,5 @@
 import * as monaco from "monaco-editor";
+import { setGlobalMonacoModelRegistry } from "./model-registry-bridge";
 import { toWorkspaceFileUri } from "./uri";
 
 export interface EditorModelHandle {
@@ -115,3 +116,5 @@ export function createModelRegistry(): ModelRegistry {
 }
 
 export const monacoModelRegistry = createModelRegistry();
+
+setGlobalMonacoModelRegistry(monacoModelRegistry);
