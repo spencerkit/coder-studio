@@ -297,7 +297,7 @@ describe("GitHub workflow boundaries", () => {
       'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain(
-      'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","fresh-wsl","external-sidecar-browser"]\''
+      'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
     );
     expect(resolveChannel?.run).toContain(
       'acceptance_scenarios=\'["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]\''
@@ -599,6 +599,9 @@ describe("GitHub workflow boundaries", () => {
     expect(prepareScenario?.run).toContain("InvariantCulture");
     expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
     expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
+    expect(prepareScenario?.run).toContain("scripts/serve-static-http.mjs");
+    expect(prepareScenario?.run).toContain("Invoke-WebRequest -UseBasicParsing -Method Head");
+    expect(prepareScenario?.run).toContain("desktop-installed-http.stderr.log");
     expect(runInstalled?.run).toContain(
       "@('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')"
     );
@@ -653,6 +656,9 @@ describe("GitHub workflow boundaries", () => {
     expect(validateReports?.run).toContain("wsl-combined");
     expect(validateReports?.run).toContain("legacy-wsl-current");
     expect(validateReports?.run).toContain("report.releaseKind !== releaseKind");
+    expect(validateReports?.run).toContain(
+      '["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]'
+    );
     expect(promote?.run?.trim()).toBe(
       'gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest'
     );
@@ -726,6 +732,9 @@ describe("GitHub workflow boundaries", () => {
     expect(steps[desktopReportIndex]?.run).toContain("releaseKinds");
     expect(steps[desktopReportIndex]?.run).toContain('releaseKind === "full"');
     expect(steps[desktopReportIndex]?.run).toContain('releaseKind !== "migration"');
+    expect(steps[desktopReportIndex]?.run).toContain(
+      '["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]'
+    );
     expect(steps[desktopReportIndex]?.run).toContain("reports.length === 2");
     expect(steps[desktopReportIndex]?.run).toContain(
       'report.scenario !== "runtime-health-rollback"'
