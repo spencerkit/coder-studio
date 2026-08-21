@@ -94,6 +94,13 @@ jobs:
               shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${desktop_version}" "${previous_shell_version}")
               if [[ "${shell_change}" == "same" ]]; then
                 release_kind="runtime-only"
+                runtime_min_shell_version="${previous_shell_version}"
+                if [[ "${has_modern_channel}" == "true" ]]; then
+                  gh release download "${previous_tag}" \
+                    --pattern 'desktop-channel.json' \
+                    --dir release/desktop-release-boundary
+                  runtime_min_shell_version=$(node -e "const channel=require('./release/desktop-release-boundary/desktop-channel.json'); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)")
+                fi
               elif [[ "${shell_change}" == "downgrade" ]]; then
                 echo "Desktop Shell ${desktop_version} is older than stable ${previous_shell_version}" >&2
                 exit 1
