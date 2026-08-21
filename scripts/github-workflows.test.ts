@@ -565,6 +565,9 @@ describe("GitHub workflow boundaries", () => {
     const runInstalled = installedSteps.find(
       (step) => step.name === "Run installed Desktop update scenario"
     );
+    const downloadPrevious = installedSteps.find(
+      (step) => step.name === "Download previous stable Desktop release"
+    );
     const prepareScenario = installedSteps.find(
       (step) => step.name === "Prepare scenario-specific signed channel"
     );
@@ -580,6 +583,9 @@ describe("GitHub workflow boundaries", () => {
     expect(runInstalled?.run).not.toContain("pnpm acceptance:desktop:installed --");
     expect(runInstalled?.run).toContain("-CandidateInstaller");
     expect(runInstalled?.run).toContain("-PublicKeyPath");
+    expect(downloadPrevious?.run).toContain("'modern.yml'");
+    expect(downloadPrevious?.run).toContain("'build-info-modern.json'");
+    expect(downloadPrevious?.run).toContain("'desktop-channel-modern.json'");
     expect(runInstalled?.run).toContain("if ('${{ steps.scenario.outputs.components }}')");
     expect(runInstalled?.run).toContain("-SkipAuthenticode");
     expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
