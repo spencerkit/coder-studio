@@ -231,6 +231,30 @@ describe("RuntimeStore", () => {
     );
   });
 
+  it("preserves an unsigned Factory Runtime as a rollback candidate", async () => {
+    const root = await createRoot();
+    const factoryRoot = resolve(root, "factory");
+    const storeRoot = resolve(root, "store");
+    await createRuntime(factoryRoot, "0.5.6");
+    const store = new RuntimeStore({
+      root: storeRoot,
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem,
+    });
+    const factory = await store.getLaunchCandidate();
+
+    await expect(store.preserveRollbackCandidate(factory)).resolves.toBeUndefined();
+    await expect(
+      readFile(resolve(storeRoot, "active.json"), "utf8").then((value) => JSON.parse(value))
+    ).resolves.toMatchObject({
+      active: {
+        runtimeVersion: "0.5.6",
+      },
+    });
+  });
+
   it("prefers a newer Factory Runtime and keeps only one stored rollback", async () => {
     const root = await createRoot();
     const storeRoot = resolve(root, "store");
