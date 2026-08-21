@@ -1,37 +1,69 @@
 /**
- * Application root.
+ * Application router.
  *
- * Provides BrowserRouter and picks a shell based on viewport:
- * - mobile (< 900px) -> MobileShell
- * - desktop -> DesktopShell
+ * Keeps the initial entry thin and defers heavyweight app/runtime routes.
  */
 
+import { lazy, type ReactNode, Suspense } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { EmbeddedCanvasRoute } from "./features/canvas/routes/embedded-canvas-route";
-import { EmbeddedCanvasSnapshotRoute } from "./features/canvas/routes/embedded-canvas-snapshot-route";
-import { useViewport } from "./hooks/use-viewport";
-import { DesktopShell } from "./shells/desktop-shell";
-import { MobileShell } from "./shells/mobile-shell";
+import { ShellDeferredFallback } from "./shells/shared/shell-deferred-fallback";
 
-function ShellSwitch() {
-  const viewport = useViewport();
+const DeferredRuntimeShell = lazy(async () => {
+  const module = await import(/* @vite-ignore */ "./app/runtime-shell");
+  return { default: module.RuntimeShell };
+});
 
-  return viewport === "mobile" ? <MobileShell /> : <DesktopShell />;
+const DeferredEmbeddedCanvasRoute = lazy(async () => {
+  const module = await import(/* @vite-ignore */ "./features/canvas/routes/embedded-canvas-route");
+  return { default: module.EmbeddedCanvasRoute };
+});
+
+const DeferredEmbeddedCanvasSnapshotRoute = lazy(async () => {
+  const module = await import(
+    /* @vite-ignore */ "./features/canvas/routes/embedded-canvas-snapshot-route"
+  );
+  return { default: module.EmbeddedCanvasSnapshotRoute };
+});
+
+function DeferredRoute({
+  children,
+  fallback = <ShellDeferredFallback />,
+}: {
+  children: ReactNode;
+  fallback?: ReactNode;
+}) {
+  return <Suspense fallback={fallback}>{children}</Suspense>;
 }
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/embedded/canvas/:workspaceId" element={<EmbeddedCanvasRoute />} />
+        <Route
+          path="/embedded/canvas/:workspaceId"
+          element={
+            <DeferredRoute>
+              <DeferredEmbeddedCanvasRoute />
+            </DeferredRoute>
+          }
+        />
         <Route
           path="/embedded/canvas-snapshot/:snapshotId"
-          element={<EmbeddedCanvasSnapshotRoute />}
+          element={
+            <DeferredRoute>
+              <DeferredEmbeddedCanvasSnapshotRoute />
+            </DeferredRoute>
+          }
         />
-        <Route path="*" element={<ShellSwitch />} />
+        <Route
+          path="*"
+          element={
+            <DeferredRoute>
+              <DeferredRuntimeShell />
+            </DeferredRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
 }
-
-export default App;

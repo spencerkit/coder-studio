@@ -9,6 +9,7 @@ import "../commands/automation.js";
 import "../commands/canvas.js";
 import "../commands/memory.js";
 import "../commands/workspace.js";
+import "../commands/workspace-activity.js";
 import "../commands/ui-actions.js";
 
 function createMockRequest(authContext?: RequestAuthContext): FastifyRequest {
@@ -50,6 +51,12 @@ function createBaseContext(overrides?: {
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
+    } as never,
+    settingsRepo: {
+      get: vi.fn(() => undefined),
+      set: vi.fn(),
+      delete: vi.fn(),
+      getAll: vi.fn(() => ({})),
     } as never,
     canvasService: {
       list: vi.fn(async (workspaceId: string) =>
@@ -159,6 +166,30 @@ describe("activation commands", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data).toEqual([{ id: "workspace-1" }]);
+  });
+
+  it("allows workspace last-viewed-target reads for websocket clients without an active lease", async () => {
+    const broadcaster = {
+      broadcast: vi.fn(),
+      sendToClient: vi.fn(() => true),
+      sendBinaryToClient: vi.fn(() => true),
+      getRequestMetadata: vi.fn(() => createMockRequest()),
+    } satisfies Broadcaster;
+    const ctx = createBaseContext({ broadcaster });
+
+    const result = await dispatch(
+      {
+        kind: "command",
+        id: "00000000-0000-4000-8000-000000000002a",
+        op: "workspace.lastViewedTarget.get",
+        args: {},
+      },
+      ctx,
+      "ws-a"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toBeNull();
   });
 
   it("rejects non-allowlisted commands for websocket clients without an active lease", async () => {

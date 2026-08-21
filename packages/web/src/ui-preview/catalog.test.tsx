@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Provider } from "jotai";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -99,10 +99,36 @@ function renderScene(
   );
 }
 
+let uiPreviewDeferredScenesPrimed = false;
+
+async function primeUiPreviewDeferredScenes() {
+  if (uiPreviewDeferredScenesPrimed) {
+    return;
+  }
+
+  const mountedScenes = [
+    renderScene("settings-appearance"),
+    renderScene("workspace-mobile", "mobile"),
+    renderScene("workspace-desktop"),
+    renderScene("readme-desktop-hero"),
+  ];
+
+  await act(async () => {
+    await vi.dynamicImportSettled();
+  });
+
+  mountedScenes.forEach((scene) => scene.unmount());
+  document.body.innerHTML = "";
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("lang");
+  delete document.body.dataset.uiPreviewDevice;
+  uiPreviewDeferredScenesPrimed = true;
+}
+
 describe("UI preview catalog", () => {
   const originalMatchMedia = window.matchMedia;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     installMatchMedia("desktop");
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
@@ -123,7 +149,8 @@ describe("UI preview catalog", () => {
         constructor(public readonly items: Record<string, Blob | Promise<Blob>>) {}
       },
     });
-  });
+    await primeUiPreviewDeferredScenes();
+  }, 30_000);
 
   afterAll(() => {
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
@@ -457,6 +484,13 @@ describe("UI preview catalog", () => {
   it("renders seeded content search results in the workspace desktop scene", async () => {
     renderScene("workspace-desktop");
 
+    await waitFor(
+      () => {
+        expect(document.querySelector(".workspace-activity-bar")).toBeTruthy();
+      },
+      { timeout: 3_000 }
+    );
+
     expect(
       await screen.findByRole("navigation", { name: /Workspace activity bar|工作区活动栏/i })
     ).toBeInTheDocument();
@@ -649,6 +683,10 @@ describe("UI preview catalog", () => {
 
   it("renders the desktop overlay review scene", async () => {
     renderScene("desktop-overlay-review");
+
+    await waitFor(() => {
+      expect(document.body.querySelector(".command-palette")).toBeTruthy();
+    });
 
     expect(await screen.findByRole("dialog", { name: "Start Workspace" })).toBeInTheDocument();
     expect(document.querySelector(".desktop-review-grid")).toBeTruthy();

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ServerConfig } from "../config.js";
+import { logStartupTraceOnce } from "../startup-trace.js";
 import type { AuthLoginBlockRepo } from "../storage/repositories/auth-login-block-repo.js";
 import type { AuthSessionRepo } from "../storage/repositories/auth-session-repo.js";
 import {
@@ -204,10 +205,15 @@ export const createAuthGuard = (deps: AuthDeps) => {
 
 export const registerAuthStatusRoute = (deps: AuthDeps) => {
   return async (request: FastifyRequest, reply: FastifyReply) => {
+    const authenticated = isAuthenticatedRequest(request, deps);
+    logStartupTraceOnce("http:authStatus:firstResponse", {
+      authEnabled: deps.config.auth.enabled,
+      authenticated,
+    });
     return reply.send({
       ok: true,
       authEnabled: deps.config.auth.enabled,
-      authenticated: isAuthenticatedRequest(request, deps),
+      authenticated,
     });
   };
 };

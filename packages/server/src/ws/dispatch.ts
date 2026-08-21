@@ -37,6 +37,7 @@ import type { SkillHealthManager } from "../skills/health-manager.js";
 import type { SkillInstallManager } from "../skills/install-manager.js";
 import type { SkillMountManager } from "../skills/mount-manager.js";
 import type { SkillsHubClient } from "../skills/skills-hub-client.js";
+import { getStartupTraceDurationMs, logStartupTrace } from "../startup-trace.js";
 import type { CustomProviderRepo } from "../storage/repositories/custom-provider-repo.js";
 import type { MemoryRepo } from "../storage/repositories/memory-repo.js";
 import type { ProviderConfigRepo } from "../storage/repositories/provider-config-repo.js";
@@ -262,6 +263,16 @@ const ACTIVATION_ALLOWLIST = new Set([
   "terminal.read",
   "uiAction.capabilities",
   "uiAction.dispatch",
+  "workspace.lastViewedTarget.get",
+  "workspace.list",
+]);
+
+const STARTUP_TRACE_COMMANDS = new Set([
+  "activation.claim",
+  "provider.list",
+  "settings.get",
+  "updates.getState",
+  "workspace.lastViewedTarget.get",
   "workspace.list",
 ]);
 
@@ -560,6 +571,21 @@ export async function dispatch(
   ctx: HostCommandContext,
   clientId?: string
 ): Promise<Result> {
+  const traceStartedAt =
+    clientId !== undefined && STARTUP_TRACE_COMMANDS.has(msg.op) ? process.hrtime.bigint() : null;
+  const finishTrace = (result: Result): Result => {
+    if (traceStartedAt === null) {
+      return result;
+    }
+
+    logStartupTrace(`command:${msg.op}`, {
+      clientId,
+      durationMs: getStartupTraceDurationMs(traceStartedAt),
+      errorCode: result.ok ? undefined : result.error?.code,
+      ok: result.ok,
+    });
+    return result;
+  };
   const isWsDispatch =
     clientId !== undefined && typeof ctx.broadcaster.getRequestMetadata === "function";
   const authContext = isWsDispatch ? getSessionTokenRequestAuthContext(ctx, clientId) : undefined;
@@ -567,19 +593,19 @@ export async function dispatch(
   if (authContext) {
     const authorizationError = authorizeSessionTokenCommand(msg, authContext, ctx);
     if (authorizationError) {
-      return {
+      return finishTrace({
         kind: "result",
         id: msg.id,
         ok: false,
         error: authorizationError,
-      };
+      });
     }
   }
 
   if (isWsDispatch && !authContext && !ACTIVATION_ALLOWLIST.has(msg.op)) {
     const active = ctx.activationMgr.getLease();
     if (!active || active.wsClientId !== clientId) {
-      return {
+      return finishTrace({
         kind: "result",
         id: msg.id,
         ok: false,
@@ -587,7 +613,7 @@ export async function dispatch(
           code: "activation_required",
           message: "This tab is no longer the active session",
         },
-      };
+      });
     }
   }
 
@@ -606,12 +632,12 @@ export async function dispatch(
         runtimeDefinition.resolveTarget(parsedArgs)
       );
 
-      return {
+      return finishTrace({
         kind: "result",
         id: msg.id,
         ok: true,
         data,
-      };
+      });
     }
 
     const data = await executeHostCommand(msg.op, msg.args, ctx, {
@@ -619,19 +645,19 @@ export async function dispatch(
       authContext,
     });
 
-    return {
+    return finishTrace({
       kind: "result",
       id: msg.id,
       ok: true,
       data,
-    };
+    });
   } catch (error: unknown) {
-    return {
+    return finishTrace({
       kind: "result",
       id: msg.id,
       ok: false,
       error: normalizeError(error),
-    };
+    });
   }
 }
 

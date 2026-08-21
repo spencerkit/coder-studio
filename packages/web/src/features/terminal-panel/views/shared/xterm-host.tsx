@@ -15,6 +15,7 @@ import {
 } from "@coder-studio/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   type ChangeEvent as ReactChangeEvent,
@@ -61,7 +62,7 @@ import {
   toggleCtrlMode,
 } from "../../mobile/virtual-terminal-keys";
 import { getTerminalFontSizeForViewport, terminalPreferencesAtom } from "../../preferences";
-import { getGlobalRecoveryCoordinator } from "../../recovery-singleton";
+import { getGlobalRecoveryCoordinator } from "../../recovery-bridge";
 import {
   classifyReplayFailure,
   isRecoveryControlPlaneError,

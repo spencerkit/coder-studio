@@ -7,8 +7,6 @@ import { useState } from "react";
 import { Switch } from "../../../components/ui";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
-import type { UseMonitoringDataResult } from "../../monitoring";
-import { MonitoringDashboard, type TimeWindow } from "../../monitoring";
 import {
   formatBytes,
   formatLoadAverage,
@@ -16,6 +14,11 @@ import {
   formatTimestamp,
   formatUptime,
 } from "../../monitoring/formatters";
+import {
+  MonitoringDashboard,
+  type TimeWindow,
+  type UseMonitoringDataResult,
+} from "../../monitoring/page";
 import { formatModeLabel, MonitoringSettingsCard } from "./monitoring-settings-card";
 
 interface MonitoringSettingsSubpageProps {

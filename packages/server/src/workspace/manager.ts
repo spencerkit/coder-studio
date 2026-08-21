@@ -35,6 +35,10 @@ export interface WorkspaceManagerDeps {
   logger?: WatcherLogger;
 }
 
+export interface HydrateWatchersOptions {
+  workspaces?: Workspace[];
+}
+
 /**
  * Generates a unique workspace ID.
  */
@@ -85,8 +89,8 @@ export class WorkspaceManager {
     );
   }
 
-  hydrateWatchers(): void {
-    for (const workspace of this.list()) {
+  hydrateWatchers(options: HydrateWatchersOptions = {}): void {
+    for (const workspace of options.workspaces ?? this.list()) {
       this.startWatcher(workspace.id, workspace.path);
     }
   }

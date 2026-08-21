@@ -9,21 +9,34 @@ import {
   type Session,
   type Workspace,
 } from "@coder-studio/core";
+import { lazy, Suspense } from "react";
 import { LoginPage } from "../../features/auth";
 import { SessionGatePage } from "../../features/auth/session-gate";
-import { MoreFeaturesPage } from "../../features/more";
 import { NotFoundPage } from "../../features/not-found";
 import { SettingsPage } from "../../features/settings";
 import { WelcomePage } from "../../features/welcome";
 import type { OpenFile } from "../../features/workspace/atoms";
-import { WorkspaceDesktopView } from "../../features/workspace/views/desktop/workspace-desktop-view";
-import { WorkspaceMobileView } from "../../features/workspace/views/mobile/workspace-mobile-view";
 import { WorkspaceEmptyState } from "../../features/workspace/views/shared/workspace-empty-state";
 import { WorkspaceRouteGate } from "../../features/workspace/views/shared/workspace-route-gate";
 import { DesktopShell } from "../../shells/desktop-shell";
 import { MobileShell } from "../../shells/mobile-shell";
 import type { UiPreviewSceneContext, UiPreviewSceneDefinition } from "../catalog";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
+
+const DeferredMoreFeaturesPage = lazy(async () => {
+  const module = await import("../../features/more");
+  return { default: module.MoreFeaturesPage };
+});
+
+const DeferredWorkspaceDesktopView = lazy(async () => {
+  const module = await import("../../features/workspace/views/desktop/workspace-desktop-view");
+  return { default: module.WorkspaceDesktopView };
+});
+
+const DeferredWorkspaceMobileView = lazy(async () => {
+  const module = await import("../../features/workspace/views/mobile/workspace-mobile-view");
+  return { default: module.WorkspaceMobileView };
+});
 
 const workspace: Workspace = {
   id: "ws-preview",
@@ -1469,7 +1482,11 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
         path: "/more/settings/general",
       }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("settings-appearance", {
       router: () => ({
@@ -1477,7 +1494,11 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
         path: "/more/settings/appearance",
       }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("settings-providers", {
       router: () => ({
@@ -1485,7 +1506,11 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
         path: "/more/settings/providers",
       }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("settings-shortcuts", {
       router: () => ({
@@ -1493,7 +1518,11 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
         path: "/more/settings/shortcuts",
       }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("settings-monitoring", {
       router: () => ({
@@ -1501,7 +1530,11 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
         path: "/more/analysis/monitoring",
       }),
       seed: (context) => buildSettingsSeed(context),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("settings-mobile-root", {
       router: () => ({ initialEntries: ["/more/settings"], path: "/more/settings" }),
@@ -1525,45 +1558,55 @@ export function createPageScenes(): UiPreviewSceneDefinition[] {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildWorkspaceSeed(context),
       render: () => (
-        <WorkspaceRouteGate>
-          <WorkspaceDesktopView />
-        </WorkspaceRouteGate>
+        <Suspense fallback={null}>
+          <WorkspaceRouteGate>
+            <DeferredWorkspaceDesktopView />
+          </WorkspaceRouteGate>
+        </Suspense>
       ),
     }),
     scene("workspace-custom-skills-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildWorkspaceCustomSkillsReviewSeed(context),
       render: () => (
-        <WorkspaceRouteGate>
-          <WorkspaceDesktopView />
-        </WorkspaceRouteGate>
+        <Suspense fallback={null}>
+          <WorkspaceRouteGate>
+            <DeferredWorkspaceDesktopView />
+          </WorkspaceRouteGate>
+        </Suspense>
       ),
     }),
     scene("workspace-mobile", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildWorkspaceSeed(context),
       render: () => (
-        <WorkspaceRouteGate>
-          <WorkspaceMobileView />
-        </WorkspaceRouteGate>
+        <Suspense fallback={null}>
+          <WorkspaceRouteGate>
+            <DeferredWorkspaceMobileView />
+          </WorkspaceRouteGate>
+        </Suspense>
       ),
     }),
     scene("workspace-draft-pane-editor-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildDraftPaneEditorReviewSeed(context),
       render: () => (
-        <WorkspaceRouteGate>
-          <WorkspaceDesktopView />
-        </WorkspaceRouteGate>
+        <Suspense fallback={null}>
+          <WorkspaceRouteGate>
+            <DeferredWorkspaceDesktopView />
+          </WorkspaceRouteGate>
+        </Suspense>
       ),
     }),
     scene("workspace-editor-pane-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildEditorPaneReviewSeed(context),
       render: () => (
-        <WorkspaceRouteGate>
-          <WorkspaceDesktopView />
-        </WorkspaceRouteGate>
+        <Suspense fallback={null}>
+          <WorkspaceRouteGate>
+            <DeferredWorkspaceDesktopView />
+          </WorkspaceRouteGate>
+        </Suspense>
       ),
     }),
     scene("auth-preview", {

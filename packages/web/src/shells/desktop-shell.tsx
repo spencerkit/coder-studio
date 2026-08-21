@@ -6,25 +6,57 @@
  */
 
 import { useAtomValue } from "jotai";
+import { lazy, type ReactNode, Suspense, useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import { authEnabledAtom } from "../atoms";
 import { EmptyState } from "../components/ui";
 import { LoginPage } from "../features/auth";
 import { SessionGatePage } from "../features/auth/session-gate";
-import { CommandPalette } from "../features/command-palette";
-import { DiagnosticsPage } from "../features/diagnostics";
-import { MonitoringPage } from "../features/monitoring";
-import { MoreFeaturesPage } from "../features/more";
 import { NotFoundPage } from "../features/not-found";
 import { ToastContainer } from "../features/notifications";
-import { QuickOpen } from "../features/quick-open";
 import { WelcomePage } from "../features/welcome";
-import { WorkAnalyticsPage } from "../features/work-analysis";
-import { WorkspaceDesktopView } from "../features/workspace/views/desktop/workspace-desktop-view";
+import { WorkspaceLoadingState } from "../features/workspace/views/shared/workspace-loading-state";
 import { WorkspaceRouteGate } from "../features/workspace/views/shared/workspace-route-gate";
 import { useBootstrap } from "../hooks/use-bootstrap";
 import { useTranslation } from "../lib/i18n";
+import { logStartupTraceOnce } from "../startup-trace";
 import { ConnectionStatusBanner } from "./shared/connection-status-banner";
+import { ShellDeferredFallback } from "./shared/shell-deferred-fallback";
+
+const DeferredCommandPalette = lazy(async () => {
+  const module = await import("../features/command-palette");
+  return { default: module.CommandPalette };
+});
+
+const DeferredDiagnosticsPage = lazy(async () => {
+  const module = await import("../features/diagnostics");
+  return { default: module.DiagnosticsPage };
+});
+
+const DeferredMonitoringPage = lazy(async () => {
+  const module = await import("../features/monitoring");
+  return { default: module.MonitoringPage };
+});
+
+const DeferredMoreFeaturesPage = lazy(async () => {
+  const module = await import("../features/more");
+  return { default: module.MoreFeaturesPage };
+});
+
+const DeferredQuickOpen = lazy(async () => {
+  const module = await import("../features/quick-open");
+  return { default: module.QuickOpen };
+});
+
+const DeferredWorkAnalyticsPage = lazy(async () => {
+  const module = await import("../features/work-analysis");
+  return { default: module.WorkAnalyticsPage };
+});
+
+const DeferredWorkspaceDesktopView = lazy(async () => {
+  const module = await import("../features/workspace/views/desktop/workspace-desktop-view");
+  return { default: module.WorkspaceDesktopView };
+});
 
 const appLoadingEmptyStateStyle = {
   minHeight: "auto",
@@ -34,6 +66,16 @@ const appLoadingEmptyStateStyle = {
   justifyContent: "flex-start",
   textAlign: "left" as const,
 };
+
+function DeferredRoute({
+  children,
+  fallback = <ShellDeferredFallback />,
+}: {
+  children: ReactNode;
+  fallback?: ReactNode;
+}) {
+  return <Suspense fallback={fallback}>{children}</Suspense>;
+}
 
 export function DesktopShell() {
   useBootstrap();
@@ -47,6 +89,16 @@ export function DesktopShell() {
     location.pathname.startsWith("/diagnostics") ||
     location.pathname.startsWith("/more") ||
     location.pathname === "/session-gate";
+  useEffect(() => {
+    if (!authUnknown || shouldBypassAuthLoading) {
+      return;
+    }
+
+    logStartupTraceOnce("shell:loading_visible", {
+      path: location.pathname,
+      shell: "desktop",
+    });
+  }, [authUnknown, location.pathname, shouldBypassAuthLoading]);
 
   return (
     <div className="app">
@@ -73,15 +125,45 @@ export function DesktopShell() {
             <Route path="/" element={<WelcomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/session-gate" element={<SessionGatePage />} />
-            <Route path="/diagnostics" element={<DiagnosticsPage />} />
-            <Route path="/analytics" element={<WorkAnalyticsPage />} />
-            <Route path="/monitoring" element={<MonitoringPage />} />
-            <Route path="/more/*" element={<MoreFeaturesPage />} />
+            <Route
+              path="/diagnostics"
+              element={
+                <DeferredRoute>
+                  <DeferredDiagnosticsPage />
+                </DeferredRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <DeferredRoute>
+                  <DeferredWorkAnalyticsPage />
+                </DeferredRoute>
+              }
+            />
+            <Route
+              path="/monitoring"
+              element={
+                <DeferredRoute>
+                  <DeferredMonitoringPage />
+                </DeferredRoute>
+              }
+            />
+            <Route
+              path="/more/*"
+              element={
+                <DeferredRoute>
+                  <DeferredMoreFeaturesPage />
+                </DeferredRoute>
+              }
+            />
             <Route
               path="/workspace"
               element={
                 <WorkspaceRouteGate>
-                  <WorkspaceDesktopView />
+                  <DeferredRoute fallback={<WorkspaceLoadingState />}>
+                    <DeferredWorkspaceDesktopView />
+                  </DeferredRoute>
                 </WorkspaceRouteGate>
               }
             />
@@ -90,8 +172,10 @@ export function DesktopShell() {
         )}
       </main>
 
-      <QuickOpen />
-      <CommandPalette />
+      <Suspense fallback={null}>
+        <DeferredQuickOpen />
+        <DeferredCommandPalette />
+      </Suspense>
       <ToastContainer />
     </div>
   );

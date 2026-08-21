@@ -9,10 +9,9 @@ import type {
   WorktreeInfo,
 } from "@coder-studio/core";
 import { useSetAtom } from "jotai";
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { type CSSProperties, lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { ConfirmDialog, EmptyState, Notice, Sheet, ThemedIcon } from "../../components/ui";
 import { SessionCard } from "../../features/agent-panes/views/shared/session-card";
-import { CommandPalette } from "../../features/command-palette";
 import { ToastContainer } from "../../features/notifications";
 import { supervisorDetailsAtom } from "../../features/supervisor/atoms";
 import { MobileSupervisorBadge } from "../../features/supervisor/views/mobile/mobile-supervisor-badge";
@@ -22,7 +21,6 @@ import { SupervisorCard } from "../../features/supervisor/views/shared/superviso
 import { SupervisorDetailsDialog } from "../../features/supervisor/views/shared/supervisor-details-dialog";
 import { TerminalPanel } from "../../features/terminal-panel";
 import { TopBar } from "../../features/topbar";
-import { WorkspaceDesktopView } from "../../features/workspace/views/desktop/workspace-desktop-view";
 import { MobileDock } from "../../features/workspace/views/mobile/mobile-dock";
 import { MobileFilesSheet } from "../../features/workspace/views/mobile/mobile-files-sheet";
 import { MobileTopBar } from "../../features/workspace/views/mobile/mobile-topbar";
@@ -37,6 +35,16 @@ import { useTranslation } from "../../lib/i18n";
 import type { UiPreviewSceneContext, UiPreviewSceneDefinition } from "../catalog";
 import type { UiPreviewSeed } from "../preview-store";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
+
+const DeferredCommandPalette = lazy(async () => {
+  const module = await import("../../features/command-palette");
+  return { default: module.CommandPalette };
+});
+
+const DeferredWorkspaceDesktopView = lazy(async () => {
+  const module = await import("../../features/workspace/views/desktop/workspace-desktop-view");
+  return { default: module.WorkspaceDesktopView };
+});
 
 const workspace: Workspace = {
   id: "ws-preview",
@@ -1216,7 +1224,11 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
         activeWorkspaceId: workspace.id,
         commandPaletteOpen: true,
       }),
-      render: () => <CommandPalette />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredCommandPalette />
+        </Suspense>
+      ),
     }),
     scene("branch-quick-pick", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
@@ -1760,7 +1772,11 @@ export function createShowcaseScenes(): UiPreviewSceneDefinition[] {
     scene("readme-desktop-hero", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
       seed: (context) => buildReadmeDesktopHeroSeed(context),
-      render: () => <WorkspaceDesktopView />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredWorkspaceDesktopView />
+        </Suspense>
+      ),
     }),
     scene("readme-desktop-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),

@@ -17,7 +17,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../../atoms/workspaces";
 import { useTranslation } from "../../../lib/i18n";
-import { buildDiagnosticsPath } from "../../diagnostics";
+import { buildDiagnosticsPath } from "../../diagnostics/navigation";
 import { hydrateWorkspaceEditorState } from "./open-editor-state";
 import { usePersistWorkspaceLastViewedTarget } from "./use-persist-workspace-last-viewed-target";
 

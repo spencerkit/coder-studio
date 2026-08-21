@@ -1,16 +1,14 @@
 import { useAtomValue } from "jotai";
 import { ChevronRight } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect } from "react";
+import { type KeyboardEvent, lazy, type ReactNode, Suspense, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { resolvedActiveWorkspaceIdAtom } from "../../atoms/workspaces";
 import { ThemedIcon } from "../../components/ui";
 import { useViewport } from "../../hooks/use-viewport";
 import { useTranslation } from "../../lib/i18n";
-import { DiagnosticsPage } from "../diagnostics";
 import { SettingsPage } from "../settings";
 import { MobilePageHeader } from "../shared/components/mobile-page-header";
 import { PageHeader } from "../shared/components/page-header";
-import { WorkAnalyticsSettingsSection } from "../work-analysis";
 import {
   buildMorePath,
   MORE_CATEGORIES,
@@ -19,6 +17,20 @@ import {
   type MoreSectionDefinition,
   parseMoreRoute,
 } from "./routes";
+
+const DeferredDiagnosticsPage = lazy(async () => {
+  const module = await import("../diagnostics");
+  return { default: module.DiagnosticsPage };
+});
+
+const DeferredWorkAnalyticsSettingsSection = lazy(async () => {
+  const module = await import("../work-analysis");
+  return { default: module.WorkAnalyticsSettingsSection };
+});
+
+function DeferredMoreContent({ children }: { children: ReactNode }) {
+  return <Suspense fallback={null}>{children}</Suspense>;
+}
 
 const MORE_CATEGORY_LIST = Object.values(MORE_CATEGORIES) as MoreCategoryDefinition[];
 const FALLBACK_CATEGORY = MORE_CATEGORIES.settings;
@@ -180,17 +192,23 @@ function renderMoreRouteContent(
 
   switch (section.id) {
     case "analytics":
-      return <WorkAnalyticsSettingsSection />;
+      return (
+        <DeferredMoreContent>
+          <DeferredWorkAnalyticsSettingsSection />
+        </DeferredMoreContent>
+      );
     case "diagnostics":
       return (
         <div className="settings-section">
-          <DiagnosticsPage
-            embedded
-            intent={{
-              context: "manual_check",
-              workspaceId: activeWorkspaceId ?? undefined,
-            }}
-          />
+          <DeferredMoreContent>
+            <DeferredDiagnosticsPage
+              embedded
+              intent={{
+                context: "manual_check",
+                workspaceId: activeWorkspaceId ?? undefined,
+              }}
+            />
+          </DeferredMoreContent>
         </div>
       );
     default:

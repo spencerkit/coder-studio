@@ -6,10 +6,19 @@ const backendHttpTarget = process.env.VITE_BACKEND_HTTP_URL || "http://127.0.0.1
 const backendWsTarget = process.env.VITE_BACKEND_WS_URL || "ws://127.0.0.1:4173";
 const disableHmr = process.env.CODER_STUDIO_DISABLE_HMR === "true";
 
-export default defineConfig(({ command, isPreview }) => {
+export default defineConfig(({ command, isPreview, mode }) => {
   if (command === "serve" && !isPreview && process.env.NODE_ENV === "production") {
     process.env.NODE_ENV = "development";
   }
+
+  const isUiPreviewBuild = command === "build" && mode === "ui-preview";
+  const buildInput: Record<string, string> = isUiPreviewBuild
+    ? {
+        "ui-preview": path.resolve(__dirname, "ui-preview.html"),
+      }
+    : {
+        main: path.resolve(__dirname, "index.html"),
+      };
 
   return {
     plugins: [react()],
@@ -49,14 +58,18 @@ export default defineConfig(({ command, isPreview }) => {
     },
     build: {
       outDir: "dist",
+      modulePreload: false,
       sourcemap: true,
       rollupOptions: {
-        input: {
-          main: path.resolve(__dirname, "index.html"),
-          "ui-preview": path.resolve(__dirname, "ui-preview.html"),
-        },
+        input: buildInput,
         output: {
           manualChunks(id) {
+            const normalizedId = id.split(path.sep).join("/");
+
+            if (normalizedId.endsWith("/src/app.tsx")) {
+              return "app-router";
+            }
+
             if (id.includes("monaco-editor")) {
               return "monaco-editor";
             }

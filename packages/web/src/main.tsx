@@ -7,9 +7,8 @@ import { Provider } from "jotai";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app";
-import { AppProviders } from "./app/providers";
+import { logStartupTraceOnce } from "./startup-trace";
 
-import "@xterm/xterm/css/xterm.css";
 import "@xyflow/react/dist/style.css";
 
 // Import fonts
@@ -21,12 +20,13 @@ import "./styles/base.css";
 import "./styles/components.css";
 
 // Mount application
+logStartupTraceOnce("main:module_evaluated");
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+logStartupTraceOnce("main:render_started");
 
 root.render(
   <Provider>
-    <AppProviders>
-      <App />
-    </AppProviders>
+    <App />
   </Provider>
 );
+logStartupTraceOnce("main:render_called");

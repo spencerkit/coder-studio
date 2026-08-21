@@ -5,8 +5,7 @@ import type {
   Workspace,
   WorktreeInfo,
 } from "@coder-studio/core";
-import { CommandPalette } from "../../features/command-palette";
-import { MoreFeaturesPage } from "../../features/more";
+import { lazy, Suspense } from "react";
 import { TerminalPanel } from "../../features/terminal-panel";
 import { TopBar } from "../../features/topbar";
 import { FileTreePanel } from "../../features/workspace/views/shared/file-tree-panel";
@@ -17,6 +16,16 @@ import { WorkspaceStatusBar } from "../../features/workspace/views/shared/worksp
 import { WorktreeManagerSurface } from "../../features/workspace/views/shared/worktree-manager-surface";
 import type { UiPreviewSceneDefinition } from "../catalog";
 import { getUiPreviewSceneMetadata } from "../scene-metadata";
+
+const DeferredCommandPalette = lazy(async () => {
+  const module = await import("../../features/command-palette");
+  return { default: module.CommandPalette };
+});
+
+const DeferredMoreFeaturesPage = lazy(async () => {
+  const module = await import("../../features/more");
+  return { default: module.MoreFeaturesPage };
+});
 
 const workspace: Workspace = {
   id: "ws-review",
@@ -417,7 +426,11 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
           },
         },
       }),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("settings-light-theme-review", {
       router: () => ({
@@ -445,7 +458,11 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
           },
         },
       }),
-      render: () => <MoreFeaturesPage />,
+      render: () => (
+        <Suspense fallback={null}>
+          <DeferredMoreFeaturesPage />
+        </Suspense>
+      ),
     }),
     scene("desktop-overlay-review", {
       router: () => ({ initialEntries: ["/workspace"], path: "/workspace" }),
@@ -468,7 +485,9 @@ export function createDesktopReviewScenes(): UiPreviewSceneDefinition[] {
       render: () => (
         <div className="desktop-review-grid">
           <div className="desktop-review-card">
-            <CommandPalette />
+            <Suspense fallback={null}>
+              <DeferredCommandPalette />
+            </Suspense>
           </div>
           <div className="desktop-review-card">
             <WorkspaceLaunchModal onClose={() => {}} />

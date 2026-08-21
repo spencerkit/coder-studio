@@ -8,7 +8,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activationStatusAtom } from "../atoms/activation";
 import { authenticatedAtom, lastViewedTargetAtom, localeAtom } from "../atoms/app-ui";
 import { authEnabledAtom, connectionStatusAtom, wsClientAtom } from "../atoms/connection";
-import { workspacesAtom, workspacesLoadStateAtom } from "../atoms/workspaces";
+import {
+  activeWorkspaceIdAtom,
+  workspacesAtom,
+  workspacesLoadStateAtom,
+} from "../atoms/workspaces";
 import { paneLayoutAtomFamily } from "../features/agent-panes/atoms/pane-layout";
 import {
   activeEditorTabAtomFamily,
@@ -308,6 +312,172 @@ describe("useBootstrap", () => {
           leafKind: "editor",
         },
       ],
+    });
+  });
+
+  it("prefetches workspace bootstrap data before activation becomes active", async () => {
+    const store = createStore();
+    const sendCommand = vi.fn(async (op: string) => {
+      if (op === "workspace.list") {
+        return [
+          {
+            id: "ws-1",
+            path: "/workspace",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+        ];
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        return {
+          workspaceId: "ws-1",
+          updatedAt: 10,
+        };
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(activationStatusAtom, "idle");
+    store.set(authenticatedAtom, true);
+    store.set(localeAtom, "en");
+
+    renderHook(() => useBootstrap(), {
+      wrapper: wrapperFor(store),
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("workspace.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("workspace.lastViewedTarget.get", {}, undefined);
+    });
+
+    expect(store.get(workspacesLoadStateAtom)).toBe("loading");
+    expect(store.get(workspacesAtom)).toEqual({});
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await waitFor(() => {
+      expect(store.get(workspacesLoadStateAtom)).toBe("ready");
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-1");
+    });
+  });
+
+  it("revalidates a prefetched last viewed target before committing after activation", async () => {
+    const store = createStore();
+    let lastViewedTargetCallCount = 0;
+    let resolveLatestTarget: ((value: { workspaceId: string; updatedAt: number }) => void) | null =
+      null;
+    const latestTargetPromise = new Promise<{ workspaceId: string; updatedAt: number }>(
+      (resolve) => {
+        resolveLatestTarget = resolve;
+      }
+    );
+
+    const sendCommand = vi.fn((op: string) => {
+      if (op === "workspace.list") {
+        return Promise.resolve([
+          {
+            id: "ws-1",
+            path: "/workspace-1",
+            targetRuntime: "native",
+            openedAt: 1,
+            lastActiveAt: 1,
+            uiState: {
+              leftPanelWidth: 280,
+              bottomPanelHeight: 200,
+              focusMode: false,
+            },
+          },
+          {
+            id: "ws-2",
+            path: "/workspace-2",
+            targetRuntime: "native",
+            openedAt: 2,
+            lastActiveAt: 2,
+            uiState: {
+              leftPanelWidth: 300,
+              bottomPanelHeight: 220,
+              focusMode: false,
+            },
+          },
+        ]);
+      }
+
+      if (op === "workspace.lastViewedTarget.get") {
+        lastViewedTargetCallCount += 1;
+        if (lastViewedTargetCallCount === 1) {
+          return Promise.resolve({
+            workspaceId: "ws-1",
+            updatedAt: 10,
+          });
+        }
+        if (lastViewedTargetCallCount === 2) {
+          return latestTargetPromise;
+        }
+      }
+
+      throw new Error(`Unexpected command: ${op}`);
+    });
+
+    store.set(wsClientAtom, { sendCommand } as never);
+    store.set(connectionStatusAtom, "connected");
+    store.set(authEnabledAtom, false);
+    store.set(activationStatusAtom, "idle");
+    store.set(authenticatedAtom, true);
+    store.set(localeAtom, "en");
+
+    renderHook(() => useBootstrap(), {
+      wrapper: wrapperFor(store),
+    });
+
+    await waitFor(() => {
+      expect(sendCommand).toHaveBeenCalledWith("workspace.list", {}, undefined);
+      expect(sendCommand).toHaveBeenCalledWith("workspace.lastViewedTarget.get", {}, undefined);
+      expect(lastViewedTargetCallCount).toBe(1);
+    });
+
+    expect(store.get(workspacesLoadStateAtom)).toBe("loading");
+    expect(store.get(activeWorkspaceIdAtom)).toBeNull();
+    expect(store.get(lastViewedTargetAtom)).toBeNull();
+
+    act(() => {
+      store.set(activationStatusAtom, "active");
+    });
+
+    await waitFor(() => {
+      expect(lastViewedTargetCallCount).toBe(2);
+    });
+
+    expect(store.get(workspacesLoadStateAtom)).toBe("loading");
+    expect(store.get(activeWorkspaceIdAtom)).toBeNull();
+    expect(store.get(lastViewedTargetAtom)).toBeNull();
+
+    await act(async () => {
+      resolveLatestTarget?.({
+        workspaceId: "ws-2",
+        updatedAt: 20,
+      });
+    });
+
+    await waitFor(() => {
+      expect(store.get(workspacesLoadStateAtom)).toBe("ready");
+      expect(store.get(activeWorkspaceIdAtom)).toBe("ws-2");
+      expect(store.get(lastViewedTargetAtom)).toEqual({
+        workspaceId: "ws-2",
+        updatedAt: 20,
+      });
     });
   });
 });

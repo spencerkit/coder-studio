@@ -7,6 +7,7 @@ import {
   clientInstanceIdAtom,
 } from "../atoms/activation";
 import { connectionStatusAtom, wsClientAtom } from "../atoms/connection";
+import { logStartupTraceOnce } from "../startup-trace";
 
 interface ActivationClaimPayload {
   active: true;
@@ -46,18 +47,24 @@ export function useActivation() {
     }
 
     setStatus("claiming");
+    logStartupTraceOnce("activation:claim_started");
 
     const pending = wsClient
       .sendCommand<ActivationClaimPayload>("activation.claim", {
         clientInstanceId,
       })
       .then((result) => {
+        logStartupTraceOnce("activation:claim_succeeded", {
+          generation: result.generation,
+          recoveryMode: result.recoveryMode,
+        });
         setGeneration(result.generation);
         setReason(null);
         setStatus("active");
         return true;
       })
       .catch(() => {
+        logStartupTraceOnce("activation:claim_failed");
         setReason(null);
         setStatus((current) => (current === "gated" ? current : "idle"));
         return false;

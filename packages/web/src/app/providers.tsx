@@ -52,7 +52,10 @@ import {
   normalizePaneLayout,
   paneLayoutAtomFamily,
 } from "../features/agent-panes/atoms/pane-layout";
-import { monacoModelRegistry } from "../features/code-editor/monaco/model-registry";
+import {
+  getGlobalMonacoModelRegistry,
+  resetGlobalMonacoModelRegistry,
+} from "../features/code-editor/monaco/model-registry-bridge";
 import { useSessionNotifications } from "../features/notifications";
 import { supervisorsAtom } from "../features/supervisor/atoms";
 import { terminalMetaAtomFamily } from "../features/terminal-panel/atoms";
@@ -64,14 +67,14 @@ import {
   terminalPreferencesAtom,
 } from "../features/terminal-panel/preferences";
 import {
-  createRecoveryCoordinator,
-  createRecoveryDispatchCommand,
-} from "../features/terminal-panel/recovery-coordinator";
-import {
   getGlobalRecoveryCoordinator,
   resetGlobalRecoveryCoordinator,
   setGlobalRecoveryCoordinator,
-} from "../features/terminal-panel/recovery-singleton";
+} from "../features/terminal-panel/recovery-bridge";
+import {
+  createRecoveryCoordinator,
+  createRecoveryDispatchCommand,
+} from "../features/terminal-panel/recovery-coordinator";
 import {
   productUpdateStateAtom,
   serverUpdateStateAtom,
@@ -95,6 +98,7 @@ import {
   worktreeListAtomFamily,
 } from "../features/workspace/atoms";
 import { useActivation } from "../hooks/use-activation";
+import { logStartupTraceOnce } from "../startup-trace";
 import { getThemeById, resolveStoredThemeId } from "../theme";
 import { useSyncTerminalThemeBackground } from "../theme/use-sync-terminal-theme-background";
 import type { ConnectionStatus, EventListener } from "../ws";
@@ -132,6 +136,7 @@ const DEFAULT_REFRESH_HINT: WorkspaceRefreshHint = {
   markTreeStale: false,
   refreshEditorBuffers: false,
 };
+const AUTH_STATUS_TIMEOUT_MS = 1200;
 const FOREGROUND_RECOVERY_COOLDOWN_MS = 250;
 const THEME_ID_STORAGE_KEY = "ui.themeId";
 const LEGACY_THEME_STORAGE_KEY = "ui.theme";
@@ -169,6 +174,7 @@ export function resetAppProvidersSingletonsForTests() {
   }
   globalWsClient = null;
   resetGlobalRecoveryCoordinator();
+  resetGlobalMonacoModelRegistry();
 }
 
 function reportRecoveryCoordinatorError(context: string, error: unknown) {
@@ -191,6 +197,7 @@ function mergeRefreshHints(
 function resetServerProjectedState(store: Store): void {
   const workspaceIds = store.get(workspaceOrderAtom);
   const workspaces = store.get(workspacesAtom);
+  const monacoModelRegistry = getGlobalMonacoModelRegistry();
   const terminalIds = Object.values(store.get(sessionsAtom))
     .map((session) => session.terminalId)
     .filter((terminalId): terminalId is string => Boolean(terminalId));
@@ -206,7 +213,7 @@ function resetServerProjectedState(store: Store): void {
   for (const workspaceId of workspaceIds) {
     const workspace = workspaces[workspaceId];
     if (workspace) {
-      monacoModelRegistry.disposeWorkspace(workspace.path);
+      monacoModelRegistry?.disposeWorkspace(workspace.path);
     }
     store.set(fileTreeAtomFamily(workspaceId), null);
     store.set(loadedDirsAtomFamily(workspaceId), new Set());
@@ -247,8 +254,14 @@ function ProviderListBootstrapper() {
     }
 
     let cancelled = false;
+    logStartupTraceOnce("providerList:request_started");
 
     void dispatch("provider.list", {}).then((result) => {
+      logStartupTraceOnce("providerList:resolved", {
+        errorCode: result.ok ? undefined : result.error?.code,
+        ok: result.ok,
+        providerCount: Array.isArray(result.data) ? result.data.length : 0,
+      });
       if (cancelled || !result.ok || !Array.isArray(result.data)) {
         return;
       }
@@ -460,7 +473,12 @@ export function AppProviders({ children }: AppProvidersProps) {
     });
 
     const hydrateTerminalPreferences = async () => {
+      logStartupTraceOnce("settings:get_requested");
       const result = await dispatch<Record<string, unknown>>("settings.get", {});
+      logStartupTraceOnce("settings:get_resolved", {
+        errorCode: result.ok ? undefined : result.error?.code,
+        ok: result.ok,
+      });
       if (cancelled || !result.ok || !result.data) {
         return;
       }
@@ -505,7 +523,12 @@ export function AppProviders({ children }: AppProvidersProps) {
     let cancelled = false;
 
     const hydrateUpdateState = async () => {
+      logStartupTraceOnce("updates:getState_requested");
       const result = await dispatch<UpdateStateView>("updates.getState", {});
+      logStartupTraceOnce("updates:getState_resolved", {
+        errorCode: result.ok ? undefined : result.error?.code,
+        ok: result.ok,
+      });
       if (cancelled || !result.ok || !result.data) {
         return;
       }
@@ -670,19 +693,48 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [store]);
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, AUTH_STATUS_TIMEOUT_MS);
+
     const loadAuthStatus = async () => {
       try {
-        const response = await fetch("/auth/status");
+        logStartupTraceOnce("authStatus:request_started");
+        const response = await fetch("/auth/status", {
+          signal: controller.signal,
+        });
         const data = await response.json();
+        const authenticated = Boolean(data.authenticated) || data.authEnabled === false;
+        logStartupTraceOnce("authStatus:response_received", {
+          authEnabled: Boolean(data.authEnabled),
+          authenticated,
+        });
+        if (cancelled) {
+          return;
+        }
         setAuthEnabled(Boolean(data.authEnabled));
-        store.set(authenticatedAtom, Boolean(data.authenticated) || data.authEnabled === false);
+        store.set(authenticatedAtom, authenticated);
       } catch {
+        logStartupTraceOnce("authStatus:request_failed");
+        if (cancelled) {
+          return;
+        }
         setAuthEnabled(false);
         store.set(authenticatedAtom, false);
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
     void loadAuthStatus();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [setAuthEnabled, store]);
 
   useEffect(() => {
@@ -754,6 +806,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       if (status === "connected") {
+        logStartupTraceOnce("ws:connected");
         setReconnectCount(0);
         setLastReconnect(null);
         syncWorkspaceActivity(true);
@@ -1049,6 +1102,9 @@ export function AppProviders({ children }: AppProvidersProps) {
       setWsClient(globalWsClient);
       const status = globalWsClient.getStatus();
       setConnectionStatus(status);
+      if (status === "connected") {
+        logStartupTraceOnce("ws:connected");
+      }
 
       // Re-establish subscriptions for this mount
       const unsubscribeStatus = globalWsClient.onStatus(handleStatusChange);
@@ -1106,6 +1162,7 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     // Create new WebSocket client singleton
     const client = new WsClient(resolveWsUrl());
+    logStartupTraceOnce("ws:connect_requested");
     globalWsClient = client;
     setGlobalRecoveryCoordinator(
       createRecoveryCoordinator({
@@ -1279,6 +1336,13 @@ function storeServerMetadata(
     return false;
   }
 
+  if (typeof data.authEnabled === "boolean") {
+    store.set(authEnabledAtom, data.authEnabled);
+    if (data.authEnabled === false) {
+      store.set(authenticatedAtom, true);
+    }
+  }
+
   store.set(serverInfoAtom, {
     version: data.version,
     serverInstanceId: data.serverInstanceId,
@@ -1317,9 +1381,6 @@ export function routeEventToAtom(topic: string, payload: unknown, store: Store):
     };
     if (data.status === "connected") {
       storeServerMetadata(payload, store);
-    }
-    if (data.status === "connected" && data.authEnabled === false) {
-      store.set(authenticatedAtom, true);
     }
     if (data.status === "error" && data.message) {
       store.set(connectionErrorAtom, data.message);

@@ -71,7 +71,7 @@ interface ReconnectConfig {
 
 const DEFAULT_RECONNECT_CONFIG: ReconnectConfig = {
   maxAttempts: Number.POSITIVE_INFINITY,
-  baseDelayMs: 1000,
+  baseDelayMs: 250,
   maxDelayMs: 30000,
 };
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getRuntimePath, readRuntimeConfig } from "@coder-studio/core/runtime";
@@ -92,6 +92,36 @@ describe("server runtime config", () => {
 
   it("writes runtime config before post-listen workspace sync completes", async () => {
     const syncGate = Promise.withResolvers<void>();
+    const syncStarted = Promise.withResolvers<void>();
+    const workspaceDir = join(testHomeDir, "workspace-sync-target");
+    mkdirSync(workspaceDir, { recursive: true });
+    mkdirSync(join(testHomeDir, "server-state-deferred", "state"), { recursive: true });
+    writeFileSync(
+      join(testHomeDir, "server-state-deferred", "state", "workspaces.json"),
+      JSON.stringify({
+        version: 1,
+        workspaces: {
+          "ws-1": {
+            id: "ws-1",
+            path: workspaceDir,
+            targetRuntime: "native",
+            openedAt: Date.now(),
+            lastActiveAt: Date.now(),
+            uiState: {
+              leftPanelWidth: 250,
+              bottomPanelHeight: 200,
+              focusMode: false,
+              paneLayout: {
+                id: "root",
+                type: "leaf",
+                leafKind: "draft",
+              },
+            },
+          },
+        },
+      }),
+      "utf8"
+    );
     vi.resetModules();
     vi.doMock("../agent-instructions/publisher.js", async () => {
       const actual = await vi.importActual<typeof import("../agent-instructions/publisher.js")>(
@@ -99,9 +129,13 @@ describe("server runtime config", () => {
       );
 
       class DeferredPublisher extends actual.AgentInstructionsPublisher {
-        override async syncAllOpenWorkspaces() {
+        override async syncWorkspace(workspaceId: string) {
+          syncStarted.resolve();
           await syncGate.promise;
-          return [];
+          return {
+            workspaceId,
+            targets: [],
+          };
         }
       }
 
@@ -126,6 +160,7 @@ describe("server runtime config", () => {
       })
       .not.toBeNull();
 
+    await syncStarted.promise;
     syncGate.resolve();
     server = await pendingServer;
     const { createServer: restoredCreateServer } = await import("../server.js");

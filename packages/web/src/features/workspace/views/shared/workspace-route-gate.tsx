@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import {
   activeWorkspaceAtom,
@@ -7,6 +7,7 @@ import {
   workspacesLoadStateAtom,
 } from "../../../../atoms/workspaces";
 import { useTranslation } from "../../../../lib/i18n";
+import { logStartupTraceOnce } from "../../../../startup-trace";
 import { WorkspaceEmptyState } from "./workspace-empty-state";
 import { WorkspaceLoadingState } from "./workspace-loading-state";
 
@@ -22,6 +23,16 @@ export function WorkspaceRouteGate({ children }: { children: ReactNode }) {
     (loadState === "idle" ||
       loadState === "loading" ||
       (isWorkspaceRoute && loadState === "ready"));
+  useEffect(() => {
+    if (!shouldHoldForResolution) {
+      return;
+    }
+
+    logStartupTraceOnce("workspaceRoute:loading_visible", {
+      loadState,
+      path: location.pathname,
+    });
+  }, [loadState, location.pathname, shouldHoldForResolution]);
 
   if (!workspace && loadState === "error") {
     return (

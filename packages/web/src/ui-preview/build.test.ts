@@ -12,13 +12,36 @@ afterEach(() => {
 });
 
 describe("ui-preview build outputs", () => {
-  it("emits ui-preview.html as a production entry", async () => {
+  it("does not emit ui-preview.html during the default app build", async () => {
     rmSync(uiPreviewBuildDir, { recursive: true, force: true });
     const resolvedConfig =
       typeof viteConfig === "function"
         ? ((await viteConfig({
             command: "build",
             mode: "production",
+            isPreview: false,
+          })) as InlineConfig)
+        : viteConfig;
+
+    await build({
+      ...resolvedConfig,
+      configFile: false,
+      build: {
+        ...resolvedConfig.build,
+        outDir: uiPreviewBuildDir,
+      },
+    });
+
+    expect(() => readFileSync(join(uiPreviewBuildDir, "ui-preview.html"), "utf8")).toThrow();
+  }, 120_000);
+
+  it("emits ui-preview.html only from the dedicated ui-preview build", async () => {
+    rmSync(uiPreviewBuildDir, { recursive: true, force: true });
+    const resolvedConfig =
+      typeof viteConfig === "function"
+        ? ((await viteConfig({
+            command: "build",
+            mode: "ui-preview",
             isPreview: false,
           })) as InlineConfig)
         : viteConfig;

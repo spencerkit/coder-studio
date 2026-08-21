@@ -295,6 +295,41 @@ describe("WorkspaceManager", () => {
         )
       ).toBe(true);
     });
+
+    it("can restore a selected subset of persisted workspace watchers", async () => {
+      const secondDir = join(tmpdir(), `workspace-test-${Date.now()}-secondary`);
+      await mkdir(secondDir);
+      try {
+        const firstWorkspace = await manager.open({ path: testDir });
+        const secondWorkspace = await manager.open({ path: secondDir });
+        const broadcaster = { broadcast: vi.fn() };
+        const restoredManager = new WorkspaceManager({
+          workspaceRepo: new WorkspaceRepo({
+            filePath: join(stateDir, "workspaces.json"),
+          }),
+          eventBus,
+          broadcaster,
+        });
+
+        watchSpy.mockClear();
+        restoredManager.hydrateWatchers({ workspaces: [secondWorkspace] });
+
+        expect(watchSpy).toHaveBeenCalledTimes(1);
+        expect(watchSpy).toHaveBeenCalledWith(
+          secondDir,
+          expect.objectContaining({
+            ignoreInitial: true,
+            persistent: true,
+          })
+        );
+        const watchers = (restoredManager as unknown as { watchers: Map<string, unknown> })
+          .watchers;
+        expect(watchers.has(secondWorkspace.id)).toBe(true);
+        expect(watchers.has(firstWorkspace.id)).toBe(false);
+      } finally {
+        await rm(secondDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("updateUiState", () => {

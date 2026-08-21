@@ -12,6 +12,7 @@ import {
 import { activeWorkspaceAtom } from "../../../../atoms/workspaces";
 import { EmptyState, Tooltip } from "../../../../components/ui";
 import { useTranslation } from "../../../../lib/i18n";
+import { logStartupTraceOnce } from "../../../../startup-trace";
 import { AgentPanes } from "../../../agent-panes";
 import { CodeEditorHost } from "../../../code-editor/views/shared/code-editor-host";
 import { TopBar } from "../../../topbar";
@@ -865,6 +866,16 @@ const WorkspaceDesktopScene: FC = () => {
 export const WorkspaceDesktopView: FC = () => {
   const workspace = useAtomValue(activeWorkspaceAtom);
   const t = useTranslation();
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    logStartupTraceOnce("route:workspace_visible", {
+      shell: "desktop",
+      workspaceId: workspace.id,
+    });
+  }, [workspace]);
 
   if (!workspace) {
     return (
