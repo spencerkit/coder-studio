@@ -1,4 +1,6 @@
 import {
+  assertSafeReleaseAssetName,
+  assertSafeReleaseTag,
   parseChannelTimestamp,
   parseReleaseCapabilities,
   type ReleaseCapabilities,
@@ -14,6 +16,18 @@ export interface ProductChannelRuntime {
   publishedAt: string;
   manifest: string;
   manifestSha256: string;
+}
+
+export type ProductRuntimeTarget = "win32-x64" | "linux-x64";
+
+export interface FactoryProductProvenance {
+  schemaVersion: 1;
+  version: string;
+  releaseTag: string;
+  runtimes: Record<
+    ProductRuntimeTarget,
+    Pick<ProductChannelRuntime, "manifest" | "manifestSha256">
+  >;
 }
 
 export interface ProductChannel {
@@ -35,6 +49,44 @@ export function resolveProductChannelUrl(env: NodeJS.ProcessEnv, compiledUrl: st
   }
   const compiled = compiledUrl.trim();
   return compiled ? new URL(compiled).toString() : "";
+}
+
+export function parseFactoryProductProvenance(value: unknown): FactoryProductProvenance {
+  if (!value || typeof value !== "object") throw new Error("Factory Product must be an object");
+  const candidate = value as Record<string, unknown>;
+  if (candidate.schemaVersion !== 1) throw new Error("Unsupported Factory Product schema");
+  const version = readChannelString(candidate.version, "Factory Product version");
+  const releaseTag = readChannelString(candidate.releaseTag, "Factory Product releaseTag");
+  assertSafeReleaseTag(releaseTag);
+  if (!candidate.runtimes || typeof candidate.runtimes !== "object") {
+    throw new Error("Factory Product runtimes must be an object");
+  }
+  const runtimes = candidate.runtimes as Record<string, unknown>;
+  const parseIdentity = (target: ProductRuntimeTarget) => {
+    const value = runtimes[target];
+    if (!value || typeof value !== "object") {
+      throw new Error(`Factory Product ${target} is missing`);
+    }
+    const identity = value as Record<string, unknown>;
+    const manifest = readChannelString(identity.manifest, `Factory Product ${target}.manifest`);
+    assertSafeReleaseAssetName(manifest);
+    return {
+      manifest,
+      manifestSha256: readChannelSha256(
+        identity.manifestSha256,
+        `Factory Product ${target}.manifestSha256`
+      ),
+    };
+  };
+  return {
+    schemaVersion: 1,
+    version,
+    releaseTag,
+    runtimes: {
+      "win32-x64": parseIdentity("win32-x64"),
+      "linux-x64": parseIdentity("linux-x64"),
+    },
+  };
 }
 
 function parseRuntime(

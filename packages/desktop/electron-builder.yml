@@ -21,6 +21,8 @@ extraResources:
     filter:
       - "**/*"
       - "!**/*.map"
+  - from: dist/factory-product.json
+    to: factory-product.json
   - from: dist/engine
     to: engine
     filter:

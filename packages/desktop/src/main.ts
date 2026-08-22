@@ -57,7 +57,13 @@ import {
 import { DesktopEnvironmentManager } from "./environment-manager.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
 import { DesktopGateway } from "./gateway.js";
+import {
+  parseFactoryProductProvenance,
+  parseProductChannel,
+  resolveProductChannelUrl,
+} from "./product-channel.js";
 import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
+import { resolveVersionedReleaseAsset } from "./release-channel.js";
 import { DESKTOP_NODE_VERSION, getRuntimePublishedAt } from "./runtime-manifest.js";
 import type { ProductRuntime } from "./runtime-store.js";
 import { RuntimeStore } from "./runtime-store.js";
@@ -71,8 +77,8 @@ import type { WslRuntimeCandidate } from "./wsl-runtime-store.js";
 import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
 
 declare const __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: string;
+declare const __CODER_STUDIO_PRODUCT_CHANNEL_URL__: string;
 declare const __CODER_STUDIO_DESKTOP_CHANNEL_URL__: string;
-declare const __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__: string;
 declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
 
 const ENVIRONMENT_LAUNCH_DATA_KEY = "environmentLaunchRequestId";
@@ -183,10 +189,19 @@ function getEnvironmentPartition(target: DesktopEnvironmentTarget): string {
   return `persist:coder-studio-${id}`;
 }
 
-function getReleaseBaseUrl(runtimeUpdateUrl: string): string {
-  const override = process.env.CODER_STUDIO_RELEASE_BASE_URL?.trim();
-  if (override) return override.endsWith("/") ? override : `${override}/`;
-  return new URL(".", runtimeUpdateUrl).toString();
+function getDesktopReleaseBaseUrl(desktopChannelUrl: string, shellVersion: string): string {
+  const acceptanceOverride = process.env.CODER_STUDIO_RELEASE_BASE_URL?.trim();
+  if (process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1" && acceptanceOverride) {
+    return acceptanceOverride.endsWith("/") ? acceptanceOverride : `${acceptanceOverride}/`;
+  }
+  return new URL(
+    ".",
+    resolveVersionedReleaseAsset(
+      desktopChannelUrl,
+      `desktop-v${shellVersion}`,
+      "coder-studio-engine-linux-x64.manifest.json"
+    )
+  ).toString();
 }
 
 function emitEnvironmentProgress(progress: DesktopEnvironmentProgress): void {
@@ -616,11 +631,26 @@ async function startApplication(): Promise<void> {
     compiledRuntimePublicKey,
     (path) => readFileSync(path, "utf8")
   );
+  const compiledProductChannelUrl =
+    typeof __CODER_STUDIO_PRODUCT_CHANNEL_URL__ === "string"
+      ? __CODER_STUDIO_PRODUCT_CHANNEL_URL__.trim()
+      : "";
+  const productChannelUrl = resolveProductChannelUrl(process.env, compiledProductChannelUrl);
   const compiledDesktopChannelUrl =
     typeof __CODER_STUDIO_DESKTOP_CHANNEL_URL__ === "string"
       ? __CODER_STUDIO_DESKTOP_CHANNEL_URL__.trim()
       : "";
   const desktopChannelUrl = resolveDesktopChannelUrl(process.env, compiledDesktopChannelUrl);
+  const loadProductChannel = async () => {
+    if (!productChannelUrl || !runtimePublicKey) {
+      throw new Error("Product update channel is not configured");
+    }
+    const response = await fetch(productChannelUrl, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Product update channel check failed with ${response.status}`);
+    }
+    return parseProductChannel(await response.json(), runtimePublicKey, productChannelUrl);
+  };
   const loadDesktopChannel = async () => {
     if (!desktopChannelUrl || !runtimePublicKey) {
       throw new Error("Desktop update channel is not configured");
@@ -631,14 +661,15 @@ async function startApplication(): Promise<void> {
     }
     return parseDesktopChannel(await response.json(), runtimePublicKey, desktopChannelUrl);
   };
-  const compiledFactoryReleaseBaseUrl =
-    typeof __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__ === "string"
-      ? __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__.trim()
-      : "";
   const productVersion =
     typeof __CODER_STUDIO_PRODUCT_VERSION__ === "string"
       ? __CODER_STUDIO_PRODUCT_VERSION__.trim()
       : "0.0.0";
+  const factoryProduct = app.isPackaged
+    ? parseFactoryProductProvenance(
+        JSON.parse(readFileSync(join(process.resourcesPath, "factory-product.json"), "utf8"))
+      )
+    : undefined;
   const runtimeStore = app.isPackaged
     ? new RuntimeStore({
         root: join(rootUserDataDir, "runtime-store"),
@@ -653,10 +684,10 @@ async function startApplication(): Promise<void> {
     runtimeStore && webRuntime ? await runtimeStore.acquireLease(webRuntime) : null;
   const environmentStateStore = new EnvironmentStateStore(userDataDir);
   const nativeRuntimeUpdateAdapter =
-    runtimeStore && webRuntime && runtimePublicKey && desktopChannelUrl
+    runtimeStore && webRuntime && runtimePublicKey && productChannelUrl
       ? new ProductRuntimeUpdateManager({
           store: runtimeStore,
-          manifestUrl: desktopChannelUrl,
+          productChannelUrl: productChannelUrl,
           getCurrentRuntime: () => activeProductRuntime ?? (webRuntime as ProductRuntime),
           onError: (error) => console.warn("[runtime-update]", error.message),
         })
@@ -671,14 +702,14 @@ async function startApplication(): Promise<void> {
     runtimeVersion: webRuntime?.manifest.runtimeVersion ?? productVersion,
     publicKeyPem: runtimePublicKey,
     enableWsl: app.isPackaged && process.platform === "win32",
-    releaseBaseUrl: getReleaseBaseUrl(
-      process.env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() || desktopChannelUrl
-    ),
+    releaseBaseUrl: getDesktopReleaseBaseUrl(desktopChannelUrl, app.getVersion()),
     factoryReleaseBaseUrl:
-      process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL?.trim() ||
-      compiledFactoryReleaseBaseUrl ||
-      undefined,
-    loadChannel: desktopChannelUrl && runtimePublicKey ? loadDesktopChannel : undefined,
+      process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1"
+        ? process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL?.trim()
+        : undefined,
+    productChannelUrl,
+    loadProductChannel: productChannelUrl && runtimePublicKey ? loadProductChannel : undefined,
+    factoryProduct: factoryProduct,
     nativeRuntimeUpdateAdapter,
     onProgress: (progress) => {
       emitEnvironmentProgress(progress);
@@ -810,7 +841,7 @@ async function startApplication(): Promise<void> {
       currentVersion: app.getVersion(),
       isPackaged: true,
       allowPrerelease: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1",
-      updaterChannel: "modern",
+      desktopChannelUrl: desktopChannelUrl,
       createCancellationToken: () => new CancellationToken(),
       logLocations: [join(app.getPath("logs"), "main.log")],
       manualInstallerUrl: "https://github.com/spencerkit/coder-studio/releases",
@@ -840,7 +871,8 @@ async function startApplication(): Promise<void> {
         return manifest ? getRuntimePublishedAt(manifest) : null;
       },
       getBuildInfo: () => buildInfo,
-      loadChannel: loadDesktopChannel,
+      loadProductChannel: loadProductChannel,
+      loadDesktopChannel: loadDesktopChannel,
       shell: shellUpdateAdapter,
       getRuntimeAdapter: (target, environmentId) =>
         (environmentManager as DesktopEnvironmentManager).createRuntimeUpdateAdapter(
@@ -875,6 +907,8 @@ async function startApplication(): Promise<void> {
       activeEnvironmentTarget.kind === "wsl"
         ? await wslRuntimeStore?.readPendingVersion()
         : await runtimeStore?.readPendingVersion();
+    const pendingSharedWebVersion =
+      activeEnvironmentTarget.kind === "wsl" ? await runtimeStore?.readPendingVersion() : null;
     await updateCoordinator.reconcileOnStartup({
       shellVersion: app.getVersion(),
       runtimeVersion:
@@ -882,6 +916,15 @@ async function startApplication(): Promise<void> {
           ? (wslRuntime?.manifest.runtimeVersion ?? productVersion)
           : (activeProductRuntime?.manifest.runtimeVersion ?? productVersion),
       pendingRuntimeVersion: pendingRuntimeVersion ?? null,
+      ...(activeEnvironmentTarget.kind === "wsl"
+        ? {
+            sharedWebVersion:
+              activeProductRuntime?.manifest.runtimeVersion ??
+              webRuntime?.manifest.runtimeVersion ??
+              productVersion,
+            pendingSharedWebVersion: pendingSharedWebVersion ?? null,
+          }
+        : {}),
     });
     await updateCoordinator.start();
   }

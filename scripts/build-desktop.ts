@@ -9,26 +9,23 @@ import {
   DESKTOP_NODE_VERSION,
   RUNTIME_HOST_API_VERSION,
 } from "../packages/desktop/src/runtime-manifest.js";
-import { buildDesktopRuntime } from "./build-desktop-runtime.js";
 import { ensureDir, error, info, log, ROOT_DIR, step, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
 export const DESKTOP_DIR = resolve(ROOT_DIR, "packages/desktop");
 export const DESKTOP_DIST_DIR = resolve(DESKTOP_DIR, "dist");
 
-export function resolveDesktopRuntimeUrls(
-  env: NodeJS.ProcessEnv,
-  platform = process.platform,
-  arch = process.arch
-): { runtimeUpdateUrl: string; factoryReleaseBaseUrl: string } {
-  const runtimeUpdateUrl =
-    env.CODER_STUDIO_RUNTIME_UPDATE_URL?.trim() ||
-    `https://github.com/spencerkit/coder-studio/releases/latest/download/coder-studio-runtime-${platform}-${arch}.manifest.json`;
+export function resolveDesktopChannelUrls(env: NodeJS.ProcessEnv): {
+  productChannelUrl: string;
+  desktopChannelUrl: string;
+} {
   return {
-    runtimeUpdateUrl,
-    factoryReleaseBaseUrl:
-      env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL?.trim() ||
-      new URL(".", runtimeUpdateUrl).toString(),
+    productChannelUrl:
+      env.CODER_STUDIO_PRODUCT_CHANNEL_URL?.trim() ||
+      "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
+    desktopChannelUrl:
+      env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim() ||
+      "https://github.com/spencerkit/coder-studio/releases/download/desktop-stable/desktop-channel.json",
   };
 }
 
@@ -54,15 +51,11 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
   const releasePublishedAt = releasePublishedAtValue
     ? normalizeUtcTimestamp(releasePublishedAtValue, "CODER_STUDIO_RELEASE_PUBLISHED_AT")
     : null;
-  const desktopChannelUrl =
-    process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL?.trim() ??
-    "https://github.com/spencerkit/coder-studio/releases/latest/download/desktop-channel-modern.json";
-  const { runtimeUpdateUrl, factoryReleaseBaseUrl } = resolveDesktopRuntimeUrls(process.env);
+  const { productChannelUrl, desktopChannelUrl } = resolveDesktopChannelUrls(process.env);
   const runtimeDefines = {
     __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: JSON.stringify(runtimePublicKey),
-    __CODER_STUDIO_RUNTIME_UPDATE_URL__: JSON.stringify(runtimeUpdateUrl),
+    __CODER_STUDIO_PRODUCT_CHANNEL_URL__: JSON.stringify(productChannelUrl),
     __CODER_STUDIO_DESKTOP_CHANNEL_URL__: JSON.stringify(desktopChannelUrl),
-    __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__: JSON.stringify(factoryReleaseBaseUrl),
     __CODER_STUDIO_PRODUCT_VERSION__: JSON.stringify(cliManifest.version.trim()),
   };
 
@@ -109,12 +102,9 @@ export async function buildDesktopShell(options: { clean?: boolean } = {}): Prom
 }
 
 export async function buildDesktop(): Promise<void> {
-  step("BUILD DESKTOP", "Building desktop shell and Product Runtime...\n");
+  step("BUILD DESKTOP", "Building the independent Desktop Shell...\n");
   await buildDesktopShell({ clean: true });
-  const runtime = await buildDesktopRuntime();
   info(`Desktop shell: ${DESKTOP_DIST_DIR}`);
-  info(`Factory Runtime: ${runtime.factoryRuntimeDir}`);
-  info(`Publishable Runtime: ${runtime.releaseRuntimeDir}`);
   success("Desktop build complete");
 }
 

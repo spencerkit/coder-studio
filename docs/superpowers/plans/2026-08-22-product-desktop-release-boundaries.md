@@ -146,11 +146,11 @@ if (productResult.status === "rejected" && desktopResult.status === "rejected") 
 - Modify: `packages/desktop/src/environment-manager.ts`
 - Modify: `packages/desktop/src/environment-manager.test.ts`
 
-- [ ] Write failing tests for compiled `product-stable/product-channel.json` and `desktop-stable/desktop-channel.json` URLs and for exact Factory Product tag/manifest digest in packaged resources.
-- [ ] Replace `__CODER_STUDIO_RUNTIME_UPDATE_URL__`/the unified URL with independent Product/Desktop channel defines. Retain acceptance-only environment overrides for both feeds and one production public key.
-- [ ] Make Desktop packaging consume a pre-resolved immutable Factory Runtime directory and provenance JSON. It must not build Product Runtime from the Desktop source checkout during a production Desktop release.
-- [ ] Wire main-process loaders independently, pass both to the coordinator/environment manager, and derive WSL Product manifest locations from the Product channel.
-- [ ] Run focused script/Desktop tests and commit: `feat(desktop): package accepted factory runtime provenance`.
+- [x] Write failing tests for compiled `product-stable/product-channel.json` and `desktop-stable/desktop-channel.json` URLs and for exact Factory Product tag/manifest digest in packaged resources.
+- [x] Replace `__CODER_STUDIO_RUNTIME_UPDATE_URL__`/the unified URL with independent Product/Desktop channel defines. Retain acceptance-only environment overrides for both feeds and one production public key.
+- [x] Make Desktop packaging consume a pre-resolved immutable Factory Runtime directory and provenance JSON. It must not build Product Runtime from the Desktop source checkout during a production Desktop release.
+- [x] Wire main-process loaders independently, pass both to the coordinator/environment manager, and derive WSL Product manifest locations from the Product channel.
+- [x] Run focused script/Desktop tests and commit: `feat(desktop): package accepted factory runtime provenance`.
 
 ## Task 6: Separate release artifact validation
 

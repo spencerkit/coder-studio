@@ -5,12 +5,14 @@ import { writeJsonFileAtomic } from "../packages/desktop/src/atomic-json-file.js
 import { parseDesktopBuildInfo } from "../packages/desktop/src/build-info.js";
 import type { DesktopChannel } from "../packages/desktop/src/desktop-channel.js";
 import { parseEngineManifest } from "../packages/desktop/src/engine-manifest.js";
-import type { ProductChannel } from "../packages/desktop/src/product-channel.js";
+import {
+  type ProductChannel,
+  parseFactoryProductProvenance,
+} from "../packages/desktop/src/product-channel.js";
 import {
   assertSafeReleaseAssetName,
   assertSafeReleaseTag,
   parseChannelTimestamp,
-  readChannelSha256,
   readChannelString,
 } from "../packages/desktop/src/release-channel.js";
 import { parseNetworkRuntimeManifest } from "../packages/desktop/src/runtime-manifest.js";
@@ -42,13 +44,6 @@ export interface BuildDesktopChannelOptions extends CommonBuildOptions {
   updaterMetadataFile?: string;
   wslEngineManifestFile?: string;
   factoryProductFile: string;
-}
-
-interface FactoryProductProvenance {
-  schemaVersion: 1;
-  version: string;
-  releaseTag: string;
-  runtimes: Record<"win32-x64" | "linux-x64", { manifest: string; manifestSha256: string }>;
 }
 
 export type ReleaseChannelCommand =
@@ -209,43 +204,6 @@ export async function buildProductChannel(
   return channel;
 }
 
-function parseFactoryProduct(value: unknown): FactoryProductProvenance {
-  if (!value || typeof value !== "object") throw new Error("Factory Product must be an object");
-  const candidate = value as Record<string, unknown>;
-  if (candidate.schemaVersion !== 1) throw new Error("Unsupported Factory Product schema");
-  const version = readChannelString(candidate.version, "Factory Product version");
-  const releaseTag = readChannelString(candidate.releaseTag, "Factory Product releaseTag");
-  assertSafeReleaseTag(releaseTag);
-  if (!candidate.runtimes || typeof candidate.runtimes !== "object") {
-    throw new Error("Factory Product runtimes must be an object");
-  }
-  const runtimes = candidate.runtimes as Record<string, unknown>;
-  const parseRuntime = (target: "win32-x64" | "linux-x64") => {
-    const value = runtimes[target];
-    if (!value || typeof value !== "object")
-      throw new Error(`Factory Product ${target} is missing`);
-    const runtime = value as Record<string, unknown>;
-    const manifest = readChannelString(runtime.manifest, `Factory Product ${target}.manifest`);
-    assertSafeReleaseAssetName(manifest);
-    return {
-      manifest,
-      manifestSha256: readChannelSha256(
-        runtime.manifestSha256,
-        `Factory Product ${target}.manifestSha256`
-      ),
-    };
-  };
-  return {
-    schemaVersion: 1,
-    version,
-    releaseTag,
-    runtimes: {
-      "win32-x64": parseRuntime("win32-x64"),
-      "linux-x64": parseRuntime("linux-x64"),
-    },
-  };
-}
-
 export async function buildDesktopChannel(
   options: BuildDesktopChannelOptions
 ): Promise<DesktopChannel> {
@@ -264,7 +222,7 @@ export async function buildDesktopChannel(
   ]);
   const updater = parseUpdaterMetadata(updaterBytes.toString("utf8"));
   const engine = parseEngineManifest(JSON.parse(engineBytes.toString("utf8")));
-  const factoryProduct = parseFactoryProduct(factoryValue);
+  const factoryProduct = parseFactoryProductProvenance(factoryValue);
   if (
     !buildInfo.publishedAt ||
     !buildInfo.engineVersion ||

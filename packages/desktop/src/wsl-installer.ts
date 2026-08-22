@@ -69,6 +69,10 @@ export interface WslRuntimeUpdateMetadata {
   engineManifest: EngineManifest | null;
 }
 
+type WslExpectedRuntime = Omit<ProductChannelRuntime, "publishedAt"> & {
+  publishedAt?: string;
+};
+
 export interface WslRuntimeDownloadOptions {
   signal: AbortSignal;
   onProgress: (percent: number) => void;
@@ -335,7 +339,7 @@ export class WslInstaller {
 
   async checkRuntime(
     probe: WslDistroProbe,
-    expected: ProductChannelRuntime,
+    expected: WslExpectedRuntime,
     plannedShellVersion: string,
     releaseTag: string
   ): Promise<WslRuntimeUpdateMetadata> {
@@ -468,7 +472,7 @@ export class WslInstaller {
   private async loadMetadata(
     probe: WslDistroProbe,
     plannedShellVersion: string,
-    expected?: Omit<ProductChannelRuntime, "manifestSha256"> & { manifestSha256?: string },
+    expected?: Omit<WslExpectedRuntime, "manifestSha256"> & { manifestSha256?: string },
     releaseTag?: string
   ): Promise<WslRuntimeUpdateMetadata> {
     if (!probe.supported) throw new Error(probe.message ?? "Unsupported WSL distribution");
@@ -535,7 +539,8 @@ export class WslInstaller {
     if (
       expected &&
       (runtimeManifest.runtimeVersion !== expected.version ||
-        runtimeManifest.publishedAt !== expected.publishedAt)
+        (expected.publishedAt !== undefined &&
+          runtimeManifest.publishedAt !== expected.publishedAt))
     ) {
       throw new Error(
         `WSL Runtime manifest does not match signed ${usesProductChannel ? "Product" : "Desktop"} channel`

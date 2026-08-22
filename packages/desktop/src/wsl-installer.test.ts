@@ -267,6 +267,23 @@ describe("WslInstaller", () => {
     expect(runner).not.toHaveBeenCalled();
     fetchMock.mockClear();
 
+    await expect(
+      installer.checkRuntime(
+        createProbe(),
+        {
+          version: "0.5.6",
+          manifest: "runtime.manifest.json",
+          manifestSha256: createHash("sha256").update(runtimeManifestBody).digest("hex"),
+        },
+        "0.1.0",
+        "v0.5.6"
+      )
+    ).resolves.toMatchObject({
+      version: "0.5.6",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+    });
+    fetchMock.mockClear();
+
     const installed = await installer.downloadAndStageRuntime(metadata, {
       signal: new AbortController().signal,
       onProgress: () => {},
