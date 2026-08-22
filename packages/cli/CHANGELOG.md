@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.12
+
+### Patch Changes
+
+- [#140](https://github.com/spencerkit/coder-studio/pull/140) [`5049484`](https://github.com/spencerkit/coder-studio/commit/504948431189c085150a7ab3a89edeb88403f6de) Thanks [@pallyoung](https://github.com/pallyoung)! - Fix packaged Desktop startup by allowing Vite to bundle and rewrite deferred application routes instead of leaving unresolved browser-native module paths.
+
 ## 0.5.11
 
 ### Patch Changes
