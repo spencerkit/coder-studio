@@ -92,12 +92,12 @@ if (shared.some((field) => windows[field] !== linux[field])) {
 - Modify: `packages/desktop/src/update-manager.ts`
 - Modify: `packages/desktop/src/update-manager.test.ts`
 
-- [ ] Write failing tests proving Runtime manifest bytes must match the Product-channel SHA-256 before parsing, installed Runtime compatibility metadata is available to the coordinator, and Shell checks first configure a versioned generic feed.
-- [ ] Add `setFeedURL(options: { provider: "generic"; url: string })` to `ShellUpdaterPort` and require `DesktopShellUpdateAdapter.checkMetadata()` to derive the release base from the signed Desktop tag before `checkForUpdates()`.
-- [ ] Require updater metadata name and returned version to match the Desktop channel. Keep Authenticode and downloaded-version validation unchanged.
-- [ ] Change Runtime adapter input from `DesktopChannelRuntime` to `ProductChannelRuntime`, resolve the signed Product release tag, verify the raw manifest digest, then run existing manifest signature and compatibility checks.
-- [ ] Add `getCurrentManifest()` to both native and WSL adapters so Shell-only compatibility is evaluated against installed Runtime metadata.
-- [ ] Run focused Desktop tests and commit: `feat(desktop): pin update metadata to signed release tags`.
+- [x] Write failing tests proving Runtime manifest bytes must match the Product-channel SHA-256 before parsing, installed Runtime compatibility metadata is available to the coordinator, and Shell checks first configure a versioned generic feed.
+- [x] Add `setFeedURL(options: { provider: "generic"; url: string })` to `ShellUpdaterPort` and require `DesktopShellUpdateAdapter.checkMetadata()` to derive the release base from the signed Desktop tag before `checkForUpdates()`.
+- [x] Require updater metadata name and returned version to match the Desktop channel. Keep Authenticode and downloaded-version validation unchanged.
+- [x] Change Runtime adapter input from `DesktopChannelRuntime` to `ProductChannelRuntime`, resolve the signed Product release tag, verify the raw manifest digest, then run existing manifest signature and compatibility checks.
+- [x] Add `getCurrentManifest()` to both native and WSL adapters so Shell-only compatibility is evaluated against installed Runtime metadata.
+- [x] Run focused Desktop tests and commit: `feat(desktop): pin update metadata to signed release tags`.
 
 ## Task 4: Merge independent feeds into one safe Desktop plan
 

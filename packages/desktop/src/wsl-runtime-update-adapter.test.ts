@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DesktopChannelRuntime } from "./desktop-channel.js";
+import type { ProductChannelRuntime } from "./product-channel.js";
 import type { WslDistroProbe } from "./wsl-discovery.js";
 import type { WslRuntimeUpdateMetadata } from "./wsl-installer.js";
 import { WslRuntimeUpdateAdapter } from "./wsl-runtime-update-adapter.js";
@@ -23,10 +23,11 @@ const probe: WslDistroProbe = {
 
 describe("WslRuntimeUpdateAdapter", () => {
   it("binds one discovered distribution and forwards explicit retry options", async () => {
-    const expected: DesktopChannelRuntime = {
+    const expected: ProductChannelRuntime = {
       version: "0.6.0",
       publishedAt: "2026-08-08T01:02:03.000Z",
       manifest: "runtime.manifest.json",
+      manifestSha256: "a".repeat(64),
     };
     const metadata = { version: "0.6.0", probe } as WslRuntimeUpdateMetadata;
     const installer = {
@@ -42,7 +43,7 @@ describe("WslRuntimeUpdateAdapter", () => {
       installer: installer as never,
       runtimeStore: runtimeStore as never,
     });
-    const checked = await adapter.checkMetadata(expected, "0.7.0");
+    const checked = await adapter.checkMetadata(expected, "0.7.0", "v0.6.0");
     const options = {
       signal: new AbortController().signal,
       onProgress: vi.fn(),
@@ -51,9 +52,10 @@ describe("WslRuntimeUpdateAdapter", () => {
 
     await adapter.downloadAndStage(checked, options);
 
-    expect(installer.checkRuntime).toHaveBeenCalledWith(probe, expected, "0.7.0");
+    expect(installer.checkRuntime).toHaveBeenCalledWith(probe, expected, "0.7.0", "v0.6.0");
     expect(installer.downloadAndStageRuntime).toHaveBeenCalledWith(metadata, options);
     await expect(adapter.getCurrentVersion()).resolves.toBe("0.5.0");
+    await expect(adapter.getCurrentManifest()).resolves.toEqual({ runtimeVersion: "0.5.0" });
     await expect(adapter.getPendingVersion()).resolves.toBe("0.6.0");
   });
 });

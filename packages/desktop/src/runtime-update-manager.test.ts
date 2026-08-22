@@ -1,4 +1,4 @@
-import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -79,12 +79,14 @@ async function writeRuntime(
 
 describe("ProductRuntimeUpdateManager", () => {
   it("reports the current Runtime version bound to its target environment", async () => {
+    const current = { manifest: { runtimeVersion: "0.5.6" } } as never;
     const manager = new ProductRuntimeUpdateManager({
       store: null as never,
-      getCurrentRuntime: () => ({ manifest: { runtimeVersion: "0.5.6" } }) as never,
+      getCurrentRuntime: () => current,
     });
 
     await expect(manager.getCurrentVersion()).resolves.toBe("0.5.6");
+    await expect(manager.getCurrentManifest()).resolves.toEqual({ runtimeVersion: "0.5.6" });
   });
 
   it("checks signed metadata without downloading or staging the package", async () => {
@@ -102,10 +104,12 @@ describe("ProductRuntimeUpdateManager", () => {
       nodeVersion: "24.19.0",
       publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
     });
-    const fetchMock = vi.fn<typeof fetch>(async () => Response.json(manifest));
+    const manifestBytes = Buffer.from(JSON.stringify(manifest));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(manifestBytes));
     const manager = new ProductRuntimeUpdateManager({
       store,
-      manifestUrl: "https://updates.example.test/channel.json",
+      productChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
       getCurrentRuntime: () => null as never,
       fetch: fetchMock,
     });
@@ -116,8 +120,10 @@ describe("ProductRuntimeUpdateManager", () => {
           version: "0.6.0",
           publishedAt: "2026-08-08T01:02:03.000Z",
           manifest: "runtime.manifest.json",
+          manifestSha256: createHash("sha256").update(manifestBytes).digest("hex"),
         },
-        "0.6.0"
+        "0.6.0",
+        "v0.6.0"
       )
     ).resolves.toMatchObject({
       componentId: `runtime:${process.platform}-${process.arch}`,
@@ -127,9 +133,45 @@ describe("ProductRuntimeUpdateManager", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "https://updates.example.test/runtime.manifest.json"
+      "https://github.com/spencerkit/coder-studio/releases/download/v0.6.0/runtime.manifest.json"
     );
     await expect(store.readPendingVersion()).resolves.toBeNull();
+  });
+
+  it("rejects Product manifest bytes that differ from the signed channel digest", async () => {
+    const root = await temporaryRoot();
+    const factoryRoot = resolve(root, "factory");
+    const updateRoot = resolve(root, "update");
+    await writeRuntime(factoryRoot, "0.5.6", undefined);
+    const keys = generateKeyPairSync("ed25519");
+    const manifest = await writeRuntime(updateRoot, "0.6.0", "runtime.tgz", keys.privateKey);
+    const store = new RuntimeStore({
+      root: resolve(root, "store"),
+      factoryRuntimeRoot: factoryRoot,
+      shellVersion: "0.5.6",
+      nodeVersion: "24.19.0",
+      publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    });
+    const manager = new ProductRuntimeUpdateManager({
+      store,
+      productChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
+      getCurrentRuntime: () => null as never,
+      fetch: vi.fn(async () => Response.json(manifest)),
+    });
+
+    await expect(
+      manager.checkMetadata(
+        {
+          version: "0.6.0",
+          publishedAt: "2026-08-08T01:02:03.000Z",
+          manifest: "runtime.manifest.json",
+          manifestSha256: "0".repeat(64),
+        },
+        "0.6.0",
+        "v0.6.0"
+      )
+    ).rejects.toThrow("digest does not match signed Product channel");
   });
 
   it("rejects legacy network manifests and signed channel source drift", async () => {

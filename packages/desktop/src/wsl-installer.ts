@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { relative, resolve } from "node:path";
 import { create, extract } from "tar";
-import type { DesktopChannelRuntime } from "./desktop-channel.js";
-import { resolveChannelAsset } from "./desktop-channel.js";
 import {
   type EngineManifest,
   parseEngineManifest,
   verifyEngineManifestSignature,
 } from "./engine-manifest.js";
+import type { ProductChannelRuntime } from "./product-channel.js";
+import { assertSafeReleaseAssetName, resolveVersionedReleaseAsset } from "./release-channel.js";
 import {
   API_PROTOCOL_VERSION,
   compareVersions,
@@ -49,6 +49,7 @@ export interface WslInstallerOptions {
   runtimeVersion: string;
   engineManifestUrl: (arch: "x64" | "arm64") => string;
   runtimeManifestUrl: (arch: "x64" | "arm64") => string;
+  productChannelUrl?: string;
   factoryEngineManifestUrl?: (arch: "x64" | "arm64") => string;
   factoryRuntimeManifestUrl?: (arch: "x64" | "arm64") => string;
   fetch?: typeof fetch;
@@ -334,10 +335,11 @@ export class WslInstaller {
 
   async checkRuntime(
     probe: WslDistroProbe,
-    expected: DesktopChannelRuntime,
-    plannedShellVersion: string
+    expected: ProductChannelRuntime,
+    plannedShellVersion: string,
+    releaseTag: string
   ): Promise<WslRuntimeUpdateMetadata> {
-    return this.loadMetadata(probe, plannedShellVersion, expected);
+    return this.loadMetadata(probe, plannedShellVersion, expected, releaseTag);
   }
 
   async downloadAndStageRuntime(
@@ -466,7 +468,8 @@ export class WslInstaller {
   private async loadMetadata(
     probe: WslDistroProbe,
     plannedShellVersion: string,
-    expected?: DesktopChannelRuntime
+    expected?: Omit<ProductChannelRuntime, "manifestSha256"> & { manifestSha256?: string },
+    releaseTag?: string
   ): Promise<WslRuntimeUpdateMetadata> {
     if (!probe.supported) throw new Error(probe.message ?? "Unsupported WSL distribution");
     if (!probe.target.distro) throw new Error("The WSL target has no distribution name");
@@ -483,9 +486,20 @@ export class WslInstaller {
       ? this.options.runtimeManifestUrl(probe.arch)
       : (this.options.factoryRuntimeManifestUrl?.(probe.arch) ??
         this.options.runtimeManifestUrl(probe.arch));
-    const runtimeManifestUrl = expected
-      ? resolveChannelAsset(configuredRuntimeManifestUrl, expected.manifest)
-      : configuredRuntimeManifestUrl;
+    if (expected) assertSafeReleaseAssetName(expected.manifest);
+    const usesProductChannel = Boolean(expected && this.options.productChannelUrl);
+    if (usesProductChannel && (!releaseTag || !expected?.manifestSha256)) {
+      throw new Error("Signed Product channel WSL Runtime identity is incomplete");
+    }
+    const runtimeManifestUrl = usesProductChannel
+      ? resolveVersionedReleaseAsset(
+          this.options.productChannelUrl as string,
+          releaseTag as string,
+          expected?.manifest as string
+        )
+      : expected
+        ? new URL(expected.manifest, configuredRuntimeManifestUrl).toString()
+        : configuredRuntimeManifestUrl;
     const [engineManifestResponse, runtimeManifestResponse] = await Promise.all([
       probe.engineInstalled
         ? Promise.resolve(null)
@@ -501,7 +515,14 @@ export class WslInstaller {
     const engineManifest = engineManifestResponse
       ? parseEngineManifest(await engineManifestResponse.json())
       : null;
-    const runtimeManifest = parseNetworkRuntimeManifest(await runtimeManifestResponse.json());
+    const runtimeManifestText = await runtimeManifestResponse.text();
+    if (
+      usesProductChannel &&
+      createHash("sha256").update(runtimeManifestText).digest("hex") !== expected?.manifestSha256
+    ) {
+      throw new Error("WSL Runtime manifest digest does not match signed Product channel");
+    }
+    const runtimeManifest = parseNetworkRuntimeManifest(JSON.parse(runtimeManifestText));
     if (
       engineManifest &&
       !verifyEngineManifestSignature(engineManifest, this.options.publicKeyPem)
@@ -516,7 +537,9 @@ export class WslInstaller {
       (runtimeManifest.runtimeVersion !== expected.version ||
         runtimeManifest.publishedAt !== expected.publishedAt)
     ) {
-      throw new Error("WSL Runtime manifest does not match signed Desktop channel");
+      throw new Error(
+        `WSL Runtime manifest does not match signed ${usesProductChannel ? "Product" : "Desktop"} channel`
+      );
     }
     if (
       engineManifest &&

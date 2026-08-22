@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { DesktopChannel } from "./desktop-channel.js";
+import { resolveVersionedReleaseAsset } from "./release-channel.js";
 import { compareVersions } from "./runtime-manifest.js";
 
 export interface ShellCancellationToken {
@@ -16,6 +17,7 @@ export interface ShellUpdaterPort {
   on(event: "download-progress", listener: (value: { percent?: number }) => void): unknown;
   on(event: "update-downloaded", listener: (value: { version?: string }) => void): unknown;
   on(event: "error", listener: (value: unknown) => void): unknown;
+  setFeedURL(options: { provider: "generic"; url: string }): void;
   checkForUpdates(): Promise<{ updateInfo: { version: string } } | null>;
   downloadUpdate(token?: ShellCancellationToken): Promise<string[]>;
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
@@ -39,6 +41,7 @@ export interface DesktopShellUpdateAdapterOptions {
   isPackaged: boolean;
   allowPrerelease?: boolean;
   updaterChannel?: string;
+  desktopChannelUrl?: string;
   createCancellationToken?: () => ShellCancellationToken;
   logLocations?: string[];
   manualInstallerUrl?: string | null;
@@ -99,7 +102,9 @@ export class DesktopShellUpdateAdapter {
     this.options.updater.autoInstallOnAppQuit = false;
     this.options.updater.disableDifferentialDownload = true;
     this.options.updater.disableWebInstaller = true;
-    this.options.updater.channel = this.options.updaterChannel ?? null;
+    this.options.updater.channel = this.options.desktopChannelUrl
+      ? null
+      : (this.options.updaterChannel ?? null);
     this.options.updater.allowPrerelease =
       this.options.allowPrerelease === true || this.options.currentVersion.includes("-");
     this.options.updater.on("download-progress", (progress: { percent?: number }) => {
@@ -148,8 +153,9 @@ export class DesktopShellUpdateAdapter {
     }, timeoutMs);
   }
 
-  async checkMetadata(expected: DesktopChannel["shell"]): Promise<ShellUpdateMetadata> {
+  async checkMetadata(channel: DesktopChannel): Promise<ShellUpdateMetadata> {
     this.start();
+    const expected = channel.shell;
     const versionOrder = compareVersions(expected.version, this.options.currentVersion);
     if (versionOrder < 0) {
       throw new Error("Signed Desktop channel Shell is older than the installed Shell");
@@ -165,6 +171,21 @@ export class DesktopShellUpdateAdapter {
     if (!this.options.isPackaged) {
       throw new Error("Desktop Shell updates require a packaged Desktop build");
     }
+    if (!this.options.desktopChannelUrl) {
+      throw new Error("No Desktop Shell update channel is configured");
+    }
+    if (expected.updaterMetadata !== "latest.yml") {
+      throw new Error("Signed Desktop channel updater metadata is unsupported");
+    }
+    const metadataUrl = resolveVersionedReleaseAsset(
+      this.options.desktopChannelUrl,
+      channel.releaseTag,
+      expected.updaterMetadata
+    );
+    this.options.updater.setFeedURL({
+      provider: "generic",
+      url: new URL(".", metadataUrl).toString(),
+    });
     const result = await this.options.updater.checkForUpdates();
     if (!result || result.updateInfo.version !== expected.version) {
       throw new Error("Desktop Shell updater does not match signed Desktop channel");

@@ -1,12 +1,13 @@
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { extract } from "tar";
-import type { DesktopChannelRuntime } from "./desktop-channel.js";
-import { resolveChannelAsset } from "./desktop-channel.js";
+import type { ProductChannelRuntime } from "./product-channel.js";
 import type { DesktopRuntimeUpdateState, DesktopRuntimeUpdateStatus } from "./protocol.js";
+import { assertSafeReleaseAssetName, resolveVersionedReleaseAsset } from "./release-channel.js";
 import {
   compareVersions,
   getRuntimeManifestSigningPayload,
@@ -25,6 +26,7 @@ export type RuntimeUpdateCheckResult =
 export interface RuntimeUpdateManagerOptions {
   store: RuntimeStore;
   manifestUrl?: string;
+  productChannelUrl?: string;
   getCurrentRuntime: () => ProductRuntime;
   onUpdateReady?: (runtime: ProductRuntime) => void;
   onError?: (error: Error) => void;
@@ -95,9 +97,11 @@ export interface RuntimeDownloadOptions {
 
 export interface RuntimeUpdateAdapter {
   getCurrentVersion(): Promise<string>;
+  getCurrentManifest(): Promise<RuntimeManifest>;
   checkMetadata(
-    expected: DesktopChannelRuntime,
-    plannedShellVersion: string
+    expected: ProductChannelRuntime,
+    plannedShellVersion: string,
+    releaseTag: string
   ): Promise<RuntimeUpdateMetadata>;
   downloadAndStage(
     metadata: RuntimeUpdateMetadata,
@@ -123,11 +127,15 @@ export class ProductRuntimeUpdateManager {
   private errorSummary: string | null = null;
 
   constructor(private readonly options: RuntimeUpdateManagerOptions) {
-    this.status = options.manifestUrl ? "idle" : "disabled";
+    this.status = options.manifestUrl || options.productChannelUrl ? "idle" : "disabled";
   }
 
   async getCurrentVersion(): Promise<string> {
     return this.options.getCurrentRuntime().manifest.runtimeVersion;
+  }
+
+  async getCurrentManifest(): Promise<RuntimeManifest> {
+    return this.options.getCurrentRuntime().manifest;
   }
 
   start(): void {
@@ -184,20 +192,36 @@ export class ProductRuntimeUpdateManager {
   }
 
   async checkMetadata(
-    expected: DesktopChannelRuntime,
-    plannedShellVersion: string
+    expected: Omit<ProductChannelRuntime, "manifestSha256"> & { manifestSha256?: string },
+    plannedShellVersion: string,
+    releaseTag?: string
   ): Promise<RuntimeUpdateMetadata> {
-    if (!this.options.manifestUrl) {
+    const sourceUrl = this.options.productChannelUrl ?? this.options.manifestUrl;
+    if (!sourceUrl) {
       throw new Error("No Product Runtime update channel is configured");
     }
-    const manifestUrl = resolveChannelAsset(this.options.manifestUrl, expected.manifest);
+    assertSafeReleaseAssetName(expected.manifest);
+    const isProductChannel = Boolean(this.options.productChannelUrl);
+    if (isProductChannel && (!releaseTag || !expected.manifestSha256)) {
+      throw new Error("Signed Product channel Runtime identity is incomplete");
+    }
+    const manifestUrl = isProductChannel
+      ? resolveVersionedReleaseAsset(sourceUrl, releaseTag as string, expected.manifest)
+      : new URL(expected.manifest, sourceUrl).toString();
     const manifestResponse = await (this.options.fetch ?? fetch)(manifestUrl, {
       cache: "no-store",
     });
     if (!manifestResponse.ok) {
       throw new Error(`Product Runtime update check failed with ${manifestResponse.status}`);
     }
-    const manifest = parseNetworkRuntimeManifest(await manifestResponse.json());
+    const manifestText = await manifestResponse.text();
+    if (
+      isProductChannel &&
+      createHash("sha256").update(manifestText).digest("hex") !== expected.manifestSha256
+    ) {
+      throw new Error("Product Runtime manifest digest does not match signed Product channel");
+    }
+    const manifest = parseNetworkRuntimeManifest(JSON.parse(manifestText));
     this.options.store.assertManifestCompatible(manifest, true, {
       shellVersion: plannedShellVersion,
     });
@@ -205,7 +229,9 @@ export class ProductRuntimeUpdateManager {
       manifest.runtimeVersion !== expected.version ||
       manifest.publishedAt !== expected.publishedAt
     ) {
-      throw new Error("Product Runtime manifest does not match signed Desktop channel");
+      throw new Error(
+        `Product Runtime manifest does not match signed ${isProductChannel ? "Product" : "Desktop"} channel`
+      );
     }
     return {
       componentId: componentIdForManifest(manifest),
@@ -305,17 +331,16 @@ export class ProductRuntimeUpdateManager {
   async getState(): Promise<DesktopRuntimeUpdateState> {
     const pendingVersion = await this.getPendingVersion();
     const pendingReady = Boolean(pendingVersion) && this.status !== "checking";
+    const supported = Boolean(this.options.manifestUrl || this.options.productChannelUrl);
     return {
-      supported: Boolean(this.options.manifestUrl),
+      supported,
       currentVersion: this.options.getCurrentRuntime().manifest.runtimeVersion,
       latestVersion: pendingVersion ?? this.latestVersion,
       pendingVersion,
       lastCheckedAt: this.lastCheckedAt,
       status: pendingReady ? "ready" : this.status,
       errorSummary: pendingReady ? null : this.errorSummary,
-      unsupportedReason: this.options.manifestUrl
-        ? null
-        : "No Product Runtime update channel is configured",
+      unsupportedReason: supported ? null : "No Product Runtime update channel is configured",
     };
   }
 
