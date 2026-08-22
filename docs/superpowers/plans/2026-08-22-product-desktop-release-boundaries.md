@@ -162,11 +162,11 @@ if (productResult.status === "rejected" && desktopResult.status === "rejected") 
 - Create: `scripts/release-promotion.test.ts`
 - Modify: `package.json`
 
-- [ ] Write failing tests for Product bundles (CLI version plus Windows/WSL Runtime equality), Desktop bundles (Shell/installer plus Windows/WSL Engine and immutable Factory Runtime provenance), and rejection of all carry-forward/release-kind flags.
-- [ ] Implement explicit `stage-product`, `validate-product`, `stage-desktop`, and `validate-desktop` commands. Product validation owns Runtime artifacts; Desktop validation owns Shell/Engine/installer and only verifies referenced Factory Runtime bytes.
-- [ ] Add pure idempotent promotion planners for Product and Desktop. Product order must be npm tag -> Product release -> Product pointer -> verification -> temporary-tag cleanup; Desktop order must be Desktop release -> Desktop pointer -> verification. Any immutable digest mismatch must stop.
-- [ ] Generate `promotion.json` with commit, candidate tag, accepted digests/run, previous/final pointer digests, and timestamp.
-- [ ] Run focused script tests and commit: `feat(release): validate and promote split release bundles`.
+- [x] Write failing tests for Product bundles (CLI version plus Windows/WSL Runtime equality), Desktop bundles (Shell/installer plus Windows/WSL Engine and immutable Factory Runtime provenance), and rejection of all carry-forward/release-kind flags.
+- [x] Implement explicit `stage-product`, `validate-product`, `stage-desktop`, and `validate-desktop` commands. Product validation owns Runtime artifacts; Desktop validation owns Shell/Engine/installer and only verifies referenced Factory Runtime bytes.
+- [x] Add pure idempotent promotion planners for Product and Desktop. Product order must be npm tag -> Product release -> Product pointer -> verification -> temporary-tag cleanup; Desktop order must be Desktop release -> Desktop pointer -> verification. Any immutable digest mismatch must stop.
+- [x] Generate `promotion.json` with commit, candidate tag, accepted digests/run, previous/final pointer digests, and timestamp.
+- [x] Run focused script tests and commit: `feat(release): validate and promote split release bundles`.
 
 ## Task 7: Add the Product release and reusable compatibility acceptance workflows
 
