@@ -1,0 +1,740 @@
+name: Publish Product
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/cli/package.json
+  workflow_dispatch:
+    inputs:
+      candidate_tag:
+        description: "Existing immutable Product candidate tag to resume"
+        required: false
+        default: ""
+        type: string
+      final_dist_tag:
+        description: "Final npm dist-tag advanced after acceptance"
+        required: true
+        default: "latest"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Resolve Product release identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      package_name: ${{ steps.release.outputs.package_name }}
+      version: ${{ steps.release.outputs.version }}
+      previous_version: ${{ steps.release.outputs.previous_version }}
+      candidate_tag: ${{ steps.release.outputs.candidate_tag }}
+      resume_candidate: ${{ steps.release.outputs.resume_candidate }}
+      temporary_dist_tag: ${{ steps.release.outputs.temporary_dist_tag }}
+      final_dist_tag: ${{ steps.release.outputs.final_dist_tag }}
+      published_at: ${{ steps.release.outputs.published_at }}
+      previous_product_channel_sha256: ${{ steps.stable.outputs.product_channel_sha256 }}
+      previous_product_tag: ${{ steps.stable.outputs.product_tag }}
+      desktop_tag: ${{ steps.stable.outputs.desktop_tag }}
+      desktop_channel_sha256: ${{ steps.stable.outputs.desktop_channel_sha256 }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require main and a release-ready tree
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Product publication must run from main" >&2
+            exit 1
+          fi
+          pending_changesets=$(find .changeset -maxdepth 1 -type f -name '*.md' ! -name 'README.md')
+          if [[ -n "${pending_changesets}" ]]; then
+            echo "Pending changesets exist. Merge the generated release PR first." >&2
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run release validation
+        run: pnpm ci:release:validate
+
+      - name: Resolve immutable Product identity
+        id: release
+        env:
+          REQUESTED_CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          REQUESTED_FINAL_DIST_TAG: ${{ inputs.final_dist_tag }}
+        run: |
+          package_name=$(node -p "require('./packages/cli/package.json').name")
+          version=$(node -p "require('./packages/cli/package.json').version")
+          expected_tag="v${version}"
+          candidate_tag="${REQUESTED_CANDIDATE_TAG:-${expected_tag}}"
+          final_dist_tag="${REQUESTED_FINAL_DIST_TAG:-latest}"
+          if [[ "${candidate_tag}" != "${expected_tag}" ]]; then
+            echo "Product candidate tag must be the final immutable identity ${expected_tag}" >&2
+            exit 1
+          fi
+          if [[ ! "${final_dist_tag}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+            echo "Final npm dist-tag is unsafe" >&2
+            exit 1
+          fi
+          previous_version=$(npm view "${package_name}@${final_dist_tag}" version --json 2>/dev/null | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { try { const v=JSON.parse(d); console.log(typeof v === 'string' ? v : '') } catch { console.log('') } })")
+          temporary_dist_tag="rc-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+          echo "package_name=${package_name}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "previous_version=${previous_version}" >> "${GITHUB_OUTPUT}"
+          echo "candidate_tag=${candidate_tag}" >> "${GITHUB_OUTPUT}"
+          resume_candidate=false
+          if [[ -n "${REQUESTED_CANDIDATE_TAG}" ]]; then
+            resume_candidate=true
+          fi
+          echo "resume_candidate=${resume_candidate}" >> "${GITHUB_OUTPUT}"
+          echo "temporary_dist_tag=${temporary_dist_tag}" >> "${GITHUB_OUTPUT}"
+          echo "final_dist_tag=${final_dist_tag}" >> "${GITHUB_OUTPUT}"
+          echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve current stable Product and Desktop identities
+        id: stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release/stable/product release/stable/desktop
+          previous_product_digest=""
+          previous_product_tag=""
+          if gh release download product-stable --pattern product-channel.json --dir release/stable/product 2>/dev/null; then
+            previous_product_digest=$(sha256sum release/stable/product/product-channel.json | cut -d ' ' -f 1)
+            previous_product_tag=$(node -p "require('./release/stable/product/product-channel.json').releaseTag")
+          fi
+          gh release download desktop-stable --pattern desktop-channel.json --dir release/stable/desktop
+          desktop_digest=$(sha256sum release/stable/desktop/desktop-channel.json | cut -d ' ' -f 1)
+          desktop_tag=$(node -p "require('./release/stable/desktop/desktop-channel.json').releaseTag")
+          echo "product_channel_sha256=${previous_product_digest}" >> "${GITHUB_OUTPUT}"
+          echo "product_tag=${previous_product_tag}" >> "${GITHUB_OUTPUT}"
+          echo "desktop_channel_sha256=${desktop_digest}" >> "${GITHUB_OUTPUT}"
+          echo "desktop_tag=${desktop_tag}" >> "${GITHUB_OUTPUT}"
+
+  windows-runtime:
+    name: Build signed Windows Product Runtime
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build or recover Windows Runtime bytes
+        shell: bash
+        run: |
+          if [[ "${{ needs.prepare.outputs.resume_candidate }}" == "true" ]]; then
+            mkdir -p release/product-windows
+            gh release download "${{ needs.prepare.outputs.candidate_tag }}" \
+              --pattern coder-studio-runtime-win32-x64.manifest.json \
+              --pattern 'coder-studio-runtime-*-win32-x64.tgz' \
+              --dir release/product-windows
+          else
+            if [[ -z "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" || -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+              echo "Production Runtime signing credentials are required" >&2
+              exit 1
+            fi
+            pnpm build:desktop-runtime
+            pnpm release:artifacts stage-product \
+              --directory release/product-windows \
+              --components win-runtime
+          fi
+
+      - name: Upload Windows Runtime candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-windows-${{ github.sha }}
+          path: release/product-windows/
+          if-no-files-found: error
+          retention-days: 14
+
+  wsl-runtime:
+    name: Build signed WSL Product Runtime
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build or recover WSL Runtime bytes
+        run: |
+          if [[ "${{ needs.prepare.outputs.resume_candidate }}" == "true" ]]; then
+            mkdir -p release/product-wsl
+            gh release download "${{ needs.prepare.outputs.candidate_tag }}" \
+              --pattern coder-studio-server-runtime-linux-x64.manifest.json \
+              --pattern 'coder-studio-server-runtime-*-linux-x64.tgz' \
+              --dir release/product-wsl
+          else
+            if [[ -z "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" || -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+              echo "Production Runtime signing credentials are required" >&2
+              exit 1
+            fi
+            pnpm build:wsl-runtime
+            pnpm release:artifacts stage-product \
+              --directory release/product-wsl \
+              --components wsl-runtime
+          fi
+
+      - name: Upload WSL Runtime candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-wsl-${{ github.sha }}
+          path: release/product-wsl/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-candidate:
+    name: Publish immutable Product candidate
+    needs:
+      - prepare
+      - windows-runtime
+      - wsl-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      candidate_tag: ${{ steps.identity.outputs.candidate_tag }}
+      product_channel_sha256: ${{ steps.identity.outputs.product_channel_sha256 }}
+      windows_manifest_sha256: ${{ steps.identity.outputs.windows_manifest_sha256 }}
+      linux_manifest_sha256: ${{ steps.identity.outputs.linux_manifest_sha256 }}
+      npm_integrity: ${{ steps.identity.outputs.npm_integrity }}
+      artifact_digests: ${{ steps.identity.outputs.artifact_digests }}
+      candidate_commit: ${{ steps.identity.outputs.candidate_commit }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download signed Runtime components
+        uses: actions/download-artifact@v4
+        with:
+          pattern: product-*-${{ github.sha }}
+          path: release/runtime
+          merge-multiple: true
+
+      - name: Assemble or recover immutable Product bundle
+        id: bundle
+        env:
+          CANDIDATE_TAG: ${{ needs.prepare.outputs.candidate_tag }}
+          PRODUCT_VERSION: ${{ needs.prepare.outputs.version }}
+          PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+        run: |
+          mkdir -p release/cli-candidate release/product-candidate release/product-signing
+          if [[ "${{ needs.prepare.outputs.resume_candidate }}" == "true" ]]; then
+            gh release download "${CANDIDATE_TAG}" --dir release/product-candidate
+          else
+            pack_json=$(pnpm --dir ./packages/cli pack --json --pack-destination "${PWD}/release/cli-candidate")
+            tarball=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d).filename))")
+            pnpm validate:cli-package -- \
+              --tarball "${tarball}" \
+              --source-package-json packages/cli/package.json
+            pnpm release:artifacts stage-product \
+              --directory release/product-candidate \
+              --components 'cli,win-runtime,wsl-runtime' \
+              --cli-tarball "${tarball}"
+            printf '%s' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" > release/product-signing/runtime-private.pem
+            pnpm release:channel product -- \
+              --directory release/product-candidate \
+              --release-tag "${CANDIDATE_TAG}" \
+              --generated-at "${PUBLISHED_AT}" \
+              --private-key release/product-signing/runtime-private.pem \
+              --product-version "${PRODUCT_VERSION}"
+          fi
+          pnpm release:artifacts validate-product \
+            --directory release/product-candidate \
+            --source-package-json packages/cli/package.json
+
+      - name: Publish or reuse temporary npm candidate
+        env:
+          PACKAGE_NAME: ${{ needs.prepare.outputs.package_name }}
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.version }}
+          ACCEPTANCE_DIST_TAG: ${{ needs.prepare.outputs.temporary_dist_tag }}
+        run: |
+          if [[ -z "${NODE_AUTH_TOKEN}" ]]; then
+            echo "NPM_TOKEN is required for Product publication" >&2
+            exit 1
+          fi
+          tarball=release/product-candidate/coder-studio-cli.tgz
+          packed_integrity=$(node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'))" "${tarball}")
+          registry_integrity=$(npm view "${PACKAGE_NAME}@${CANDIDATE_VERSION}" dist.integrity --json 2>/dev/null | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { try { const v=JSON.parse(d); console.log(typeof v === 'string' ? v : '') } catch { console.log('') } })")
+          if [[ -z "${registry_integrity}" ]]; then
+            pnpm publish "${tarball}" --access public --tag "${ACCEPTANCE_DIST_TAG}" --provenance
+          elif [[ "${registry_integrity}" != "${packed_integrity}" ]]; then
+            mkdir -p release/cli-registry
+            registry_pack_json=$(npm pack "${PACKAGE_NAME}@${CANDIDATE_VERSION}" --json --pack-destination release/cli-registry)
+            registry_filename=$(printf '%s' "${registry_pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { const v=JSON.parse(d); console.log((Array.isArray(v) ? v[0] : v).filename) })")
+            registry_tarball="release/cli-registry/$(basename "${registry_filename}")"
+            pnpm validate:cli-package -- \
+              --tarball "${tarball}" \
+              --compare-tarball "${registry_tarball}" \
+              --source-package-json packages/cli/package.json
+            registry_file_integrity=$(node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; console.log('sha512-' + createHash('sha512').update(readFileSync(process.argv[1])).digest('base64'))" "${registry_tarball}")
+            if [[ "${registry_file_integrity}" != "${registry_integrity}" ]]; then
+              echo "Downloaded npm Product integrity does not match the registry" >&2
+              exit 1
+            fi
+            cp "${registry_tarball}" "${tarball}"
+            npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${ACCEPTANCE_DIST_TAG}"
+          else
+            npm dist-tag add "${PACKAGE_NAME}@${CANDIDATE_VERSION}" "${ACCEPTANCE_DIST_TAG}"
+          fi
+
+      - name: Create or verify immutable Product prerelease
+        env:
+          CANDIDATE_TAG: ${{ needs.prepare.outputs.candidate_tag }}
+          PRODUCT_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if gh release view "${CANDIDATE_TAG}" >/dev/null 2>&1; then
+            mkdir -p release/existing-candidate
+            gh release download "${CANDIDATE_TAG}" --dir release/existing-candidate
+            EXPECTED_ROOT=release/product-candidate ACTUAL_ROOT=release/existing-candidate node --input-type=module <<'NODE'
+            import { createHash } from "node:crypto";
+            import { readdirSync, readFileSync } from "node:fs";
+            import { basename, join } from "node:path";
+            const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+            const names = (root) => readdirSync(root, { withFileTypes: true })
+              .filter((entry) => entry.isFile() && entry.name !== "promotion.json")
+              .map((entry) => entry.name)
+              .sort();
+            const expected = names(process.env.EXPECTED_ROOT);
+            const actual = names(process.env.ACTUAL_ROOT);
+            if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+              throw new Error("Immutable Product release asset set differs from the candidate bundle");
+            }
+            for (const name of expected) {
+              if (digest(join(process.env.EXPECTED_ROOT, basename(name))) !== digest(join(process.env.ACTUAL_ROOT, basename(name)))) {
+                throw new Error(`Immutable Product release asset differs: ${name}`);
+              }
+            }
+            NODE
+          else
+            gh release create "${CANDIDATE_TAG}" release/product-candidate/* \
+              --target "${GITHUB_SHA}" \
+              --title "Coder Studio Product ${PRODUCT_VERSION}" \
+              --generate-notes \
+              --prerelease --latest=false
+          fi
+
+      - name: Record accepted candidate identity
+        id: identity
+        env:
+          CANDIDATE_TAG: ${{ needs.prepare.outputs.candidate_tag }}
+        run: |
+          npm_integrity=$(npm view "${{ needs.prepare.outputs.package_name }}@${{ needs.prepare.outputs.version }}" dist.integrity --json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8'))")
+          candidate_commit=$(gh release view "${CANDIDATE_TAG}" --json targetCommitish --jq .targetCommitish)
+          if [[ ! "${candidate_commit}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            candidate_commit=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${candidate_commit}" --jq .sha)
+          fi
+          CANDIDATE_ROOT=release/product-candidate GITHUB_OUTPUT_FILE="${GITHUB_OUTPUT}" NPM_INTEGRITY="${npm_integrity}" CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_COMMIT="${candidate_commit}" node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { appendFileSync, readdirSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+          const digest = (name) => createHash("sha256").update(readFileSync(join(process.env.CANDIDATE_ROOT, name))).digest("hex");
+          const artifactDigests = Object.fromEntries(
+            readdirSync(process.env.CANDIDATE_ROOT, { withFileTypes: true })
+              .filter((entry) => entry.isFile() && entry.name !== "promotion.json")
+              .map((entry) => [entry.name, digest(entry.name)])
+              .sort(([left], [right]) => left.localeCompare(right))
+          );
+          appendFileSync(process.env.GITHUB_OUTPUT_FILE, [
+            `candidate_tag=${process.env.CANDIDATE_TAG}`,
+            `product_channel_sha256=${artifactDigests["product-channel.json"]}`,
+            `windows_manifest_sha256=${artifactDigests["coder-studio-runtime-win32-x64.manifest.json"]}`,
+            `linux_manifest_sha256=${artifactDigests["coder-studio-server-runtime-linux-x64.manifest.json"]}`,
+            `npm_integrity=${process.env.NPM_INTEGRITY}`,
+            `artifact_digests=${JSON.stringify(artifactDigests)}`,
+            `candidate_commit=${process.env.CANDIDATE_COMMIT}`,
+            "",
+          ].join("\n"));
+          NODE
+
+  accept-cli:
+    name: Accept installed CLI update
+    needs:
+      - prepare
+      - publish-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run immutable CLI candidate acceptance
+        run: |
+          pnpm acceptance:cli:update -- \
+            --package-name "${{ needs.prepare.outputs.package_name }}" \
+            --previous-version "${{ needs.prepare.outputs.previous_version }}" \
+            --candidate-version "${{ needs.prepare.outputs.version }}" \
+            --registry-url https://registry.npmjs.org/ \
+            --dist-tag "${{ needs.prepare.outputs.temporary_dist_tag }}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --report release/cli-update-acceptance/report.json
+
+      - name: Upload CLI acceptance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-cli-acceptance-${{ github.sha }}
+          path: release/cli-update-acceptance/report.json
+          if-no-files-found: error
+          retention-days: 30
+
+  accept-runtime:
+    name: Accept installed Product Runtime update (${{ matrix.target }})
+    needs:
+      - prepare
+      - publish-candidate
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [native, wsl]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare accepted stable-to-candidate Runtime fixture
+        shell: bash
+        env:
+          CANDIDATE_TAG: ${{ needs.publish-candidate.outputs.candidate_tag }}
+          CANDIDATE_VERSION: ${{ needs.prepare.outputs.version }}
+          PREVIOUS_PRODUCT_TAG: ${{ needs.prepare.outputs.previous_product_tag }}
+          PRODUCT_CHANNEL_SHA256: ${{ needs.publish-candidate.outputs.product_channel_sha256 }}
+          WINDOWS_MANIFEST_SHA256: ${{ needs.publish-candidate.outputs.windows_manifest_sha256 }}
+          LINUX_MANIFEST_SHA256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
+        run: |
+          if [[ -z "${PREVIOUS_PRODUCT_TAG}" ]]; then
+            echo "A stable Product Runtime is required for installed-update acceptance" >&2
+            exit 1
+          fi
+          mkdir -p release/wsl-acceptance/keys release/wsl-acceptance/desktop/resources/factory-runtime release/runtime-baseline release/runtime-candidate
+          gh release download "${CANDIDATE_TAG}" \
+            --pattern product-channel.json \
+            --pattern coder-studio-runtime-win32-x64.manifest.json \
+            --pattern coder-studio-server-runtime-linux-x64.manifest.json \
+            --dir release/runtime-candidate
+          printf '%s  %s\n' "${PRODUCT_CHANNEL_SHA256}" release/runtime-candidate/product-channel.json | sha256sum --check --strict
+          printf '%s  %s\n' "${WINDOWS_MANIFEST_SHA256}" release/runtime-candidate/coder-studio-runtime-win32-x64.manifest.json | sha256sum --check --strict
+          printf '%s  %s\n' "${LINUX_MANIFEST_SHA256}" release/runtime-candidate/coder-studio-server-runtime-linux-x64.manifest.json | sha256sum --check --strict
+          gh release download "${PREVIOUS_PRODUCT_TAG}" \
+            --pattern coder-studio-runtime-win32-x64.manifest.json \
+            --pattern 'coder-studio-runtime-*-win32-x64.tgz' \
+            --dir release/runtime-baseline
+          baseline_manifest=release/runtime-baseline/coder-studio-runtime-win32-x64.manifest.json
+          baseline_package=$(node -p "require('./${baseline_manifest}').packageFile")
+          baseline_version=$(node -p "require('./${baseline_manifest}').runtimeVersion")
+          tar -xzf "release/runtime-baseline/${baseline_package}" -C release/wsl-acceptance/desktop/resources/factory-runtime
+          printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" > release/wsl-acceptance/keys/runtime-public.pem
+          CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_VERSION="${CANDIDATE_VERSION}" BASELINE_VERSION="${baseline_version}" node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from "node:fs";
+          mkdirSync("release/wsl-acceptance", { recursive: true });
+          writeFileSync("release/wsl-acceptance/acceptance.json", `${JSON.stringify({
+            schemaVersion: 1,
+            runtimeVersion: process.env.CANDIDATE_VERSION,
+            factoryRuntimeVersion: process.env.BASELINE_VERSION,
+            downloadBaseUrl: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${process.env.CANDIDATE_TAG}/`,
+            desktopExecutable: "release/wsl-acceptance/desktop/Coder Studio.exe",
+          }, null, 2)}\n`);
+          NODE
+
+      - name: Run tag-pinned Runtime acceptance
+        env:
+          ACCEPTANCE_TARGET: ${{ matrix.target }}
+        run: pnpm acceptance:runtime:verify
+
+  compatibility:
+    name: Accept Product compatibility with stable Desktop
+    needs:
+      - prepare
+      - publish-candidate
+    uses: ./.github/workflows/compatibility-acceptance.yml
+    with:
+      product_tag: ${{ needs.publish-candidate.outputs.candidate_tag }}
+      product_channel_sha256: ${{ needs.publish-candidate.outputs.product_channel_sha256 }}
+      windows_manifest_sha256: ${{ needs.publish-candidate.outputs.windows_manifest_sha256 }}
+      linux_manifest_sha256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
+      desktop_tag: ${{ needs.prepare.outputs.desktop_tag }}
+      desktop_channel_sha256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
+
+  promote:
+    name: Promote accepted Product
+    needs:
+      - prepare
+      - publish-candidate
+      - accept-cli
+      - accept-runtime
+      - compatibility
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      PACKAGE_NAME: ${{ needs.prepare.outputs.package_name }}
+      PRODUCT_VERSION: ${{ needs.prepare.outputs.version }}
+      CANDIDATE_TAG: ${{ needs.publish-candidate.outputs.candidate_tag }}
+      FINAL_DIST_TAG: ${{ needs.prepare.outputs.final_dist_tag }}
+      ACCEPTANCE_DIST_TAG: ${{ needs.prepare.outputs.temporary_dist_tag }}
+      PRODUCT_CHANNEL_SHA256: ${{ needs.publish-candidate.outputs.product_channel_sha256 }}
+      WINDOWS_MANIFEST_SHA256: ${{ needs.publish-candidate.outputs.windows_manifest_sha256 }}
+      LINUX_MANIFEST_SHA256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
+      NPM_INTEGRITY: ${{ needs.publish-candidate.outputs.npm_integrity }}
+      ARTIFACT_DIGESTS: ${{ needs.publish-candidate.outputs.artifact_digests }}
+      PREVIOUS_POINTER_DIGEST: ${{ needs.prepare.outputs.previous_product_channel_sha256 }}
+      CANDIDATE_COMMIT: ${{ needs.publish-candidate.outputs.candidate_commit }}
+    steps:
+      - name: Setup Node.js for npm promotion
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify accepted immutable Product bytes
+        run: |
+          mkdir -p release/product-promotion/candidate
+          gh release download "${CANDIDATE_TAG}" --dir release/product-promotion/candidate
+          ACTUAL_ROOT=release/product-promotion/candidate EXPECTED_DIGESTS="${ARTIFACT_DIGESTS}" node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readdirSync, readFileSync } from "node:fs";
+          import { join } from "node:path";
+          const expected = JSON.parse(process.env.EXPECTED_DIGESTS);
+          const actualNames = readdirSync(process.env.ACTUAL_ROOT, { withFileTypes: true })
+            .filter((entry) => entry.isFile() && entry.name !== "promotion.json")
+            .map((entry) => entry.name)
+            .sort();
+          if (JSON.stringify(actualNames) !== JSON.stringify(Object.keys(expected).sort())) {
+            throw new Error("Immutable Product digest mismatch: release asset set");
+          }
+          for (const [name, digest] of Object.entries(expected)) {
+            const actual = createHash("sha256").update(readFileSync(join(process.env.ACTUAL_ROOT, name))).digest("hex");
+            if (actual !== digest) throw new Error(`Immutable Product digest mismatch: ${name}`);
+          }
+          NODE
+          registry_integrity=$(npm view "${PACKAGE_NAME}@${PRODUCT_VERSION}" dist.integrity --json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8'))")
+          if [[ "${registry_integrity}" != "${NPM_INTEGRITY}" ]]; then
+            echo "Immutable Product digest mismatch: npm integrity" >&2
+            exit 1
+          fi
+
+      - name: Advance final npm dist-tag
+        run: npm dist-tag add "${PACKAGE_NAME}@${PRODUCT_VERSION}" "${FINAL_DIST_TAG}"
+
+      - name: Promote Product versioned release
+        run: gh release edit "${CANDIDATE_TAG}" --prerelease=false --latest=false
+
+      - name: Advance signed Product stable pointer
+        run: |
+          pointer=release/product-promotion/candidate/product-channel.json
+          final_digest=$(sha256sum "${pointer}" | cut -d ' ' -f 1)
+          if [[ "${final_digest}" != "${PRODUCT_CHANNEL_SHA256}" ]]; then
+            echo "Immutable Product digest mismatch: product-channel.json" >&2
+            exit 1
+          fi
+          mkdir -p release/product-promotion/previous
+          current_digest=""
+          if gh release download product-stable --pattern product-channel.json --dir release/product-promotion/previous 2>/dev/null; then
+            current_digest=$(sha256sum release/product-promotion/previous/product-channel.json | cut -d ' ' -f 1)
+          fi
+          if [[ "${current_digest}" != "${PREVIOUS_POINTER_DIGEST}" && "${current_digest}" != "${final_digest}" ]]; then
+            echo "Product stable pointer changed after acceptance" >&2
+            exit 1
+          fi
+          if gh release view product-stable >/dev/null 2>&1; then
+            gh release upload product-stable "${pointer}" --clobber
+          else
+            gh release create product-stable "${pointer}" \
+              --target "${GITHUB_SHA}" \
+              --title "Coder Studio Product stable channel" \
+              --notes "Signed mutable Product channel pointer." \
+              --latest=false
+          fi
+
+      - name: Verify promoted Product
+        run: |
+          selected_version=$(npm view "${PACKAGE_NAME}@${FINAL_DIST_TAG}" version --json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8'))")
+          if [[ "${selected_version}" != "${PRODUCT_VERSION}" ]]; then
+            echo "Final npm dist-tag does not resolve to the accepted Product" >&2
+            exit 1
+          fi
+          mkdir -p release/product-promotion/final
+          gh release download product-stable --pattern product-channel.json --dir release/product-promotion/final
+          final_digest=$(sha256sum release/product-promotion/final/product-channel.json | cut -d ' ' -f 1)
+          final_version=$(node -p "require('./release/product-promotion/final/product-channel.json').version")
+          if [[ "${final_digest}" != "${PRODUCT_CHANNEL_SHA256}" || "${final_version}" != "${PRODUCT_VERSION}" ]]; then
+            echo "Promoted Product stable pointer verification failed" >&2
+            exit 1
+          fi
+
+      - name: Remove temporary npm dist-tag
+        run: npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"
+
+      - name: Record Product promotion
+        run: |
+          mkdir -p release/product-promotion/record release/product-promotion/existing-record
+          if gh release download "${CANDIDATE_TAG}" --pattern promotion.json --dir release/product-promotion/existing-record 2>/dev/null; then
+            EXISTING_RECORD=release/product-promotion/existing-record/promotion.json PRODUCT_VERSION="${PRODUCT_VERSION}" CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_COMMIT="${CANDIDATE_COMMIT}" ARTIFACT_DIGESTS="${ARTIFACT_DIGESTS}" FINAL_POINTER_DIGEST="${PRODUCT_CHANNEL_SHA256}" node --input-type=module <<'NODE'
+            import { copyFileSync, readFileSync } from "node:fs";
+            const existing = JSON.parse(readFileSync(process.env.EXISTING_RECORD, "utf8"));
+            const matches = existing.schemaVersion === 1
+              && existing.channel === "product"
+              && existing.version === process.env.PRODUCT_VERSION
+              && existing.commit === process.env.CANDIDATE_COMMIT
+              && existing.candidateTag === process.env.CANDIDATE_TAG
+              && JSON.stringify(existing.artifactDigests) === process.env.ARTIFACT_DIGESTS
+              && existing.finalPointerDigest === process.env.FINAL_POINTER_DIGEST;
+            if (!matches) throw new Error("Existing Product promotion record differs from accepted identity");
+            copyFileSync(process.env.EXISTING_RECORD, "release/product-promotion/record/promotion.json");
+            NODE
+            echo "Existing Product promotion record matches the accepted immutable identity"
+          else
+            PRODUCT_VERSION="${PRODUCT_VERSION}" CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_COMMIT="${CANDIDATE_COMMIT}" ARTIFACT_DIGESTS="${ARTIFACT_DIGESTS}" PREVIOUS_POINTER_DIGEST="${PREVIOUS_POINTER_DIGEST}" FINAL_POINTER_DIGEST="${PRODUCT_CHANNEL_SHA256}" node --input-type=module <<'NODE'
+            import { writeFileSync } from "node:fs";
+            const promotion = {
+              schemaVersion: 1,
+              channel: "product",
+              version: process.env.PRODUCT_VERSION,
+              commit: process.env.CANDIDATE_COMMIT,
+              candidateTag: process.env.CANDIDATE_TAG,
+              artifactDigests: JSON.parse(process.env.ARTIFACT_DIGESTS),
+              acceptanceRun: {
+                workflow: "product-release",
+                runId: process.env.GITHUB_RUN_ID,
+                attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+              },
+              previousPointerDigest: process.env.PREVIOUS_POINTER_DIGEST || null,
+              finalPointerDigest: process.env.FINAL_POINTER_DIGEST,
+              promotedAt: new Date().toISOString(),
+            };
+            writeFileSync("release/product-promotion/record/promotion.json", `${JSON.stringify(promotion, null, 2)}\n`);
+            NODE
+            gh release upload "${CANDIDATE_TAG}" release/product-promotion/record/promotion.json
+          fi
+
+      - name: Retain Product promotion record
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-promotion-${{ github.sha }}
+          path: release/product-promotion/record/promotion.json
+          if-no-files-found: error
+          retention-days: 90
