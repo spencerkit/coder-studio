@@ -1,0 +1,709 @@
+name: Promote one-time Product and Desktop bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      bridge_candidate_tag:
+        description: "Existing immutable bridge candidate tag"
+        required: true
+        type: string
+      confirm_latest:
+        description: "Type PROMOTE_BRIDGE_TO_LATEST to confirm the one-time migration"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: product-desktop-migration-bridge
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate immutable bridge candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      bridge_candidate_tag: ${{ steps.identity.outputs.bridge_candidate_tag }}
+      previous_latest_tag: ${{ steps.identity.outputs.previous_latest_tag }}
+      already_promoted: ${{ steps.identity.outputs.already_promoted }}
+      product_tag: ${{ steps.identity.outputs.product_tag }}
+      product_version: ${{ steps.identity.outputs.product_version }}
+      product_channel_sha256: ${{ steps.identity.outputs.product_channel_sha256 }}
+      desktop_version: ${{ steps.identity.outputs.desktop_version }}
+      desktop_channel_sha256: ${{ steps.identity.outputs.desktop_channel_sha256 }}
+      legacy_channel_sha256: ${{ steps.identity.outputs.legacy_channel_sha256 }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      BRIDGE_CANDIDATE_TAG: ${{ inputs.bridge_candidate_tag }}
+      CONFIRM_LATEST: ${{ inputs.confirm_latest }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require the explicit one-time confirmation
+        run: |
+          if [[ "${CONFIRM_LATEST}" != "PROMOTE_BRIDGE_TO_LATEST" ]]; then
+            echo "Bridge promotion requires PROMOTE_BRIDGE_TO_LATEST" >&2
+            exit 1
+          fi
+          if [[ -z "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            echo "bridge_candidate_tag is required" >&2
+            exit 1
+          fi
+          case "${BRIDGE_CANDIDATE_TAG}" in
+            product-stable|desktop-stable)
+              echo "A stable pointer tag cannot be used as a bridge candidate" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Download existing immutable bridge candidate
+        run: |
+          candidate_json=$(gh release view "${BRIDGE_CANDIDATE_TAG}" \
+            --json tagName,isDraft,isPrerelease)
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          CANDIDATE_JSON="${candidate_json}" LATEST_TAG="${latest_tag}" node --input-type=module <<'NODE'
+          const candidate = JSON.parse(process.env.CANDIDATE_JSON);
+          if (candidate.tagName !== process.env.BRIDGE_CANDIDATE_TAG) {
+            throw new Error("Bridge candidate lookup returned a different tag");
+          }
+          if (candidate.isDraft) {
+            throw new Error("Bridge candidate must be a published immutable release");
+          }
+          if (!candidate.isPrerelease && candidate.tagName !== process.env.LATEST_TAG) {
+            throw new Error(
+              "A normal bridge release is recoverable only when it is repository-wide latest"
+            );
+          }
+          NODE
+          mkdir -p release/bridge/source
+          gh release download "${BRIDGE_CANDIDATE_TAG}" --dir release/bridge/source
+
+      - name: Stage Product and Desktop validation roots
+        run: |
+          source=release/bridge/source
+          product=release/bridge/product
+          desktop=release/bridge/desktop
+          mkdir -p "${product}" "${desktop}" release/bridge/product-source
+
+          cp "${source}/product-channel.json" "${product}/product-channel.json"
+          cp "${source}/coder-studio-cli.tgz" "${product}/coder-studio-cli.tgz"
+          cp "${source}/coder-studio-runtime-win32-x64.manifest.json" "${product}/"
+          cp "${source}/coder-studio-server-runtime-linux-x64.manifest.json" "${product}/"
+          cp "${source}"/coder-studio-runtime-*-win32-x64.tgz "${product}/"
+          cp "${source}"/coder-studio-server-runtime-*-linux-x64.tgz "${product}/"
+          tar -xOf "${product}/coder-studio-cli.tgz" package/package.json \
+            > release/bridge/product-source/package.json
+
+          cp "${source}/desktop-channel-modern.json" "${desktop}/desktop-channel.json"
+          cp "${source}/latest.yml" "${desktop}/latest.yml"
+          cp "${source}/build-info.json" "${desktop}/build-info.json"
+          cp "${source}/factory-product.json" "${desktop}/factory-product.json"
+          cp "${source}"/Coder-Studio-Setup-*.exe "${desktop}/"
+          cp "${source}"/Coder-Studio-Setup-*.exe.blockmap "${desktop}/"
+          cp "${source}/coder-studio-engine-linux-x64.manifest.json" "${desktop}/"
+          cp "${source}"/coder-studio-engine-*-linux-x64.tgz "${desktop}/"
+          tar -xzf "${source}/desktop-validation-evidence.tgz" -C "${desktop}"
+
+      - name: Validate Product and Desktop bundles
+        run: |
+          pnpm release:artifacts validate-product \
+            --directory release/bridge/product \
+            --source-package-json release/bridge/product-source/package.json
+          pnpm release:artifacts validate-desktop \
+            --directory release/bridge/desktop
+
+      - name: Verify Product bytes at their signed immutable tag
+        run: |
+          product_tag=$(node -p "require('./release/bridge/product/product-channel.json').releaseTag")
+          mkdir -p release/bridge/versioned-product
+          gh release download "${product_tag}" --dir release/bridge/versioned-product
+          product_files=(
+            product-channel.json
+            coder-studio-cli.tgz
+            coder-studio-runtime-win32-x64.manifest.json
+            coder-studio-server-runtime-linux-x64.manifest.json
+          )
+          windows_package=$(node -p "require('./release/bridge/product/coder-studio-runtime-win32-x64.manifest.json').packageFile")
+          linux_package=$(node -p "require('./release/bridge/product/coder-studio-server-runtime-linux-x64.manifest.json').packageFile")
+          product_files+=("${windows_package}" "${linux_package}")
+          for file in "${product_files[@]}"; do
+            if ! cmp --silent "release/bridge/product/${file}" "release/bridge/versioned-product/${file}"; then
+              echo "Immutable Product byte mismatch at ${product_tag}: ${file}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Record accepted bridge identities
+        id: identity
+        run: |
+          previous_latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          already_promoted=false
+          if [[ "${previous_latest_tag}" == "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            already_promoted=true
+          fi
+          product_tag=$(node -p "require('./release/bridge/product/product-channel.json').releaseTag")
+          product_version=$(node -p "require('./release/bridge/product/product-channel.json').version")
+          desktop_tag=$(node -p "require('./release/bridge/desktop/desktop-channel.json').releaseTag")
+          desktop_version=$(node -p "require('./release/bridge/desktop/desktop-channel.json').version")
+          if [[ "${desktop_tag}" != "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            echo "Modern Desktop channel must resolve assets from the immutable bridge candidate" >&2
+            exit 1
+          fi
+          BRIDGE_CANDIDATE_TAG="${BRIDGE_CANDIDATE_TAG}" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const legacy = JSON.parse(readFileSync("release/bridge/source/desktop-channel.json", "utf8"));
+          const modern = JSON.parse(readFileSync("release/bridge/source/desktop-channel-modern.json", "utf8"));
+          if (!legacy.shell || !legacy.runtimes?.["win32-x64"] || !legacy.runtimes?.["linux-x64"]) {
+            throw new Error("Bridge desktop-channel.json must retain the legacy unified schema");
+          }
+          if (modern.channel !== "desktop" || modern.releaseTag !== process.env.BRIDGE_CANDIDATE_TAG) {
+            throw new Error("desktop-channel-modern.json must use the split Desktop contract");
+          }
+          NODE
+          echo "bridge_candidate_tag=${BRIDGE_CANDIDATE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "previous_latest_tag=${previous_latest_tag}" >> "${GITHUB_OUTPUT}"
+          echo "already_promoted=${already_promoted}" >> "${GITHUB_OUTPUT}"
+          echo "product_tag=${product_tag}" >> "${GITHUB_OUTPUT}"
+          echo "product_version=${product_version}" >> "${GITHUB_OUTPUT}"
+          echo "product_channel_sha256=$(sha256sum release/bridge/source/product-channel.json | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
+          echo "desktop_version=${desktop_version}" >> "${GITHUB_OUTPUT}"
+          echo "desktop_channel_sha256=$(sha256sum release/bridge/source/desktop-channel-modern.json | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
+          echo "legacy_channel_sha256=$(sha256sum release/bridge/source/desktop-channel.json | cut -d ' ' -f 1)" >> "${GITHUB_OUTPUT}"
+
+  bootstrap-product:
+    name: Bootstrap signed Product stable pointer
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
+      PRODUCT_TAG: ${{ needs.prepare.outputs.product_tag }}
+      PRODUCT_CHANNEL_SHA256: ${{ needs.prepare.outputs.product_channel_sha256 }}
+    steps:
+      - name: Download accepted Product pointer
+        run: |
+          mkdir -p release/bridge-product-pointer
+          gh release download "${BRIDGE_CANDIDATE_TAG}" \
+            --pattern product-channel.json \
+            --dir release/bridge-product-pointer
+          actual=$(sha256sum release/bridge-product-pointer/product-channel.json | cut -d ' ' -f 1)
+          if [[ "${actual}" != "${PRODUCT_CHANNEL_SHA256}" ]]; then
+            echo "Immutable Product pointer digest mismatch" >&2
+            exit 1
+          fi
+          declared_tag=$(node -p "require('./release/bridge-product-pointer/product-channel.json').releaseTag")
+          if [[ "${declared_tag}" != "${PRODUCT_TAG}" ]]; then
+            echo "Product pointer release tag changed after acceptance" >&2
+            exit 1
+          fi
+
+      - name: Create or verify Product stable pointer
+        run: |
+          pointer=release/bridge-product-pointer/product-channel.json
+          if gh release view product-stable >/dev/null 2>&1; then
+            mkdir -p release/existing-product-pointer
+            if gh release download product-stable \
+              --pattern product-channel.json \
+              --dir release/existing-product-pointer 2>/dev/null; then
+              existing=$(sha256sum release/existing-product-pointer/product-channel.json | cut -d ' ' -f 1)
+              if [[ "${existing}" != "${PRODUCT_CHANNEL_SHA256}" ]]; then
+                echo "Immutable Product pointer digest mismatch" >&2
+                exit 1
+              fi
+            else
+              gh release upload product-stable "${pointer}"
+            fi
+          else
+            gh release create product-stable "${pointer}" \
+              --target "${GITHUB_SHA}" \
+              --title "Coder Studio Product stable channel" \
+              --notes "Signed stable Product pointer bootstrapped by the one-time Desktop bridge." \
+              --latest=false
+          fi
+
+  accept-legacy-upgrade:
+    name: Accept legacy installed bridge (${{ matrix.target }})
+    needs:
+      - prepare
+      - bootstrap-product
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [native, wsl]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download repository-wide latest and immutable bridge assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release/bridge-legacy/previous | Out-Null
+          New-Item -ItemType Directory -Force -Path release/bridge-legacy/candidate | Out-Null
+          $latestTag = gh api "repos/${env:GITHUB_REPOSITORY}/releases/latest" --jq .tag_name
+          if ($LASTEXITCODE -ne 0 -or $latestTag -ne '${{ needs.prepare.outputs.previous_latest_tag }}') {
+            throw 'Repository-wide latest changed during bridge acceptance'
+          }
+          gh release download $latestTag `
+            --pattern desktop-channel.json `
+            --pattern latest.yml `
+            --pattern 'Coder-Studio-Setup-*.exe' `
+            --dir release/bridge-legacy/previous
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the supported legacy Desktop' }
+          gh release download '${{ inputs.bridge_candidate_tag }}' `
+            --pattern desktop-channel.json `
+            --pattern latest.yml `
+            --pattern 'Coder-Studio-Setup-*.exe' `
+            --dir release/bridge-legacy/candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the immutable bridge candidate' }
+
+      - name: Resolve legacy acceptance identity
+        id: identity
+        shell: pwsh
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw 'Desktop Runtime public key is required for bridge acceptance'
+          }
+          New-Item -ItemType Directory -Force -Path release/bridge-legacy/key | Out-Null
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content release/bridge-legacy/key/runtime-public.pem -NoNewline
+          $previousRoot = 'release/bridge-legacy/previous'
+          $candidateRoot = 'release/bridge-legacy/candidate'
+          $previous = Get-Content "$previousRoot/desktop-channel.json" -Raw | ConvertFrom-Json
+          $candidate = Get-Content "$candidateRoot/desktop-channel.json" -Raw | ConvertFrom-Json
+          $previousMetadata = Get-Content "$previousRoot/latest.yml" -Raw
+          $candidateMetadata = Get-Content "$candidateRoot/latest.yml" -Raw
+          $previousInstaller = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $candidateInstaller = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $frozenScenario = if ('${{ matrix.target }}' -eq 'wsl') { 'legacy-wsl-current' } else { 'legacy-current' }
+          $alreadyPromoted = '${{ needs.prepare.outputs.already_promoted }}' -eq 'true'
+          $scenario = if ($alreadyPromoted) {
+            $frozenScenario
+          } elseif ('${{ matrix.target }}' -eq 'wsl') {
+            'wsl-combined'
+          } else {
+            'combined'
+          }
+          $components = if ($alreadyPromoted) { '' } else { 'shell,runtime:win32-x64' }
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$candidate.signature.value)
+          $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
+          "previous_installer=$previousRoot/$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate_installer=$candidateRoot/$candidateInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_shell=$($previous.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$($previous.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_shell=$($candidate.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_runtime=$($candidate.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "scenario=$scenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "frozen_scenario=$frozenScenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify accepted legacy channel digest
+        shell: bash
+        run: |
+          actual=$(sha256sum release/bridge-legacy/candidate/desktop-channel.json | cut -d ' ' -f 1)
+          if [[ "${actual}" != "${{ needs.prepare.outputs.legacy_channel_sha256 }}" ]]; then
+            echo "Immutable legacy bridge channel digest mismatch" >&2
+            exit 1
+          fi
+
+      - name: Prepare disposable WSL distribution
+        if: matrix.target == 'wsl'
+        id: wsl
+        shell: pwsh
+        run: |
+          $distro = "coder-studio-acceptance-bridge-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          wsl.exe --install -d Ubuntu --no-launch
+          wsl.exe -d Ubuntu -u root -- true
+          wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
+          wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable bridge WSL distribution' }
+          wsl.exe -d $distro -u root -- sh -lc "useradd --create-home --shell /bin/bash coderstudio && printf '[boot]\nsystemd=false\n[user]\ndefault=coderstudio\n' > /etc/wsl.conf"
+          wsl.exe --terminate $distro
+          "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run legacy installed upgrade to the bridge
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.previous_installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ inputs.bridge_candidate_tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ inputs.bridge_candidate_tag }}/desktop-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.previous_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-PublicKeyPath', 'release/bridge-legacy/key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.scenario }}',
+            '-ReportPath', 'release/bridge-legacy-report/${{ matrix.target }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ steps.identity.outputs.components }}') {
+            $arguments += @('-ExpectedComponents', '${{ steps.identity.outputs.components }}')
+          }
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy installed bridge upgrade failed' }
+
+      - name: Verify the bridge leaves the legacy channel frozen
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ inputs.bridge_candidate_tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ inputs.bridge_candidate_tag }}/desktop-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-PublicKeyPath', 'release/bridge-legacy/key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.frozen_scenario }}',
+            '-ReportPath', 'release/bridge-legacy-report/${{ matrix.target }}-frozen.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen legacy bridge verification failed' }
+
+      - name: Upload legacy bridge acceptance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-legacy-${{ matrix.target }}-${{ github.sha }}
+          path: release/bridge-legacy-report/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Clean up disposable WSL distribution
+        if: always() && matrix.target == 'wsl'
+        shell: pwsh
+        run: |
+          $distro = '${{ steps.wsl.outputs.name }}'
+          if ($distro) { wsl.exe --unregister $distro 2>$null }
+
+  bootstrap-desktop:
+    name: Bootstrap signed Desktop stable pointer
+    needs:
+      - prepare
+      - accept-legacy-upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
+      DESKTOP_CHANNEL_SHA256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
+    steps:
+      - name: Download accepted modern Desktop pointer
+        run: |
+          mkdir -p release/bridge-desktop-pointer
+          gh release download "${BRIDGE_CANDIDATE_TAG}" \
+            --pattern desktop-channel-modern.json \
+            --dir release/bridge-desktop-pointer
+          actual=$(sha256sum release/bridge-desktop-pointer/desktop-channel-modern.json | cut -d ' ' -f 1)
+          if [[ "${actual}" != "${DESKTOP_CHANNEL_SHA256}" ]]; then
+            echo "Immutable Desktop pointer digest mismatch" >&2
+            exit 1
+          fi
+          cp release/bridge-desktop-pointer/desktop-channel-modern.json \
+            release/bridge-desktop-pointer/desktop-channel.json
+
+      - name: Create or verify Desktop stable pointer
+        run: |
+          pointer=release/bridge-desktop-pointer/desktop-channel.json
+          if gh release view desktop-stable >/dev/null 2>&1; then
+            mkdir -p release/existing-desktop-pointer
+            if gh release download desktop-stable \
+              --pattern desktop-channel.json \
+              --dir release/existing-desktop-pointer 2>/dev/null; then
+              existing=$(sha256sum release/existing-desktop-pointer/desktop-channel.json | cut -d ' ' -f 1)
+              if [[ "${existing}" != "${DESKTOP_CHANNEL_SHA256}" ]]; then
+                echo "Immutable Desktop pointer digest mismatch" >&2
+                exit 1
+              fi
+            else
+              gh release upload desktop-stable "${pointer}"
+            fi
+          else
+            gh release create desktop-stable "${pointer}" \
+              --target "${GITHUB_SHA}" \
+              --title "Coder Studio Desktop stable channel" \
+              --notes "Signed stable Desktop pointer bootstrapped by the one-time migration bridge." \
+              --latest=false
+          fi
+
+  verify-stable-feeds:
+    name: Verify bootstrapped signed stable feeds
+    needs:
+      - prepare
+      - bootstrap-product
+      - bootstrap-desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
+      PRODUCT_TAG: ${{ needs.prepare.outputs.product_tag }}
+      PRODUCT_CHANNEL_SHA256: ${{ needs.prepare.outputs.product_channel_sha256 }}
+      DESKTOP_CHANNEL_SHA256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
+    steps:
+      - name: Download stable and accepted channel bytes
+        run: |
+          mkdir -p release/stable-verification/product \
+            release/stable-verification/desktop \
+            release/stable-verification/accepted
+          gh release download product-stable \
+            --pattern product-channel.json \
+            --dir release/stable-verification/product
+          gh release download desktop-stable \
+            --pattern desktop-channel.json \
+            --dir release/stable-verification/desktop
+          gh release download "${BRIDGE_CANDIDATE_TAG}" \
+            --pattern product-channel.json \
+            --pattern desktop-channel-modern.json \
+            --dir release/stable-verification/accepted
+
+      - name: Verify exact stable pointer bytes and signed release tags
+        run: |
+          printf '%s  %s\n' "${PRODUCT_CHANNEL_SHA256}" \
+            release/stable-verification/product/product-channel.json | sha256sum --check --strict
+          printf '%s  %s\n' "${DESKTOP_CHANNEL_SHA256}" \
+            release/stable-verification/desktop/desktop-channel.json | sha256sum --check --strict
+          cmp release/stable-verification/product/product-channel.json \
+            release/stable-verification/accepted/product-channel.json
+          cmp release/stable-verification/desktop/desktop-channel.json \
+            release/stable-verification/accepted/desktop-channel-modern.json
+          resolved_product_tag=$(node -p "require('./release/stable-verification/product/product-channel.json').releaseTag")
+          resolved_desktop_tag=$(node -p "require('./release/stable-verification/desktop/desktop-channel.json').releaseTag")
+          if [[ "${resolved_product_tag}" != "${PRODUCT_TAG}" ]]; then
+            echo "product-stable resolves to a different immutable Product release" >&2
+            exit 1
+          fi
+          if [[ "${resolved_desktop_tag}" != "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            echo "desktop-stable resolves to a different immutable Desktop release" >&2
+            exit 1
+          fi
+
+  accept-independent-feeds:
+    name: Accept independent stable feeds (${{ matrix.target }})
+    needs:
+      - prepare
+      - verify-stable-feeds
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [native, wsl]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CODER_STUDIO_PRODUCT_CHANNEL_URL: https://github.com/${{ github.repository }}/releases/download/product-stable/product-channel.json
+      CODER_STUDIO_DESKTOP_CHANNEL_URL: https://github.com/${{ github.repository }}/releases/download/desktop-stable/desktop-channel.json
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download bridge installer and both stable pointers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release/bridge-independent/candidate | Out-Null
+          New-Item -ItemType Directory -Force -Path release/bridge-independent/product-stable | Out-Null
+          New-Item -ItemType Directory -Force -Path release/bridge-independent/desktop-stable | Out-Null
+          gh release download '${{ inputs.bridge_candidate_tag }}' `
+            --pattern latest.yml `
+            --pattern 'Coder-Studio-Setup-*.exe' `
+            --dir release/bridge-independent/candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download bridge installer' }
+          gh release download product-stable `
+            --pattern product-channel.json `
+            --dir release/bridge-independent/product-stable
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download product-stable' }
+          gh release download desktop-stable `
+            --pattern desktop-channel.json `
+            --dir release/bridge-independent/desktop-stable
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download desktop-stable' }
+
+      - name: Resolve independent feed acceptance identity
+        id: identity
+        shell: pwsh
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw 'Desktop Runtime public key is required for independent-feed acceptance'
+          }
+          New-Item -ItemType Directory -Force -Path release/bridge-independent/key | Out-Null
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content release/bridge-independent/key/runtime-public.pem -NoNewline
+          $candidateRoot = 'release/bridge-independent/candidate'
+          $desktop = Get-Content release/bridge-independent/desktop-stable/desktop-channel.json -Raw | ConvertFrom-Json
+          $product = Get-Content release/bridge-independent/product-stable/product-channel.json -Raw | ConvertFrom-Json
+          $metadata = Get-Content "$candidateRoot/latest.yml" -Raw
+          $installer = [regex]::Match($metadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $scenario = if ('${{ matrix.target }}' -eq 'wsl') { 'legacy-wsl-current' } else { 'legacy-current' }
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$desktop.signature.value)
+          $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
+          "installer=$candidateRoot/$installer" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "shell=$($desktop.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "runtime=$($product.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "scenario=$scenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify accepted stable pointer digests
+        shell: bash
+        run: |
+          printf '%s  %s\n' '${{ needs.prepare.outputs.product_channel_sha256 }}' \
+            release/bridge-independent/product-stable/product-channel.json | sha256sum --check --strict
+          printf '%s  %s\n' '${{ needs.prepare.outputs.desktop_channel_sha256 }}' \
+            release/bridge-independent/desktop-stable/desktop-channel.json | sha256sum --check --strict
+
+      - name: Prepare disposable WSL distribution
+        if: matrix.target == 'wsl'
+        id: wsl
+        shell: pwsh
+        run: |
+          $distro = "coder-studio-acceptance-stable-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          wsl.exe --install -d Ubuntu --no-launch
+          wsl.exe -d Ubuntu -u root -- true
+          wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
+          wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable stable-feed WSL distribution' }
+          wsl.exe -d $distro -u root -- sh -lc "useradd --create-home --shell /bin/bash coderstudio && printf '[boot]\nsystemd=false\n[user]\ndefault=coderstudio\n' > /etc/wsl.conf"
+          wsl.exe --terminate $distro
+          "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run installed independent-feed acceptance
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.installer }}',
+            '-CandidateTag', '${{ inputs.bridge_candidate_tag }}',
+            '-ChannelUrl', $env:CODER_STUDIO_DESKTOP_CHANNEL_URL,
+            '-PreviousShellVersion', '${{ steps.identity.outputs.shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.runtime }}',
+            '-PublicKeyPath', 'release/bridge-independent/key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.scenario }}',
+            '-ReportPath', 'release/bridge-independent-report/${{ matrix.target }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Independent Product/Desktop feed acceptance failed' }
+
+      - name: Upload independent-feed acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-independent-${{ matrix.target }}-${{ github.sha }}
+          path: release/bridge-independent-report/
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Clean up disposable WSL distribution
+        if: always() && matrix.target == 'wsl'
+        shell: pwsh
+        run: |
+          $distro = '${{ steps.wsl.outputs.name }}'
+          if ($distro) { wsl.exe --unregister $distro 2>$null }
+
+  promote-bridge:
+    name: Make the bridge the final repository-wide latest
+    needs:
+      - prepare
+      - verify-stable-feeds
+      - accept-independent-feeds
+    if: success()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
+      CONFIRM_LATEST: ${{ inputs.confirm_latest }}
+    steps:
+      - name: Reconfirm the one-time latest migration
+        run: |
+          if [[ "${CONFIRM_LATEST}" != "PROMOTE_BRIDGE_TO_LATEST" ]]; then
+            echo "Bridge promotion requires PROMOTE_BRIDGE_TO_LATEST" >&2
+            exit 1
+          fi
+
+      - name: Make bridge the final repository-wide latest
+        run: gh release edit "${BRIDGE_CANDIDATE_TAG}" --prerelease=false --latest
+
+      - name: Verify bridge is repository-wide latest
+        run: |
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          if [[ "${latest}" != "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            echo "Repository-wide latest did not advance to the accepted bridge" >&2
+            exit 1
+          fi

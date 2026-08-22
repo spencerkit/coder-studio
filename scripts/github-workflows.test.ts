@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -266,6 +266,7 @@ describe("reusable compatibility acceptance", () => {
     expect(verify.strategy?.matrix?.target).toEqual(["native", "wsl"]);
     expect(download).toContain('gh release download "${PRODUCT_TAG}"');
     expect(download).toContain('gh release download "${DESKTOP_TAG}"');
+    expect(download).toContain("desktop-channel-modern.json");
     expect(text).toContain("PRODUCT_CHANNEL_SHA256");
     expect(text).toContain("WINDOWS_MANIFEST_SHA256");
     expect(text).toContain("LINUX_MANIFEST_SHA256");
@@ -392,6 +393,7 @@ describe("Desktop publication workflow", () => {
     expect(jobText(jobs["accept-installation"])).toContain(
       "needs.publish-candidate.outputs.candidate_tag"
     );
+    expect(jobText(jobs["accept-installation"])).toContain("gh release download desktop-stable");
     expect(jobs["accept-factory"].strategy?.matrix?.scenario).toEqual([
       "offline-factory",
       "factory-fallback",
@@ -452,5 +454,183 @@ describe("legacy Desktop acceptance", () => {
     expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
     expect(JSON.stringify(workflow.on)).toContain("bridge_candidate_tag");
     expect(desktopReleaseSource).not.toContain("desktop-acceptance.yml");
+  });
+});
+
+describe("one-time Product and Desktop migration bridge", () => {
+  it("is an explicit manual operation with a serialized confirmation", () => {
+    expect(existsSync(workflowPath("desktop-bridge-release.yml"))).toBe(true);
+    const workflow = loadWorkflow("desktop-bridge-release.yml");
+    const dispatch = workflow.on.workflow_dispatch as {
+      inputs: Record<string, Record<string, unknown>>;
+    };
+
+    expect(dispatch.inputs).toEqual({
+      bridge_candidate_tag: {
+        description: "Existing immutable bridge candidate tag",
+        required: true,
+        type: "string",
+      },
+      confirm_latest: {
+        description: "Type PROMOTE_BRIDGE_TO_LATEST to confirm the one-time migration",
+        required: true,
+        type: "string",
+      },
+    });
+    expect(workflow.concurrency).toEqual({
+      group: "product-desktop-migration-bridge",
+      "cancel-in-progress": false,
+    });
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(workflow.on.push).toBeUndefined();
+  });
+
+  it("orders immutable preparation, both acceptance phases, and final promotion", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+
+    expect(Object.keys(jobs)).toEqual([
+      "prepare",
+      "bootstrap-product",
+      "accept-legacy-upgrade",
+      "bootstrap-desktop",
+      "verify-stable-feeds",
+      "accept-independent-feeds",
+      "promote-bridge",
+    ]);
+    expect(jobs["bootstrap-product"].needs).toBe("prepare");
+    expect(jobs["accept-legacy-upgrade"].needs).toEqual(["prepare", "bootstrap-product"]);
+    expect(jobs["bootstrap-desktop"].needs).toEqual(["prepare", "accept-legacy-upgrade"]);
+    expect(jobs["verify-stable-feeds"].needs).toEqual([
+      "prepare",
+      "bootstrap-product",
+      "bootstrap-desktop",
+    ]);
+    expect(jobs["accept-independent-feeds"].needs).toEqual(["prepare", "verify-stable-feeds"]);
+    expect(jobs["promote-bridge"].needs).toEqual([
+      "prepare",
+      "verify-stable-feeds",
+      "accept-independent-feeds",
+    ]);
+    expect(jobs["promote-bridge"].if).toBe("success()");
+    expect(JSON.stringify(jobs)).not.toContain('"environment"');
+  });
+
+  it("can recover when the accepted bridge already became repository-wide latest", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const prepare = jobs.prepare;
+
+    expect(prepare.outputs?.already_promoted).toBe(
+      "${{ steps.identity.outputs.already_promoted }}"
+    );
+    expect(step(prepare, "Download existing immutable bridge candidate")?.run).toContain(
+      "A normal bridge release is recoverable only when it is repository-wide latest"
+    );
+    expect(jobText(jobs["accept-legacy-upgrade"])).toContain(
+      "needs.prepare.outputs.already_promoted"
+    );
+  });
+
+  it("validates an existing immutable candidate without rebuilding or publishing it", () => {
+    const prepare = loadWorkflow("desktop-bridge-release.yml").jobs.prepare;
+    const text = jobText(prepare);
+    const download = step(prepare, "Download existing immutable bridge candidate")?.run;
+
+    expect(text).toContain("bridge_candidate_tag");
+    expect(download).toContain('gh release download "${BRIDGE_CANDIDATE_TAG}"');
+    expect(text).toContain("product-channel.json");
+    expect(text).toContain("desktop-channel.json");
+    expect(text).toContain("desktop-channel-modern.json");
+    expect(text).toContain("pnpm release:artifacts validate-product");
+    expect(text).toContain("pnpm release:artifacts validate-desktop");
+    expect(text).toContain("sha256sum");
+    expect(text).not.toMatch(/pnpm (?:build|dist|publish)/);
+    expect(text).not.toContain("gh release create");
+    expect(text).not.toContain("gh release upload");
+  });
+
+  it("bootstraps both signed stable pointers without changing immutable bytes", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const product = jobText(jobs["bootstrap-product"]);
+    const desktop = jobText(jobs["bootstrap-desktop"]);
+
+    expect(jobs["bootstrap-product"].permissions).toEqual({ contents: "write" });
+    expect(product).toContain("product-stable");
+    expect(product).toContain("product-channel.json");
+    expect(product).toContain("Immutable Product pointer digest mismatch");
+    expect(product).toContain("--latest=false");
+
+    expect(jobs["bootstrap-desktop"].permissions).toEqual({ contents: "write" });
+    expect(desktop).toContain("desktop-stable");
+    expect(desktop).toContain("desktop-channel-modern.json");
+    expect(desktop).toContain("desktop-channel.json");
+    expect(desktop).toContain("Immutable Desktop pointer digest mismatch");
+    expect(desktop).toContain("--latest=false");
+  });
+
+  it("accepts legacy installed upgrades before independent-feed upgrades", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const legacy = jobs["accept-legacy-upgrade"];
+    const independent = jobs["accept-independent-feeds"];
+
+    expect(legacy.strategy?.matrix?.target).toEqual(["native", "wsl"]);
+    expect(jobText(legacy)).toContain("releases/latest");
+    expect(jobText(legacy)).toContain("legacy-current");
+    expect(jobText(legacy)).toContain("legacy-wsl-current");
+    expect(jobText(legacy)).toContain("pnpm acceptance:desktop:installed");
+    expect(jobText(legacy)).toContain("bridge_candidate_tag");
+
+    expect(independent.strategy?.matrix?.target).toEqual(["native", "wsl"]);
+    expect(jobText(independent)).toContain("product-stable");
+    expect(jobText(independent)).toContain("desktop-stable");
+    expect(jobText(independent)).toContain("pnpm acceptance:desktop:installed");
+  });
+
+  it("verifies both stable feeds before making the bridge repository-wide latest", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const verify = jobText(jobs["verify-stable-feeds"]);
+    const promote = jobs["promote-bridge"];
+
+    expect(verify).toContain("gh release download product-stable");
+    expect(verify).toContain("gh release download desktop-stable");
+    expect(verify).toContain("product-channel.json");
+    expect(verify).toContain("desktop-channel.json");
+    expect(verify).toContain("sha256sum");
+    expect(jobText(promote)).toContain("PROMOTE_BRIDGE_TO_LATEST");
+    expect(step(promote, "Make bridge the final repository-wide latest")?.run).toBe(
+      'gh release edit "${BRIDGE_CANDIDATE_TAG}" --prerelease=false --latest'
+    );
+    expect(step(promote, "Verify bridge is repository-wide latest")?.run).toContain(
+      'releases/latest" --jq .tag_name'
+    );
+  });
+
+  it("keeps repository-wide latest ownership exclusive to the bridge", () => {
+    const workflowFiles = readdirSync(workflowsRoot).filter((name) => name.endsWith(".yml"));
+    const latestOwners = workflowFiles.filter((name) => {
+      const source = readFileSync(workflowPath(name), "utf8");
+      return /--latest(?![=]false)/.test(source);
+    });
+
+    expect(latestOwners).toEqual(["desktop-bridge-release.yml"]);
+    expect(readFileSync(workflowPath("product-release.yml"), "utf8")).toContain("--latest=false");
+    expect(readFileSync(workflowPath("desktop-release.yml"), "utf8")).toContain("--latest=false");
+  });
+
+  it("documents normal operations, recovery, migration, and compatibility sequencing", () => {
+    const runbookPath = resolve(
+      import.meta.dirname,
+      "../docs/promotion/product-desktop-release-runbook.md"
+    );
+    expect(existsSync(runbookPath)).toBe(true);
+    const runbook = readFileSync(runbookPath, "utf8");
+
+    expect(runbook).toContain("Product release");
+    expect(runbook).toContain("Desktop release");
+    expect(runbook).toContain("candidate_tag");
+    expect(runbook).toContain("immutable-byte mismatch");
+    expect(runbook).toContain("product-stable");
+    expect(runbook).toContain("desktop-stable");
+    expect(runbook).toContain("PROMOTE_BRIDGE_TO_LATEST");
+    expect(runbook).toContain("two-release compatibility window");
   });
 });

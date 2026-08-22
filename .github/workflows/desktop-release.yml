@@ -626,18 +626,25 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path release/desktop-acceptance/candidate -Force | Out-Null
           New-Item -ItemType Directory -Path release/desktop-acceptance/previous -Force | Out-Null
+          New-Item -ItemType Directory -Path release/desktop-acceptance/stable-pointer -Force | Out-Null
           gh release download '${{ needs.publish-candidate.outputs.candidate_tag }}' `
             --pattern desktop-channel.json `
             --pattern latest.yml `
             --pattern 'Coder-Studio-Setup-*.exe' `
             --dir release/desktop-acceptance/candidate
           if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Desktop candidate' }
-          gh release download '${{ needs.prepare.outputs.previous_desktop_tag }}' `
+          gh release download desktop-stable `
             --pattern desktop-channel.json `
+            --dir release/desktop-acceptance/stable-pointer
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the previous signed Desktop pointer' }
+          gh release download '${{ needs.prepare.outputs.previous_desktop_tag }}' `
             --pattern latest.yml `
             --pattern 'Coder-Studio-Setup-*.exe' `
             --dir release/desktop-acceptance/previous
           if ($LASTEXITCODE -ne 0) { throw 'Unable to download previous stable Desktop release' }
+          Copy-Item `
+            release/desktop-acceptance/stable-pointer/desktop-channel.json `
+            release/desktop-acceptance/previous/desktop-channel.json
 
       - name: Resolve installed acceptance identity
         id: identity

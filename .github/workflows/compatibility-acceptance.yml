@@ -40,6 +40,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PRODUCT_TAG: ${{ inputs.product_tag }}
           DESKTOP_TAG: ${{ inputs.desktop_tag }}
+          DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
         run: |
           mkdir -p release/compatibility/product release/compatibility/desktop
           gh release download "${PRODUCT_TAG}" \
@@ -49,7 +50,27 @@ jobs:
             --dir release/compatibility/product
           gh release download "${DESKTOP_TAG}" \
             --pattern desktop-channel.json \
+            --pattern desktop-channel-modern.json \
             --dir release/compatibility/desktop
+
+          accepted_channel=""
+          for candidate in \
+            release/compatibility/desktop/desktop-channel.json \
+            release/compatibility/desktop/desktop-channel-modern.json; do
+            [[ -f "${candidate}" ]] || continue
+            candidate_digest=$(sha256sum "${candidate}" | cut -d ' ' -f 1)
+            if [[ "${candidate_digest}" == "${DESKTOP_CHANNEL_SHA256}" ]]; then
+              accepted_channel="${candidate}"
+              break
+            fi
+          done
+          if [[ -z "${accepted_channel}" ]]; then
+            echo "No Desktop channel asset matches the accepted digest" >&2
+            exit 1
+          fi
+          cp "${accepted_channel}" release/compatibility/desktop/desktop-channel.accepted.json
+          mv release/compatibility/desktop/desktop-channel.accepted.json \
+            release/compatibility/desktop/desktop-channel.json
 
       - name: Verify accepted channel and manifest digests
         env:
