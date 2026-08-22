@@ -88,7 +88,8 @@ import { TerminalSettingsSection } from "./terminal-settings-section";
 import { useSessionGateDispatch } from "./use-session-gate-dispatch";
 
 type NotificationCapabilityStatus = "available" | "limited" | "unsupported";
-type NotificationPermissionState = NotificationPermission | "unavailable";
+type NotificationPermissionState = NotificationPermission | "native" | "unavailable";
+type NotificationRuntimeChannel = "browser" | "native";
 type SettingsNavigationState =
   | {
       kind: "root";
@@ -1567,6 +1568,8 @@ function GeneralSettings({
     useState<NotificationPermissionState>("unavailable");
   const [notificationCapability, setNotificationCapability] =
     useState<NotificationCapabilityStatus>("unsupported");
+  const [notificationRuntimeChannel, setNotificationRuntimeChannel] =
+    useState<NotificationRuntimeChannel>("browser");
   const [supervisorTimeoutDraft, setSupervisorTimeoutDraft] = useState(
     String(supervisorEvaluationTimeoutSec)
   );
@@ -1591,6 +1594,29 @@ function GeneralSettings({
   };
 
   useEffect(() => {
+    const desktopApi = window.coderStudioDesktop;
+    if (desktopApi?.getNotificationSupport) {
+      let cancelled = false;
+      setNotificationRuntimeChannel("native");
+      setNotificationPermission("native");
+      setNotificationCapability("unsupported");
+
+      void desktopApi
+        .getNotificationSupport()
+        .then((supported) => {
+          if (!cancelled) setNotificationCapability(supported ? "available" : "unsupported");
+        })
+        .catch((error) => {
+          console.warn("Unable to query Desktop notification support", error);
+          if (!cancelled) setNotificationCapability("unsupported");
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setNotificationRuntimeChannel("browser");
     setNotificationCapability(detectNotificationCapability());
 
     if ("Notification" in window) {
@@ -1599,6 +1625,7 @@ function GeneralSettings({
     }
 
     setNotificationPermission("unavailable");
+    return undefined;
   }, []);
 
   useEffect(() => {
@@ -1626,6 +1653,7 @@ function GeneralSettings({
   }, [supervisorRetryDelaySec]);
 
   const requestNotificationPermission = async () => {
+    if (notificationRuntimeChannel === "native") return;
     if ("Notification" in window) {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
@@ -1824,7 +1852,9 @@ function GeneralSettings({
               <>
                 {t("settings.notification_status_unsupported")}
                 <span className="settings-status-hint">
-                  {t("settings.notification_status_unsupported_hint")}
+                  {notificationRuntimeChannel === "native"
+                    ? t("settings.notification_status_native_unsupported_hint")
+                    : t("settings.notification_status_unsupported_hint")}
                 </span>
               </>
             )}
@@ -1859,6 +1889,14 @@ function GeneralSettings({
                 {t("settings.permission_unavailable")}
                 <span className="settings-status-hint">
                   {t("settings.permission_unavailable_hint")}
+                </span>
+              </>
+            )}
+            {notificationPermission === "native" && (
+              <>
+                {t("settings.permission_native_managed")}
+                <span className="settings-status-hint">
+                  {t("settings.permission_native_managed_hint")}
                 </span>
               </>
             )}

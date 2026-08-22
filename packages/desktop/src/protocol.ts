@@ -20,6 +20,24 @@ export interface DesktopWindowActivityState {
   minimized: boolean;
 }
 
+export interface DesktopNotificationRequest {
+  title: string;
+  body: string;
+  tag: string;
+  workspaceId: string;
+  sessionId: string;
+}
+
+export interface DesktopNotificationTarget {
+  workspaceId: string;
+  sessionId: string;
+}
+
+export type DesktopNotificationResult =
+  | { status: "shown" }
+  | { status: "unsupported" }
+  | { status: "failed" };
+
 export type DesktopEnvironmentKind = "native" | "wsl";
 export type DesktopEnvironmentStatus =
   | "ready"
@@ -87,6 +105,9 @@ export interface DesktopApi {
   onAuthenticationRecovered(listener: () => void): () => void;
   getWindowActivityState(): Promise<DesktopWindowActivityState>;
   onWindowActivityStateChanged(listener: (state: DesktopWindowActivityState) => void): () => void;
+  getNotificationSupport(): Promise<boolean>;
+  showNotification(request: DesktopNotificationRequest): Promise<DesktopNotificationResult>;
+  onNotificationClicked(listener: (target: DesktopNotificationTarget) => void): () => void;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<DesktopEnvironmentOpenResult>;

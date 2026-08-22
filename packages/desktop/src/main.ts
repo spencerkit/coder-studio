@@ -12,6 +12,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  Notification as ElectronNotification,
   type Event,
   ipcMain,
   Menu,
@@ -35,6 +36,9 @@ import {
   shouldForceAcceptanceRuntimeHealthFailure,
 } from "./desktop-channel.js";
 import { installDesktopContextMenu } from "./desktop-context-menu.js";
+import { activateDesktopNotificationTarget } from "./desktop-notification-activation.js";
+import { registerDesktopNotificationIpc } from "./desktop-notification-ipc.js";
+import { createDesktopNotificationService } from "./desktop-notifications.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
@@ -64,6 +68,7 @@ import { RuntimeStore } from "./runtime-store.js";
 import { ProductRuntimeUpdateManager } from "./runtime-update-manager.js";
 import { DesktopShellUpdateAdapter, type ShellUpdaterPort } from "./update-manager.js";
 import { readDesktopWindowActivityState } from "./window-activity.js";
+import { configureWindowsNotificationIdentity } from "./windows-notification-identity.js";
 import { createWslBackendLaunch } from "./wsl-backend.js";
 import { WslDiscovery } from "./wsl-discovery.js";
 import { windowsWslPathToLinux } from "./wsl-path.js";
@@ -74,6 +79,8 @@ declare const __CODER_STUDIO_RUNTIME_PUBLIC_KEY__: string;
 declare const __CODER_STUDIO_DESKTOP_CHANNEL_URL__: string;
 declare const __CODER_STUDIO_FACTORY_RELEASE_BASE_URL__: string;
 declare const __CODER_STUDIO_PRODUCT_VERSION__: string;
+
+configureWindowsNotificationIdentity(app, process.platform);
 
 const ENVIRONMENT_LAUNCH_DATA_KEY = "environmentLaunchRequestId";
 const ENVIRONMENT_LAUNCH_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
@@ -97,6 +104,21 @@ let shutdownComplete = false;
 let shutdownStarted = false;
 let shutdownActivationPromise: Promise<void> = Promise.resolve();
 const smokeResultPath = process.env.CODER_STUDIO_DESKTOP_SMOKE_RESULT?.trim() || null;
+const desktopNotifications = createDesktopNotificationService({
+  isSupported: () => ElectronNotification.isSupported(),
+  createNotification: (options) => new ElectronNotification(options),
+  platform: process.platform,
+  onWarning: (message, details) => console.warn(`[desktop-notification] ${message}`, details),
+  onClick: (target) => {
+    const activatedWindow = activateDesktopNotificationTarget({
+      target,
+      window: mainWindow,
+      createWindow: () => (appOrigin ? createMainWindow(appOrigin) : null),
+      shuttingDown: shutdownStarted,
+    });
+    mainWindow = activatedWindow as BrowserWindow | null;
+  },
+});
 const desktopAuthRecovery = new DesktopAuthRecoveryCoordinator({
   canRecover: () =>
     !shutdownStarted &&
@@ -281,6 +303,7 @@ async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
 }
 
 function registerIpcHandlers(rootUserDataDir: string): void {
+  registerDesktopNotificationIpc({ ipc: ipcMain, service: desktopNotifications });
   registerDesktopUpdateIpc({
     ipc: ipcMain,
     getCoordinator: () => updateCoordinator,

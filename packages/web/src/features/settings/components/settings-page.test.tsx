@@ -457,6 +457,7 @@ describe("SettingsPage", () => {
     navigatorMocks.maxTouchPoints = 0;
     navigatorMocks.standalone = false;
     navigatorMocks.displayModeStandalone = false;
+    Reflect.deleteProperty(window, "coderStudioDesktop");
     installNotificationMock();
     applyNavigatorMocks();
     window.history.replaceState({ idx: 0 }, "", "/settings");
@@ -4929,6 +4930,55 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回" }));
 
     expect(routerMocks.navigate).toHaveBeenCalledWith(-1);
+  });
+
+  it("reports available Desktop native notification capability without browser permission", async () => {
+    const getNotificationSupport = vi.fn(async () => true);
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { getNotificationSupport } as unknown as CoderStudioDesktopApi,
+    });
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("通知状态")).toBeInTheDocument();
+    await waitFor(() => expect(getNotificationSupport).toHaveBeenCalledOnce());
+    expect(await screen.findByText("可用")).toBeInTheDocument();
+    expect(screen.getByText("由系统管理")).toBeInTheDocument();
+    expect(screen.getByText("Desktop 使用系统原生通知，无需浏览器站点授权。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "请求授权" })).not.toBeInTheDocument();
+  });
+
+  it("reports unsupported Desktop native notification capability", async () => {
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        getNotificationSupport: vi.fn(async () => false),
+      } as unknown as CoderStudioDesktopApi,
+    });
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("不支持")).toBeInTheDocument();
+    expect(screen.getByText("当前桌面环境未提供可用的系统通知服务。")).toBeInTheDocument();
+    expect(screen.getByText("由系统管理")).toBeInTheDocument();
+  });
+
+  it("handles a rejected Desktop native notification capability query", async () => {
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        getNotificationSupport: vi.fn(async () => {
+          throw new Error("native capability unavailable");
+        }),
+      } as unknown as CoderStudioDesktopApi,
+    });
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("不支持")).toBeInTheDocument();
+    expect(screen.getByText("当前桌面环境未提供可用的系统通知服务。")).toBeInTheDocument();
+    expect(screen.getByText("由系统管理")).toBeInTheDocument();
   });
 
   it("splits mobile notification support from denied browser permission on Android", async () => {

@@ -23,8 +23,8 @@
  *    ┌────────────────────────────┬────────────────────────────────┐
  *    │ App foreground            │ App background / unfocused     │
  *    ├────────────────────────────┼────────────────────────────────┤
- *    │ session.workspaceId is the │ Always send a system (browser) │
- *    │ active workspace           │ push notification              │
+ *    │ session.workspaceId is the │ Always send a system           │
+ *    │ active workspace           │ notification                   │
  *    │   → suppress (user is here)│                                │
  *    │ Otherwise                  │                                │
  *    │   → in-app banner toast    │                                │
@@ -60,6 +60,7 @@ type NotificationChannel = "none" | "toast" | "system";
  * still catching anything a human would meaningfully wait on.
  */
 const MIN_NOTIFY_DURATION_MS = 4_000;
+const NATIVE_CLICK_TARGET_TIMEOUT_MS = 30_000;
 
 /** What we remember about each session between renders. */
 interface SessionTrace {
@@ -178,7 +179,7 @@ async function playCompletionSound(): Promise<void> {
   }
 }
 
-interface BrowserNotificationOptions {
+interface SystemNotificationOptions {
   title: string;
   body: string;
   tag: string;
@@ -191,7 +192,7 @@ interface BrowserNotificationOptions {
   setPendingFocus: (sessionId: string | null) => void;
 }
 
-function showBrowserNotification(opts: BrowserNotificationOptions): void {
+function showBrowserNotification(opts: SystemNotificationOptions): void {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
@@ -220,9 +221,33 @@ function showBrowserNotification(opts: BrowserNotificationOptions): void {
       });
       notification.close();
     };
-  } catch {
-    // Notification API may not be available in all contexts
+  } catch (error) {
+    console.warn("Unable to show browser notification", error);
   }
+}
+
+function showSystemNotification(opts: SystemNotificationOptions): void {
+  const desktopApi = window.coderStudioDesktop;
+  if (!desktopApi?.showNotification) {
+    showBrowserNotification(opts);
+    return;
+  }
+
+  void desktopApi
+    .showNotification({
+      title: opts.title,
+      body: opts.body,
+      tag: opts.tag,
+      workspaceId: opts.workspaceId,
+      sessionId: opts.sessionId,
+    })
+    .then((result) => {
+      if (result.status !== "shown") showBrowserNotification(opts);
+    })
+    .catch((error) => {
+      console.warn("Unable to show Desktop notification; falling back to browser delivery", error);
+      showBrowserNotification(opts);
+    });
 }
 
 /**
@@ -245,6 +270,8 @@ export function useSessionNotifications(): void {
   const t = useTranslation();
   const viewport = useViewport();
   const persistLastViewedTarget = usePersistWorkspaceLastViewedTarget();
+  const persistLastViewedTargetRef = useRef(persistLastViewedTarget);
+  persistLastViewedTargetRef.current = persistLastViewedTarget;
   // Read-on-demand handle for atoms we don't want to trigger re-renders for —
   // notably the workspaces map, which we snapshot only when a notification fires.
   const store = useStore();
@@ -284,6 +311,61 @@ export function useSessionNotifications(): void {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const desktopApi = typeof window === "undefined" ? undefined : window.coderStudioDesktop;
+    if (!desktopApi?.onNotificationClicked) return;
+
+    let pendingTarget: DesktopNotificationTarget | null = null;
+    let pendingTargetTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const clearPendingTarget = () => {
+      pendingTarget = null;
+      if (pendingTargetTimeout) clearTimeout(pendingTargetTimeout);
+      pendingTargetTimeout = null;
+    };
+
+    const focusTarget = (target: DesktopNotificationTarget): boolean => {
+      const session = store.get(sessionsAtom)[target.sessionId];
+      const workspace = store.get(workspacesAtom)[target.workspaceId];
+      if (!session || !workspace || session.workspaceId !== target.workspaceId) return false;
+
+      focusSession({
+        workspaceId: target.workspaceId,
+        sessionId: target.sessionId,
+        setActiveWorkspaceId,
+        persistLastViewedTarget: (nextTarget) => {
+          void persistLastViewedTargetRef.current(nextTarget);
+        },
+        setPendingFocus,
+      });
+      return true;
+    };
+
+    const retryPendingTarget = () => {
+      if (pendingTarget && focusTarget(pendingTarget)) clearPendingTarget();
+    };
+
+    const unsubscribeSessions = store.sub(sessionsAtom, retryPendingTarget);
+    const unsubscribeWorkspaces = store.sub(workspacesAtom, retryPendingTarget);
+    const unsubscribeClick = desktopApi.onNotificationClicked((target) => {
+      if (focusTarget(target)) {
+        clearPendingTarget();
+        return;
+      }
+
+      clearPendingTarget();
+      pendingTarget = target;
+      pendingTargetTimeout = setTimeout(clearPendingTarget, NATIVE_CLICK_TARGET_TIMEOUT_MS);
+    });
+
+    return () => {
+      clearPendingTarget();
+      unsubscribeClick();
+      unsubscribeSessions();
+      unsubscribeWorkspaces();
+    };
+  }, [setActiveWorkspaceId, setPendingFocus, store]);
 
   useEffect(() => {
     if (connectionStatus !== "connected") {
@@ -413,7 +495,7 @@ export function useSessionNotifications(): void {
         // Tag scopes the notification to "this turn" so a later turn can
         // replace it instead of stacking.
         const tag = `session-${session.id}-${next.activeSince ?? "unknown"}`;
-        showBrowserNotification({
+        showSystemNotification({
           title,
           body,
           tag,

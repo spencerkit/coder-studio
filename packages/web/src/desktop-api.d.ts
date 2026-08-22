@@ -15,6 +15,10 @@ interface CoderStudioDesktopApi {
   // Optional while newer Web bundles can still be paired with an older Desktop shell.
   getWindowActivityState?(): Promise<DesktopWindowActivityState>;
   onWindowActivityStateChanged?(listener: (state: DesktopWindowActivityState) => void): () => void;
+  // Optional while newer Web bundles can still be paired with an older Desktop shell.
+  getNotificationSupport?(): Promise<boolean>;
+  showNotification?(request: DesktopNotificationRequest): Promise<DesktopNotificationResult>;
+  onNotificationClicked?(listener: (target: DesktopNotificationTarget) => void): () => void;
   listEnvironments(): Promise<DesktopEnvironmentSummary[]>;
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<{ status: "unchanged" | "opened" }>;
@@ -42,6 +46,24 @@ interface CoderStudioDesktopApi {
   restartForRuntimeUpdate(): Promise<boolean>;
   onRuntimeUpdateStateChanged(listener: (state: DesktopRuntimeUpdateState) => void): () => void;
 }
+
+interface DesktopNotificationRequest {
+  title: string;
+  body: string;
+  tag: string;
+  workspaceId: string;
+  sessionId: string;
+}
+
+interface DesktopNotificationTarget {
+  workspaceId: string;
+  sessionId: string;
+}
+
+type DesktopNotificationResult =
+  | { status: "shown" }
+  | { status: "unsupported" }
+  | { status: "failed" };
 
 interface DesktopWindowActivityState {
   focused: boolean;
