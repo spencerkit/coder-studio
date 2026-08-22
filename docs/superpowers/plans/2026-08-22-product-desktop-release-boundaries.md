@@ -110,9 +110,9 @@ if (shared.some((field) => windows[field] !== linux[field])) {
 - Modify: `packages/web/src/features/updates/controller.ts`
 - Modify relevant Web update fixtures/tests that construct `ProductUpdateDiagnostics`
 
-- [ ] Add failing coordinator tests for combined, Runtime-only, Shell-only, Product-feed failure, Desktop-feed failure, both-feed failure, invalid signature propagation, incompatible minimum Shell, and Shell-only validation against the installed Runtime manifest.
-- [ ] Extend diagnostics with optional `productChannelError` and `desktopChannelError` fields so partial failure is visible without invalidating a safe component.
-- [ ] Replace `loadChannel` with `loadProductChannel` and `loadDesktopChannel`. Use `Promise.allSettled`, but fail the check only when neither feed can yield a safe plan:
+- [x] Add failing coordinator tests for combined, Runtime-only, Shell-only, Product-feed failure, Desktop-feed failure, both-feed failure, invalid signature propagation, incompatible minimum Shell, and Shell-only validation against the installed Runtime manifest.
+- [x] Extend diagnostics with optional `productChannelError` and `desktopChannelError` fields so partial failure is visible without invalidating a safe component.
+- [x] Replace `loadChannel` with `loadProductChannel` and `loadDesktopChannel`. Use `Promise.allSettled`, but fail the check only when neither feed can yield a safe plan:
 
 ```ts
 const [productResult, desktopResult] = await Promise.allSettled([
@@ -127,10 +127,10 @@ if (productResult.status === "rejected" && desktopResult.status === "rejected") 
 }
 ```
 
-- [ ] Construct metadata only for available feeds, then validate the effective tuple: target Runtime or installed Runtime versus target Shell or installed Shell. Do not report `idle`/up-to-date if either feed failed; retain a failed-feed diagnostic while exposing any safe available components.
-- [ ] Preserve parallel component downloads, journal recovery, one confirmation, one restart, Runtime rollback/quarantine, and Shell manual recovery behavior.
-- [ ] For an active WSL environment, stage the Product release's Windows Runtime (shared Web) and Linux Runtime together and reconcile both target versions after restart.
-- [ ] Run Core, Desktop, and focused Web tests; commit: `feat(desktop): coordinate independent product and desktop updates`.
+- [x] Construct metadata only for available feeds, then validate the effective tuple: target Runtime or installed Runtime versus target Shell or installed Shell. Do not report `idle`/up-to-date if either feed failed; retain a failed-feed diagnostic while exposing any safe available components.
+- [x] Preserve parallel component downloads, journal recovery, one confirmation, one restart, Runtime rollback/quarantine, and Shell manual recovery behavior.
+- [x] For an active WSL environment, stage the Product release's Windows Runtime (shared Web) and Linux Runtime together and reconcile both target versions after restart.
+- [x] Run Core, Desktop, and focused Web tests; commit: `feat(desktop): coordinate independent product and desktop updates`.
 
 ## Task 5: Compile independent stable URLs and record Factory Runtime provenance
 

@@ -54,6 +54,8 @@ export interface UpdateCompatibilityResult {
 export interface ProductUpdateDiagnostics {
   failedComponentId: UpdateComponentId | null;
   failedPhase: string | null;
+  productChannelError?: string | null;
+  desktopChannelError?: string | null;
   shellVersion: string | null;
   shellPublishedAt: string | null;
   shellBuiltAt: string | null;
@@ -121,6 +123,8 @@ export function createDefaultProductUpdateState(
     diagnostics: {
       failedComponentId: null,
       failedPhase: null,
+      productChannelError: null,
+      desktopChannelError: null,
       shellVersion: null,
       shellPublishedAt: null,
       shellBuiltAt: null,
