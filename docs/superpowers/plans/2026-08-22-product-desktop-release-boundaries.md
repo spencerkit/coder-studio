@@ -20,9 +20,9 @@
 - Create: `packages/desktop/src/product-channel.test.ts`
 - Modify: `packages/desktop/src/desktop-channel.test.ts`
 
-- [ ] Write failing tests for strict Product/Desktop schemas, canonical signature verification, release-tag validation, manifest digests, Factory Runtime provenance, and versioned asset resolution.
-- [ ] Run `pnpm --filter @coder-studio/desktop exec vitest run src/product-channel.test.ts src/desktop-channel.test.ts` and confirm the new tests fail for missing contracts.
-- [ ] Add shared safe release resolution. The implementation must derive the immutable asset location from the trusted channel URL and signed tag, never accept an absolute asset URL:
+- [x] Write failing tests for strict Product/Desktop schemas, canonical signature verification, release-tag validation, manifest digests, Factory Runtime provenance, and versioned asset resolution.
+- [x] Run `pnpm --filter @coder-studio/desktop exec vitest run src/product-channel.test.ts src/desktop-channel.test.ts` and confirm the new tests fail for missing contracts.
+- [x] Add shared safe release resolution. The implementation must derive the immutable asset location from the trusted channel URL and signed tag, never accept an absolute asset URL:
 
 ```ts
 export function resolveVersionedReleaseAsset(
@@ -43,9 +43,9 @@ export function resolveVersionedReleaseAsset(
 }
 ```
 
-- [ ] Define `ProductChannel` with `channel: "product"`, one product version, two Runtime manifest names and SHA-256 digests, `minShellVersion`, capability requirements, release tag/time, and Ed25519 signature.
-- [ ] Redefine `DesktopChannel` with `channel: "desktop"`, Shell updater/installer identity, Desktop capability tuple, exact Factory Runtime Product tag/version/manifest digest, release tag/time, and Ed25519 signature. Remove Product Runtime entries from the Desktop contract.
-- [ ] Run the focused tests and commit: `feat(desktop): split product and desktop release channels`.
+- [x] Define `ProductChannel` with `channel: "product"`, one product version, two Runtime manifest names and SHA-256 digests, `minShellVersion`, capability requirements, release tag/time, and Ed25519 signature.
+- [x] Redefine `DesktopChannel` with `channel: "desktop"`, Shell updater/installer identity, Desktop capability tuple, exact Factory Runtime Product tag/version/manifest digest, release tag/time, and Ed25519 signature. Remove Product Runtime entries from the Desktop contract.
+- [x] Run the focused tests and commit: `feat(desktop): split product and desktop release channels`.
 
 ## Task 2: Build Product and Desktop pointers from immutable artifacts
 

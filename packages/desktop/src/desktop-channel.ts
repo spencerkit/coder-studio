@@ -1,29 +1,44 @@
-import { normalizeUtcTimestamp } from "./build-info.js";
-import { isSafeRuntimeRelativePath, type RuntimeSignature } from "./runtime-manifest.js";
+import {
+  parseChannelTimestamp,
+  parseReleaseCapabilities,
+  readChannelSha256,
+  readChannelString,
+  resolveVersionedReleaseAsset,
+} from "./release-channel.js";
+import type { RuntimeSignature } from "./runtime-manifest.js";
 import { canonicalSigningPayload, verifyEd25519Payload } from "./signed-json.js";
 
-export interface DesktopChannelRuntime {
-  version: string;
-  publishedAt: string;
+interface DesktopChannelManifestIdentity {
   manifest: string;
+  manifestSha256: string;
 }
 
 export interface DesktopChannel {
   schemaVersion: 1;
-  channel: "stable" | "prerelease";
+  channel: "desktop";
+  version: string;
   releaseTag: string;
   generatedAt: string;
   shell: {
     version: string;
     publishedAt: string;
-    updaterMetadata: "latest.yml" | "modern.yml";
+    updaterMetadata: string;
+    installer: string;
     engineVersion: string;
     nodeVersion: string;
     runtimeHostApiVersion: number;
     apiProtocolVersion: number;
     dataSchemaVersion: number;
   };
-  runtimes: Record<"win32-x64" | "linux-x64", DesktopChannelRuntime>;
+  wslEngine: DesktopChannelManifestIdentity & {
+    version: string;
+    nodeVersion: string;
+  };
+  factoryProduct: {
+    version: string;
+    releaseTag: string;
+    runtimes: Record<"win32-x64" | "linux-x64", DesktopChannelManifestIdentity>;
+  };
   signature: RuntimeSignature;
 }
 
@@ -62,100 +77,111 @@ export function shouldForceAcceptanceRuntimeHealthFailure(
   );
 }
 
-function readString(value: unknown, label: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`Desktop channel ${label} must be a non-empty string`);
-  }
-  return value.trim();
-}
-
-function readPositiveInteger(value: unknown, label: string): number {
-  if (!Number.isInteger(value) || (value as number) < 1) {
-    throw new Error(`Desktop channel ${label} must be a positive integer`);
-  }
-  return value as number;
-}
-
-function parseRuntime(value: unknown, label: string): DesktopChannelRuntime {
-  if (!value || typeof value !== "object") {
-    throw new Error(`Desktop channel ${label} Runtime must be an object`);
-  }
+function parseManifestIdentity(
+  value: unknown,
+  label: string,
+  channelUrl: string,
+  releaseTag: string
+): DesktopChannelManifestIdentity {
+  if (!value || typeof value !== "object") throw new Error(`${label} must be an object`);
   const candidate = value as Record<string, unknown>;
-  return {
-    version: readString(candidate.version, `${label}.version`),
-    publishedAt: normalizeUtcTimestamp(candidate.publishedAt, `${label}.publishedAt`),
-    manifest: readString(candidate.manifest, `${label}.manifest`),
+  const identity = {
+    manifest: readChannelString(candidate.manifest, `${label}.manifest`),
+    manifestSha256: readChannelSha256(candidate.manifestSha256, `${label}.manifestSha256`),
   };
-}
-
-export function resolveChannelAsset(indexUrl: string, relativePath: string): string {
-  if (!isSafeRuntimeRelativePath(relativePath) || relativePath.includes("/")) {
-    throw new Error("Desktop channel asset path is unsafe");
-  }
-  const index = new URL(indexUrl);
-  const asset = new URL(relativePath, index);
-  if (asset.origin !== index.origin || asset.username || asset.password) {
-    throw new Error("Desktop channel asset changed origin");
-  }
-  return asset.toString();
+  resolveVersionedReleaseAsset(channelUrl, releaseTag, identity.manifest);
+  return identity;
 }
 
 export function parseDesktopChannel(
   value: unknown,
   publicKeyPem: string,
-  indexUrl: string,
+  channelUrl: string,
   options: { allowUnsigned?: boolean } = {}
 ): DesktopChannel {
   if (!value || typeof value !== "object") throw new Error("Desktop channel must be an object");
   const candidate = value as Record<string, unknown>;
   if (candidate.schemaVersion !== 1) throw new Error("Unsupported Desktop channel schema");
-  if (candidate.channel !== "stable" && candidate.channel !== "prerelease") {
-    throw new Error("Desktop channel kind is unsupported");
-  }
+  if (candidate.channel !== "desktop") throw new Error("Desktop channel kind is unsupported");
+  const version = readChannelString(candidate.version, "Desktop channel version");
+  const releaseTag = readChannelString(candidate.releaseTag, "Desktop channel releaseTag");
   if (!candidate.shell || typeof candidate.shell !== "object") {
     throw new Error("Desktop channel shell must be an object");
   }
-  if (!candidate.runtimes || typeof candidate.runtimes !== "object") {
-    throw new Error("Desktop channel runtimes must be an object");
-  }
   const shellValue = candidate.shell as Record<string, unknown>;
-  if (shellValue.updaterMetadata !== "latest.yml" && shellValue.updaterMetadata !== "modern.yml") {
-    throw new Error("Desktop channel updaterMetadata is unsupported");
+  const shellCapabilities = parseReleaseCapabilities(shellValue, "Desktop channel shell");
+  const shell = {
+    version: readChannelString(shellValue.version, "Desktop channel shell.version"),
+    publishedAt: parseChannelTimestamp(shellValue.publishedAt, "Desktop channel shell.publishedAt"),
+    updaterMetadata: readChannelString(
+      shellValue.updaterMetadata,
+      "Desktop channel shell.updaterMetadata"
+    ),
+    installer: readChannelString(shellValue.installer, "Desktop channel shell.installer"),
+    ...shellCapabilities,
+  };
+  if (shell.version !== version) {
+    throw new Error("Desktop channel Shell must use the Desktop version");
   }
-  const runtimeValues = candidate.runtimes as Record<string, unknown>;
-  const windows = parseRuntime(runtimeValues["win32-x64"], "win32-x64");
-  const linux = parseRuntime(runtimeValues["linux-x64"], "linux-x64");
-  if (windows.version !== linux.version) {
-    throw new Error("Desktop channel Runtimes must use the same product version");
+  resolveVersionedReleaseAsset(channelUrl, releaseTag, shell.updaterMetadata);
+  resolveVersionedReleaseAsset(channelUrl, releaseTag, shell.installer);
+
+  if (!candidate.wslEngine || typeof candidate.wslEngine !== "object") {
+    throw new Error("Desktop channel wslEngine must be an object");
   }
-  resolveChannelAsset(indexUrl, windows.manifest);
-  resolveChannelAsset(indexUrl, linux.manifest);
+  const wslEngineValue = candidate.wslEngine as Record<string, unknown>;
+  const wslEngine = {
+    version: readChannelString(wslEngineValue.version, "Desktop channel wslEngine.version"),
+    nodeVersion: readChannelString(
+      wslEngineValue.nodeVersion,
+      "Desktop channel wslEngine.nodeVersion"
+    ),
+    ...parseManifestIdentity(wslEngineValue, "Desktop channel wslEngine", channelUrl, releaseTag),
+  };
+  if (wslEngine.version !== shell.engineVersion || wslEngine.nodeVersion !== shell.nodeVersion) {
+    throw new Error("Desktop channel Windows and WSL Engines must use the same versions");
+  }
+
+  if (!candidate.factoryProduct || typeof candidate.factoryProduct !== "object") {
+    throw new Error("Desktop channel factoryProduct must be an object");
+  }
+  const factoryValue = candidate.factoryProduct as Record<string, unknown>;
+  const factoryReleaseTag = readChannelString(
+    factoryValue.releaseTag,
+    "Desktop channel factoryProduct.releaseTag"
+  );
+  if (!factoryValue.runtimes || typeof factoryValue.runtimes !== "object") {
+    throw new Error("Desktop channel factoryProduct.runtimes must be an object");
+  }
+  const factoryRuntimes = factoryValue.runtimes as Record<string, unknown>;
+  const factoryProduct = {
+    version: readChannelString(factoryValue.version, "Desktop channel factoryProduct.version"),
+    releaseTag: factoryReleaseTag,
+    runtimes: {
+      "win32-x64": parseManifestIdentity(
+        factoryRuntimes["win32-x64"],
+        "Desktop channel factoryProduct.win32-x64",
+        channelUrl,
+        factoryReleaseTag
+      ),
+      "linux-x64": parseManifestIdentity(
+        factoryRuntimes["linux-x64"],
+        "Desktop channel factoryProduct.linux-x64",
+        channelUrl,
+        factoryReleaseTag
+      ),
+    },
+  };
 
   const channel: DesktopChannel = {
     schemaVersion: 1,
-    channel: candidate.channel,
-    releaseTag: readString(candidate.releaseTag, "releaseTag"),
-    generatedAt: normalizeUtcTimestamp(candidate.generatedAt, "generatedAt"),
-    shell: {
-      version: readString(shellValue.version, "shell.version"),
-      publishedAt: normalizeUtcTimestamp(shellValue.publishedAt, "shell.publishedAt"),
-      updaterMetadata: shellValue.updaterMetadata,
-      engineVersion: readString(shellValue.engineVersion, "shell.engineVersion"),
-      nodeVersion: readString(shellValue.nodeVersion, "shell.nodeVersion"),
-      runtimeHostApiVersion: readPositiveInteger(
-        shellValue.runtimeHostApiVersion,
-        "shell.runtimeHostApiVersion"
-      ),
-      apiProtocolVersion: readPositiveInteger(
-        shellValue.apiProtocolVersion,
-        "shell.apiProtocolVersion"
-      ),
-      dataSchemaVersion: readPositiveInteger(
-        shellValue.dataSchemaVersion,
-        "shell.dataSchemaVersion"
-      ),
-    },
-    runtimes: { "win32-x64": windows, "linux-x64": linux },
+    channel: "desktop",
+    version,
+    releaseTag,
+    generatedAt: parseChannelTimestamp(candidate.generatedAt, "Desktop channel generatedAt"),
+    shell,
+    wslEngine,
+    factoryProduct,
     signature: candidate.signature as RuntimeSignature,
   };
   if (
