@@ -1,6 +1,10 @@
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
+import type { DesktopChannel } from "./desktop-channel.js";
 import { DesktopShellUpdateAdapter, type ShellUpdaterPort } from "./update-manager.js";
+
+const desktopChannelUrl =
+  "https://github.com/spencerkit/coder-studio/releases/download/desktop-stable/desktop-channel.json";
 
 function createUpdater() {
   const emitter = new EventEmitter();
@@ -16,6 +20,7 @@ function createUpdater() {
       return updater;
     },
     emit: (event: string, value: unknown) => emitter.emit(event, value),
+    setFeedURL: vi.fn(),
     checkForUpdates: vi.fn(async () => ({ updateInfo: { version: "0.3.0" } })),
     downloadUpdate: vi.fn(async () => ["installer.exe"]),
     quitAndInstall: vi.fn(),
@@ -23,15 +28,44 @@ function createUpdater() {
   return updater as unknown as typeof updater & ShellUpdaterPort;
 }
 
-const expectedShell = {
+const expectedChannel: DesktopChannel = {
+  schemaVersion: 1,
+  channel: "desktop",
   version: "0.3.0",
-  publishedAt: "2026-08-08T01:02:03.000Z",
-  updaterMetadata: "latest.yml" as const,
-  engineVersion: "2",
-  nodeVersion: "24.19.0",
-  runtimeHostApiVersion: 1,
-  apiProtocolVersion: 1,
-  dataSchemaVersion: 1,
+  releaseTag: "desktop-v0.3.0",
+  generatedAt: "2026-08-08T01:02:03.000Z",
+  shell: {
+    version: "0.3.0",
+    publishedAt: "2026-08-08T01:02:03.000Z",
+    updaterMetadata: "latest.yml",
+    installer: "Coder-Studio-Setup-0.3.0.exe",
+    engineVersion: "2",
+    nodeVersion: "24.19.0",
+    runtimeHostApiVersion: 1,
+    apiProtocolVersion: 1,
+    dataSchemaVersion: 1,
+  },
+  wslEngine: {
+    version: "2",
+    nodeVersion: "24.19.0",
+    manifest: "coder-studio-engine-linux-x64.manifest.json",
+    manifestSha256: "a".repeat(64),
+  },
+  factoryProduct: {
+    version: "0.6.0",
+    releaseTag: "v0.6.0",
+    runtimes: {
+      "win32-x64": {
+        manifest: "coder-studio-runtime-win32-x64.manifest.json",
+        manifestSha256: "b".repeat(64),
+      },
+      "linux-x64": {
+        manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
+        manifestSha256: "c".repeat(64),
+      },
+    },
+  },
+  signature: { algorithm: "ed25519", value: "signed" },
 };
 
 describe("DesktopShellUpdateAdapter", () => {
@@ -41,11 +75,11 @@ describe("DesktopShellUpdateAdapter", () => {
       updater,
       currentVersion: "0.2.0",
       isPackaged: true,
-      updaterChannel: "modern",
+      desktopChannelUrl,
     });
     adapter.start();
 
-    await expect(adapter.checkMetadata(expectedShell)).resolves.toEqual({
+    await expect(adapter.checkMetadata(expectedChannel)).resolves.toEqual({
       componentId: "shell",
       version: "0.3.0",
       publishedAt: "2026-08-08T01:02:03.000Z",
@@ -55,7 +89,11 @@ describe("DesktopShellUpdateAdapter", () => {
     expect(updater.autoInstallOnAppQuit).toBe(false);
     expect(updater.disableDifferentialDownload).toBe(true);
     expect(updater.disableWebInstaller).toBe(true);
-    expect(updater.channel).toBe("modern");
+    expect(updater.channel).toBeNull();
+    expect(updater.setFeedURL).toHaveBeenCalledWith({
+      provider: "generic",
+      url: "https://github.com/spencerkit/coder-studio/releases/download/desktop-v0.3.0/",
+    });
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
@@ -65,6 +103,7 @@ describe("DesktopShellUpdateAdapter", () => {
       updater,
       currentVersion: "0.2.0",
       isPackaged: true,
+      desktopChannelUrl,
       allowPrerelease: true,
     });
 
@@ -80,8 +119,9 @@ describe("DesktopShellUpdateAdapter", () => {
       updater,
       currentVersion: "0.2.0",
       isPackaged: true,
+      desktopChannelUrl,
     });
-    await expect(adapter.checkMetadata(expectedShell)).rejects.toThrow(
+    await expect(adapter.checkMetadata(expectedChannel)).rejects.toThrow(
       "does not match signed Desktop channel"
     );
 
@@ -91,7 +131,7 @@ describe("DesktopShellUpdateAdapter", () => {
       currentVersion: "0.3.0",
       isPackaged: true,
     });
-    await expect(carried.checkMetadata(expectedShell)).resolves.toMatchObject({
+    await expect(carried.checkMetadata(expectedChannel)).resolves.toMatchObject({
       version: "0.3.0",
       updateNeeded: false,
     });
@@ -106,10 +146,11 @@ describe("DesktopShellUpdateAdapter", () => {
       currentVersion: "0.2.0",
       isPackaged: true,
       createCancellationToken: () => token,
+      desktopChannelUrl,
       logLocations: ["updates.log"],
       manualInstallerUrl: "https://releases.example/desktop",
     });
-    const metadata = await adapter.checkMetadata(expectedShell);
+    const metadata = await adapter.checkMetadata(expectedChannel);
     const onProgress = vi.fn();
     const download = adapter.download(metadata, onProgress);
     updater.emit("download-progress", { percent: 45 });
@@ -144,9 +185,10 @@ describe("DesktopShellUpdateAdapter", () => {
         currentVersion: "0.2.0",
         isPackaged: true,
         createCancellationToken: () => token,
+        desktopChannelUrl,
         downloadInactivityTimeoutMs: 1_000,
       });
-      const metadata = await adapter.checkMetadata(expectedShell);
+      const metadata = await adapter.checkMetadata(expectedChannel);
       const download = adapter.download(metadata, vi.fn());
       const rejected = expect(download).rejects.toMatchObject({ name: "TimeoutError" });
 

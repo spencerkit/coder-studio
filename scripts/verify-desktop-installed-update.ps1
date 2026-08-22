@@ -4,6 +4,7 @@ param(
   [Parameter(Mandatory = $true)][string]$CandidateInstaller,
   [Parameter(Mandatory = $true)][string]$CandidateTag,
   [Parameter(Mandatory = $true)][string]$ChannelUrl,
+  [string]$ProductChannelUrl = '',
   [Parameter(Mandatory = $true)][string]$PreviousShellVersion,
   [Parameter(Mandatory = $true)][string]$PreviousRuntimeVersion,
   [Parameter(Mandatory = $true)][string]$ExpectedShellVersion,
@@ -260,6 +261,11 @@ try {
 
   $env:CODER_STUDIO_DESKTOP_ACCEPTANCE = '1'
   $env:CODER_STUDIO_DESKTOP_CHANNEL_URL = ([Uri]$ChannelUrl).AbsoluteUri
+  if ($ProductChannelUrl) {
+    $env:CODER_STUDIO_PRODUCT_CHANNEL_URL = ([Uri]$ProductChannelUrl).AbsoluteUri
+  } else {
+    Remove-Item Env:CODER_STUDIO_PRODUCT_CHANNEL_URL -ErrorAction SilentlyContinue
+  }
   $env:CODER_STUDIO_FACTORY_RELEASE_BASE_URL = ([Uri]::new([Uri]$ChannelUrl, '.')).AbsoluteUri
   $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE = $publicKeyFile
   $env:CODER_STUDIO_DESKTOP_STATE_DIR = Join-Path $userDataDirectory 'data'

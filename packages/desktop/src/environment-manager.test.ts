@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopEnvironmentManager } from "./environment-manager.js";
+import type { ProductChannel } from "./product-channel.js";
 import { DESKTOP_ENGINE_VERSION, type RuntimeManifest } from "./runtime-manifest.js";
 import { WslInstaller } from "./wsl-installer.js";
 import { WslRuntimeStoreClient } from "./wsl-runtime-store.js";
@@ -137,6 +138,7 @@ describe("DesktopEnvironmentManager Runtime compatibility", () => {
       version: "0.5.6",
       publishedAt: "2026-08-08T01:02:03.000Z",
       manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
+      manifestSha256: "b".repeat(64),
     };
     const manager = new DesktopEnvironmentManager({
       stateStore: null as never,
@@ -147,14 +149,141 @@ describe("DesktopEnvironmentManager Runtime compatibility", () => {
       publicKeyPem: "test-key",
       releaseBaseUrl: "https://releases.example/",
       factoryReleaseBaseUrl: "https://factory.example/",
-      loadChannel: vi.fn(async () => ({
-        runtimes: { "linux-x64": expected },
-      })) as never,
+      productChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
+      loadProductChannel: vi.fn(
+        async (): Promise<ProductChannel> => ({
+          schemaVersion: 1,
+          channel: "product",
+          version: "0.5.6",
+          releaseTag: "v0.5.6",
+          generatedAt: "2026-08-08T01:02:03.000Z",
+          minShellVersion: "0.1.0",
+          requirements: {
+            engineVersion: "2",
+            nodeVersion: "24.19.0",
+            runtimeHostApiVersion: 1,
+            apiProtocolVersion: 1,
+            dataSchemaVersion: 1,
+          },
+          runtimes: { "win32-x64": { ...expected }, "linux-x64": expected },
+          signature: { algorithm: "ed25519", value: "signature" },
+        })
+      ),
     });
 
     await expect(manager.prepareWsl(target)).resolves.toMatchObject({ runtime: candidate });
-    expect(checkRuntime).toHaveBeenCalledWith(probe, expected, "0.1.0");
+    expect(checkRuntime).toHaveBeenCalledWith(probe, expected, "0.1.0", "v0.5.6");
     expect(download).toHaveBeenCalledOnce();
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("pins WSL bootstrap to packaged Factory Product provenance after stable advances", async () => {
+    const target = {
+      id: "wsl:ubuntu",
+      kind: "wsl" as const,
+      label: "WSL: Ubuntu",
+      distro: "Ubuntu",
+    };
+    const probe = {
+      target,
+      home: "/home/alice",
+      dataRoot: "/home/alice/.local/share/coder-studio-desktop",
+      arch: "x64" as const,
+      kernel: "microsoft-standard-WSL2",
+      libc: "glibc 2.39",
+      engineInstalled: true,
+      installed: true,
+      supported: true,
+    };
+    const candidate = {
+      root: `${probe.dataRoot}/runtime-store/versions/${"a".repeat(24)}`,
+      source: "pending" as const,
+      pointer: {
+        id: "a".repeat(24),
+        runtimeVersion: "0.5.6",
+        installedAt: "2026-08-08T01:02:03.000Z",
+      },
+      manifest: compatibleManifest,
+    };
+    vi.spyOn(WslRuntimeStoreClient.prototype, "getLaunchCandidate")
+      .mockRejectedValueOnce(new Error("missing"))
+      .mockResolvedValueOnce(candidate);
+    const checkRuntime = vi
+      .spyOn(WslInstaller.prototype, "checkRuntime")
+      .mockResolvedValue({ version: "0.5.6" } as never);
+    vi.spyOn(WslInstaller.prototype, "downloadAndStageRuntime").mockResolvedValue({} as never);
+    const prepare = vi.spyOn(WslInstaller.prototype, "prepare").mockResolvedValue({} as never);
+    const expected = {
+      manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
+      manifestSha256: "b".repeat(64),
+    };
+    const manager = new DesktopEnvironmentManager({
+      stateStore: null as never,
+      discovery: { probe: vi.fn(async () => probe) } as never,
+      shellVersion: "0.1.0",
+      nodeVersion: "24.19.0",
+      runtimeVersion: "0.5.6",
+      publicKeyPem: "test-key",
+      releaseBaseUrl: "https://desktop-release.example/",
+      productChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
+      factoryProduct: {
+        schemaVersion: 1,
+        version: "0.5.6",
+        releaseTag: "v0.5.6",
+        runtimes: {
+          "win32-x64": {
+            manifest: "coder-studio-runtime-win32-x64.manifest.json",
+            manifestSha256: "a".repeat(64),
+          },
+          "linux-x64": expected,
+        },
+      },
+      loadProductChannel: vi.fn(
+        async (): Promise<ProductChannel> => ({
+          schemaVersion: 1,
+          channel: "product",
+          version: "0.6.0",
+          releaseTag: "v0.6.0",
+          generatedAt: "2026-08-09T01:02:03.000Z",
+          minShellVersion: "0.1.0",
+          requirements: {
+            engineVersion: "2",
+            nodeVersion: "24.19.0",
+            runtimeHostApiVersion: 1,
+            apiProtocolVersion: 1,
+            dataSchemaVersion: 1,
+          },
+          runtimes: {
+            "win32-x64": {
+              version: "0.6.0",
+              publishedAt: "2026-08-09T01:02:03.000Z",
+              manifest: "coder-studio-runtime-win32-x64.manifest.json",
+              manifestSha256: "c".repeat(64),
+            },
+            "linux-x64": {
+              version: "0.6.0",
+              publishedAt: "2026-08-09T01:02:03.000Z",
+              manifest: "coder-studio-server-runtime-linux-x64.manifest.json",
+              manifestSha256: "d".repeat(64),
+            },
+          },
+          signature: { algorithm: "ed25519", value: "signature" },
+        })
+      ),
+    } as never);
+
+    await expect(manager.prepareWsl(target)).resolves.toMatchObject({ runtime: candidate });
+    expect(checkRuntime).toHaveBeenCalledWith(
+      probe,
+      {
+        ...expected,
+        version: "0.5.6",
+      },
+      "0.1.0",
+      "v0.5.6"
+    );
     expect(prepare).not.toHaveBeenCalled();
   });
 });

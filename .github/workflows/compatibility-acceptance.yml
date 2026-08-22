@@ -1,0 +1,130 @@
+name: Product and Desktop compatibility acceptance
+
+on:
+  workflow_call:
+    inputs:
+      product_tag:
+        type: string
+        required: true
+      product_channel_sha256:
+        type: string
+        required: true
+      windows_manifest_sha256:
+        type: string
+        required: true
+      linux_manifest_sha256:
+        type: string
+        required: true
+      desktop_tag:
+        type: string
+        required: true
+      desktop_channel_sha256:
+        type: string
+        required: true
+    secrets:
+      runtime_public_key:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.target }} compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [native, wsl]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download immutable Product and Desktop metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCT_TAG: ${{ inputs.product_tag }}
+          DESKTOP_TAG: ${{ inputs.desktop_tag }}
+          DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
+        run: |
+          mkdir -p release/compatibility/product release/compatibility/desktop
+          gh release download "${PRODUCT_TAG}" \
+            --pattern product-channel.json \
+            --pattern coder-studio-runtime-win32-x64.manifest.json \
+            --pattern coder-studio-server-runtime-linux-x64.manifest.json \
+            --dir release/compatibility/product
+          gh release download "${DESKTOP_TAG}" \
+            --pattern desktop-channel.json \
+            --pattern desktop-channel-modern.json \
+            --dir release/compatibility/desktop
+
+          accepted_channel=""
+          for candidate in \
+            release/compatibility/desktop/desktop-channel.json \
+            release/compatibility/desktop/desktop-channel-modern.json; do
+            [[ -f "${candidate}" ]] || continue
+            candidate_digest=$(sha256sum "${candidate}" | cut -d ' ' -f 1)
+            if [[ "${candidate_digest}" == "${DESKTOP_CHANNEL_SHA256}" ]]; then
+              accepted_channel="${candidate}"
+              break
+            fi
+          done
+          if [[ -z "${accepted_channel}" ]]; then
+            echo "No Desktop channel asset matches the accepted digest" >&2
+            exit 1
+          fi
+          cp "${accepted_channel}" release/compatibility/desktop/desktop-channel.accepted.json
+          mv release/compatibility/desktop/desktop-channel.accepted.json \
+            release/compatibility/desktop/desktop-channel.json
+
+      - name: Verify accepted channel and manifest digests
+        env:
+          PRODUCT_CHANNEL_SHA256: ${{ inputs.product_channel_sha256 }}
+          WINDOWS_MANIFEST_SHA256: ${{ inputs.windows_manifest_sha256 }}
+          LINUX_MANIFEST_SHA256: ${{ inputs.linux_manifest_sha256 }}
+          DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
+        run: |
+          cd release/compatibility
+          printf '%s  %s\n' "${PRODUCT_CHANNEL_SHA256}" product/product-channel.json | sha256sum --check --strict
+          printf '%s  %s\n' "${WINDOWS_MANIFEST_SHA256}" product/coder-studio-runtime-win32-x64.manifest.json | sha256sum --check --strict
+          printf '%s  %s\n' "${LINUX_MANIFEST_SHA256}" product/coder-studio-server-runtime-linux-x64.manifest.json | sha256sum --check --strict
+          printf '%s  %s\n' "${DESKTOP_CHANNEL_SHA256}" desktop/desktop-channel.json | sha256sum --check --strict
+
+      - name: Verify Product Runtime and Desktop Shell capability tuple
+        env:
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.runtime_public_key }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PRODUCT_TAG: ${{ inputs.product_tag }}
+          DESKTOP_TAG: ${{ inputs.desktop_tag }}
+          TARGET: ${{ matrix.target }}
+          PRODUCT_CHANNEL_SHA256: ${{ inputs.product_channel_sha256 }}
+          WINDOWS_MANIFEST_SHA256: ${{ inputs.windows_manifest_sha256 }}
+          LINUX_MANIFEST_SHA256: ${{ inputs.linux_manifest_sha256 }}
+          DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
+        run: |
+          mkdir -p release/compatibility-report
+          pnpm exec tsx scripts/verify-release-compatibility.ts
+
+      - name: Upload compatibility report
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-report-${{ matrix.target }}-${{ github.sha }}
+          path: release/compatibility-report/${{ matrix.target }}.json
+          if-no-files-found: error
+          retention-days: 30

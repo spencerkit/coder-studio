@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   resolveDesktopChannelUrl,
@@ -5,6 +7,7 @@ import {
   shouldForceAcceptanceRuntimeHealthFailure,
 } from "./desktop-channel.js";
 import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
+import { resolveProductChannelUrl } from "./product-channel.js";
 
 const state = {
   schemaVersion: 1 as const,
@@ -59,6 +62,39 @@ const state = {
 };
 
 describe("unified Desktop update IPC", () => {
+  it("accepts independent feed overrides only for explicit acceptance launches", () => {
+    const compiledProduct = "https://updates.example/stable/product-channel.json";
+    const compiledDesktop = "https://updates.example/stable/desktop-channel.json";
+    const env = {
+      CODER_STUDIO_PRODUCT_CHANNEL_URL:
+        "https://github.com/o/r/releases/download/product-candidate/product-channel.json",
+      CODER_STUDIO_DESKTOP_CHANNEL_URL:
+        "https://github.com/o/r/releases/download/desktop-candidate/desktop-channel.json",
+    };
+
+    expect(resolveProductChannelUrl(env, compiledProduct)).toBe(compiledProduct);
+    expect(resolveDesktopChannelUrl(env, compiledDesktop)).toBe(compiledDesktop);
+    expect(
+      resolveProductChannelUrl({ ...env, CODER_STUDIO_DESKTOP_ACCEPTANCE: "1" }, compiledProduct)
+    ).toBe(env.CODER_STUDIO_PRODUCT_CHANNEL_URL);
+    expect(
+      resolveDesktopChannelUrl({ ...env, CODER_STUDIO_DESKTOP_ACCEPTANCE: "1" }, compiledDesktop)
+    ).toBe(env.CODER_STUDIO_DESKTOP_CHANNEL_URL);
+  });
+
+  it("wires Product and Desktop loaders to their owning adapters", async () => {
+    const source = await readFile(resolve(import.meta.dirname, "main.ts"), "utf8");
+
+    expect(source).toContain("parseProductChannel");
+    expect(source).toContain("productChannelUrl: productChannelUrl");
+    expect(source).toContain("desktopChannelUrl: desktopChannelUrl");
+    expect(source).toContain("loadProductChannel: loadProductChannel");
+    expect(source).toContain("loadDesktopChannel: loadDesktopChannel");
+    expect(source).toContain('join(process.resourcesPath, "factory-product.json")');
+    expect(source).toContain("factoryProduct: factoryProduct");
+    expect(source).not.toContain("loadChannel: loadDesktopChannel");
+  });
+
   it("accepts a tag-pinned channel override only for explicit acceptance launches", () => {
     const compiled = "https://updates.example/stable/desktop-channel.json";
     const override = "https://github.com/o/r/releases/download/candidate/desktop-channel.json";

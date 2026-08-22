@@ -8,6 +8,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { DesktopChannel } from "./desktop-channel.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
+import type { ProductChannel } from "./product-channel.js";
+import type { RuntimeManifestV2 } from "./runtime-manifest.js";
 import type { RuntimeDownloadOptions, RuntimeUpdateMetadata } from "./runtime-update-manager.js";
 
 const execFileAsync = promisify(execFile);
@@ -22,15 +24,54 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const channel: DesktopChannel = {
+const desktopChannel: DesktopChannel = {
   schemaVersion: 1,
-  channel: "stable",
-  releaseTag: "v0.6.0",
+  channel: "desktop",
+  version: "0.3.0",
+  releaseTag: "desktop-v0.3.0",
   generatedAt: "2026-08-08T01:02:03.000Z",
   shell: {
     version: "0.3.0",
     publishedAt: "2026-08-08T01:02:03.000Z",
     updaterMetadata: "latest.yml",
+    installer: "Coder-Studio-Setup-0.3.0.exe",
+    engineVersion: "2",
+    nodeVersion: "24.19.0",
+    runtimeHostApiVersion: 1,
+    apiProtocolVersion: 1,
+    dataSchemaVersion: 1,
+  },
+  wslEngine: {
+    version: "2",
+    nodeVersion: "24.19.0",
+    manifest: "engine-linux-x64.manifest.json",
+    manifestSha256: "d".repeat(64),
+  },
+  factoryProduct: {
+    version: "0.6.0",
+    releaseTag: "v0.6.0",
+    runtimes: {
+      "win32-x64": {
+        manifest: "runtime-win32-x64.manifest.json",
+        manifestSha256: "a".repeat(64),
+      },
+      "linux-x64": {
+        manifest: "runtime-linux-x64.manifest.json",
+        manifestSha256: "b".repeat(64),
+      },
+    },
+  },
+  signature: { algorithm: "ed25519", value: "signed" },
+};
+
+const productChannel: ProductChannel = {
+  schemaVersion: 1,
+  channel: "product",
+  version: "0.6.0",
+  releaseTag: "v0.6.0",
+  generatedAt: "2026-08-08T01:02:03.000Z",
+  minShellVersion: "0.2.0",
+  requirements: {
     engineVersion: "2",
     nodeVersion: "24.19.0",
     runtimeHostApiVersion: 1,
@@ -42,25 +83,31 @@ const channel: DesktopChannel = {
       version: "0.6.0",
       publishedAt: "2026-08-08T01:02:03.000Z",
       manifest: "runtime-win32-x64.manifest.json",
+      manifestSha256: "a".repeat(64),
     },
     "linux-x64": {
       version: "0.6.0",
       publishedAt: "2026-08-08T01:02:03.000Z",
       manifest: "runtime-linux-x64.manifest.json",
+      manifestSha256: "b".repeat(64),
     },
   },
   signature: { algorithm: "ed25519", value: "signed" },
 };
 
-function runtimeMetadata(target: "win32-x64" | "linux-x64" = "win32-x64"): RuntimeUpdateMetadata {
+function runtimeMetadata(
+  target: "win32-x64" | "linux-x64" = "win32-x64",
+  version = "0.6.0",
+  manifestOverrides: Partial<RuntimeManifestV2> = {}
+): RuntimeUpdateMetadata {
   const [platform, arch] = target.split("-") as ["win32" | "linux", "x64"];
   return {
     componentId: `runtime:${target}`,
     manifestUrl: `https://releases.example/runtime-${target}.manifest.json`,
     manifest: {
       schemaVersion: 2,
-      publishedAt: "2026-08-08T01:02:03.000Z",
-      runtimeVersion: "0.6.0",
+      publishedAt: version === "0.6.0" ? "2026-08-08T01:02:03.000Z" : "2026-07-01T00:00:00.000Z",
+      runtimeVersion: version,
       minShellVersion: "0.2.0",
       requiredEngineVersion: "2",
       requiredNodeVersion: "24.19.0",
@@ -73,9 +120,10 @@ function runtimeMetadata(target: "win32-x64" | "linux-x64" = "win32-x64"): Runti
       packageFile: "runtime.tgz",
       files: [{ path: "server.mjs", sha256: "a".repeat(64), size: 1 }],
       signature: { algorithm: "ed25519", value: "signed" },
+      ...manifestOverrides,
     },
-    version: "0.6.0",
-    publishedAt: "2026-08-08T01:02:03.000Z",
+    version,
+    publishedAt: version === "0.6.0" ? "2026-08-08T01:02:03.000Z" : "2026-07-01T00:00:00.000Z",
     plannedShellVersion: "0.3.0",
   };
 }
@@ -92,6 +140,11 @@ function createHarness(
     runtimeTarget?: "win32-x64" | "linux-x64";
     environmentId?: string;
     updateOwnerId?: string;
+    productChannelError?: Error;
+    desktopChannelError?: Error;
+    installedRuntimeManifest?: RuntimeManifestV2;
+    installedSharedWebManifest?: RuntimeManifestV2;
+    buildEngineVersion?: string;
   } = {}
 ) {
   const shellVersion = options.shellVersion ?? "0.2.0";
@@ -122,6 +175,24 @@ function createHarness(
         options.runtimeDownload
     ),
     getCurrentVersion: vi.fn(async () => runtimeVersion),
+    getCurrentManifest: vi.fn(
+      async () =>
+        options.installedRuntimeManifest ?? runtimeMetadata(runtimeTarget, runtimeVersion).manifest
+    ),
+    getPendingVersion: vi.fn(async () => null),
+  };
+  const sharedWebRuntime = {
+    checkMetadata: vi.fn(async () => runtimeMetadata("win32-x64")),
+    downloadAndStage: vi.fn(
+      async (_metadata: RuntimeUpdateMetadata, _downloadOptions: RuntimeDownloadOptions) =>
+        options.runtimeDownload
+    ),
+    getCurrentVersion: vi.fn(async () => options.sharedWebVersion ?? runtimeVersion),
+    getCurrentManifest: vi.fn(
+      async () =>
+        options.installedSharedWebManifest ??
+        runtimeMetadata("win32-x64", options.sharedWebVersion ?? runtimeVersion).manifest
+    ),
     getPendingVersion: vi.fn(async () => null),
   };
   const journalRecord = { value: null as unknown };
@@ -150,8 +221,19 @@ function createHarness(
     })),
   };
   const states: ProductUpdateState[] = [];
-  const loadChannel = vi.fn(async () => channel);
-  const getRuntimeAdapter = vi.fn(async () => runtime as never);
+  const loadProductChannel = vi.fn(async () => {
+    if (options.productChannelError) throw options.productChannelError;
+    return productChannel;
+  });
+  const loadDesktopChannel = vi.fn(async () => {
+    if (options.desktopChannelError) throw options.desktopChannelError;
+    return desktopChannel;
+  });
+  const getRuntimeAdapter = vi.fn(async (target: "win32-x64" | "linux-x64") =>
+    runtimeTarget === "linux-x64" && target === "win32-x64"
+      ? (sharedWebRuntime as never)
+      : (runtime as never)
+  );
   const coordinator = new DesktopUpdateCoordinator({
     runtimeContext: {
       environment: runtimeTarget === "linux-x64" ? "desktop-wsl" : "desktop-native",
@@ -167,14 +249,15 @@ function createHarness(
       shellVersion,
       builtAt: "2026-07-01T00:00:00.000Z",
       publishedAt: "2026-07-01T00:00:00.000Z",
-      engineVersion: "2",
+      engineVersion: options.buildEngineVersion ?? "2",
       nodeVersion: "24.19.0",
       runtimeHostApiVersion: 1,
       apiProtocolVersion: 1,
       dataSchemaVersion: 1,
       metadataAvailable: true,
     }),
-    loadChannel,
+    loadProductChannel,
+    loadDesktopChannel,
     shell: shell as never,
     getRuntimeAdapter,
     initialRuntimeTarget: runtimeTarget,
@@ -193,10 +276,12 @@ function createHarness(
     coordinator,
     shell,
     runtime,
+    sharedWebRuntime,
     journal,
     settings,
     states,
-    loadChannel,
+    loadProductChannel,
+    loadDesktopChannel,
     getRuntimeAdapter,
   };
 }
@@ -223,8 +308,143 @@ describe("DesktopUpdateCoordinator", () => {
     expect(state.components.every((component) => component.targetPublishedAt !== null)).toBe(true);
   });
 
-  it("skips a WSL Runtime-only update that would outrun the shared Web Runtime", async () => {
+  it("keeps a safe Shell plan when the Product feed fails signature verification", async () => {
     const { coordinator, runtime } = createHarness({
+      shellVersion: "0.2.0",
+      runtimeVersion: "0.6.0",
+      productChannelError: new Error("Product channel signature is invalid"),
+    });
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "available",
+      components: [expect.objectContaining({ id: "shell" })],
+      diagnostics: {
+        productChannelError: "Product channel signature is invalid",
+        desktopChannelError: null,
+      },
+    });
+    expect(runtime.checkMetadata).not.toHaveBeenCalled();
+    expect(runtime.getCurrentManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a safe Runtime plan when the Desktop feed is unavailable", async () => {
+    const { coordinator, shell } = createHarness({
+      shellVersion: "0.3.0",
+      runtimeVersion: "0.5.0",
+      desktopChannelError: new Error("Desktop feed unavailable"),
+    });
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "available",
+      components: [expect.objectContaining({ id: "runtime:win32-x64" })],
+      diagnostics: {
+        productChannelError: null,
+        desktopChannelError: "Desktop feed unavailable",
+      },
+    });
+    expect(shell.checkMetadata).not.toHaveBeenCalled();
+  });
+
+  it("keeps a safe Shell plan when Product Runtime metadata verification fails", async () => {
+    const { coordinator, runtime } = createHarness({
+      shellVersion: "0.2.0",
+      runtimeVersion: "0.6.0",
+    });
+    runtime.checkMetadata.mockRejectedValueOnce(new Error("Runtime manifest signature is invalid"));
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "available",
+      components: [expect.objectContaining({ id: "shell" })],
+      diagnostics: { productChannelError: "Runtime manifest signature is invalid" },
+    });
+  });
+
+  it("keeps a safe Runtime plan when Shell updater metadata verification fails", async () => {
+    const { coordinator, shell } = createHarness({
+      shellVersion: "0.2.0",
+      runtimeVersion: "0.5.0",
+    });
+    shell.checkMetadata.mockRejectedValueOnce(
+      new Error("Desktop Shell updater does not match signed Desktop channel")
+    );
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "available",
+      components: [expect.objectContaining({ id: "runtime:win32-x64" })],
+      diagnostics: {
+        desktopChannelError: "Desktop Shell updater does not match signed Desktop channel",
+      },
+    });
+  });
+
+  it("reports a partial feed failure instead of claiming the available feed is up to date", async () => {
+    const { coordinator } = createHarness({
+      shellVersion: "0.3.0",
+      runtimeVersion: "0.6.0",
+      productChannelError: new Error("Product feed unavailable"),
+    });
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "failed",
+      components: [],
+      diagnostics: { productChannelError: "Product feed unavailable" },
+      errorSummary: "Product feed unavailable",
+    });
+  });
+
+  it("throws one aggregate failure when neither signed feed is available", async () => {
+    const { coordinator } = createHarness({
+      productChannelError: new Error("Product feed unavailable"),
+      desktopChannelError: new Error("Desktop feed unavailable"),
+    });
+
+    await expect(coordinator.check({ manual: true })).rejects.toThrow(
+      "Product and Desktop update channels are unavailable"
+    );
+    expect(coordinator.getState()).toMatchObject({
+      status: "failed",
+      diagnostics: {
+        productChannelError: "Product feed unavailable",
+        desktopChannelError: "Desktop feed unavailable",
+      },
+    });
+  });
+
+  it("rejects a Product Runtime whose minimum Shell exceeds the effective Shell", async () => {
+    const { coordinator, loadProductChannel } = createHarness({ shellVersion: "0.3.0" });
+    loadProductChannel.mockResolvedValueOnce({
+      ...productChannel,
+      minShellVersion: "0.4.0",
+    });
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "failed",
+      compatibility: { compatible: false, code: "runtime_host_incompatible" },
+    });
+  });
+
+  it("validates a Shell-only plan against the installed Runtime manifest", async () => {
+    const installedRuntime = runtimeMetadata("win32-x64", "0.6.0", {
+      requiredEngineVersion: "1",
+    }).manifest;
+    const { coordinator, runtime } = createHarness({
+      shellVersion: "0.2.0",
+      runtimeVersion: "0.6.0",
+      productChannelError: new Error("Product feed unavailable"),
+      installedRuntimeManifest: installedRuntime,
+      buildEngineVersion: "1",
+    });
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "failed",
+      components: [expect.objectContaining({ id: "shell", status: "failed" })],
+      compatibility: { compatible: false, code: "shell_breaks_current_runtime" },
+    });
+    expect(runtime.getCurrentManifest).toHaveBeenCalledTimes(1);
+  });
+
+  it("stages both Product Runtimes for an active WSL environment and reconciles both", async () => {
+    const { coordinator, runtime, sharedWebRuntime } = createHarness({
       shellVersion: "0.3.0",
       runtimeVersion: "0.5.0",
       sharedWebVersion: "0.5.0",
@@ -234,12 +454,29 @@ describe("DesktopUpdateCoordinator", () => {
 
     const state = await coordinator.check({ manual: true });
 
-    expect(state).toMatchObject({
-      status: "idle",
-      components: [],
-      compatibility: { compatible: true, code: null },
+    expect(state.components.map((component) => component.id)).toEqual([
+      "runtime:win32-x64",
+      "runtime:linux-x64",
+    ]);
+    await expect(coordinator.download()).resolves.toMatchObject({ status: "ready" });
+    expect(sharedWebRuntime.downloadAndStage).toHaveBeenCalledTimes(1);
+    expect(runtime.downloadAndStage).toHaveBeenCalledTimes(1);
+    await coordinator.prepareRestart();
+    await expect(
+      coordinator.reconcileOnStartup({
+        shellVersion: "0.3.0",
+        runtimeVersion: "0.6.0",
+        pendingRuntimeVersion: null,
+        sharedWebVersion: "0.6.0",
+        pendingSharedWebVersion: null,
+      })
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      components: [
+        expect.objectContaining({ id: "runtime:win32-x64", status: "succeeded" }),
+        expect.objectContaining({ id: "runtime:linux-x64", status: "succeeded" }),
+      ],
     });
-    expect(runtime.downloadAndStage).not.toHaveBeenCalled();
   });
 
   it("allows a combined WSL update when the target Shell carries matching shared Web", async () => {
@@ -256,6 +493,7 @@ describe("DesktopUpdateCoordinator", () => {
       compatibility: { compatible: true },
       components: [
         expect.objectContaining({ id: "shell" }),
+        expect.objectContaining({ id: "runtime:win32-x64" }),
         expect.objectContaining({ id: "runtime:linux-x64" }),
       ],
     });
@@ -559,7 +797,8 @@ describe("DesktopUpdateCoordinator", () => {
       await expect(native.coordinator.check({ manual: true })).rejects.toMatchObject({
         code: "desktop_update_owner_unavailable",
       });
-      expect(native.loadChannel).not.toHaveBeenCalled();
+      expect(native.loadProductChannel).not.toHaveBeenCalled();
+      expect(native.loadDesktopChannel).not.toHaveBeenCalled();
       expect(wsl.shell.disarmInstallOnQuit).not.toHaveBeenCalled();
       await expect(wslJournal.read()).resolves.toMatchObject({
         planId: "wsl-plan",
@@ -688,7 +927,14 @@ describe("DesktopUpdateCoordinator", () => {
   });
 
   it("skips target environment preparation without update ownership", async () => {
-    const { coordinator, journal, loadChannel, getRuntimeAdapter, runtime } = createHarness();
+    const {
+      coordinator,
+      journal,
+      loadProductChannel,
+      loadDesktopChannel,
+      getRuntimeAdapter,
+      runtime,
+    } = createHarness();
     journal.isOwner.mockReturnValue(false);
     journal.acquireOwner.mockResolvedValue(false);
 
@@ -697,7 +943,8 @@ describe("DesktopUpdateCoordinator", () => {
     ).resolves.toBeUndefined();
 
     expect(journal.acquireOwner).toHaveBeenCalledWith("desktop-owner-1");
-    expect(loadChannel).not.toHaveBeenCalled();
+    expect(loadProductChannel).not.toHaveBeenCalled();
+    expect(loadDesktopChannel).not.toHaveBeenCalled();
     expect(getRuntimeAdapter).not.toHaveBeenCalled();
     expect(runtime.checkMetadata).not.toHaveBeenCalled();
     expect(runtime.downloadAndStage).not.toHaveBeenCalled();
@@ -832,7 +1079,8 @@ describe("DesktopUpdateCoordinator", () => {
       await expect(native.coordinator.check({ manual: true })).rejects.toMatchObject({
         code: "desktop_update_owner_unavailable",
       });
-      expect(native.loadChannel).not.toHaveBeenCalled();
+      expect(native.loadProductChannel).not.toHaveBeenCalled();
+      expect(native.loadDesktopChannel).not.toHaveBeenCalled();
       await expect(wslJournal.read()).resolves.toMatchObject({
         planId: "restarting-wsl-plan",
         environmentId: "wsl:ubuntu",

@@ -195,16 +195,25 @@ describe("WslInstaller", () => {
       "server.mjs": serverBytes,
       "manifest.json": `${JSON.stringify(runtimeManifest, null, 2)}\n`,
     });
+    const runtimeManifestBody = JSON.stringify(runtimeManifest);
 
     const responses = new Map<string, Response>([
       ["https://releases.example/engine.manifest.json", Response.json(engineManifest)],
       ["https://releases.example/runtime.manifest.json", Response.json(runtimeManifest)],
       ["https://immutable.example/engine.manifest.json", Response.json(engineManifest)],
       ["https://immutable.example/runtime.manifest.json", Response.json(runtimeManifest)],
+      [
+        "https://github.com/spencerkit/coder-studio/releases/download/v0.5.6/runtime.manifest.json",
+        new Response(runtimeManifestBody),
+      ],
       ["https://releases.example/engine.tgz", new Response(engineArchive)],
       ["https://releases.example/runtime.tgz", new Response(runtimeArchive)],
       ["https://immutable.example/engine.tgz", new Response(engineArchive)],
       ["https://immutable.example/runtime.tgz", new Response(runtimeArchive)],
+      [
+        "https://github.com/spencerkit/coder-studio/releases/download/v0.5.6/runtime.tgz",
+        new Response(runtimeArchive),
+      ],
     ]);
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const response = responses.get(String(input));
@@ -226,6 +235,8 @@ describe("WslInstaller", () => {
       runtimeVersion: "0.5.6",
       engineManifestUrl: () => "https://releases.example/engine.manifest.json",
       runtimeManifestUrl: () => "https://releases.example/runtime.manifest.json",
+      productChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
       factoryEngineManifestUrl: () => "https://immutable.example/engine.manifest.json",
       factoryRuntimeManifestUrl: () => "https://immutable.example/runtime.manifest.json",
       fetch: fetchImpl,
@@ -239,17 +250,38 @@ describe("WslInstaller", () => {
         version: "0.5.6",
         publishedAt: "2026-08-08T01:02:03.000Z",
         manifest: "runtime.manifest.json",
+        manifestSha256: createHash("sha256").update(runtimeManifestBody).digest("hex"),
       },
-      "0.1.0"
+      "0.1.0",
+      "v0.5.6"
     );
     expect(metadata).toMatchObject({
       componentId: "runtime:linux-x64",
       version: "0.5.6",
       publishedAt: "2026-08-08T01:02:03.000Z",
+      manifestUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/v0.5.6/runtime.manifest.json",
       engineManifestUrl: "https://releases.example/engine.manifest.json",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(runner).not.toHaveBeenCalled();
+    fetchMock.mockClear();
+
+    await expect(
+      installer.checkRuntime(
+        createProbe(),
+        {
+          version: "0.5.6",
+          manifest: "runtime.manifest.json",
+          manifestSha256: createHash("sha256").update(runtimeManifestBody).digest("hex"),
+        },
+        "0.1.0",
+        "v0.5.6"
+      )
+    ).resolves.toMatchObject({
+      version: "0.5.6",
+      publishedAt: "2026-08-08T01:02:03.000Z",
+    });
     fetchMock.mockClear();
 
     const installed = await installer.downloadAndStageRuntime(metadata, {
