@@ -54,9 +54,18 @@ stable pointer backward as a downgrade mechanism.
 ## Automatic promotion and interruptions
 
 Product and Desktop workflows use independent serialized locks (`product-production` and
-`desktop-production`). A failed acceptance leaves the candidate as a prerelease and does not move an
-npm dist-tag or stable pointer. A rerun with `candidate_tag` inspects external state and completes only
-missing steps in the defined order.
+`desktop-production`) for candidate construction and acceptance. Their promotion jobs additionally
+share `product-desktop-stable-promotion`, so only one accepted tuple can move a stable pointer at a
+time. After acquiring that lock, Product rechecks the accepted `desktop-stable` digest and Desktop
+rechecks the accepted `product-stable` digest before changing any external state. If the counterpart
+changed after compatibility acceptance, promotion stops and the same `candidate_tag` must rerun the
+complete compatibility graph against the new stable tuple.
+
+A failed acceptance leaves the candidate as a prerelease and does not move an npm dist-tag or stable
+pointer. A rerun with `candidate_tag` inspects external state and completes only missing steps in the
+defined order. Desktop candidates created before the split boundary cannot be resumed when their
+`desktop-validation-evidence.tgz` still contains `factory-runtime/`; create a new candidate so Desktop
+does not republish Product-owned Runtime bytes.
 
 If interruption occurs after a versioned release is promoted but before its pointer moves, rerun the
 same candidate. If it occurs after a pointer moves, verification and `promotion.json` converge on the
@@ -86,7 +95,9 @@ and cannot acquire both normal workflow locks at once.
 
 1. Prepare an immutable prerelease containing the accepted Product bundle, the bridge installer and
    Engine assets, a legacy unified `desktop-channel.json`, and the split
-   `desktop-channel-modern.json`.
+   `desktop-channel-modern.json`. Its tag must be `desktop-v<version>`, exactly matching the signed
+   Desktop channel version; arbitrary bridge tags are rejected because installed WSL Engine URLs are
+   derived from that immutable identity.
 2. Run `desktop-bridge-release.yml` with its exact tag in `bridge_candidate_tag` and type
    `PROMOTE_BRIDGE_TO_LATEST` in the confirmation input.
 3. The workflow validates both bundles and confirms that Product bytes already exist unchanged at the

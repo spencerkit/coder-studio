@@ -480,16 +480,22 @@ jobs:
           retention-days: 30
 
   accept-runtime:
-    name: Accept installed Product Runtime update (${{ matrix.target }})
+    name: Accept installed Product Runtime (${{ matrix.scenario }})
     needs:
       - prepare
       - publish-candidate
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        target: [native, wsl]
+        scenario:
+          - runtime-only
+          - wsl
+          - runtime-health-rollback
+          - interrupted-download
+          - restart-journal-recovery
+          - external-sidecar-browser
     env:
       GH_TOKEN: ${{ github.token }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
@@ -512,54 +518,152 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Prepare accepted stable-to-candidate Runtime fixture
-        shell: bash
-        env:
-          CANDIDATE_TAG: ${{ needs.publish-candidate.outputs.candidate_tag }}
-          CANDIDATE_VERSION: ${{ needs.prepare.outputs.version }}
-          PREVIOUS_PRODUCT_TAG: ${{ needs.prepare.outputs.previous_product_tag }}
-          PRODUCT_CHANNEL_SHA256: ${{ needs.publish-candidate.outputs.product_channel_sha256 }}
-          WINDOWS_MANIFEST_SHA256: ${{ needs.publish-candidate.outputs.windows_manifest_sha256 }}
-          LINUX_MANIFEST_SHA256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
+      - name: Download stable Desktop and immutable Product candidate
+        shell: pwsh
         run: |
-          if [[ -z "${PREVIOUS_PRODUCT_TAG}" ]]; then
-            echo "A stable Product Runtime is required for installed-update acceptance" >&2
-            exit 1
-          fi
-          mkdir -p release/wsl-acceptance/keys release/wsl-acceptance/desktop/resources/factory-runtime release/runtime-baseline release/runtime-candidate
-          gh release download "${CANDIDATE_TAG}" \
-            --pattern product-channel.json \
-            --pattern coder-studio-runtime-win32-x64.manifest.json \
-            --pattern coder-studio-server-runtime-linux-x64.manifest.json \
-            --dir release/runtime-candidate
-          printf '%s  %s\n' "${PRODUCT_CHANNEL_SHA256}" release/runtime-candidate/product-channel.json | sha256sum --check --strict
-          printf '%s  %s\n' "${WINDOWS_MANIFEST_SHA256}" release/runtime-candidate/coder-studio-runtime-win32-x64.manifest.json | sha256sum --check --strict
-          printf '%s  %s\n' "${LINUX_MANIFEST_SHA256}" release/runtime-candidate/coder-studio-server-runtime-linux-x64.manifest.json | sha256sum --check --strict
-          gh release download "${PREVIOUS_PRODUCT_TAG}" \
-            --pattern coder-studio-runtime-win32-x64.manifest.json \
-            --pattern 'coder-studio-runtime-*-win32-x64.tgz' \
-            --dir release/runtime-baseline
-          baseline_manifest=release/runtime-baseline/coder-studio-runtime-win32-x64.manifest.json
-          baseline_package=$(node -p "require('./${baseline_manifest}').packageFile")
-          baseline_version=$(node -p "require('./${baseline_manifest}').runtimeVersion")
-          tar -xzf "release/runtime-baseline/${baseline_package}" -C release/wsl-acceptance/desktop/resources/factory-runtime
-          printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" > release/wsl-acceptance/keys/runtime-public.pem
-          CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_VERSION="${CANDIDATE_VERSION}" BASELINE_VERSION="${baseline_version}" node --input-type=module <<'NODE'
-          import { mkdirSync, writeFileSync } from "node:fs";
-          mkdirSync("release/wsl-acceptance", { recursive: true });
-          writeFileSync("release/wsl-acceptance/acceptance.json", `${JSON.stringify({
-            schemaVersion: 1,
-            runtimeVersion: process.env.CANDIDATE_VERSION,
-            factoryRuntimeVersion: process.env.BASELINE_VERSION,
-            downloadBaseUrl: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/download/${process.env.CANDIDATE_TAG}/`,
-            desktopExecutable: "release/wsl-acceptance/desktop/Coder Studio.exe",
-          }, null, 2)}\n`);
-          NODE
+          New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/stable-pointer | Out-Null
+          New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/desktop | Out-Null
+          New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/product | Out-Null
+          gh release download desktop-stable `
+            --pattern desktop-channel.json `
+            --dir release/product-runtime-acceptance/stable-pointer
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the accepted Desktop stable pointer' }
+          $desktop = Get-Content release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Raw | ConvertFrom-Json
+          gh release download $desktop.releaseTag `
+            --pattern desktop-channel.json `
+            --pattern desktop-channel-modern.json `
+            --pattern latest.yml `
+            --pattern 'Coder-Studio-Setup-*.exe' `
+            --dir release/product-runtime-acceptance/desktop
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the immutable stable Desktop installer' }
+          $stableDigest = (Get-FileHash release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Algorithm SHA256).Hash
+          $acceptedAsset = $null
+          foreach ($asset in @('desktop-channel.json', 'desktop-channel-modern.json')) {
+            $path = Join-Path 'release/product-runtime-acceptance/desktop' $asset
+            if ((Test-Path $path) -and (Get-FileHash $path -Algorithm SHA256).Hash -eq $stableDigest) {
+              $acceptedAsset = $asset
+              break
+            }
+          }
+          if (-not $acceptedAsset) { throw 'No immutable Desktop channel matches the accepted stable pointer' }
+          if ($acceptedAsset -ne 'desktop-channel.json') {
+            Copy-Item `
+              (Join-Path 'release/product-runtime-acceptance/desktop' $acceptedAsset) `
+              release/product-runtime-acceptance/desktop/desktop-channel.json `
+              -Force
+          }
+          $acceptedAsset | Set-Content release/product-runtime-acceptance/desktop/channel-asset.txt -NoNewline
+          gh release download '${{ needs.publish-candidate.outputs.candidate_tag }}' `
+            --pattern product-channel.json `
+            --pattern coder-studio-runtime-win32-x64.manifest.json `
+            --pattern coder-studio-server-runtime-linux-x64.manifest.json `
+            --dir release/product-runtime-acceptance/product
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Product candidate metadata' }
 
-      - name: Run tag-pinned Runtime acceptance
-        env:
-          ACCEPTANCE_TARGET: ${{ matrix.target }}
-        run: pnpm acceptance:runtime:verify
+      - name: Verify accepted Product and Desktop metadata digests
+        shell: bash
+        run: |
+          cmp --silent \
+            release/product-runtime-acceptance/stable-pointer/desktop-channel.json \
+            release/product-runtime-acceptance/desktop/desktop-channel.json || {
+              echo "Desktop stable pointer differs from its immutable release" >&2
+              exit 1
+            }
+          printf '%s  %s\n' '${{ needs.prepare.outputs.desktop_channel_sha256 }}' \
+            release/product-runtime-acceptance/desktop/desktop-channel.json | sha256sum --check --strict
+          printf '%s  %s\n' '${{ needs.publish-candidate.outputs.product_channel_sha256 }}' \
+            release/product-runtime-acceptance/product/product-channel.json | sha256sum --check --strict
+          printf '%s  %s\n' '${{ needs.publish-candidate.outputs.windows_manifest_sha256 }}' \
+            release/product-runtime-acceptance/product/coder-studio-runtime-win32-x64.manifest.json | sha256sum --check --strict
+          printf '%s  %s\n' '${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}' \
+            release/product-runtime-acceptance/product/coder-studio-server-runtime-linux-x64.manifest.json | sha256sum --check --strict
+
+      - name: Resolve installed Product acceptance identity
+        id: identity
+        shell: pwsh
+        run: |
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw 'Desktop Runtime public key is required for Product acceptance'
+          }
+          New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/key | Out-Null
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content release/product-runtime-acceptance/key/runtime-public.pem -NoNewline
+          $desktopRoot = 'release/product-runtime-acceptance/desktop'
+          $desktop = Get-Content "$desktopRoot/desktop-channel.json" -Raw | ConvertFrom-Json
+          $product = Get-Content release/product-runtime-acceptance/product/product-channel.json -Raw | ConvertFrom-Json
+          $metadata = Get-Content "$desktopRoot/latest.yml" -Raw
+          $installerName = [regex]::Match($metadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $components = if ('${{ matrix.scenario }}' -eq 'external-sidecar-browser') { '' } else { 'runtime:win32-x64' }
+          $desktopChannelAsset = Get-Content "$desktopRoot/channel-asset.txt" -Raw
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$product.signature.value)
+          $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
+          "installer=$desktopRoot/$installerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "desktop_tag=$($desktop.releaseTag)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "desktop_channel_asset=$desktopChannelAsset" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "shell_version=$($desktop.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$($desktop.factoryProduct.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_runtime=$($product.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Prepare disposable WSL distribution
+        if: matrix.scenario == 'wsl'
+        id: wsl
+        shell: pwsh
+        run: |
+          $distro = "coder-studio-acceptance-product-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          wsl.exe --install -d Ubuntu --no-launch
+          wsl.exe -d Ubuntu -u root -- true
+          wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
+          wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable Product acceptance WSL distribution' }
+          wsl.exe -d $distro -u root -- sh -lc "useradd --create-home --shell /bin/bash coderstudio && printf '[boot]\nsystemd=false\n[user]\ndefault=coderstudio\n' > /etc/wsl.conf"
+          wsl.exe --terminate $distro
+          "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Run tag-pinned installed Product acceptance
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.installer }}',
+            '-CandidateTag', '${{ needs.publish-candidate.outputs.candidate_tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ steps.identity.outputs.desktop_tag }}/${{ steps.identity.outputs.desktop_channel_asset }}',
+            '-ProductChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ needs.publish-candidate.outputs.candidate_tag }}/product-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.shell_version }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.shell_version }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-ExpectedComponents', '${{ steps.identity.outputs.components }}',
+            '-PublicKeyPath', 'release/product-runtime-acceptance/key/runtime-public.pem',
+            '-Scenario', '${{ matrix.scenario }}',
+            '-ReportPath', 'release/product-runtime-report/${{ matrix.scenario }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
+            $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.identity.outputs.previous_runtime }}')
+          }
+          if ('${{ matrix.scenario }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Installed Product Runtime acceptance failed' }
+
+      - name: Upload Product Runtime acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-runtime-${{ matrix.scenario }}-${{ github.sha }}
+          path: release/product-runtime-report/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Clean up disposable WSL distribution
+        if: always() && matrix.scenario == 'wsl'
+        shell: pwsh
+        run: |
+          $distro = '${{ steps.wsl.outputs.name }}'
+          if ($distro) { wsl.exe --unregister $distro 2>$null }
 
   compatibility:
     name: Accept Product compatibility with stable Desktop
@@ -574,6 +678,8 @@ jobs:
       linux_manifest_sha256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
       desktop_tag: ${{ needs.prepare.outputs.desktop_tag }}
       desktop_channel_sha256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
+    secrets:
+      runtime_public_key: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
 
   promote:
     name: Promote accepted Product
@@ -586,6 +692,9 @@ jobs:
     if: success()
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: product-desktop-stable-promotion
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
@@ -602,6 +711,7 @@ jobs:
       NPM_INTEGRITY: ${{ needs.publish-candidate.outputs.npm_integrity }}
       ARTIFACT_DIGESTS: ${{ needs.publish-candidate.outputs.artifact_digests }}
       PREVIOUS_POINTER_DIGEST: ${{ needs.prepare.outputs.previous_product_channel_sha256 }}
+      ACCEPTED_DESKTOP_CHANNEL_SHA256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
       CANDIDATE_COMMIT: ${{ needs.publish-candidate.outputs.candidate_commit }}
     steps:
       - name: Setup Node.js for npm promotion
@@ -609,6 +719,18 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
+
+      - name: Revalidate accepted Desktop stable pointer
+        run: |
+          mkdir -p release/product-promotion/accepted-desktop
+          gh release download desktop-stable \
+            --pattern desktop-channel.json \
+            --dir release/product-promotion/accepted-desktop
+          current_digest=$(sha256sum release/product-promotion/accepted-desktop/desktop-channel.json | cut -d ' ' -f 1)
+          if [[ "${current_digest}" != "${ACCEPTED_DESKTOP_CHANNEL_SHA256}" ]]; then
+            echo "Desktop stable pointer changed after compatibility acceptance; rerun the candidate acceptance graph" >&2
+            exit 1
+          fi
 
       - name: Verify accepted immutable Product bytes
         run: |

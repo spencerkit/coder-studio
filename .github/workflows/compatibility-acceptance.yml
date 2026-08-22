@@ -21,6 +21,9 @@ on:
       desktop_channel_sha256:
         type: string
         required: true
+    secrets:
+      runtime_public_key:
+        required: true
 
 permissions:
   contents: read
@@ -35,6 +38,24 @@ jobs:
       matrix:
         target: [native, wsl]
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Download immutable Product and Desktop metadata
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,6 +108,8 @@ jobs:
 
       - name: Verify Product Runtime and Desktop Shell capability tuple
         env:
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.runtime_public_key }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           PRODUCT_TAG: ${{ inputs.product_tag }}
           DESKTOP_TAG: ${{ inputs.desktop_tag }}
           TARGET: ${{ matrix.target }}
@@ -96,95 +119,7 @@ jobs:
           DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
         run: |
           mkdir -p release/compatibility-report
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync } from "node:fs";
-
-          const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
-          const product = readJson("release/compatibility/product/product-channel.json");
-          const desktop = readJson("release/compatibility/desktop/desktop-channel.json");
-          const target = process.env.TARGET;
-          const runtimeTarget = target === "wsl" ? "linux-x64" : "win32-x64";
-          const manifestName = target === "wsl"
-            ? "coder-studio-server-runtime-linux-x64.manifest.json"
-            : "coder-studio-runtime-win32-x64.manifest.json";
-          const manifest = readJson(`release/compatibility/product/${manifestName}`);
-          const compareVersions = (left, right) => {
-            const parts = (value) => String(value).split(/[.+-]/u).map((part) => Number.parseInt(part, 10) || 0);
-            const a = parts(left);
-            const b = parts(right);
-            for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-              if ((a[index] ?? 0) !== (b[index] ?? 0)) return (a[index] ?? 0) - (b[index] ?? 0);
-            }
-            return 0;
-          };
-
-          if (product.channel !== "product" || product.releaseTag !== process.env.PRODUCT_TAG) {
-            throw new Error("Product channel does not match the explicit immutable release tag");
-          }
-          if (desktop.channel !== "desktop" || desktop.releaseTag !== process.env.DESKTOP_TAG) {
-            throw new Error("Desktop channel does not match the explicit immutable release tag");
-          }
-          if (product.runtimes?.[runtimeTarget]?.manifest !== manifestName) {
-            throw new Error(`Product channel does not identify the ${runtimeTarget} manifest`);
-          }
-          const expectedManifestSha256 = target === "wsl"
-            ? process.env.LINUX_MANIFEST_SHA256
-            : process.env.WINDOWS_MANIFEST_SHA256;
-          if (product.runtimes[runtimeTarget].manifestSha256 !== expectedManifestSha256) {
-            throw new Error(`Product channel ${runtimeTarget} manifestSha256 differs from accepted bytes`);
-          }
-          if (manifest.runtimeVersion !== product.version) {
-            throw new Error("Product Runtime version does not match the Product channel");
-          }
-          if (compareVersions(desktop.shell.version, product.minShellVersion) < 0) {
-            throw new Error("Desktop Shell is older than the Product minimum Shell version");
-          }
-          const expected = {
-            requiredEngineVersion: desktop.shell.engineVersion,
-            requiredNodeVersion: desktop.shell.nodeVersion,
-            runtimeHostApiVersion: desktop.shell.runtimeHostApiVersion,
-            apiProtocolVersion: desktop.shell.apiProtocolVersion,
-            dataSchemaVersion: desktop.shell.dataSchemaVersion,
-          };
-          for (const [field, value] of Object.entries(expected)) {
-            if (manifest[field] !== value) {
-              throw new Error(`${target} Product Runtime ${field} is incompatible with Desktop`);
-            }
-          }
-          const channelRequirements = {
-            requiredEngineVersion: product.requirements.engineVersion,
-            requiredNodeVersion: product.requirements.nodeVersion,
-            runtimeHostApiVersion: product.requirements.runtimeHostApiVersion,
-            apiProtocolVersion: product.requirements.apiProtocolVersion,
-            dataSchemaVersion: product.requirements.dataSchemaVersion,
-          };
-          if (JSON.stringify(channelRequirements) !== JSON.stringify(expected)) {
-            throw new Error("Product channel requirements are incompatible with Desktop");
-          }
-
-          writeFileSync(
-            `release/compatibility-report/${target}.json`,
-            `${JSON.stringify({
-              schemaVersion: 1,
-              target,
-              product: {
-                version: product.version,
-                tag: process.env.PRODUCT_TAG,
-                channelSha256: process.env.PRODUCT_CHANNEL_SHA256,
-                manifestSha256: target === "wsl"
-                  ? process.env.LINUX_MANIFEST_SHA256
-                  : process.env.WINDOWS_MANIFEST_SHA256,
-              },
-              desktop: {
-                version: desktop.version,
-                tag: process.env.DESKTOP_TAG,
-                channelSha256: process.env.DESKTOP_CHANNEL_SHA256,
-              },
-              compatible: true,
-            }, null, 2)}\n`,
-            "utf8"
-          );
-          NODE
+          pnpm exec tsx scripts/verify-release-compatibility.ts
 
       - name: Upload compatibility report
         uses: actions/upload-artifact@v4

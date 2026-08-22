@@ -325,8 +325,14 @@ jobs:
               --pattern factory-product.json \
               --pattern desktop-validation-evidence.tgz \
               --dir release/desktop-windows
+            if tar -tzf release/desktop-windows/desktop-validation-evidence.tgz \
+              | grep -Eq '(^|/)factory-runtime(/|$)'; then
+              echo "Legacy Desktop candidate evidence contains Factory Runtime bytes" >&2
+              exit 1
+            fi
             tar -xzf release/desktop-windows/desktop-validation-evidence.tgz \
               -C release/desktop-windows
+            cp -R release/factory-product/factory-runtime release/desktop-windows/factory-runtime
           else
             if [[ -z "${CSC_LINK}" || -z "${CSC_KEY_PASSWORD}" ]]; then
               echo "Windows Authenticode signing credentials are required" >&2
@@ -504,7 +510,7 @@ jobs:
               --factory-product factory-product.json
             tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
               -czf release/desktop-candidate/desktop-validation-evidence.tgz \
-              -C release/desktop-candidate factory-runtime windows-engine
+              -C release/desktop-candidate windows-engine
           fi
           pnpm release:artifacts validate-desktop \
             --directory release/desktop-candidate
@@ -748,6 +754,7 @@ jobs:
     name: Accept packaged Factory Runtime (${{ matrix.scenario }})
     needs:
       - prepare
+      - resolve-factory-product
       - publish-candidate
     runs-on: windows-latest
     timeout-minutes: 45
@@ -759,20 +766,89 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
     steps:
-      - name: Download immutable Factory evidence and installer
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download and validate immutable Product and Desktop bytes
         shell: pwsh
+        env:
+          CANDIDATE_TAG: ${{ needs.publish-candidate.outputs.candidate_tag }}
+          DESKTOP_CHANNEL_SHA256: ${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}
+          PRODUCT_TAG: ${{ needs.resolve-factory-product.outputs.current_product_tag }}
+          PRODUCT_CHANNEL_SHA256: ${{ needs.resolve-factory-product.outputs.current_product_channel_sha256 }}
         run: |
-          New-Item -ItemType Directory -Path release/factory-acceptance/candidate -Force | Out-Null
-          gh release download '${{ needs.publish-candidate.outputs.candidate_tag }}' `
-            --pattern desktop-channel.json `
-            --pattern latest.yml `
-            --pattern 'Coder-Studio-Setup-*.exe' `
-            --pattern factory-product.json `
-            --pattern desktop-validation-evidence.tgz `
-            --dir release/factory-acceptance/candidate
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Factory acceptance assets' }
-          tar -xzf release/factory-acceptance/candidate/desktop-validation-evidence.tgz `
-            -C release/factory-acceptance/candidate
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) { throw 'Desktop Runtime public key is required' }
+          $root = [System.IO.Path]::GetFullPath('release/factory-acceptance')
+          $candidate = Join-Path $root 'candidate'
+          $product = Join-Path $root 'product'
+          $source = Join-Path $root 'source'
+          New-Item -ItemType Directory -Path $candidate, $product, $source -Force | Out-Null
+
+          gh release download $env:CANDIDATE_TAG --dir $candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Desktop candidate bytes' }
+          $desktopChannelPath = Join-Path $candidate 'desktop-channel.json'
+          $desktopChannelDigest = (Get-FileHash $desktopChannelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($desktopChannelDigest -ne ([string]$env:DESKTOP_CHANNEL_SHA256).ToLowerInvariant()) {
+            throw 'Immutable Desktop channel digest differs from the accepted candidate identity'
+          }
+
+          gh release download $env:PRODUCT_TAG --dir $product
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable Factory Product bytes' }
+          $productChannelPath = Join-Path $product 'product-channel.json'
+          $productChannelDigest = (Get-FileHash $productChannelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($productChannelDigest -ne ([string]$env:PRODUCT_CHANNEL_SHA256).ToLowerInvariant()) {
+            throw 'Immutable Product channel digest differs from the accepted Factory identity'
+          }
+
+          tar -xzf (Join-Path $product 'coder-studio-cli.tgz') `
+            -C $source package/package.json
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to extract immutable Product CLI manifest' }
+          pnpm release:artifacts validate-product `
+            --directory $product `
+            --source-package-json (Join-Path $source 'package/package.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable Factory Product validation failed' }
+
+          $desktopChannel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
+          $factoryProduct = Get-Content (Join-Path $candidate 'factory-product.json') -Raw | ConvertFrom-Json
+          $productChannel = Get-Content $productChannelPath -Raw | ConvertFrom-Json
+          $factoryTag = [string]$desktopChannel.factoryProduct.releaseTag
+          if (
+            -not $factoryTag -or
+            $factoryTag -ne $env:PRODUCT_TAG -or
+            $factoryProduct.releaseTag -ne $factoryTag
+          ) {
+            throw 'Factory Product provenance differs from the signed Desktop channel'
+          }
+          if ($productChannel.releaseTag -ne $factoryTag -or $productChannel.version -ne $factoryProduct.version) {
+            throw 'Immutable Product release differs from Factory Product provenance'
+          }
+          $manifestName = [string]$factoryProduct.runtimes.'win32-x64'.manifest
+          $manifestPath = Join-Path $product $manifestName
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          New-Item -ItemType Directory -Path (Join-Path $candidate 'factory-runtime') -Force | Out-Null
+          tar -xzf (Join-Path $product $manifest.packageFile) `
+            -C (Join-Path $candidate 'factory-runtime')
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to extract immutable Factory Runtime bytes' }
+          tar -xzf (Join-Path $candidate 'desktop-validation-evidence.tgz') -C $candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to extract immutable Desktop validation evidence' }
+          pnpm release:artifacts validate-desktop --directory $candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable Desktop candidate validation failed' }
 
       - name: Verify offline Factory startup and fallback
         shell: pwsh
@@ -795,9 +871,39 @@ jobs:
           if ($installer.ExitCode -ne 0) { throw "Desktop installer exited with $($installer.ExitCode)" }
 
           $resources = Join-Path $installRoot 'resources'
-          $packagedManifest = Get-FileHash (Join-Path $resources 'factory-runtime/manifest.json') -Algorithm SHA256
-          $acceptedManifest = Get-FileHash (Join-Path $candidate 'factory-runtime/manifest.json') -Algorithm SHA256
-          if ($packagedManifest.Hash -ne $acceptedManifest.Hash) { throw 'Packaged Factory Runtime differs from accepted bytes' }
+          $packagedFactoryRoot = Join-Path $resources 'factory-runtime'
+          $acceptedFactoryRoot = Join-Path $candidate 'factory-runtime'
+          function Get-RelativeFiles([string]$path) {
+            $resolved = (Resolve-Path -LiteralPath $path).Path
+            @(
+              Get-ChildItem -LiteralPath $resolved -Recurse -File |
+                ForEach-Object {
+                  [System.IO.Path]::GetRelativePath($resolved, $_.FullName).Replace('\', '/')
+                } |
+                Sort-Object
+            )
+          }
+          $packagedFiles = @(Get-RelativeFiles $packagedFactoryRoot)
+          $acceptedFiles = @(Get-RelativeFiles $acceptedFactoryRoot)
+          $fileSetDifference = Compare-Object `
+            -ReferenceObject $acceptedFiles `
+            -DifferenceObject $packagedFiles `
+            -CaseSensitive
+          if ($fileSetDifference) {
+            throw 'Packaged Factory Runtime file set differs from accepted Product bytes'
+          }
+          foreach ($relativePath in $acceptedFiles) {
+            $packagedPath = Join-Path $packagedFactoryRoot $relativePath
+            $acceptedPath = Join-Path $acceptedFactoryRoot $relativePath
+            $packagedFile = Get-Item -LiteralPath $packagedPath
+            $acceptedFile = Get-Item -LiteralPath $acceptedPath
+            $packagedHash = (Get-FileHash $packagedPath -Algorithm SHA256).Hash
+            $acceptedHash = (Get-FileHash $acceptedPath -Algorithm SHA256).Hash
+            if ($packagedFile.Length -ne $acceptedFile.Length -or $packagedHash -ne $acceptedHash) {
+              throw "Packaged Factory Runtime file differs from accepted Product bytes: $relativePath"
+            }
+          }
+          $packagedManifest = Get-FileHash (Join-Path $packagedFactoryRoot 'manifest.json') -Algorithm SHA256
           $packagedProduct = Get-Content (Join-Path $resources 'factory-product.json') -Raw | ConvertFrom-Json
           $channel = Get-Content (Join-Path $candidate 'desktop-channel.json') -Raw | ConvertFrom-Json
           if ($packagedProduct.releaseTag -ne $channel.factoryProduct.releaseTag) { throw 'Packaged Factory Product provenance differs from the signed Desktop channel' }
@@ -882,6 +988,8 @@ jobs:
       linux_manifest_sha256: ${{ matrix.product == 'current' && needs.resolve-factory-product.outputs.current_linux_manifest_sha256 || needs.resolve-factory-product.outputs.previous_linux_manifest_sha256 }}
       desktop_tag: ${{ needs.publish-candidate.outputs.candidate_tag }}
       desktop_channel_sha256: ${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}
+    secrets:
+      runtime_public_key: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
 
   promote:
     name: Promote accepted Desktop
@@ -895,6 +1003,9 @@ jobs:
     if: success()
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: product-desktop-stable-promotion
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
@@ -904,8 +1015,21 @@ jobs:
       DESKTOP_CHANNEL_SHA256: ${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}
       ARTIFACT_DIGESTS: ${{ needs.publish-candidate.outputs.artifact_digests }}
       PREVIOUS_POINTER_DIGEST: ${{ needs.prepare.outputs.previous_desktop_channel_sha256 }}
+      ACCEPTED_PRODUCT_CHANNEL_SHA256: ${{ needs.resolve-factory-product.outputs.current_product_channel_sha256 }}
       CANDIDATE_COMMIT: ${{ needs.publish-candidate.outputs.candidate_commit }}
     steps:
+      - name: Revalidate accepted Product stable pointer
+        run: |
+          mkdir -p release/desktop-promotion/accepted-product
+          gh release download product-stable \
+            --pattern product-channel.json \
+            --dir release/desktop-promotion/accepted-product
+          current_digest=$(sha256sum release/desktop-promotion/accepted-product/product-channel.json | cut -d ' ' -f 1)
+          if [[ "${current_digest}" != "${ACCEPTED_PRODUCT_CHANNEL_SHA256}" ]]; then
+            echo "Product stable pointer changed after compatibility acceptance; rerun the candidate acceptance graph" >&2
+            exit 1
+          fi
+
       - name: Verify accepted immutable Desktop bytes
         run: |
           mkdir -p release/desktop-promotion/candidate

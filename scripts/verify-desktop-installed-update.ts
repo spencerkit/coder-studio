@@ -235,12 +235,18 @@ export async function verifyInstalledDesktopScenario(
   let checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates");
   assertPlanComponents(checked, scenario.expectedComponentIds);
   const downloadTimeoutMs = options.downloadTimeoutMs ?? DEFAULT_DOWNLOAD_TIMEOUT_MS;
-  await downloadUpdateWithTimeout(deps, downloadTimeoutMs);
   if (scenario.name === "interrupted-download") {
+    const interruptedDownload = downloadUpdateWithTimeout(deps, downloadTimeoutMs).catch(
+      () => undefined
+    );
+    await deps.waitForState("downloading");
     await deps.interruptAtPhase("downloading");
+    await interruptedDownload;
     await deps.reconnectAfterRestart();
     checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates after interruption");
     assertPlanComponents(checked, scenario.expectedComponentIds);
+    await downloadUpdateWithTimeout(deps, downloadTimeoutMs);
+  } else {
     await downloadUpdateWithTimeout(deps, downloadTimeoutMs);
   }
   await deps.waitForState("ready");

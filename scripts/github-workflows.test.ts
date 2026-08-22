@@ -23,6 +23,7 @@ interface WorkflowJob {
   outputs?: Record<string, string>;
   with?: Record<string, unknown>;
   strategy?: { matrix?: Record<string, unknown> };
+  concurrency?: { group: string; "cancel-in-progress": boolean };
   secrets?: Record<string, string> | "inherit";
   steps?: WorkflowStep[];
 }
@@ -174,10 +175,23 @@ describe("Product publication workflow", () => {
     expect(publishText).not.toContain("desktop-release");
 
     expect(jobText(jobs["accept-cli"])).toContain("pnpm acceptance:cli:update");
-    expect(jobText(jobs["accept-runtime"])).toContain("pnpm acceptance:runtime:verify");
+    expect(jobText(jobs["accept-runtime"])).toContain("pnpm acceptance:desktop:installed");
     expect(jobText(jobs["accept-runtime"])).toContain("sha256sum");
-    expect(jobs["accept-runtime"].strategy?.matrix?.target).toEqual(["native", "wsl"]);
+    expect(jobs["accept-runtime"].strategy?.matrix?.scenario).toEqual([
+      "runtime-only",
+      "wsl",
+      "runtime-health-rollback",
+      "interrupted-download",
+      "restart-journal-recovery",
+      "external-sidecar-browser",
+    ]);
+    expect(jobText(jobs["accept-runtime"])).toContain("ProductChannelUrl");
+    expect(jobText(jobs["accept-runtime"])).toContain("Prepare disposable WSL distribution");
+    expect(jobText(jobs["accept-runtime"])).not.toContain("ACCEPTANCE_TARGET");
     expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
+    expect(jobs.compatibility.secrets).toEqual({
+      runtime_public_key: "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}",
+    });
     expect(jobs.compatibility.with).toMatchObject({
       product_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
       product_channel_sha256: "${{ needs.publish-candidate.outputs.product_channel_sha256 }}",
@@ -231,6 +245,16 @@ describe("Product publication workflow", () => {
     expect(steps[recordIndex]?.run).toContain("finalPointerDigest");
     expect(steps[recordIndex]?.run).toContain("acceptanceRun");
     expect(steps[recordIndex]?.run).toContain("Existing Product promotion record");
+    expect(promote.concurrency).toEqual({
+      group: "product-desktop-stable-promotion",
+      "cancel-in-progress": false,
+    });
+    expect(step(promote, "Revalidate accepted Desktop stable pointer")?.run).toContain(
+      "Desktop stable pointer changed after compatibility acceptance"
+    );
+    expect(step(promote, "Revalidate accepted Desktop stable pointer")?.run).toContain(
+      "desktop-stable"
+    );
     expect(jobText(promote)).not.toMatch(/pnpm (build|dist)/);
     expect(steps.map((candidate) => candidate.run ?? "").join("\n")).not.toMatch(
       /gh release upload[^\n]*(?:runtime|product-channel\.json)[^\n]*--clobber/
@@ -243,6 +267,7 @@ describe("reusable compatibility acceptance", () => {
     const workflow = loadWorkflow("compatibility-acceptance.yml");
     const call = workflow.on.workflow_call as {
       inputs: Record<string, { type: string; required: boolean }>;
+      secrets: Record<string, { required: boolean }>;
     };
 
     expect(call.inputs).toEqual({
@@ -253,6 +278,7 @@ describe("reusable compatibility acceptance", () => {
       desktop_tag: { type: "string", required: true },
       desktop_channel_sha256: { type: "string", required: true },
     });
+    expect(call.secrets).toEqual({ runtime_public_key: { required: true } });
     expect(workflow.permissions).toEqual({ contents: "read" });
   });
 
@@ -272,12 +298,20 @@ describe("reusable compatibility acceptance", () => {
     expect(text).toContain("LINUX_MANIFEST_SHA256");
     expect(text).toContain("DESKTOP_CHANNEL_SHA256");
     expect(text).toContain("sha256sum");
-    expect(text).toContain("manifestSha256");
     expect(text).toContain("compatibility-report");
+    expect(text).toContain("CODER_STUDIO_RUNTIME_PUBLIC_KEY");
+    expect(text).toContain("scripts/verify-release-compatibility.ts");
     expect(text).not.toContain("releases/latest");
     expect(text).not.toContain("product-stable");
     expect(text).not.toContain("desktop-stable");
     expect(text).not.toMatch(/pnpm (build|dist|publish)|gh release (create|edit|upload)/);
+
+    const verifierPath = resolve(import.meta.dirname, "verify-release-compatibility.ts");
+    const verifier = existsSync(verifierPath) ? readFileSync(verifierPath, "utf8") : "";
+    expect(existsSync(verifierPath)).toBe(true);
+    expect(verifier).toContain("parseProductChannel");
+    expect(verifier).toContain("parseDesktopChannel");
+    expect(verifier).toContain("manifestSha256");
   });
 });
 
@@ -334,7 +368,11 @@ describe("Desktop publication workflow", () => {
       "wsl-engine",
     ]);
     expect(jobs["accept-installation"].needs).toEqual(["prepare", "publish-candidate"]);
-    expect(jobs["accept-factory"].needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs["accept-factory"].needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "publish-candidate",
+    ]);
     expect(jobs.compatibility.needs).toEqual([
       "prepare",
       "resolve-factory-product",
@@ -365,6 +403,17 @@ describe("Desktop publication workflow", () => {
     expect(windowsText).toContain("pnpm release:artifacts stage-desktop");
     expect(windowsText).toContain("--components windows");
     expect(windowsText).not.toContain("build:desktop-runtime");
+    const recoverWindows = step(
+      jobs["windows-assets"],
+      "Build or recover Windows Desktop bytes"
+    )?.run;
+    expect(recoverWindows).toContain("tar -tzf");
+    expect(recoverWindows).toContain(
+      "Legacy Desktop candidate evidence contains Factory Runtime bytes"
+    );
+    expect(recoverWindows).toContain(
+      "cp -R release/factory-product/factory-runtime release/desktop-windows/factory-runtime"
+    );
 
     const linuxText = jobText(jobs["wsl-engine"]);
     expect(linuxText).toContain("pnpm build:wsl-engine");
@@ -378,6 +427,12 @@ describe("Desktop publication workflow", () => {
     expect(publishText).toContain("--prerelease --latest=false");
     expect(publishText).not.toContain("product-channel.json");
     expect(publishText).not.toMatch(/pnpm (?:publish|build:desktop-runtime|build:wsl-runtime)/);
+    expect(
+      step(jobs["publish-candidate"], "Assemble or recover signed Desktop bundle")?.run
+    ).toContain("-C release/desktop-candidate windows-engine");
+    expect(
+      step(jobs["publish-candidate"], "Assemble or recover signed Desktop bundle")?.run
+    ).not.toContain("-C release/desktop-candidate factory-runtime windows-engine");
   });
 
   it("accepts installation, Factory fallback, and current and previous Product compatibility", () => {
@@ -399,8 +454,22 @@ describe("Desktop publication workflow", () => {
       "factory-fallback",
     ]);
     expect(jobText(jobs["accept-factory"])).toContain("factory-runtime");
+    expect(jobText(jobs["accept-factory"])).toContain("factoryProduct.releaseTag");
+    expect(jobText(jobs["accept-factory"])).toContain("pnpm release:artifacts validate-product");
+    expect(jobText(jobs["accept-factory"])).toContain("pnpm release:artifacts validate-desktop");
+    expect(jobText(jobs["accept-factory"])).toContain("DESKTOP_CHANNEL_SHA256");
+    expect(jobText(jobs["accept-factory"])).toContain("PRODUCT_CHANNEL_SHA256");
+    expect(jobText(jobs["accept-factory"])).toContain(
+      "Packaged Factory Runtime file set differs from accepted Product bytes"
+    );
+    expect(jobText(jobs["accept-factory"])).not.toContain(
+      "--pattern desktop-validation-evidence.tgz"
+    );
     expect(jobs.compatibility.strategy?.matrix?.product).toEqual(["current", "previous"]);
     expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
+    expect(jobs.compatibility.secrets).toEqual({
+      runtime_public_key: "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}",
+    });
     expect(jobText(jobs.compatibility)).toContain("current_product_tag");
     expect(jobText(jobs.compatibility)).toContain("previous_product_tag");
     expect(jobs.compatibility.with).toMatchObject({
@@ -442,7 +511,17 @@ describe("Desktop publication workflow", () => {
     expect(step(promote, "Record Desktop promotion")?.run).toContain("previousPointerDigest");
     expect(step(promote, "Record Desktop promotion")?.run).toContain("finalPointerDigest");
     expect(step(promote, "Record Desktop promotion")?.run).toContain("acceptanceRun");
-    expect(jobText(promote)).not.toMatch(/npm|product-stable|pnpm (build|dist)/);
+    expect(promote.concurrency).toEqual({
+      group: "product-desktop-stable-promotion",
+      "cancel-in-progress": false,
+    });
+    expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
+      "Product stable pointer changed after compatibility acceptance"
+    );
+    expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
+      "product-stable"
+    );
+    expect(jobText(promote)).not.toMatch(/npm|pnpm (build|dist)/);
   });
 });
 
@@ -453,6 +532,15 @@ describe("legacy Desktop acceptance", () => {
     expect(workflow.name).toContain("Legacy bridge");
     expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
     expect(JSON.stringify(workflow.on)).toContain("bridge_candidate_tag");
+    expect(jobText(workflow.jobs.accept)).toContain("inputs.bridge_candidate_tag");
+    const source = readFileSync(workflowPath("desktop-acceptance.yml"), "utf8");
+    expect(source).not.toContain("desktop:channel");
+    expect(source).not.toContain("desktop:artifacts");
+    expect(source).not.toContain("--release-kind");
+    expect(source).not.toContain("--previous-release-directory");
+    expect(source).not.toContain("desktop-ci-");
+    expect(source).not.toContain("gh release create");
+    expect(source).toContain("pnpm acceptance:desktop:installed");
     expect(desktopReleaseSource).not.toContain("desktop-acceptance.yml");
   });
 });
@@ -543,6 +631,9 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(text).toContain("pnpm release:artifacts validate-product");
     expect(text).toContain("pnpm release:artifacts validate-desktop");
     expect(text).toContain("sha256sum");
+    expect(step(prepare, "Record accepted bridge identities")?.run).toContain(
+      'expected_desktop_tag="desktop-v${desktop_version}"'
+    );
     expect(text).not.toMatch(/pnpm (?:build|dist|publish)/);
     expect(text).not.toContain("gh release create");
     expect(text).not.toContain("gh release upload");

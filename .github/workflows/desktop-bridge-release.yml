@@ -164,6 +164,11 @@ jobs:
           product_version=$(node -p "require('./release/bridge/product/product-channel.json').version")
           desktop_tag=$(node -p "require('./release/bridge/desktop/desktop-channel.json').releaseTag")
           desktop_version=$(node -p "require('./release/bridge/desktop/desktop-channel.json').version")
+          expected_desktop_tag="desktop-v${desktop_version}"
+          if [[ "${BRIDGE_CANDIDATE_TAG}" != "${expected_desktop_tag}" ]]; then
+            echo "Bridge candidate tag must match the signed Desktop identity ${expected_desktop_tag}" >&2
+            exit 1
+          fi
           if [[ "${desktop_tag}" != "${BRIDGE_CANDIDATE_TAG}" ]]; then
             echo "Modern Desktop channel must resolve assets from the immutable bridge candidate" >&2
             exit 1
