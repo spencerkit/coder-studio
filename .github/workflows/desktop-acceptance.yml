@@ -1,8 +1,12 @@
-name: Publish Desktop acceptance
+name: Legacy bridge Desktop acceptance
 
 on:
   workflow_dispatch:
     inputs:
+      bridge_candidate_tag:
+        description: "Immutable legacy bridge candidate tag"
+        required: true
+        type: string
       windows_signing:
         description: "Sign Windows executables with Authenticode"
         required: true

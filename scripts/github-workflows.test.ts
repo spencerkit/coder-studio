@@ -28,6 +28,7 @@ interface WorkflowJob {
 }
 
 interface Workflow {
+  name?: string;
   on: Record<string, unknown>;
   permissions?: Record<string, string>;
   concurrency?: { group: string; "cancel-in-progress": boolean };
@@ -276,5 +277,180 @@ describe("reusable compatibility acceptance", () => {
     expect(text).not.toContain("product-stable");
     expect(text).not.toContain("desktop-stable");
     expect(text).not.toMatch(/pnpm (build|dist|publish)|gh release (create|edit|upload)/);
+  });
+});
+
+describe("Desktop publication workflow", () => {
+  it("triggers only for Desktop version releases and supports immutable recovery", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const push = workflow.on.push as { branches: string[]; paths: string[] };
+    const dispatch = workflow.on.workflow_dispatch as {
+      inputs: Record<string, Record<string, unknown>>;
+    };
+
+    expect(push).toEqual({
+      branches: ["main"],
+      paths: ["packages/desktop/package.json"],
+    });
+    expect(dispatch.inputs).toEqual({
+      candidate_tag: {
+        description: "Existing immutable Desktop candidate tag to resume",
+        required: false,
+        default: "",
+        type: "string",
+      },
+    });
+    expect(workflow.concurrency).toEqual({
+      group: "desktop-production",
+      "cancel-in-progress": false,
+    });
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(JSON.stringify(workflow)).not.toContain("run_id");
+    expect(JSON.stringify(workflow)).not.toContain('"environment"');
+  });
+
+  it("builds one Shell and Engine candidate from the accepted stable Factory Product", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const jobs = workflow.jobs;
+    expect(Object.keys(jobs)).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "windows-assets",
+      "wsl-engine",
+      "publish-candidate",
+      "accept-installation",
+      "accept-factory",
+      "compatibility",
+      "promote",
+    ]);
+    expect(jobs["resolve-factory-product"].needs).toBe("prepare");
+    expect(jobs["windows-assets"].needs).toEqual(["prepare", "resolve-factory-product"]);
+    expect(jobs["wsl-engine"].needs).toBe("prepare");
+    expect(jobs["publish-candidate"].needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "windows-assets",
+      "wsl-engine",
+    ]);
+    expect(jobs["accept-installation"].needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs["accept-factory"].needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs.compatibility.needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "publish-candidate",
+    ]);
+    expect(jobs.promote.needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "publish-candidate",
+      "accept-installation",
+      "accept-factory",
+      "compatibility",
+    ]);
+    expect(jobs.promote.if).toBe("success()");
+
+    const factoryText = jobText(jobs["resolve-factory-product"]);
+    expect(factoryText).toContain("gh release download product-stable");
+    expect(factoryText).toContain("product-channel.json");
+    expect(factoryText).toContain("pnpm release:artifacts validate-product");
+    expect(factoryText).toContain("factory-product.json");
+    expect(factoryText).toContain("factory-runtime");
+    expect(factoryText).not.toMatch(/pnpm (?:build:desktop-runtime|build:wsl-runtime)/);
+
+    const windowsText = jobText(jobs["windows-assets"]);
+    expect(windowsText).toContain("CODER_STUDIO_FACTORY_RUNTIME_DIR");
+    expect(windowsText).toContain("CODER_STUDIO_FACTORY_PRODUCT_FILE");
+    expect(windowsText).toContain("pnpm dist:desktop");
+    expect(windowsText).toContain("pnpm release:artifacts stage-desktop");
+    expect(windowsText).toContain("--components windows");
+    expect(windowsText).not.toContain("build:desktop-runtime");
+
+    const linuxText = jobText(jobs["wsl-engine"]);
+    expect(linuxText).toContain("pnpm build:wsl-engine");
+    expect(linuxText).toContain("--components wsl-engine");
+    expect(linuxText).not.toContain("build:wsl-runtime");
+
+    const publishText = jobText(jobs["publish-candidate"]);
+    expect(publishText).toContain("pnpm release:channel desktop");
+    expect(publishText).toContain("pnpm release:artifacts validate-desktop");
+    expect(publishText).toContain("gh release create");
+    expect(publishText).toContain("--prerelease --latest=false");
+    expect(publishText).not.toContain("product-channel.json");
+    expect(publishText).not.toMatch(/pnpm (?:publish|build:desktop-runtime|build:wsl-runtime)/);
+  });
+
+  it("accepts installation, Factory fallback, and current and previous Product compatibility", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const jobs = workflow.jobs;
+
+    expect(jobs["accept-installation"].strategy?.matrix?.scenario).toEqual([
+      "fresh-native",
+      "fresh-wsl",
+      "installed-upgrade",
+    ]);
+    expect(jobText(jobs["accept-installation"])).toContain("pnpm acceptance:desktop:installed");
+    expect(jobText(jobs["accept-installation"])).toContain(
+      "needs.publish-candidate.outputs.candidate_tag"
+    );
+    expect(jobs["accept-factory"].strategy?.matrix?.scenario).toEqual([
+      "offline-factory",
+      "factory-fallback",
+    ]);
+    expect(jobText(jobs["accept-factory"])).toContain("factory-runtime");
+    expect(jobs.compatibility.strategy?.matrix?.product).toEqual(["current", "previous"]);
+    expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
+    expect(jobText(jobs.compatibility)).toContain("current_product_tag");
+    expect(jobText(jobs.compatibility)).toContain("previous_product_tag");
+    expect(jobs.compatibility.with).toMatchObject({
+      desktop_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
+      desktop_channel_sha256: "${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}",
+    });
+  });
+
+  it("promotes only Desktop release and pointer after acceptance", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const promote = workflow.jobs.promote;
+    const steps = promote.steps ?? [];
+    const names = steps.map((candidate) => candidate.name);
+    const expectedOrder = [
+      "Verify accepted immutable Desktop bytes",
+      "Promote Desktop versioned release",
+      "Advance signed Desktop stable pointer",
+      "Verify promoted Desktop",
+      "Record Desktop promotion",
+    ];
+    let previousIndex = -1;
+    for (const name of expectedOrder) {
+      const index = names.indexOf(name);
+      expect(index).toBeGreaterThan(previousIndex);
+      previousIndex = index;
+    }
+
+    expect(step(promote, "Verify accepted immutable Desktop bytes")?.run).toContain(
+      "Immutable Desktop digest mismatch"
+    );
+    expect(step(promote, "Promote Desktop versioned release")?.run).toContain(
+      "--prerelease=false --latest=false"
+    );
+    expect(step(promote, "Advance signed Desktop stable pointer")?.run).toContain("desktop-stable");
+    expect(step(promote, "Advance signed Desktop stable pointer")?.run).toContain(
+      "desktop-channel.json"
+    );
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("promotion.json");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("previousPointerDigest");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("finalPointerDigest");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("acceptanceRun");
+    expect(jobText(promote)).not.toMatch(/npm|product-stable|pnpm (build|dist)/);
+  });
+});
+
+describe("legacy Desktop acceptance", () => {
+  it("is reserved for the explicit migration bridge", () => {
+    const workflow = loadWorkflow("desktop-acceptance.yml");
+    const desktopReleaseSource = readFileSync(workflowPath("desktop-release.yml"), "utf8");
+    expect(workflow.name).toContain("Legacy bridge");
+    expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
+    expect(JSON.stringify(workflow.on)).toContain("bridge_candidate_tag");
+    expect(desktopReleaseSource).not.toContain("desktop-acceptance.yml");
   });
 });
