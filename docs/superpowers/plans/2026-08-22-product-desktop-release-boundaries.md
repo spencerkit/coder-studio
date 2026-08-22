@@ -55,10 +55,10 @@ export function resolveVersionedReleaseAsset(
 - Modify: `scripts/build-desktop-channel.test.ts`
 - Modify: `package.json`
 
-- [ ] Replace carry-forward and inferred release-mode tests with failing tests that build one Product channel from two signed Runtime manifests and one Desktop channel from Shell/Engine metadata plus an accepted Factory Runtime identity.
-- [ ] Cover mismatched Product versions/capabilities, wrong Shell updater version, unsafe names/tags, wrong manifest digests, missing Factory Runtime provenance, signing, and deterministic CLI argument parsing.
-- [ ] Run `pnpm exec vitest run --config scripts/vitest.config.ts scripts/build-desktop-channel.test.ts` and confirm the split builders are absent.
-- [ ] Implement `buildProductChannel()` and `buildDesktopChannel()` with a shared SHA-256 helper. The Product builder must compare the complete shared Runtime tuple:
+- [x] Replace carry-forward and inferred release-mode tests with failing tests that build one Product channel from two signed Runtime manifests and one Desktop channel from Shell/Engine metadata plus an accepted Factory Runtime identity.
+- [x] Cover mismatched Product versions/capabilities, wrong Shell updater version, unsafe names/tags, wrong manifest digests, missing Factory Runtime provenance, signing, and deterministic CLI argument parsing.
+- [x] Run `pnpm exec vitest run --config scripts/vitest.config.ts scripts/build-desktop-channel.test.ts` and confirm the split builders are absent.
+- [x] Implement `buildProductChannel()` and `buildDesktopChannel()` with a shared SHA-256 helper. The Product builder must compare the complete shared Runtime tuple:
 
 ```ts
 const shared = [
@@ -76,8 +76,8 @@ if (shared.some((field) => windows[field] !== linux[field])) {
 }
 ```
 
-- [ ] Expose explicit `product` and `desktop` commands through `pnpm release:channel`; delete routine carry-forward helpers and `full/runtime-only/migration` options.
-- [ ] Run the focused tests and commit: `feat(release): build independent signed channel pointers`.
+- [x] Expose explicit `product` and `desktop` commands through `pnpm release:channel`; delete routine carry-forward helpers and `full/runtime-only/migration` options.
+- [x] Run the focused tests and commit: `feat(release): build independent signed channel pointers`.
 
 ## Task 3: Pin Runtime and Electron metadata to signed versioned releases
 
