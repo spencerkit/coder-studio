@@ -126,7 +126,14 @@ jobs:
             previous_product_digest=$(sha256sum release/stable/product/product-channel.json | cut -d ' ' -f 1)
             previous_product_tag=$(node -p "require('./release/stable/product/product-channel.json').releaseTag")
           fi
-          gh release download desktop-stable --pattern desktop-channel.json --dir release/stable/desktop
+          if ! gh release download desktop-stable --pattern desktop-channel.json --dir release/stable/desktop 2>/dev/null; then
+            fallback_desktop_tag=$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[] | select(.tagName | startswith("desktop-v")) | .tagName' | head -n 1)
+            if [[ -z "${fallback_desktop_tag}" ]]; then
+              echo "No stable Desktop release is available for Product publication" >&2
+              exit 1
+            fi
+            gh release download "${fallback_desktop_tag}" --pattern desktop-channel.json --dir release/stable/desktop
+          fi
           desktop_digest=$(sha256sum release/stable/desktop/desktop-channel.json | cut -d ' ' -f 1)
           desktop_tag=$(node -p "require('./release/stable/desktop/desktop-channel.json').releaseTag")
           echo "product_channel_sha256=${previous_product_digest}" >> "${GITHUB_OUTPUT}"
@@ -526,10 +533,17 @@ jobs:
           New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/stable-pointer | Out-Null
           New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/desktop | Out-Null
           New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/product | Out-Null
-          gh release download desktop-stable `
+          $desktopReferenceTag = 'desktop-stable'
+          gh release download $desktopReferenceTag `
             --pattern desktop-channel.json `
             --dir release/product-runtime-acceptance/stable-pointer
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the accepted Desktop stable pointer' }
+          if ($LASTEXITCODE -ne 0) {
+            $desktopReferenceTag = '${{ needs.prepare.outputs.desktop_tag }}'
+            gh release download $desktopReferenceTag `
+              --pattern desktop-channel.json `
+              --dir release/product-runtime-acceptance/stable-pointer
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to download the accepted Desktop stable reference' }
+          }
           $desktop = Get-Content release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Raw | ConvertFrom-Json
           gh release download $desktop.releaseTag `
             --pattern desktop-channel.json `
@@ -725,9 +739,15 @@ jobs:
       - name: Revalidate accepted Desktop stable pointer
         run: |
           mkdir -p release/product-promotion/accepted-desktop
-          gh release download desktop-stable \
+          desktop_reference_tag="desktop-stable"
+          if ! gh release download "${desktop_reference_tag}" \
             --pattern desktop-channel.json \
-            --dir release/product-promotion/accepted-desktop
+            --dir release/product-promotion/accepted-desktop 2>/dev/null; then
+            desktop_reference_tag="${{ needs.prepare.outputs.desktop_tag }}"
+            gh release download "${desktop_reference_tag}" \
+              --pattern desktop-channel.json \
+              --dir release/product-promotion/accepted-desktop
+          fi
           current_digest=$(sha256sum release/product-promotion/accepted-desktop/desktop-channel.json | cut -d ' ' -f 1)
           if [[ "${current_digest}" != "${ACCEPTED_DESKTOP_CHANNEL_SHA256}" ]]; then
             echo "Desktop stable pointer changed after compatibility acceptance; rerun the candidate acceptance graph" >&2

@@ -452,12 +452,14 @@ jobs:
             },
           }, null, 2)}\n`);
           NODE
+          factory_runtime_dir=$(node -p "require('node:path').resolve('release/factory-runtime')")
+          factory_product_file=$(node -p "require('node:path').resolve('release/factory-product/factory-product.json')")
           {
             echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
             cat release/desktop-ci-signing/runtime-public.pem
             echo 'PUBLIC_KEY'
-            echo "CODER_STUDIO_FACTORY_RUNTIME_DIR=$(node -p \"require('node:path').resolve('release/factory-runtime')\")"
-            echo "CODER_STUDIO_FACTORY_PRODUCT_FILE=$(node -p \"require('node:path').resolve('release/factory-product/factory-product.json')\")"
+            echo "CODER_STUDIO_FACTORY_RUNTIME_DIR=${factory_runtime_dir}"
+            echo "CODER_STUDIO_FACTORY_PRODUCT_FILE=${factory_product_file}"
           } >> "${GITHUB_ENV}"
 
       - name: Require acceptance Authenticode credentials
