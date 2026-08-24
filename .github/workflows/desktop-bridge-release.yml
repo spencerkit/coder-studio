@@ -161,12 +161,14 @@ jobs:
         id: identity
         run: |
           previous_latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
-          releases_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=30")
+          mkdir -p release/bridge
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=30" > release/bridge/releases.json
           legacy_source_tag=$(
             BRIDGE_CANDIDATE_TAG="${BRIDGE_CANDIDATE_TAG}" \
             PREVIOUS_LATEST_TAG="${previous_latest_tag}" \
-            RELEASES_JSON="${releases_json}" node --input-type=module <<'NODE'
-          const releases = JSON.parse(process.env.RELEASES_JSON);
+            RELEASES_JSON_PATH="release/bridge/releases.json" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const releases = JSON.parse(readFileSync(process.env.RELEASES_JSON_PATH, "utf8"));
           const candidateTag = process.env.BRIDGE_CANDIDATE_TAG;
           const latestTag = process.env.PREVIOUS_LATEST_TAG;
           const hasLegacyDesktopAssets = (release) => {
