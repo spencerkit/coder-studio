@@ -7,9 +7,10 @@ import { buildDesktopShell, DESKTOP_DIST_DIR, resolveDesktopChannelUrls } from "
 import {
   buildDesktopRuntime,
   createDesktopRuntimeBuildOptions,
+  createRuntimeArchiveExecution,
   DESKTOP_FACTORY_RUNTIME_DIR,
 } from "./build-desktop-runtime.js";
-import { CLI_DIR, DESKTOP_DIR } from "./shared/paths.js";
+import { CLI_DIR, DESKTOP_DIR, ROOT_DIR } from "./shared/paths.js";
 
 const originalSigningKey = process.env.CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY;
 const originalPublicKey = process.env.CODER_STUDIO_RUNTIME_PUBLIC_KEY;
@@ -67,6 +68,24 @@ describe("build-desktop-runtime", () => {
     expect(options.outdir).toBe(DESKTOP_FACTORY_RUNTIME_DIR);
     expect(options.outExtension).toEqual({ ".js": ".mjs" });
     expect(options.sourcemap).toBe(false);
+  });
+
+  it("uses repository-relative tar paths for runtime archives", () => {
+    const execution = createRuntimeArchiveExecution(
+      resolve(ROOT_DIR, "release/runtime/coder-studio-runtime-0.5.13-win32-x64.tgz"),
+      DESKTOP_FACTORY_RUNTIME_DIR
+    );
+
+    expect(execution).toEqual({
+      cwd: ROOT_DIR,
+      args: [
+        "-czf",
+        "release/runtime/coder-studio-runtime-0.5.13-win32-x64.tgz",
+        "-C",
+        "packages/desktop/dist/factory-runtime",
+        ".",
+      ],
+    });
   });
 
   it("signs one authoritative release timestamp into schema v2", async () => {
