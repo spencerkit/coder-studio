@@ -189,9 +189,7 @@ describe("Product publication workflow", () => {
     expect(jobText(jobs["accept-runtime"])).toContain("Prepare disposable WSL distribution");
     expect(jobText(jobs["accept-runtime"])).not.toContain("ACCEPTANCE_TARGET");
     expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
-    expect(jobs.compatibility.secrets).toEqual({
-      runtime_public_key: "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}",
-    });
+    expect(jobs.compatibility.secrets).toBeUndefined();
     expect(jobs.compatibility.with).toMatchObject({
       product_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
       product_channel_sha256: "${{ needs.publish-candidate.outputs.product_channel_sha256 }}",
@@ -200,6 +198,10 @@ describe("Product publication workflow", () => {
       desktop_tag: "${{ needs.prepare.outputs.desktop_tag }}",
       desktop_channel_sha256: "${{ needs.prepare.outputs.desktop_channel_sha256 }}",
     });
+    expect(jobs["windows-runtime"].environment).toBe("desktop-production");
+    expect(jobs["wsl-runtime"].environment).toBe("desktop-production");
+    expect(jobs["publish-candidate"].environment).toBe("desktop-production");
+    expect(jobs["accept-runtime"].environment).toBe("desktop-production");
   });
 
   it("promotes npm before Product release and pointer, verifies, then cleans the temporary tag", () => {
@@ -267,7 +269,7 @@ describe("reusable compatibility acceptance", () => {
     const workflow = loadWorkflow("compatibility-acceptance.yml");
     const call = workflow.on.workflow_call as {
       inputs: Record<string, { type: string; required: boolean }>;
-      secrets: Record<string, { required: boolean }>;
+      secrets?: Record<string, { required: boolean }>;
     };
 
     expect(call.inputs).toEqual({
@@ -278,8 +280,9 @@ describe("reusable compatibility acceptance", () => {
       desktop_tag: { type: "string", required: true },
       desktop_channel_sha256: { type: "string", required: true },
     });
-    expect(call.secrets).toEqual({ runtime_public_key: { required: true } });
+    expect(call.secrets).toBeUndefined();
     expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(workflow.jobs.verify.environment).toBe("desktop-production");
   });
 
   it("downloads only tag-pinned assets, checks digests, and never builds or publishes", () => {
@@ -341,7 +344,6 @@ describe("Desktop publication workflow", () => {
     });
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(JSON.stringify(workflow)).not.toContain("run_id");
-    expect(JSON.stringify(workflow)).not.toContain('"environment"');
   });
 
   it("builds one Shell and Engine candidate from the accepted stable Factory Product", () => {
@@ -467,15 +469,19 @@ describe("Desktop publication workflow", () => {
     );
     expect(jobs.compatibility.strategy?.matrix?.product).toEqual(["current", "previous"]);
     expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
-    expect(jobs.compatibility.secrets).toEqual({
-      runtime_public_key: "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}",
-    });
+    expect(jobs.compatibility.secrets).toBeUndefined();
     expect(jobText(jobs.compatibility)).toContain("current_product_tag");
     expect(jobText(jobs.compatibility)).toContain("previous_product_tag");
     expect(jobs.compatibility.with).toMatchObject({
       desktop_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
       desktop_channel_sha256: "${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}",
     });
+    expect(jobs["resolve-factory-product"].environment).toBe("desktop-production");
+    expect(jobs["windows-assets"].environment).toBe("desktop-production");
+    expect(jobs["wsl-engine"].environment).toBe("desktop-production");
+    expect(jobs["publish-candidate"].environment).toBe("desktop-production");
+    expect(jobs["accept-installation"].environment).toBe("desktop-production");
+    expect(jobs["accept-factory"].environment).toBe("desktop-production");
   });
 
   it("promotes only Desktop release and pointer after acceptance", () => {
