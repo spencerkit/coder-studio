@@ -197,6 +197,7 @@ describe("Product publication workflow", () => {
       linux_manifest_sha256: "${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}",
       desktop_tag: "${{ needs.prepare.outputs.desktop_tag }}",
       desktop_channel_sha256: "${{ needs.prepare.outputs.desktop_channel_sha256 }}",
+      runtime_public_key_b64: "${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}",
     });
     expect(jobs["windows-runtime"].environment).toBe("desktop-production");
     expect(jobs["wsl-runtime"].environment).toBe("desktop-production");
@@ -281,6 +282,7 @@ describe("reusable compatibility acceptance", () => {
       linux_manifest_sha256: { type: "string", required: true },
       desktop_tag: { type: "string", required: true },
       desktop_channel_sha256: { type: "string", required: true },
+      runtime_public_key_b64: { type: "string", required: true },
     });
     expect(call.secrets).toBeUndefined();
     expect(workflow.permissions).toEqual({ contents: "read" });
@@ -477,6 +479,7 @@ describe("Desktop publication workflow", () => {
     expect(jobs.compatibility.with).toMatchObject({
       desktop_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
       desktop_channel_sha256: "${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}",
+      runtime_public_key_b64: "${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}",
     });
     expect(jobs["resolve-factory-product"].environment).toBe("desktop-production");
     expect(jobs["windows-assets"].environment).toBe("desktop-production");

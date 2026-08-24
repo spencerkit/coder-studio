@@ -276,6 +276,7 @@ jobs:
       npm_integrity: ${{ steps.identity.outputs.npm_integrity }}
       artifact_digests: ${{ steps.identity.outputs.artifact_digests }}
       candidate_commit: ${{ steps.identity.outputs.candidate_commit }}
+      runtime_public_key_b64: ${{ steps.identity.outputs.runtime_public_key_b64 }}
     env:
       GH_TOKEN: ${{ github.token }}
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -414,6 +415,11 @@ jobs:
             --candidate-tag "${CANDIDATE_TAG}" \
             --candidate-commit "${candidate_commit}" \
             --npm-integrity "${npm_integrity}"
+          if [[ -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+            echo "CODER_STUDIO_RUNTIME_PUBLIC_KEY is required" >&2
+            exit 1
+          fi
+          echo "runtime_public_key_b64=$(printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" | base64 | tr -d '\n')" >> "${GITHUB_OUTPUT}"
 
   accept-cli:
     name: Accept installed CLI update
@@ -667,6 +673,7 @@ jobs:
       linux_manifest_sha256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
       desktop_tag: ${{ needs.prepare.outputs.desktop_tag }}
       desktop_channel_sha256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
+      runtime_public_key_b64: ${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}
 
   promote:
     name: Promote accepted Product

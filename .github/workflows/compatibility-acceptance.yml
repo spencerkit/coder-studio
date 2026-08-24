@@ -21,6 +21,9 @@ on:
       desktop_channel_sha256:
         type: string
         required: true
+      runtime_public_key_b64:
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -106,7 +109,6 @@ jobs:
 
       - name: Verify Product Runtime and Desktop Shell capability tuple
         env:
-          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PRODUCT_TAG: ${{ inputs.product_tag }}
           DESKTOP_TAG: ${{ inputs.desktop_tag }}
@@ -115,8 +117,10 @@ jobs:
           WINDOWS_MANIFEST_SHA256: ${{ inputs.windows_manifest_sha256 }}
           LINUX_MANIFEST_SHA256: ${{ inputs.linux_manifest_sha256 }}
           DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
+          RUNTIME_PUBLIC_KEY_B64: ${{ inputs.runtime_public_key_b64 }}
         run: |
           mkdir -p release/compatibility-report
+          export CODER_STUDIO_RUNTIME_PUBLIC_KEY="$(printf '%s' "${RUNTIME_PUBLIC_KEY_B64}" | base64 --decode)"
           pnpm exec tsx scripts/verify-release-compatibility.ts
 
       - name: Upload compatibility report
