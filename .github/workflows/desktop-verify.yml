@@ -344,6 +344,7 @@ jobs:
           mkdir -p release/cli-candidate
           pack_json=$(pnpm --dir ./packages/cli pack --json --pack-destination "${PWD}/release/cli-candidate")
           tarball=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d).filename))")
+          product_version=$(node -p "require('./packages/cli/package.json').version")
           pnpm release:artifacts stage-product \
             --directory release/product-complete \
             --components 'cli,win-runtime,wsl-runtime' \
@@ -353,7 +354,7 @@ jobs:
             --release-tag "${{ needs.prepare.outputs.product_tag }}" \
             --generated-at "${{ needs.prepare.outputs.published_at }}" \
             --private-key release/desktop-ci-signing/runtime-private.pem \
-            --product-version "$(node -p \"require('./packages/cli/package.json').version\")"
+            --product-version "${product_version}"
 
       - name: Validate signed Product channel
         run: |
