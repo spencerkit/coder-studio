@@ -173,10 +173,19 @@ describe("Product publication workflow", () => {
     expect(publishText).not.toContain("desktop-channel.json");
     expect(publishText).not.toContain("Coder-Studio-Setup");
     expect(publishText).not.toContain("desktop-release");
+    expect(step(publish, "Upload runtime public key for compatibility acceptance")?.with).toEqual({
+      name: "product-compatibility-runtime-public-key-${{ github.run_id }}",
+      path: "release/compatibility-key/runtime-public.pem",
+      "if-no-files-found": "error",
+      "retention-days": 1,
+    });
 
     expect(jobText(jobs["accept-cli"])).toContain("pnpm acceptance:cli:update");
     expect(jobText(jobs["accept-runtime"])).toContain("pnpm acceptance:desktop:installed");
     expect(jobText(jobs["accept-runtime"])).toContain("sha256sum");
+    expect(jobText(jobs["accept-runtime"])).toContain("desktop-channel-modern.json");
+    expect(jobText(jobs["accept-runtime"])).toContain("modern.yml");
+    expect(jobText(jobs["accept-runtime"])).toContain("shell.updaterMetadata");
     expect(jobs["accept-runtime"].strategy?.matrix?.scenario).toEqual([
       "runtime-only",
       "wsl",
@@ -197,7 +206,7 @@ describe("Product publication workflow", () => {
       linux_manifest_sha256: "${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}",
       desktop_tag: "${{ needs.prepare.outputs.desktop_tag }}",
       desktop_channel_sha256: "${{ needs.prepare.outputs.desktop_channel_sha256 }}",
-      runtime_public_key_b64: "${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}",
+      runtime_public_key_artifact: "product-compatibility-runtime-public-key-${{ github.run_id }}",
     });
     expect(jobs["windows-runtime"].environment).toBe("desktop-production");
     expect(jobs["wsl-runtime"].environment).toBe("desktop-production");
@@ -282,7 +291,7 @@ describe("reusable compatibility acceptance", () => {
       linux_manifest_sha256: { type: "string", required: true },
       desktop_tag: { type: "string", required: true },
       desktop_channel_sha256: { type: "string", required: true },
-      runtime_public_key_b64: { type: "string", required: true },
+      runtime_public_key_artifact: { type: "string", required: true },
     });
     expect(call.secrets).toBeUndefined();
     expect(workflow.permissions).toEqual({ contents: "read" });
@@ -300,6 +309,8 @@ describe("reusable compatibility acceptance", () => {
     expect(download).toContain('gh release download "${PRODUCT_TAG}"');
     expect(download).toContain('gh release download "${DESKTOP_TAG}"');
     expect(download).toContain("desktop-channel-modern.json");
+    expect(text).toContain("download-artifact@v4");
+    expect(text).toContain("runtime_public_key_artifact");
     expect(text).toContain("PRODUCT_CHANNEL_SHA256");
     expect(text).toContain("WINDOWS_MANIFEST_SHA256");
     expect(text).toContain("LINUX_MANIFEST_SHA256");
@@ -317,7 +328,7 @@ describe("reusable compatibility acceptance", () => {
     const verifier = existsSync(verifierPath) ? readFileSync(verifierPath, "utf8") : "";
     expect(existsSync(verifierPath)).toBe(true);
     expect(verifier).toContain("parseProductChannel");
-    expect(verifier).toContain("parseDesktopChannel");
+    expect(verifier).toContain("parseCompatibilityDesktopChannel");
     expect(verifier).toContain("manifestSha256");
   });
 });
@@ -347,7 +358,7 @@ describe("Desktop publication workflow", () => {
       "cancel-in-progress": false,
     });
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(JSON.stringify(workflow)).not.toContain("run_id");
+    expect(JSON.stringify(workflow.on)).not.toContain("run_id");
   });
 
   it("builds one Shell and Engine candidate from the accepted stable Factory Product", () => {
@@ -439,6 +450,15 @@ describe("Desktop publication workflow", () => {
     expect(
       step(jobs["publish-candidate"], "Assemble or recover signed Desktop bundle")?.run
     ).not.toContain("-C release/desktop-candidate factory-runtime windows-engine");
+    expect(
+      step(jobs["publish-candidate"], "Upload runtime public key for compatibility acceptance")
+        ?.with
+    ).toEqual({
+      name: "desktop-compatibility-runtime-public-key-${{ github.run_id }}",
+      path: "release/compatibility-key/runtime-public.pem",
+      "if-no-files-found": "error",
+      "retention-days": 1,
+    });
   });
 
   it("accepts installation, Factory fallback, and current and previous Product compatibility", () => {
@@ -455,6 +475,9 @@ describe("Desktop publication workflow", () => {
       "needs.publish-candidate.outputs.candidate_tag"
     );
     expect(jobText(jobs["accept-installation"])).toContain("gh release download desktop-stable");
+    expect(jobText(jobs["accept-installation"])).toContain("desktop-channel-modern.json");
+    expect(jobText(jobs["accept-installation"])).toContain("modern.yml");
+    expect(jobText(jobs["accept-installation"])).toContain("shell.updaterMetadata");
     expect(jobs["accept-factory"].strategy?.matrix?.scenario).toEqual([
       "offline-factory",
       "factory-fallback",
@@ -479,7 +502,7 @@ describe("Desktop publication workflow", () => {
     expect(jobs.compatibility.with).toMatchObject({
       desktop_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
       desktop_channel_sha256: "${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}",
-      runtime_public_key_b64: "${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}",
+      runtime_public_key_artifact: "desktop-compatibility-runtime-public-key-${{ github.run_id }}",
     });
     expect(jobs["resolve-factory-product"].environment).toBe("desktop-production");
     expect(jobs["windows-assets"].environment).toBe("desktop-production");

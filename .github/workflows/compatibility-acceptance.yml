@@ -21,7 +21,7 @@ on:
       desktop_channel_sha256:
         type: string
         required: true
-      runtime_public_key_b64:
+      runtime_public_key_artifact:
         type: string
         required: true
 
@@ -56,6 +56,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Download runtime public key
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.runtime_public_key_artifact }}
+          path: release/compatibility/key
 
       - name: Download immutable Product and Desktop metadata
         env:
@@ -117,10 +123,9 @@ jobs:
           WINDOWS_MANIFEST_SHA256: ${{ inputs.windows_manifest_sha256 }}
           LINUX_MANIFEST_SHA256: ${{ inputs.linux_manifest_sha256 }}
           DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
-          RUNTIME_PUBLIC_KEY_B64: ${{ inputs.runtime_public_key_b64 }}
         run: |
+          export CODER_STUDIO_RUNTIME_PUBLIC_KEY="$(cat release/compatibility/key/runtime-public.pem)"
           mkdir -p release/compatibility-report
-          export CODER_STUDIO_RUNTIME_PUBLIC_KEY="$(printf '%s' "${RUNTIME_PUBLIC_KEY_B64}" | base64 --decode)"
           pnpm exec tsx scripts/verify-release-compatibility.ts
 
       - name: Upload compatibility report

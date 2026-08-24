@@ -132,10 +132,30 @@ jobs:
               echo "No stable Desktop release is available for Product publication" >&2
               exit 1
             fi
-            gh release download "${fallback_desktop_tag}" --pattern desktop-channel.json --dir release/stable/desktop
+            gh release download "${fallback_desktop_tag}" \
+              --pattern desktop-channel.json \
+              --pattern desktop-channel-modern.json \
+              --dir release/stable/desktop
+            accepted_desktop_channel=""
+            for candidate in \
+              release/stable/desktop/desktop-channel-modern.json \
+              release/stable/desktop/desktop-channel.json; do
+              [[ -f "${candidate}" ]] || continue
+              candidate_tag=$(node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(typeof value.releaseTag === 'string' ? value.releaseTag : '')" "${candidate}")
+              if [[ "${candidate_tag}" == "${fallback_desktop_tag}" ]]; then
+                accepted_desktop_channel="${candidate}"
+                break
+              fi
+            done
+            if [[ -z "${accepted_desktop_channel}" ]]; then
+              echo "No Desktop channel asset matches the fallback release tag ${fallback_desktop_tag}" >&2
+              exit 1
+            fi
+          else
+            accepted_desktop_channel="release/stable/desktop/desktop-channel.json"
           fi
-          desktop_digest=$(sha256sum release/stable/desktop/desktop-channel.json | cut -d ' ' -f 1)
-          desktop_tag=$(node -p "require('./release/stable/desktop/desktop-channel.json').releaseTag")
+          desktop_digest=$(sha256sum "${accepted_desktop_channel}" | cut -d ' ' -f 1)
+          desktop_tag=$(node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(typeof value.releaseTag === 'string' ? value.releaseTag : '')" "${accepted_desktop_channel}")
           echo "product_channel_sha256=${previous_product_digest}" >> "${GITHUB_OUTPUT}"
           echo "product_tag=${previous_product_tag}" >> "${GITHUB_OUTPUT}"
           echo "desktop_channel_sha256=${desktop_digest}" >> "${GITHUB_OUTPUT}"
@@ -276,7 +296,6 @@ jobs:
       npm_integrity: ${{ steps.identity.outputs.npm_integrity }}
       artifact_digests: ${{ steps.identity.outputs.artifact_digests }}
       candidate_commit: ${{ steps.identity.outputs.candidate_commit }}
-      runtime_public_key_b64: ${{ steps.identity.outputs.runtime_public_key_b64 }}
     env:
       GH_TOKEN: ${{ github.token }}
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -398,6 +417,24 @@ jobs:
               --prerelease --latest=false
           fi
 
+      - name: Stage runtime public key for compatibility acceptance
+        run: |
+          if [[ -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+            echo "CODER_STUDIO_RUNTIME_PUBLIC_KEY is required" >&2
+            exit 1
+          fi
+          mkdir -p release/compatibility-key
+          printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" \
+            > release/compatibility-key/runtime-public.pem
+
+      - name: Upload runtime public key for compatibility acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-compatibility-runtime-public-key-${{ github.run_id }}
+          path: release/compatibility-key/runtime-public.pem
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Record accepted candidate identity
         id: identity
         env:
@@ -415,11 +452,6 @@ jobs:
             --candidate-tag "${CANDIDATE_TAG}" \
             --candidate-commit "${candidate_commit}" \
             --npm-integrity "${npm_integrity}"
-          if [[ -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
-            echo "CODER_STUDIO_RUNTIME_PUBLIC_KEY is required" >&2
-            exit 1
-          fi
-          echo "runtime_public_key_b64=$(printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" | base64 | tr -d '\n')" >> "${GITHUB_OUTPUT}"
 
   accept-cli:
     name: Accept installed CLI update
@@ -513,29 +545,32 @@ jobs:
           New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/desktop | Out-Null
           New-Item -ItemType Directory -Force -Path release/product-runtime-acceptance/product | Out-Null
           $desktopReferenceTag = 'desktop-stable'
+          $desktopReleaseTag = ''
+          $stableDigest = ''
           gh release download $desktopReferenceTag `
             --pattern desktop-channel.json `
             --dir release/product-runtime-acceptance/stable-pointer
-          if ($LASTEXITCODE -ne 0) {
-            $desktopReferenceTag = '${{ needs.prepare.outputs.desktop_tag }}'
-            gh release download $desktopReferenceTag `
-              --pattern desktop-channel.json `
-              --dir release/product-runtime-acceptance/stable-pointer
-            if ($LASTEXITCODE -ne 0) { throw 'Unable to download the accepted Desktop stable reference' }
+          if ($LASTEXITCODE -eq 0) {
+            $stableDigest = (Get-FileHash release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Algorithm SHA256).Hash.ToLowerInvariant()
+            $desktopReference = Get-Content release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Raw | ConvertFrom-Json
+            $desktopReleaseTag = [string]$desktopReference.releaseTag
+          } else {
+            $desktopReleaseTag = '${{ needs.prepare.outputs.desktop_tag }}'
+            $stableDigest = '${{ needs.prepare.outputs.desktop_channel_sha256 }}'
           }
-          $desktop = Get-Content release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Raw | ConvertFrom-Json
-          gh release download $desktop.releaseTag `
+          if (-not $desktopReleaseTag) { throw 'Unable to resolve the accepted Desktop release tag' }
+          gh release download $desktopReleaseTag `
             --pattern desktop-channel.json `
             --pattern desktop-channel-modern.json `
             --pattern latest.yml `
+            --pattern modern.yml `
             --pattern 'Coder-Studio-Setup-*.exe' `
             --dir release/product-runtime-acceptance/desktop
           if ($LASTEXITCODE -ne 0) { throw 'Unable to download the immutable stable Desktop installer' }
-          $stableDigest = (Get-FileHash release/product-runtime-acceptance/stable-pointer/desktop-channel.json -Algorithm SHA256).Hash
           $acceptedAsset = $null
           foreach ($asset in @('desktop-channel.json', 'desktop-channel-modern.json')) {
             $path = Join-Path 'release/product-runtime-acceptance/desktop' $asset
-            if ((Test-Path $path) -and (Get-FileHash $path -Algorithm SHA256).Hash -eq $stableDigest) {
+            if ((Test-Path $path) -and (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() -eq $stableDigest) {
               $acceptedAsset = $asset
               break
             }
@@ -558,12 +593,14 @@ jobs:
       - name: Verify accepted Product and Desktop metadata digests
         shell: bash
         run: |
-          cmp --silent \
-            release/product-runtime-acceptance/stable-pointer/desktop-channel.json \
-            release/product-runtime-acceptance/desktop/desktop-channel.json || {
-              echo "Desktop stable pointer differs from its immutable release" >&2
-              exit 1
-            }
+          if [[ -f release/product-runtime-acceptance/stable-pointer/desktop-channel.json ]]; then
+            cmp --silent \
+              release/product-runtime-acceptance/stable-pointer/desktop-channel.json \
+              release/product-runtime-acceptance/desktop/desktop-channel.json || {
+                echo "Desktop stable pointer differs from its immutable release" >&2
+                exit 1
+              }
+          fi
           printf '%s  %s\n' '${{ needs.prepare.outputs.desktop_channel_sha256 }}' \
             release/product-runtime-acceptance/desktop/desktop-channel.json | sha256sum --check --strict
           printf '%s  %s\n' '${{ needs.publish-candidate.outputs.product_channel_sha256 }}' \
@@ -585,8 +622,15 @@ jobs:
           $desktopRoot = 'release/product-runtime-acceptance/desktop'
           $desktop = Get-Content "$desktopRoot/desktop-channel.json" -Raw | ConvertFrom-Json
           $product = Get-Content release/product-runtime-acceptance/product/product-channel.json -Raw | ConvertFrom-Json
-          $metadata = Get-Content "$desktopRoot/latest.yml" -Raw
+          $metadataAsset = [string]$desktop.shell.updaterMetadata
+          if (-not $metadataAsset) { throw 'Stable Desktop channel did not declare updater metadata' }
+          $metadata = Get-Content (Join-Path $desktopRoot $metadataAsset) -Raw
           $installerName = [regex]::Match($metadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $previousRuntime = [string]$desktop.factoryProduct.version
+          if (-not $previousRuntime -and $desktop.runtimes.'win32-x64') {
+            $previousRuntime = [string]$desktop.runtimes.'win32-x64'.version
+          }
+          if (-not $previousRuntime) { throw 'Unable to resolve previous stable Desktop Runtime version' }
           $components = if ('${{ matrix.scenario }}' -eq 'external-sidecar-browser') { '' } else { 'runtime:win32-x64' }
           $desktopChannelAsset = Get-Content "$desktopRoot/channel-asset.txt" -Raw
           $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$product.signature.value)
@@ -595,7 +639,7 @@ jobs:
           "desktop_tag=$($desktop.releaseTag)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "desktop_channel_asset=$desktopChannelAsset" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "shell_version=$($desktop.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_runtime=$($desktop.factoryProduct.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$previousRuntime" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "target_runtime=$($product.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -618,6 +662,8 @@ jobs:
       - name: Run tag-pinned installed Product acceptance
         shell: pwsh
         run: |
+          $previousRuntime = '${{ steps.identity.outputs.previous_runtime }}'
+          if (-not $previousRuntime) { throw 'Previous Runtime version is required for Product acceptance' }
           $arguments = @(
             '-PreviousInstaller', '${{ steps.identity.outputs.installer }}',
             '-CandidateInstaller', '${{ steps.identity.outputs.installer }}',
@@ -625,7 +671,7 @@ jobs:
             '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ steps.identity.outputs.desktop_tag }}/${{ steps.identity.outputs.desktop_channel_asset }}',
             '-ProductChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ needs.publish-candidate.outputs.candidate_tag }}/product-channel.json',
             '-PreviousShellVersion', '${{ steps.identity.outputs.shell_version }}',
-            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
+            '-PreviousRuntimeVersion', $previousRuntime,
             '-ExpectedShellVersion', '${{ steps.identity.outputs.shell_version }}',
             '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
             '-ExpectedComponents', '${{ steps.identity.outputs.components }}',
@@ -636,7 +682,7 @@ jobs:
             '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
           )
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
-            $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.identity.outputs.previous_runtime }}')
+            $arguments += @('-ExpectedRuntimeAfterRestart', $previousRuntime)
           }
           if ('${{ matrix.scenario }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
@@ -673,7 +719,7 @@ jobs:
       linux_manifest_sha256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
       desktop_tag: ${{ needs.prepare.outputs.desktop_tag }}
       desktop_channel_sha256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
-      runtime_public_key_b64: ${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}
+      runtime_public_key_artifact: product-compatibility-runtime-public-key-${{ github.run_id }}
 
   promote:
     name: Promote accepted Product
