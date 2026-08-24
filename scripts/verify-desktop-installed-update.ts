@@ -83,6 +83,17 @@ export interface InstalledDesktopScenarioReport extends InstalledEvidence {
   logPaths: string[];
 }
 
+export function formatCookieHeader(
+  cookies: ReadonlyArray<{ name?: string; value?: string }>
+): string | undefined {
+  const parts = cookies.flatMap((cookie) => {
+    const name = cookie.name?.trim();
+    if (!name) return [];
+    return [`${name}=${cookie.value ?? ""}`];
+  });
+  return parts.length > 0 ? parts.join("; ") : undefined;
+}
+
 function asState(value: unknown, phase: string): ProductUpdateState {
   if (!value || typeof value !== "object") throw new Error(`${phase} did not return update state`);
   return value as ProductUpdateState;
@@ -336,6 +347,7 @@ interface BrowserSession {
     preloadAvailable: boolean;
     updateOperations: string[];
   }>;
+  getCookieHeader(url: string): Promise<string | undefined>;
 }
 
 async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
@@ -355,6 +367,12 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
       }>;
       connectOverCDP(url: string): Promise<{
         contexts(): Array<{
+          cookies(urls?: string[]): Promise<
+            Array<{
+              name?: string;
+              value?: string;
+            }>
+          >;
           pages(): Array<{
             evaluate<T, A>(callback: (argument: A) => T | Promise<T>, argument: A): Promise<T>;
           }>;
@@ -437,6 +455,7 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
         await externalBrowser.close();
       }
     },
+    getCookieHeader: async (url) => formatCookieHeader(await context.cookies([url])),
   };
 }
 
@@ -553,14 +572,24 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         }
         throw new Error(`Timed out waiting for Desktop update state ${status}: ${state?.status}`);
       },
-      prepareActivity: async () =>
-        options.sidecarUrl
-          ? callCoderStudioWsCommand<UpdatePrepareInstallResponse>({
-              apiUrl: options.sidecarUrl,
-              op: "updates.prepareInstall",
-              args: {},
-            })
-          : ({ hasActiveWork: false } as UpdatePrepareInstallResponse),
+      prepareActivity: async () => {
+        if (!options.sidecarUrl) {
+          return { hasActiveWork: false } as UpdatePrepareInstallResponse;
+        }
+        const cookieHeader = await session.getCookieHeader(options.sidecarUrl);
+        return callCoderStudioWsCommand<UpdatePrepareInstallResponse>({
+          apiUrl: options.sidecarUrl,
+          op: "updates.prepareInstall",
+          args: {},
+          ...(cookieHeader
+            ? {
+                headers: {
+                  Cookie: cookieHeader,
+                },
+              }
+            : {}),
+        });
+      },
       interruptAtPhase: async (phase) => {
         journalRecovered =
           (await requestInterruption(options.controlPath, phase)) || journalRecovered;
