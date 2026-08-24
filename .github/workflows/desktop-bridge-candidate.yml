@@ -24,6 +24,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       BRIDGE_CANDIDATE_TAG: ${{ inputs.bridge_candidate_tag }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
       CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
     steps:
       - name: Checkout repository

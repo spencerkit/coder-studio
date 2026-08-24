@@ -663,7 +663,7 @@ describe("bridge candidate preparation workflow", () => {
     });
     expect(workflow.permissions).toEqual({ contents: "write" });
     expect(prepare.environment).toBe("desktop-production");
-    expect(prepare.env).not.toHaveProperty("CODER_STUDIO_RUNTIME_PUBLIC_KEY");
+    expect(prepare.env).toHaveProperty("CODER_STUDIO_RUNTIME_PUBLIC_KEY");
     expect(text).toContain("prepare-product-release-bundle.ts");
     expect(text).toContain("prepare-desktop-bridge-candidate.ts");
     expect(text).toContain("pnpm release:artifacts validate-product");
