@@ -634,6 +634,48 @@ describe("legacy Desktop acceptance", () => {
   });
 });
 
+describe("bridge candidate preparation workflow", () => {
+  it("manually hydrates the one-time bridge candidate and accepted Product bundle", () => {
+    expect(existsSync(workflowPath("desktop-bridge-candidate.yml"))).toBe(true);
+    const workflow = loadWorkflow("desktop-bridge-candidate.yml");
+    const dispatch = workflow.on.workflow_dispatch as {
+      inputs: Record<string, Record<string, unknown>>;
+    };
+    const prepare = workflow.jobs.prepare;
+    const text = jobText(prepare);
+    const resolveProduct = step(prepare, "Resolve accepted Product tag and signing key");
+    const uploadProduct = step(
+      prepare,
+      "Upload reconstructed Product bundle to its immutable release"
+    );
+    const uploadCandidate = step(prepare, "Upload hydrated bridge assets to the Desktop candidate");
+
+    expect(dispatch.inputs).toEqual({
+      bridge_candidate_tag: {
+        description: "Existing immutable Desktop candidate tag to hydrate for bridge promotion",
+        required: true,
+        type: "string",
+      },
+    });
+    expect(workflow.concurrency).toEqual({
+      group: "desktop-bridge-candidate-${{ inputs.bridge_candidate_tag }}",
+      "cancel-in-progress": false,
+    });
+    expect(workflow.permissions).toEqual({ contents: "write" });
+    expect(prepare.environment).toBe("desktop-production");
+    expect(prepare.env).not.toHaveProperty("CODER_STUDIO_RUNTIME_PUBLIC_KEY");
+    expect(text).toContain("prepare-product-release-bundle.ts");
+    expect(text).toContain("prepare-desktop-bridge-candidate.ts");
+    expect(text).toContain("pnpm release:artifacts validate-product");
+    expect(text).toContain("pnpm release:artifacts validate-desktop");
+    expect(text).toContain("desktop-channel-modern.json");
+    expect(resolveProduct?.run).toContain("desktop-channel-modern.json");
+    expect(resolveProduct?.run).toContain('channel?.channel !== "desktop"');
+    expect(uploadProduct?.run).toContain('gh release upload "${PRODUCT_TAG}"');
+    expect(uploadCandidate?.run).toContain('gh release upload "${BRIDGE_CANDIDATE_TAG}"');
+  });
+});
+
 describe("one-time Product and Desktop migration bridge", () => {
   it("is an explicit manual operation with a serialized confirmation", () => {
     expect(existsSync(workflowPath("desktop-bridge-release.yml"))).toBe(true);

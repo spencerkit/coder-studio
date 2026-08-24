@@ -1,0 +1,154 @@
+name: Prepare one-time Product and Desktop bridge candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      bridge_candidate_tag:
+        description: Existing immutable Desktop candidate tag to hydrate for bridge promotion
+        required: true
+        type: string
+
+concurrency:
+  group: desktop-bridge-candidate-${{ inputs.bridge_candidate_tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Hydrate bridge candidate assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: desktop-production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRIDGE_CANDIDATE_TAG: ${{ inputs.bridge_candidate_tag }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download immutable Desktop candidate
+        run: |
+          if [[ -z "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            echo "bridge_candidate_tag is required" >&2
+            exit 1
+          fi
+          if [[ -z "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" ]]; then
+            echo "The production Runtime signing private key is required" >&2
+            exit 1
+          fi
+          case "${BRIDGE_CANDIDATE_TAG}" in
+            product-stable|desktop-stable)
+              echo "A stable pointer tag cannot be used as a bridge candidate" >&2
+              exit 1
+              ;;
+          esac
+          mkdir -p release/bridge-candidate/candidate
+          gh release download "${BRIDGE_CANDIDATE_TAG}" --dir release/bridge-candidate/candidate
+
+      - name: Resolve accepted Product tag and signing key
+        run: |
+          product_tag=$(node --input-type=module <<'NODE'
+          import { existsSync, readFileSync } from "node:fs";
+
+          const modernPath = "release/bridge-candidate/candidate/desktop-channel-modern.json";
+          const fallbackPath = "release/bridge-candidate/candidate/desktop-channel.json";
+          const channelPath = existsSync(modernPath) ? modernPath : fallbackPath;
+          const channel = JSON.parse(readFileSync(channelPath, "utf8"));
+          if (channel?.channel !== "desktop") {
+            throw new Error("Bridge candidate must include a split Desktop channel");
+          }
+          if (typeof channel?.factoryProduct?.releaseTag !== "string") {
+            throw new Error("Desktop bridge candidate did not declare a Factory Product releaseTag");
+          }
+          process.stdout.write(channel.factoryProduct.releaseTag);
+          NODE
+          )
+          if [[ -z "${product_tag}" ]]; then
+            echo "Desktop candidate did not declare a Factory Product releaseTag" >&2
+            exit 1
+          fi
+          mkdir -p release/bridge-candidate/keys
+          printf '%s\n' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" \
+            > release/bridge-candidate/keys/runtime-signing-private.pem
+          echo "PRODUCT_TAG=${product_tag}" >> "${GITHUB_ENV}"
+
+      - name: Download and reconstruct accepted Product bundle
+        run: |
+          mkdir -p release/bridge-candidate/product release/bridge-candidate/product-source
+          gh release download "${PRODUCT_TAG}" --dir release/bridge-candidate/product
+          pnpm exec tsx scripts/prepare-product-release-bundle.ts \
+            --directory release/bridge-candidate/product \
+            --release-tag "${PRODUCT_TAG}" \
+            --private-key release/bridge-candidate/keys/runtime-signing-private.pem
+          tar -xOf release/bridge-candidate/product/coder-studio-cli.tgz package/package.json \
+            > release/bridge-candidate/product-source/package.json
+          pnpm release:artifacts validate-product \
+            --directory release/bridge-candidate/product \
+            --source-package-json release/bridge-candidate/product-source/package.json
+
+      - name: Compose and validate bridge candidate channels
+        run: |
+          pnpm exec tsx scripts/prepare-desktop-bridge-candidate.ts \
+            --candidate-dir release/bridge-candidate/candidate \
+            --product-dir release/bridge-candidate/product \
+            --bridge-tag "${BRIDGE_CANDIDATE_TAG}" \
+            --private-key release/bridge-candidate/keys/runtime-signing-private.pem
+          mkdir -p release/bridge-candidate/desktop-validate
+          cp release/bridge-candidate/candidate/desktop-channel-modern.json \
+            release/bridge-candidate/desktop-validate/desktop-channel.json
+          cp release/bridge-candidate/candidate/latest.yml \
+            release/bridge-candidate/desktop-validate/latest.yml
+          cp release/bridge-candidate/candidate/build-info.json \
+            release/bridge-candidate/desktop-validate/build-info.json
+          cp release/bridge-candidate/candidate/factory-product.json \
+            release/bridge-candidate/desktop-validate/factory-product.json
+          cp release/bridge-candidate/candidate/Coder-Studio-Setup-*.exe \
+            release/bridge-candidate/desktop-validate/
+          cp release/bridge-candidate/candidate/Coder-Studio-Setup-*.exe.blockmap \
+            release/bridge-candidate/desktop-validate/
+          cp release/bridge-candidate/candidate/coder-studio-engine-linux-x64.manifest.json \
+            release/bridge-candidate/desktop-validate/
+          cp release/bridge-candidate/candidate/coder-studio-engine-*-linux-x64.tgz \
+            release/bridge-candidate/desktop-validate/
+          tar -xzf release/bridge-candidate/candidate/desktop-validation-evidence.tgz \
+            -C release/bridge-candidate/desktop-validate
+          pnpm release:artifacts validate-desktop \
+            --directory release/bridge-candidate/desktop-validate
+
+      - name: Upload reconstructed Product bundle to its immutable release
+        run: |
+          gh release upload "${PRODUCT_TAG}" \
+            release/bridge-candidate/product/product-channel.json \
+            release/bridge-candidate/product/coder-studio-cli.tgz \
+            --clobber
+
+      - name: Upload hydrated bridge assets to the Desktop candidate
+        run: |
+          gh release upload "${BRIDGE_CANDIDATE_TAG}" \
+            release/bridge-candidate/candidate/product-channel.json \
+            release/bridge-candidate/candidate/coder-studio-cli.tgz \
+            release/bridge-candidate/candidate/coder-studio-runtime-win32-x64.manifest.json \
+            release/bridge-candidate/candidate/coder-studio-server-runtime-linux-x64.manifest.json \
+            release/bridge-candidate/candidate/coder-studio-runtime-*-win32-x64.tgz \
+            release/bridge-candidate/candidate/coder-studio-server-runtime-*-linux-x64.tgz \
+            release/bridge-candidate/candidate/desktop-channel.json \
+            release/bridge-candidate/candidate/desktop-channel-modern.json \
+            --clobber
