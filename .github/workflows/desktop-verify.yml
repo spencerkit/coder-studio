@@ -197,6 +197,7 @@ jobs:
         run: pnpm build:desktop-runtime
 
       - name: Stage Windows Product assets
+        shell: bash
         run: |
           pnpm release:artifacts stage-product \
             --directory release/product-windows \
@@ -489,6 +490,7 @@ jobs:
         run: pnpm smoke:desktop
 
       - name: Stage Windows Desktop assets
+        shell: bash
         run: |
           pnpm release:artifacts stage-desktop \
             --directory release/desktop-windows \
