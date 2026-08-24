@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  formatCookieHeader,
   type InstalledDesktopScenario,
+  toSidecarWebSocketUrl,
   type VerifyInstalledDesktopDeps,
   verifyInstalledDesktopScenario,
 } from "./verify-desktop-installed-update.js";
@@ -125,14 +125,10 @@ describe("verify-desktop-installed-update", () => {
     );
   });
 
-  it("formats persisted browser cookies for sidecar websocket reuse", () => {
-    expect(
-      formatCookieHeader([
-        { name: "coder_studio_auth", value: "session-cookie" },
-        { name: "theme", value: "light" },
-      ])
-    ).toBe("coder_studio_auth=session-cookie; theme=light");
-    expect(formatCookieHeader([{ name: " ", value: "ignored" }, {}])).toBeUndefined();
+  it("normalizes sidecar websocket urls for browser-issued commands", () => {
+    expect(toSidecarWebSocketUrl("http://127.0.0.1:4173")).toBe("ws://127.0.0.1:4173/ws");
+    expect(toSidecarWebSocketUrl("https://example.com/app/")).toBe("wss://example.com/app/ws");
+    expect(() => toSidecarWebSocketUrl("file:///tmp/coder-studio")).toThrow("Unsupported");
   });
 
   it("drives one confirmation and validates actual component versions", async () => {
