@@ -5,7 +5,6 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { ProductUpdateState, UpdatePrepareInstallResponse } from "@coder-studio/core";
-import { callCoderStudioWsCommand } from "../packages/cli/src/automation-ws-client.js";
 import { error, ROOT_DIR, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
@@ -83,15 +82,19 @@ export interface InstalledDesktopScenarioReport extends InstalledEvidence {
   logPaths: string[];
 }
 
-export function formatCookieHeader(
-  cookies: ReadonlyArray<{ name?: string; value?: string }>
-): string | undefined {
-  const parts = cookies.flatMap((cookie) => {
-    const name = cookie.name?.trim();
-    if (!name) return [];
-    return [`${name}=${cookie.value ?? ""}`];
-  });
-  return parts.length > 0 ? parts.join("; ") : undefined;
+export function toSidecarWebSocketUrl(apiUrl: string): string {
+  const url = new URL(apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl);
+  if (url.protocol === "http:") {
+    url.protocol = "ws:";
+  } else if (url.protocol === "https:") {
+    url.protocol = "wss:";
+  } else if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+    throw new Error(`Unsupported Coder Studio API URL protocol: ${url.protocol}`);
+  }
+  url.pathname = `${url.pathname.replace(/\/$/u, "")}/ws`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
 }
 
 function asState(value: unknown, phase: string): ProductUpdateState {
@@ -343,11 +346,11 @@ interface InstalledDriverOptions {
 interface BrowserSession {
   close(): Promise<void>;
   evaluate(method: DesktopBridgeMethod): Promise<unknown>;
+  callSidecarCommand<T>(apiUrl: string, op: string, args: unknown): Promise<T>;
   verifyExternalSidecar(url: string): Promise<{
     preloadAvailable: boolean;
     updateOperations: string[];
   }>;
-  getCookieHeader(url: string): Promise<string | undefined>;
 }
 
 async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
@@ -367,12 +370,6 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
       }>;
       connectOverCDP(url: string): Promise<{
         contexts(): Array<{
-          cookies(urls?: string[]): Promise<
-            Array<{
-              name?: string;
-              value?: string;
-            }>
-          >;
           pages(): Array<{
             evaluate<T, A>(callback: (argument: A) => T | Promise<T>, argument: A): Promise<T>;
           }>;
@@ -407,6 +404,81 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
         }
         return operation.call(bridge);
       }, method),
+    callSidecarCommand: <T>(url: string, op: string, args: unknown): Promise<T> =>
+      page.evaluate(
+        ({ wsUrl, operation, operationArgs }) =>
+          new Promise<unknown>((resolve, reject) => {
+            const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+            const socket = new WebSocket(wsUrl);
+            let settled = false;
+            const timer = setTimeout(() => {
+              finish(() => reject(new Error(`Timed out waiting for ${operation} result`)));
+            }, 30_000);
+
+            const finish = (callback: () => void) => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              clearTimeout(timer);
+              socket.close();
+              callback();
+            };
+
+            socket.addEventListener("open", () => {
+              socket.send(
+                JSON.stringify({
+                  kind: "command",
+                  id,
+                  op: operation,
+                  args: operationArgs,
+                })
+              );
+            });
+
+            socket.addEventListener("message", (event) => {
+              try {
+                const message = JSON.parse(String(event.data)) as {
+                  kind?: string;
+                  id?: string;
+                  ok?: boolean;
+                  data?: unknown;
+                  error?: { code?: string; message?: string };
+                };
+                if (message.kind !== "result" || message.id !== id) {
+                  return;
+                }
+                if (message.ok) {
+                  finish(() => resolve(message.data));
+                  return;
+                }
+                const code = message.error?.code ? `${message.error.code}: ` : "";
+                finish(() =>
+                  reject(new Error(`${code}${message.error?.message ?? "Command failed"}`))
+                );
+              } catch (error) {
+                finish(() => reject(error instanceof Error ? error : new Error(String(error))));
+              }
+            });
+
+            socket.addEventListener("error", () => {
+              finish(() => reject(new Error(`WebSocket error while waiting for ${operation}`)));
+            });
+
+            socket.addEventListener("close", () => {
+              if (!settled) {
+                finish(() =>
+                  reject(new Error("Coder Studio command connection closed before a result"))
+                );
+              }
+            });
+          }),
+        {
+          wsUrl: toSidecarWebSocketUrl(url),
+          operation: op,
+          operationArgs: args,
+        }
+      ) as Promise<T>,
     verifyExternalSidecar: async (url) => {
       const externalBrowser = await playwright.chromium.launch({
         channel: "msedge",
@@ -455,7 +527,6 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
         await externalBrowser.close();
       }
     },
-    getCookieHeader: async (url) => formatCookieHeader(await context.cookies([url])),
   };
 }
 
@@ -576,19 +647,11 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         if (!options.sidecarUrl) {
           return { hasActiveWork: false } as UpdatePrepareInstallResponse;
         }
-        const cookieHeader = await session.getCookieHeader(options.sidecarUrl);
-        return callCoderStudioWsCommand<UpdatePrepareInstallResponse>({
-          apiUrl: options.sidecarUrl,
-          op: "updates.prepareInstall",
-          args: {},
-          ...(cookieHeader
-            ? {
-                headers: {
-                  Cookie: cookieHeader,
-                },
-              }
-            : {}),
-        });
+        return session.callSidecarCommand<UpdatePrepareInstallResponse>(
+          options.sidecarUrl,
+          "updates.prepareInstall",
+          {}
+        );
       },
       interruptAtPhase: async (phase) => {
         journalRecovered =
