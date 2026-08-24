@@ -287,7 +287,11 @@ function readArgumentValue(argv: string[], index: number, option: string): strin
 }
 
 export function normalizeReleaseChannelArgs(argv: string[]): string[] {
-  return argv[0] === "--" ? argv.slice(1) : argv;
+  const normalized = argv[0] === "--" ? argv.slice(1) : [...argv];
+  if ((normalized[0] === "product" || normalized[0] === "desktop") && normalized[1] === "--") {
+    normalized.splice(1, 1);
+  }
+  return normalized;
 }
 
 export function parseReleaseChannelCommand(argvValue: string[]): ReleaseChannelCommand {

@@ -154,8 +154,12 @@ describe("independent release channel builder", () => {
       normalizeReleaseChannelArgs(["--", "product", "--directory", "release/product"])
     ).toEqual(["product", "--directory", "release/product"]);
     expect(
+      normalizeReleaseChannelArgs(["product", "--", "--directory", "release/product"])
+    ).toEqual(["product", "--directory", "release/product"]);
+    expect(
       parseReleaseChannelCommand([
         "product",
+        "--",
         "--directory",
         "release/product",
         "--release-tag",
