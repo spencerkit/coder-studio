@@ -514,6 +514,7 @@ describe("Desktop publication workflow", () => {
     expect(jobText(jobs["accept-factory"])).toContain("PRODUCT_CHANNEL_SHA256");
     expect(jobText(jobs["accept-factory"])).toContain("desktop.stdout.log");
     expect(jobText(jobs["accept-factory"])).toContain("RedirectStandardError");
+    expect(jobText(jobs["accept-factory"])).toContain("CODER_STUDIO_RELEASE_BASE_URL");
     expect(jobText(jobs["accept-factory"])).toContain("Desktop process exit code");
     expect(jobText(jobs["accept-factory"])).toContain("Write-AcceptanceReport");
     expect(step(jobs["accept-factory"], "Download accepted Product bundle")?.with).toEqual({

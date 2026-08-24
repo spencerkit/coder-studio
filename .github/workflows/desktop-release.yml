@@ -1106,6 +1106,7 @@ jobs:
           $env:CODER_STUDIO_DESKTOP_ACCEPTANCE = '1'
           $env:CODER_STUDIO_PRODUCT_CHANNEL_URL = 'http://127.0.0.1:1/product-channel.json'
           $env:CODER_STUDIO_DESKTOP_CHANNEL_URL = 'http://127.0.0.1:1/desktop-channel.json'
+          $env:CODER_STUDIO_RELEASE_BASE_URL = 'https://github.com/${{ github.repository }}/releases/download/${{ needs.publish-candidate.outputs.candidate_tag }}/'
           $env:CODER_STUDIO_FACTORY_RELEASE_BASE_URL = 'http://127.0.0.1:1/'
           $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE = Join-Path $root 'runtime-public.pem'
           $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE -NoNewline
