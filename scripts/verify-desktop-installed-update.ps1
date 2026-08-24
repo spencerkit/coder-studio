@@ -104,7 +104,24 @@ function Wait-Cdp([int]$Port, [int]$TimeoutSeconds = 90) {
   throw "Timed out waiting for installed Desktop CDP on port $Port. $lastError"
 }
 
-function Stop-AcceptanceDesktop([string]$Executable, [string]$UserDataDirectory) {
+function Stop-CdpPortOwner([int]$Port) {
+  if ($Port -le 0) { return }
+  try {
+    $owners = @(
+      Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    )
+  } catch {
+    $owners = @()
+  }
+  foreach ($owner in $owners) {
+    if ($null -ne $owner -and $owner -gt 0) {
+      Stop-Process -Id $owner -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+function Stop-AcceptanceDesktop([string]$Executable, [string]$UserDataDirectory, [int]$CdpPort = 0) {
   $escapedExecutable = [Regex]::Escape($Executable)
   $escapedUserData = [Regex]::Escape($UserDataDirectory)
   $processes = Get-CimInstance Win32_Process | Where-Object {
@@ -114,6 +131,7 @@ function Stop-AcceptanceDesktop([string]$Executable, [string]$UserDataDirectory)
   foreach ($process in $processes) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
   }
+  Stop-CdpPortOwner $CdpPort
 }
 
 function Start-AcceptanceDesktop(
@@ -381,7 +399,7 @@ try {
           }
         } elseif ($control.status -eq 'requested' -and -not $handledInterruptions.Contains($phase)) {
           $journalBefore = Read-JournalIdentity $journalPath
-          Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
+          Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
           $restartScenario = if ($phase -eq 'wsl-follow') {
             if ($Scenario -eq 'wsl-combined') {
               $env:CODER_STUDIO_DESKTOP_CHANNEL_URL = 'http://127.0.0.1:1/desktop-channel.json'
@@ -409,7 +427,7 @@ try {
     if ($restartAfterInstallArmed -and -not $restartAfterInstallHandled -and $null -ne $desktopProcess) {
       $desktopProcess.Refresh()
       if (-not $desktopProcess.HasExited -and $null -ne $restartAfterInstallArmedAt -and [DateTime]::UtcNow -ge $restartAfterInstallArmedAt.AddSeconds(15)) {
-        Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
+        Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
         Start-Sleep -Seconds 1
         $desktopProcess.Refresh()
       }
@@ -418,7 +436,7 @@ try {
         $relaunchError = $null
         while ([DateTime]::UtcNow -lt $restartDeadline) {
           try {
-            Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
+            Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
             $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
             $desktopProcess.Handle | Out-Null
             Wait-Cdp $cdpPort 15 | Out-Null
@@ -467,7 +485,7 @@ try {
   $failureDetails | Set-Content -LiteralPath $failurePath -Encoding UTF8
   throw
 } finally {
-  Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
+  Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
   Preserve-AcceptanceEvidence `
     ([System.IO.Path]::GetFullPath($ReportPath)) `
     $driverOut `

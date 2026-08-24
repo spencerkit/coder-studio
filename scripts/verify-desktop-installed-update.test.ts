@@ -123,6 +123,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("provider: generic");
     expect(runner).toContain("channel: latest");
     expect(runner).toContain("Set-LegacyShellUpdaterFeed $installDirectory $ChannelUrl");
+    expect(runner).toContain("function Stop-CdpPortOwner");
+    expect(runner).toContain("Get-NetTCPConnection -LocalPort $Port -State Listen");
     expect(runner).toContain("$restartAfterInstallArmed = $false");
     expect(runner).toContain("$phase -eq 'install-restart' -and $control.status -eq 'armed'");
     expect(runner).toContain("Timed out relaunching the installed Desktop after Shell update");
