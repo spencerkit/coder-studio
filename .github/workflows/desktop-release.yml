@@ -12,6 +12,11 @@ on:
         required: false
         default: ""
         type: string
+      windows_signing:
+        description: "Require Windows Authenticode signing for workflow_dispatch runs"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -350,9 +355,10 @@ jobs:
     environment: desktop-production
     env:
       GH_TOKEN: ${{ github.token }}
-      CSC_LINK: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
-      CSC_IDENTITY_AUTO_DISCOVERY: "true"
+      WINDOWS_SIGNING_ENABLED: ${{ github.event_name != 'workflow_dispatch' || inputs.windows_signing }}
+      CSC_LINK: ${{ (github.event_name != 'workflow_dispatch' || inputs.windows_signing) && secrets.DESKTOP_WINDOWS_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ (github.event_name != 'workflow_dispatch' || inputs.windows_signing) && secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD || '' }}
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ (github.event_name != 'workflow_dispatch' || inputs.windows_signing) && 'true' || 'false' }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
     steps:
@@ -405,9 +411,11 @@ jobs:
               -C release/desktop-windows
             cp -R release/factory-product/factory-runtime release/desktop-windows/factory-runtime
           else
-            if [[ -z "${CSC_LINK}" || -z "${CSC_KEY_PASSWORD}" ]]; then
-              echo "Windows Authenticode signing credentials are required" >&2
-              exit 1
+            if [[ "${WINDOWS_SIGNING_ENABLED}" == "true" ]]; then
+              if [[ -z "${CSC_LINK}" || -z "${CSC_KEY_PASSWORD}" ]]; then
+                echo "Windows Authenticode signing credentials are required when windows_signing is enabled" >&2
+                exit 1
+              fi
             fi
             export CODER_STUDIO_FACTORY_RUNTIME_DIR="${PWD}/release/factory-product/factory-runtime"
             export CODER_STUDIO_FACTORY_PRODUCT_FILE="${PWD}/release/factory-product/factory-product.json"
@@ -419,7 +427,7 @@ jobs:
           fi
 
       - name: Verify Authenticode signatures
-        if: needs.prepare.outputs.resume_candidate != 'true'
+        if: needs.prepare.outputs.resume_candidate != 'true' && (github.event_name != 'workflow_dispatch' || inputs.windows_signing)
         shell: pwsh
         run: |
           $metadata = Get-Content release/desktop/latest.yml -Raw
