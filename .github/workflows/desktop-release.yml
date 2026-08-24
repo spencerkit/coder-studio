@@ -471,6 +471,7 @@ jobs:
       desktop_channel_sha256: ${{ steps.identity.outputs.desktop_channel_sha256 }}
       artifact_digests: ${{ steps.identity.outputs.artifact_digests }}
       candidate_commit: ${{ steps.identity.outputs.candidate_commit }}
+      runtime_public_key_b64: ${{ steps.identity.outputs.runtime_public_key_b64 }}
     env:
       GH_TOKEN: ${{ github.token }}
       CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
@@ -578,6 +579,11 @@ jobs:
             --output-file "${GITHUB_OUTPUT}" \
             --candidate-tag "${CANDIDATE_TAG}" \
             --candidate-commit "${candidate_commit}"
+          if [[ -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" ]]; then
+            echo "CODER_STUDIO_RUNTIME_PUBLIC_KEY is required" >&2
+            exit 1
+          fi
+          echo "runtime_public_key_b64=$(printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" | base64 | tr -d '\n')" >> "${GITHUB_OUTPUT}"
 
       - name: Retain accepted Desktop candidate bundle
         uses: actions/upload-artifact@v4
@@ -988,6 +994,7 @@ jobs:
       linux_manifest_sha256: ${{ matrix.product == 'current' && needs.resolve-factory-product.outputs.current_linux_manifest_sha256 || needs.resolve-factory-product.outputs.previous_linux_manifest_sha256 }}
       desktop_tag: ${{ needs.publish-candidate.outputs.candidate_tag }}
       desktop_channel_sha256: ${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}
+      runtime_public_key_b64: ${{ needs.publish-candidate.outputs.runtime_public_key_b64 }}
 
   promote:
     name: Promote accepted Desktop
