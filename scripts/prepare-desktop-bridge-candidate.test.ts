@@ -34,6 +34,12 @@ describe("prepareDesktopBridgeCandidate", () => {
         apiProtocolVersion: 1,
         dataSchemaVersion: 1,
       },
+      wslEngine: {
+        version: "2",
+        nodeVersion: "24.19.0",
+        manifest: "coder-studio-engine-linux-x64.manifest.json",
+        manifestSha256: "1".repeat(64),
+      },
       factoryProduct: {
         version: "0.5.8",
         releaseTag: "v0.5.12",
@@ -158,6 +164,11 @@ describe("prepareDesktopBridgeCandidate", () => {
       channel: "desktop",
       releaseTag: "desktop-v0.1.5",
       version: "0.1.5",
+      wslEngine: {
+        version: "2",
+        nodeVersion: "24.19.0",
+        manifest: "coder-studio-engine-linux-x64.manifest.json",
+      },
     });
     expect(parseCompatibilityDesktopChannel(legacy, publicKeyPem)).toMatchObject({
       releaseTag: "desktop-v0.1.5",

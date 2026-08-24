@@ -26,6 +26,12 @@ interface ModernDesktopChannel {
     apiProtocolVersion: number;
     dataSchemaVersion: number;
   };
+  wslEngine: {
+    version: string;
+    nodeVersion: string;
+    manifest: string;
+    manifestSha256: string;
+  };
   factoryProduct: {
     version: string;
     releaseTag: string;
@@ -157,9 +163,13 @@ function parseModernDesktopChannel(value: unknown): ModernDesktopChannel {
     throw new Error("Desktop bridge candidate must use the split Desktop channel contract");
   }
   const shell = channel.shell;
+  const wslEngine = channel.wslEngine;
   const factoryProduct = channel.factoryProduct;
   if (!shell || typeof shell !== "object") {
     throw new Error("Desktop bridge candidate shell metadata is missing");
+  }
+  if (!wslEngine || typeof wslEngine !== "object") {
+    throw new Error("Desktop bridge candidate WSL Engine metadata is missing");
   }
   if (!factoryProduct || typeof factoryProduct !== "object") {
     throw new Error("Desktop bridge candidate Factory Product metadata is missing");
@@ -194,6 +204,18 @@ function parseModernDesktopChannel(value: unknown): ModernDesktopChannel {
       dataSchemaVersion: assertPositiveInteger(
         shell.dataSchemaVersion,
         "Desktop bridge candidate shell.dataSchemaVersion"
+      ),
+    },
+    wslEngine: {
+      version: assertString(wslEngine.version, "Desktop bridge candidate wslEngine.version"),
+      nodeVersion: assertString(
+        wslEngine.nodeVersion,
+        "Desktop bridge candidate wslEngine.nodeVersion"
+      ),
+      manifest: assertBasename(wslEngine.manifest, "Desktop bridge candidate wslEngine.manifest"),
+      manifestSha256: assertString(
+        wslEngine.manifestSha256,
+        "Desktop bridge candidate wslEngine.manifestSha256"
       ),
     },
     factoryProduct: {
