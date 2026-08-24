@@ -241,6 +241,9 @@ describe("Product publication workflow", () => {
     );
 
     expect(immutableIndex).toBeGreaterThan(-1);
+    expect(step(promote, "Checkout repository")?.uses).toBe("actions/checkout@v4");
+    expect(step(promote, "Setup pnpm")?.uses).toBe("pnpm/action-setup@v4");
+    expect(step(promote, "Install dependencies")?.run).toBe("pnpm install --frozen-lockfile");
     expect(npmIndex).toBeGreaterThan(immutableIndex);
     expect(releaseIndex).toBeGreaterThan(npmIndex);
     expect(pointerIndex).toBeGreaterThan(releaseIndex);
@@ -286,6 +289,7 @@ describe("reusable compatibility acceptance", () => {
 
     expect(call.inputs).toEqual({
       product_tag: { type: "string", required: true },
+      product_bundle_artifact: { type: "string", required: false },
       product_channel_sha256: { type: "string", required: true },
       windows_manifest_sha256: { type: "string", required: true },
       linux_manifest_sha256: { type: "string", required: true },
@@ -302,14 +306,16 @@ describe("reusable compatibility acceptance", () => {
     const workflow = loadWorkflow("compatibility-acceptance.yml");
     const verify = workflow.jobs.verify;
     const text = jobText(verify);
-    const download = step(verify, "Download immutable Product and Desktop metadata")?.run;
+    const downloadProduct = step(verify, "Download immutable Product metadata")?.run;
+    const downloadDesktop = step(verify, "Download immutable Desktop metadata")?.run;
 
     expect(Object.keys(workflow.jobs)).toEqual(["verify"]);
     expect(verify.strategy?.matrix?.target).toEqual(["native", "wsl"]);
-    expect(download).toContain('gh release download "${PRODUCT_TAG}"');
-    expect(download).toContain('gh release download "${DESKTOP_TAG}"');
-    expect(download).toContain("desktop-channel-modern.json");
+    expect(downloadProduct).toContain('gh release download "${PRODUCT_TAG}"');
+    expect(downloadDesktop).toContain('gh release download "${DESKTOP_TAG}"');
+    expect(downloadDesktop).toContain("desktop-channel-modern.json");
     expect(text).toContain("download-artifact@v4");
+    expect(text).toContain("inputs.product_bundle_artifact");
     expect(text).toContain("runtime_public_key_artifact");
     expect(text).toContain("PRODUCT_CHANNEL_SHA256");
     expect(text).toContain("WINDOWS_MANIFEST_SHA256");
@@ -407,11 +413,20 @@ describe("Desktop publication workflow", () => {
 
     const factoryText = jobText(jobs["resolve-factory-product"]);
     expect(factoryText).toContain("gh release download product-stable");
+    expect(factoryText).toContain("prepare-product-release-bundle.ts");
     expect(factoryText).toContain("product-channel.json");
     expect(factoryText).toContain("pnpm release:artifacts validate-product");
     expect(factoryText).toContain("factory-product.json");
     expect(factoryText).toContain("factory-runtime");
+    expect(factoryText).toContain("accepted-product-current-");
+    expect(factoryText).toContain("accepted-product-previous-");
     expect(factoryText).not.toMatch(/pnpm (?:build:desktop-runtime|build:wsl-runtime)/);
+    expect(jobs["resolve-factory-product"].outputs).toMatchObject({
+      current_product_bundle_artifact:
+        "${{ steps.identity.outputs.current_product_bundle_artifact }}",
+      previous_product_bundle_artifact:
+        "${{ steps.identity.outputs.previous_product_bundle_artifact }}",
+    });
 
     const windowsText = jobText(jobs["windows-assets"]);
     expect(windowsText).toContain("CODER_STUDIO_FACTORY_RUNTIME_DIR");
@@ -488,6 +503,10 @@ describe("Desktop publication workflow", () => {
     expect(jobText(jobs["accept-factory"])).toContain("pnpm release:artifacts validate-desktop");
     expect(jobText(jobs["accept-factory"])).toContain("DESKTOP_CHANNEL_SHA256");
     expect(jobText(jobs["accept-factory"])).toContain("PRODUCT_CHANNEL_SHA256");
+    expect(step(jobs["accept-factory"], "Download accepted Product bundle")?.with).toEqual({
+      name: "${{ needs.resolve-factory-product.outputs.current_product_bundle_artifact }}",
+      path: "release/factory-acceptance/product",
+    });
     expect(jobText(jobs["accept-factory"])).toContain(
       "Packaged Factory Runtime file set differs from accepted Product bytes"
     );
@@ -499,6 +518,7 @@ describe("Desktop publication workflow", () => {
     expect(jobs.compatibility.secrets).toBeUndefined();
     expect(jobText(jobs.compatibility)).toContain("current_product_tag");
     expect(jobText(jobs.compatibility)).toContain("previous_product_tag");
+    expect(jobText(jobs.compatibility)).toContain("product_bundle_artifact");
     expect(jobs.compatibility.with).toMatchObject({
       desktop_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
       desktop_channel_sha256: "${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}",
@@ -531,11 +551,21 @@ describe("Desktop publication workflow", () => {
       previousIndex = index;
     }
 
+    expect(step(promote, "Checkout repository")?.uses).toBe("actions/checkout@v4");
+    expect(step(promote, "Setup pnpm")?.uses).toBe("pnpm/action-setup@v4");
+    expect(step(promote, "Install dependencies")?.run).toBe("pnpm install --frozen-lockfile");
     expect(step(promote, "Verify accepted immutable Desktop bytes")?.run).toContain(
       "release-workflow-helpers.ts verify-digests"
     );
     expect(step(promote, "Verify accepted immutable Desktop bytes")?.run).toContain(
       "--channel desktop"
+    );
+    expect(step(promote, "Download accepted current Product bundle")?.with).toEqual({
+      name: "${{ needs.resolve-factory-product.outputs.current_product_bundle_artifact }}",
+      path: "release/desktop-promotion/current-product",
+    });
+    expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
+      "current-product/product-channel.json"
     );
     expect(step(promote, "Promote Desktop versioned release")?.run).toContain(
       "--prerelease=false --latest=false"
@@ -561,7 +591,7 @@ describe("Desktop publication workflow", () => {
     expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
       "product-stable"
     );
-    expect(jobText(promote)).not.toMatch(/npm|pnpm (build|dist)/);
+    expect(jobText(promote)).not.toMatch(/pnpm (build|dist|publish)/);
   });
 });
 

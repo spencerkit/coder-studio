@@ -609,6 +609,20 @@ describe("Desktop release artifacts", () => {
       ),
       ""
     );
+    await mkdir(
+      join(
+        fixture.root,
+        "windows-engine/node_modules/npm/node_modules/node-gyp/gyp/pylib/packaging"
+      ),
+      { recursive: true }
+    );
+    await writeFile(
+      join(
+        fixture.root,
+        "windows-engine/node_modules/npm/node_modules/node-gyp/gyp/pylib/packaging/py.typed"
+      ),
+      ""
+    );
 
     await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
   });

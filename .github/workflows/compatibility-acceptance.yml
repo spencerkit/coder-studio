@@ -6,6 +6,9 @@ on:
       product_tag:
         type: string
         required: true
+      product_bundle_artifact:
+        type: string
+        required: false
       product_channel_sha256:
         type: string
         required: true
@@ -63,19 +66,34 @@ jobs:
           name: ${{ inputs.runtime_public_key_artifact }}
           path: release/compatibility/key
 
-      - name: Download immutable Product and Desktop metadata
+      - name: Prepare compatibility directories
+        run: mkdir -p release/compatibility/product release/compatibility/desktop
+
+      - name: Download Product bundle artifact
+        if: inputs.product_bundle_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.product_bundle_artifact }}
+          path: release/compatibility/product
+
+      - name: Download immutable Product metadata
+        if: inputs.product_bundle_artifact == ''
         env:
           GH_TOKEN: ${{ github.token }}
           PRODUCT_TAG: ${{ inputs.product_tag }}
-          DESKTOP_TAG: ${{ inputs.desktop_tag }}
-          DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
         run: |
-          mkdir -p release/compatibility/product release/compatibility/desktop
           gh release download "${PRODUCT_TAG}" \
             --pattern product-channel.json \
             --pattern coder-studio-runtime-win32-x64.manifest.json \
             --pattern coder-studio-server-runtime-linux-x64.manifest.json \
             --dir release/compatibility/product
+
+      - name: Download immutable Desktop metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_TAG: ${{ inputs.desktop_tag }}
+          DESKTOP_CHANNEL_SHA256: ${{ inputs.desktop_channel_sha256 }}
+        run: |
           gh release download "${DESKTOP_TAG}" \
             --pattern desktop-channel.json \
             --pattern desktop-channel-modern.json \

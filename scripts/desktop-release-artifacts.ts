@@ -84,7 +84,11 @@ const DESKTOP_COMPONENTS = new Set<DesktopReleaseComponent>(["windows", "wsl-eng
 const ALLOWED_EMPTY_WINDOWS_ENGINE_FILES = new Set(["node_modules/node-addon-api/nothing.c"]);
 
 function isAllowedEmptyWindowsEngineFile(file: string): boolean {
-  return ALLOWED_EMPTY_WINDOWS_ENGINE_FILES.has(file) || file.endsWith("/__init__.py");
+  return (
+    ALLOWED_EMPTY_WINDOWS_ENGINE_FILES.has(file) ||
+    file.endsWith("/__init__.py") ||
+    file.endsWith("/py.typed")
+  );
 }
 
 function readArgumentValue(argv: string[], index: number, option: string): string {
