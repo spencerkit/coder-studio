@@ -1,5 +1,11 @@
 # @coder-studio/desktop
 
+## 0.1.5
+
+### Patch Changes
+
+- Recover the Desktop release pipeline so packaging fixes can publish a new immutable candidate and complete production promotion.
+
 ## 0.1.4
 
 ### Patch Changes
