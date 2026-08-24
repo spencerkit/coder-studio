@@ -841,6 +841,9 @@ jobs:
           if ('${{ matrix.scenario }}' -eq 'fresh-wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
+          if ('${{ github.event_name == 'workflow_dispatch' && !inputs.windows_signing }}' -eq 'true') {
+            $arguments += '-SkipAuthenticode'
+          }
           pnpm acceptance:desktop:installed @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Immutable installed Desktop acceptance failed' }
 
@@ -984,7 +987,68 @@ jobs:
           $installRoot = Join-Path $root "install-$env:SCENARIO"
           $userData = Join-Path $root "user-$env:SCENARIO"
           $reportRoot = Join-Path $root 'reports'
+          $desktopOut = Join-Path $root "$env:SCENARIO.desktop.stdout.log"
+          $desktopErr = Join-Path $root "$env:SCENARIO.desktop.stderr.log"
+          $evidenceRoot = Join-Path $reportRoot "$env:SCENARIO.evidence"
           New-Item -ItemType Directory -Path $installRoot, $userData, $reportRoot -Force | Out-Null
+          New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+
+          function Copy-AcceptanceEvidence {
+            $sources = [System.Collections.Generic.List[string]]::new()
+            foreach ($source in @($desktopOut, $desktopErr)) {
+              if ($source -and (Test-Path -LiteralPath $source -PathType Leaf)) {
+                $sources.Add([System.IO.Path]::GetFullPath($source))
+              }
+            }
+            if (Test-Path -LiteralPath $userData -PathType Container) {
+              Get-ChildItem -LiteralPath $userData -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+                $_.Name -match '(?i)(update|electron).*\.log$' -or
+                $_.Name -in @('main.log', 'backend.log')
+              } | ForEach-Object {
+                $sources.Add($_.FullName)
+              }
+            }
+
+            $copied = [System.Collections.Generic.List[string]]::new()
+            $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $index = 0
+            foreach ($source in $sources) {
+              if (-not $seen.Add($source)) { continue }
+              $index += 1
+              $destination = Join-Path $evidenceRoot ('{0:D2}-{1}' -f $index, [System.IO.Path]::GetFileName($source))
+              Copy-Item -LiteralPath $source -Destination $destination -Force
+              $copied.Add([System.IO.Path]::GetFullPath($destination))
+            }
+            return @($copied)
+          }
+
+          function Write-AcceptanceReport([bool]$Accepted, [string]$Failure = '') {
+            $report = [ordered]@{
+              schemaVersion = 1
+              scenario = $env:SCENARIO
+              candidateTag = $env:CANDIDATE_TAG
+              desktopChannelSha256 = $env:DESKTOP_CHANNEL_SHA256
+              factoryProductTag = $packagedProduct.releaseTag
+              factoryManifestSha256 = $packagedManifest.Hash.ToLowerInvariant()
+              offline = $true
+              accepted = $Accepted
+              failure = $Failure
+              evidence = @(Copy-AcceptanceEvidence)
+            }
+            if ($process) {
+              $report.processExited = $process.HasExited
+              $report.processExitCode = if ($process.HasExited) { $process.ExitCode } else { $null }
+            }
+            $report | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $reportRoot "$env:SCENARIO.json") -Encoding utf8
+          }
+
+          function Write-LogTail([string]$Path, [string]$Label) {
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return }
+            Write-Host "::group::$Label"
+            Get-Content -LiteralPath $Path -Tail 200
+            Write-Host '::endgroup::'
+          }
+
           $installer = Start-Process -FilePath (Join-Path $candidate $installerName) -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Desktop installer exited with $($installer.ExitCode)" }
 
@@ -1046,38 +1110,43 @@ jobs:
           $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE = Join-Path $root 'runtime-public.pem'
           $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content $env:CODER_STUDIO_DESKTOP_PUBLIC_KEY_FILE -NoNewline
           $executable = Join-Path $installRoot 'Coder Studio.exe'
+          $process = $null
           $process = Start-Process -FilePath $executable -ArgumentList @(
             "--remote-debugging-port=$port",
             "--user-data-dir=$userData",
             "--coder-studio-environment-root=$userData",
             '--coder-studio-environment-target=native'
-          ) -PassThru
+          ) -PassThru -RedirectStandardOutput $desktopOut -RedirectStandardError $desktopErr
+          $process.Handle | Out-Null
           try {
             $ready = $false
             $deadline = [DateTime]::UtcNow.AddSeconds(120)
             while ([DateTime]::UtcNow -lt $deadline) {
+              if ($process.HasExited) { break }
               try {
                 $pages = Invoke-RestMethod -Uri "http://127.0.0.1:$port/json" -TimeoutSec 2
                 if ($pages.Count -gt 0) { $ready = $true; break }
               } catch {}
               Start-Sleep -Milliseconds 250
             }
-            if (-not $ready) { throw 'Desktop did not start from the offline Factory Runtime' }
+            if (-not $ready) {
+              if ($process.HasExited) {
+                Write-Host "Desktop process exit code: $($process.ExitCode)"
+              }
+              Write-LogTail $desktopOut 'Desktop stdout'
+              Write-LogTail $desktopErr 'Desktop stderr'
+              Write-AcceptanceReport $false 'Desktop did not start from the offline Factory Runtime'
+              throw 'Desktop did not start from the offline Factory Runtime'
+            }
             if ($env:SCENARIO -eq 'factory-fallback' -and (Test-Path (Join-Path $userData 'runtime-store/active.json'))) {
+              Write-AcceptanceReport $false 'Invalid active Runtime pointer did not fall back to the Factory Runtime'
               throw 'Invalid active Runtime pointer did not fall back to the Factory Runtime'
             }
-            @{
-              schemaVersion = 1
-              scenario = $env:SCENARIO
-              candidateTag = $env:CANDIDATE_TAG
-              desktopChannelSha256 = $env:DESKTOP_CHANNEL_SHA256
-              factoryProductTag = $packagedProduct.releaseTag
-              factoryManifestSha256 = $packagedManifest.Hash.ToLowerInvariant()
-              offline = $true
-              accepted = $true
-            } | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $reportRoot "$env:SCENARIO.json") -Encoding utf8
+            Write-AcceptanceReport $true
           } finally {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if ($process) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
           }
 
       - name: Upload Factory Runtime acceptance report
