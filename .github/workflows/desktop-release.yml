@@ -96,9 +96,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p release/stable-desktop
-          gh release download desktop-stable \
+          if ! gh release download desktop-stable \
             --pattern desktop-channel.json \
-            --dir release/stable-desktop
+            --dir release/stable-desktop 2>/dev/null; then
+            fallback_desktop_tag=$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[] | select(.tagName | startswith("desktop-v")) | .tagName' | head -n 1)
+            if [[ -z "${fallback_desktop_tag}" ]]; then
+              echo "No stable Desktop release is available for Desktop publication" >&2
+              exit 1
+            fi
+            gh release download "${fallback_desktop_tag}" \
+              --pattern desktop-channel.json \
+              --dir release/stable-desktop
+          fi
           desktop_digest=$(sha256sum release/stable-desktop/desktop-channel.json | cut -d ' ' -f 1)
           desktop_tag=$(node -p "require('./release/stable-desktop/desktop-channel.json').releaseTag")
           desktop_version=$(node -p "require('./release/stable-desktop/desktop-channel.json').version")
@@ -153,9 +162,18 @@ jobs:
             exit 1
           fi
           mkdir -p release/factory-resolution/stable release/factory-resolution/desktop
-          gh release download product-stable \
+          if ! gh release download product-stable \
             --pattern product-channel.json \
-            --dir release/factory-resolution/stable
+            --dir release/factory-resolution/stable 2>/dev/null; then
+            fallback_product_tag=$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[] | select(.tagName | startswith("v")) | .tagName' | head -n 1)
+            if [[ -z "${fallback_product_tag}" ]]; then
+              echo "No stable Product release is available for Desktop publication" >&2
+              exit 1
+            fi
+            gh release download "${fallback_product_tag}" \
+              --pattern product-channel.json \
+              --dir release/factory-resolution/stable
+          fi
           stable_tag=$(node -p "require('./release/factory-resolution/stable/product-channel.json').releaseTag")
           selected_tag="${stable_tag}"
           if [[ "${RESUME_CANDIDATE}" == "true" ]]; then
@@ -642,7 +660,12 @@ jobs:
           gh release download desktop-stable `
             --pattern desktop-channel.json `
             --dir release/desktop-acceptance/stable-pointer
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the previous signed Desktop pointer' }
+          if ($LASTEXITCODE -ne 0) {
+            gh release download '${{ needs.prepare.outputs.previous_desktop_tag }}' `
+              --pattern desktop-channel.json `
+              --dir release/desktop-acceptance/stable-pointer
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to download the previous signed Desktop reference' }
+          }
           gh release download '${{ needs.prepare.outputs.previous_desktop_tag }}' `
             --pattern latest.yml `
             --pattern 'Coder-Studio-Setup-*.exe' `
@@ -1021,9 +1044,15 @@ jobs:
       - name: Revalidate accepted Product stable pointer
         run: |
           mkdir -p release/desktop-promotion/accepted-product
-          gh release download product-stable \
+          product_reference_tag="product-stable"
+          if ! gh release download "${product_reference_tag}" \
             --pattern product-channel.json \
-            --dir release/desktop-promotion/accepted-product
+            --dir release/desktop-promotion/accepted-product 2>/dev/null; then
+            product_reference_tag="${{ needs.resolve-factory-product.outputs.current_product_tag }}"
+            gh release download "${product_reference_tag}" \
+              --pattern product-channel.json \
+              --dir release/desktop-promotion/accepted-product
+          fi
           current_digest=$(sha256sum release/desktop-promotion/accepted-product/product-channel.json | cut -d ' ' -f 1)
           if [[ "${current_digest}" != "${ACCEPTED_PRODUCT_CHANNEL_SHA256}" ]]; then
             echo "Product stable pointer changed after compatibility acceptance; rerun the candidate acceptance graph" >&2
