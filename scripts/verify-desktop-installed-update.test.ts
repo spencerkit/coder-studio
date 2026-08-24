@@ -134,6 +134,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("function Get-InstalledDesktopShellVersion");
     expect(runner).toContain("function Wait-ForInstalledShellVersion");
     expect(runner).toContain("function Get-InstallerProcesses");
+    expect(runner).toContain("function Stop-InstallerProcesses");
+    expect(runner).toContain("function Start-SilentInstaller");
     expect(runner).toContain("function Wait-ForInstalledShellInstall");
     expect(runner).toContain("resources/build-info.json");
     expect(runner).toContain("[System.Diagnostics.FileVersionInfo]::GetVersionInfo");
@@ -150,6 +152,9 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain(
       "$lastInstallerCount = @(Get-InstallerProcesses $InstallerFileName).Count"
     );
+    expect(runner).toContain("if ($PinLegacyShellUpdaterToChannel) {");
+    expect(runner).toContain("Stop-InstallerProcesses $candidateInstallerName");
+    expect(runner).toContain("Start-SilentInstaller $candidateInstallerPath $installDirectory");
     expect(runner).toContain("Wait-ForInstalledShellInstall `");
     expect(runner).toContain("$candidateInstallerName `");
     expect(runner).toContain("Timed out relaunching the installed Desktop after Shell update");
