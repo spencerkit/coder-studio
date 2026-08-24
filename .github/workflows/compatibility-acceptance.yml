@@ -21,9 +21,6 @@ on:
       desktop_channel_sha256:
         type: string
         required: true
-    secrets:
-      runtime_public_key:
-        required: true
 
 permissions:
   contents: read
@@ -33,6 +30,7 @@ jobs:
     name: Verify ${{ matrix.target }} compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: desktop-production
     strategy:
       fail-fast: false
       matrix:
@@ -108,7 +106,7 @@ jobs:
 
       - name: Verify Product Runtime and Desktop Shell capability tuple
         env:
-          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.runtime_public_key }}
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PRODUCT_TAG: ${{ inputs.product_tag }}
           DESKTOP_TAG: ${{ inputs.desktop_tag }}

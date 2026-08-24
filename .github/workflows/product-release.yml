@@ -146,6 +146,7 @@ jobs:
     needs: prepare
     runs-on: windows-latest
     timeout-minutes: 45
+    environment: desktop-production
     env:
       GH_TOKEN: ${{ github.token }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
@@ -203,6 +204,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment: desktop-production
     env:
       GH_TOKEN: ${{ github.token }}
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
@@ -262,6 +264,7 @@ jobs:
       - wsl-runtime
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: desktop-production
     permissions:
       contents: write
       id-token: write
@@ -495,6 +498,7 @@ jobs:
       - publish-candidate
     runs-on: windows-latest
     timeout-minutes: 120
+    environment: desktop-production
     strategy:
       fail-fast: false
       matrix:
@@ -694,8 +698,6 @@ jobs:
       linux_manifest_sha256: ${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}
       desktop_tag: ${{ needs.prepare.outputs.desktop_tag }}
       desktop_channel_sha256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
-    secrets:
-      runtime_public_key: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
 
   promote:
     name: Promote accepted Product
