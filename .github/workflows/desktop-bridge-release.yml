@@ -622,8 +622,8 @@ jobs:
             exit 1
           fi
 
-      - name: Temporarily mark the bridge candidate as repository-wide latest
-        run: gh release edit "${BRIDGE_CANDIDATE_TAG}" --latest
+      - name: Publish the bridge candidate as the repository-wide latest release
+        run: gh release edit "${BRIDGE_CANDIDATE_TAG}" --prerelease=false --latest
 
       - name: Verify bridge candidate is repository-wide latest
         run: |

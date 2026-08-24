@@ -849,9 +849,9 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(verify).toContain("sha256sum");
     expect(pin.env?.GH_REPO).toBe("${{ github.repository }}");
     expect(jobText(pin)).toContain("PROMOTE_BRIDGE_TO_LATEST");
-    expect(step(pin, "Temporarily mark the bridge candidate as repository-wide latest")?.run).toBe(
-      'gh release edit "${BRIDGE_CANDIDATE_TAG}" --latest'
-    );
+    expect(
+      step(pin, "Publish the bridge candidate as the repository-wide latest release")?.run
+    ).toBe('gh release edit "${BRIDGE_CANDIDATE_TAG}" --prerelease=false --latest');
     expect(promote.env?.GH_REPO).toBe("${{ github.repository }}");
     expect(jobText(promote)).toContain("PROMOTE_BRIDGE_TO_LATEST");
     expect(step(promote, "Make bridge the final repository-wide latest")?.run).toBe(

@@ -104,13 +104,14 @@ and cannot acquire both normal workflow locks at once.
    signed Product release tag.
 4. It bootstraps both `product-stable` and `desktop-stable`, then verifies that both fixed pointers
    resolve byte-for-byte to the accepted immutable bridge artifacts.
-5. It temporarily marks the bridge candidate as repository-wide latest so the pre-bridge installed
-   Shells, which still follow the legacy `releases/latest/download` path, can reach the bridge.
+5. It publishes the bridge candidate as the normal repository-wide latest release so the pre-bridge
+   installed Shells, which still follow the legacy `releases/latest/download` path, can reach the
+   bridge.
 6. It runs native and WSL installed-upgrade acceptance from the previously supported published
    legacy Desktop release into the bridge, then runs native and WSL checks from an installed bridge
    against the two independent stable feeds.
-7. Finally it converts the bridge prerelease to a normal release, keeps it repository-wide latest,
-   and verifies the selected tag.
+7. Finally it reconfirms that the bridge remains the repository-wide latest release and verifies the
+   selected tag after both acceptance phases.
 
 This is the only workflow permitted to issue a real GitHub `--latest` promotion. The bridge remains
 repository-wide latest indefinitely so an old client always reaches its legacy assets. Every later
