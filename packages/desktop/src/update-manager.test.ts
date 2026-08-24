@@ -175,6 +175,20 @@ describe("DesktopShellUpdateAdapter", () => {
     });
   });
 
+  it("suppresses force-run relaunch when acceptance must restart the installed Shell itself", () => {
+    const updater = createUpdater();
+    const adapter = new DesktopShellUpdateAdapter({
+      updater,
+      currentVersion: "0.2.0",
+      isPackaged: true,
+      forceRunAfterInstall: false,
+    });
+
+    adapter.quitAndInstall();
+
+    expect(updater.quitAndInstall).toHaveBeenCalledWith(false, false);
+  });
+
   it("cancels a Shell download that stops reporting progress", async () => {
     vi.useFakeTimers();
     try {

@@ -53,11 +53,21 @@ interface InstalledEvidence {
   logPaths?: string[];
 }
 
+type InstalledDesktopInterruptionPhase =
+  | "downloading"
+  | "restart-journal"
+  | "wsl-follow"
+  | "install-restart";
+
 export interface VerifyInstalledDesktopDeps {
   invoke(method: DesktopBridgeMethod): Promise<unknown>;
   waitForState(status: ProductUpdateState["status"]): Promise<unknown>;
   prepareActivity(): Promise<Pick<UpdatePrepareInstallResponse, "hasActiveWork">>;
-  interruptAtPhase(phase: "downloading" | "restart-journal" | "wsl-follow"): Promise<void>;
+  interruptAtPhase(
+    phase: Exclude<InstalledDesktopInterruptionPhase, "install-restart">
+  ): Promise<void>;
+  armRestartAfterInstall(): Promise<void>;
+  waitForRestartAfterInstall(): Promise<void>;
   verifyExternalSidecar(): Promise<{
     preloadAvailable: boolean;
     updateOperations: string[];
@@ -371,9 +381,11 @@ export async function verifyInstalledDesktopScenario(
       throw new Error(`Desktop did not recover a ready journal plan: ${recovered.status}`);
     }
   }
+  await deps.armRestartAfterInstall();
   const restartResult = await deps.invoke("restartAndInstallUpdate");
   if (restartResult !== true) throw new Error("Desktop rejected restart-and-install handoff");
   const restartCount = 1;
+  await deps.waitForRestartAfterInstall();
   await deps.reconnectAfterRestart();
   const finalState = asState(await deps.invoke("getUpdateState"), "getUpdateState");
   if (finalState.status !== "succeeded" && finalState.status !== "idle") {
@@ -562,13 +574,12 @@ async function readEvidenceFile(path: string | undefined): Promise<Partial<Insta
   return JSON.parse(await readFile(resolve(path), "utf8")) as Partial<InstalledEvidence>;
 }
 
-async function requestInterruption(
+async function waitForRelaunch(
   path: string | undefined,
-  phase: "downloading" | "restart-journal" | "wsl-follow"
+  phase: InstalledDesktopInterruptionPhase
 ): Promise<boolean> {
   if (!path) throw new Error(`Installed Desktop interruption control is required for ${phase}`);
   const controlPath = resolve(path);
-  await writeJsonAtomic(controlPath, { schemaVersion: 1, phase, status: "requested" });
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {
@@ -585,6 +596,25 @@ async function requestInterruption(
     await new Promise((resolveWait) => setTimeout(resolveWait, 250));
   }
   throw new Error(`Timed out waiting for installed Desktop interruption at ${phase}`);
+}
+
+async function requestInterruption(
+  path: string | undefined,
+  phase: Exclude<InstalledDesktopInterruptionPhase, "install-restart">
+): Promise<boolean> {
+  if (!path) throw new Error(`Installed Desktop interruption control is required for ${phase}`);
+  const controlPath = resolve(path);
+  await writeJsonAtomic(controlPath, { schemaVersion: 1, phase, status: "requested" });
+  return waitForRelaunch(controlPath, phase);
+}
+
+async function armInstalledRestart(path: string | undefined): Promise<void> {
+  if (!path) throw new Error("Installed Desktop restart control is required for install-restart");
+  await writeJsonAtomic(resolve(path), {
+    schemaVersion: 1,
+    phase: "install-restart",
+    status: "armed",
+  });
 }
 
 async function readActiveRuntimeVersion(userDataDir: string | undefined): Promise<string | null> {
@@ -683,6 +713,12 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
       interruptAtPhase: async (phase) => {
         journalRecovered =
           (await requestInterruption(options.controlPath, phase)) || journalRecovered;
+      },
+      armRestartAfterInstall: async () => {
+        await armInstalledRestart(options.controlPath);
+      },
+      waitForRestartAfterInstall: async () => {
+        await waitForRelaunch(options.controlPath, "install-restart");
       },
       verifyExternalSidecar: async () => {
         if (!options.sidecarUrl) {

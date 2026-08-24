@@ -366,12 +366,20 @@ try {
   $handledInterruptions = [System.Collections.Generic.HashSet[string]]::new(
     [StringComparer]::Ordinal
   )
+  $restartAfterInstallArmed = $false
+  $restartAfterInstallArmedAt = $null
+  $restartAfterInstallHandled = $false
   while (-not $driverProcess.HasExited) {
     if (Test-Path -LiteralPath $controlPath -PathType Leaf) {
       try {
         $control = Get-Content -LiteralPath $controlPath -Raw | ConvertFrom-Json
         $phase = [string]$control.phase
-        if ($control.status -eq 'requested' -and -not $handledInterruptions.Contains($phase)) {
+        if ($phase -eq 'install-restart' -and $control.status -eq 'armed') {
+          $restartAfterInstallArmed = $true
+          if ($null -eq $restartAfterInstallArmedAt) {
+            $restartAfterInstallArmedAt = [DateTime]::UtcNow
+          }
+        } elseif ($control.status -eq 'requested' -and -not $handledInterruptions.Contains($phase)) {
           $journalBefore = Read-JournalIdentity $journalPath
           Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
           $restartScenario = if ($phase -eq 'wsl-follow') {
@@ -396,6 +404,39 @@ try {
         }
       } catch {
         # The driver replaces this file atomically; retry partial observations.
+      }
+    }
+    if ($restartAfterInstallArmed -and -not $restartAfterInstallHandled -and $null -ne $desktopProcess) {
+      $desktopProcess.Refresh()
+      if (-not $desktopProcess.HasExited -and $null -ne $restartAfterInstallArmedAt -and [DateTime]::UtcNow -ge $restartAfterInstallArmedAt.AddSeconds(15)) {
+        Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
+        Start-Sleep -Seconds 1
+        $desktopProcess.Refresh()
+      }
+      if ($desktopProcess.HasExited) {
+        $restartDeadline = [DateTime]::UtcNow.AddSeconds(90)
+        $relaunchError = $null
+        while ([DateTime]::UtcNow -lt $restartDeadline) {
+          try {
+            Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory
+            $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
+            $desktopProcess.Handle | Out-Null
+            Wait-Cdp $cdpPort 15 | Out-Null
+            Write-JsonAtomic $controlPath @{
+              schemaVersion = 1
+              phase = 'install-restart'
+              status = 'relaunched'
+            }
+            $restartAfterInstallHandled = $true
+            break
+          } catch {
+            $relaunchError = $_
+            Start-Sleep -Seconds 1
+          }
+        }
+        if (-not $restartAfterInstallHandled) {
+          throw "Timed out relaunching the installed Desktop after Shell update. $relaunchError"
+        }
       }
     }
     Start-Sleep -Milliseconds 200
