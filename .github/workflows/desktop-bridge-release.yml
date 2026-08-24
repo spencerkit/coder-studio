@@ -28,6 +28,7 @@ jobs:
     outputs:
       bridge_candidate_tag: ${{ steps.identity.outputs.bridge_candidate_tag }}
       previous_latest_tag: ${{ steps.identity.outputs.previous_latest_tag }}
+      legacy_source_tag: ${{ steps.identity.outputs.legacy_source_tag }}
       already_promoted: ${{ steps.identity.outputs.already_promoted }}
       product_tag: ${{ steps.identity.outputs.product_tag }}
       product_version: ${{ steps.identity.outputs.product_version }}
@@ -160,6 +161,50 @@ jobs:
         id: identity
         run: |
           previous_latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          releases_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=30")
+          legacy_source_tag=$(
+            BRIDGE_CANDIDATE_TAG="${BRIDGE_CANDIDATE_TAG}" \
+            PREVIOUS_LATEST_TAG="${previous_latest_tag}" \
+            RELEASES_JSON="${releases_json}" node --input-type=module <<'NODE'
+          const releases = JSON.parse(process.env.RELEASES_JSON);
+          const candidateTag = process.env.BRIDGE_CANDIDATE_TAG;
+          const latestTag = process.env.PREVIOUS_LATEST_TAG;
+          const hasLegacyDesktopAssets = (release) => {
+            const assetNames = new Set((release.assets ?? []).map((asset) => asset.name));
+            const hasInstaller = [...assetNames].some((name) =>
+              /^Coder-Studio-Setup-.*\.exe$/i.test(name)
+            );
+            return (
+              assetNames.has("desktop-channel.json") &&
+              assetNames.has("latest.yml") &&
+              hasInstaller
+            );
+          };
+
+          const latestRelease = releases.find((release) => release.tag_name === latestTag);
+          if (
+            latestRelease &&
+            latestTag !== candidateTag &&
+            !latestRelease.draft &&
+            hasLegacyDesktopAssets(latestRelease)
+          ) {
+            process.stdout.write(latestTag);
+            process.exit(0);
+          }
+
+          const fallback = releases.find(
+            (release) =>
+              release.tag_name !== candidateTag &&
+              !release.draft &&
+              !release.prerelease &&
+              hasLegacyDesktopAssets(release)
+          );
+          if (!fallback) {
+            throw new Error("Unable to resolve a published legacy Desktop source release");
+          }
+          process.stdout.write(fallback.tag_name);
+          NODE
+          )
           already_promoted=false
           if [[ "${previous_latest_tag}" == "${BRIDGE_CANDIDATE_TAG}" ]]; then
             already_promoted=true
@@ -190,6 +235,7 @@ jobs:
           NODE
           echo "bridge_candidate_tag=${BRIDGE_CANDIDATE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "previous_latest_tag=${previous_latest_tag}" >> "${GITHUB_OUTPUT}"
+          echo "legacy_source_tag=${legacy_source_tag}" >> "${GITHUB_OUTPUT}"
           echo "already_promoted=${already_promoted}" >> "${GITHUB_OUTPUT}"
           echo "product_tag=${product_tag}" >> "${GITHUB_OUTPUT}"
           echo "product_version=${product_version}" >> "${GITHUB_OUTPUT}"
@@ -257,7 +303,8 @@ jobs:
     name: Accept legacy installed bridge (${{ matrix.target }})
     needs:
       - prepare
-      - bootstrap-product
+      - verify-stable-feeds
+      - pin-bridge-latest
     runs-on: windows-latest
     timeout-minutes: 120
     environment: desktop-production
@@ -287,16 +334,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download repository-wide latest and immutable bridge assets
+      - name: Download fixed legacy source and immutable bridge assets
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release/bridge-legacy/previous | Out-Null
           New-Item -ItemType Directory -Force -Path release/bridge-legacy/candidate | Out-Null
           $latestTag = gh api "repos/${env:GITHUB_REPOSITORY}/releases/latest" --jq .tag_name
-          if ($LASTEXITCODE -ne 0 -or $latestTag -ne '${{ needs.prepare.outputs.previous_latest_tag }}') {
-            throw 'Repository-wide latest changed during bridge acceptance'
+          if ($LASTEXITCODE -ne 0 -or $latestTag -ne '${{ needs.prepare.outputs.bridge_candidate_tag }}') {
+            throw 'Bridge candidate must be repository-wide latest during legacy acceptance'
           }
-          gh release download $latestTag `
+          $previousTag = '${{ needs.prepare.outputs.legacy_source_tag }}'
+          if (-not $previousTag) {
+            throw 'Legacy Desktop source tag is required for bridge acceptance'
+          }
+          gh release download $previousTag `
             --pattern desktop-channel.json `
             --pattern latest.yml `
             --pattern 'Coder-Studio-Setup-*.exe' `
@@ -326,16 +377,16 @@ jobs:
           $candidateMetadata = Get-Content "$candidateRoot/latest.yml" -Raw
           $previousInstaller = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
           $candidateInstaller = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          if ($previous.shell.version -eq $candidate.shell.version) {
+            throw 'Legacy Desktop source must differ from the bridge shell version'
+          }
           $frozenScenario = if ('${{ matrix.target }}' -eq 'wsl') { 'legacy-wsl-current' } else { 'legacy-current' }
-          $alreadyPromoted = '${{ needs.prepare.outputs.already_promoted }}' -eq 'true'
-          $scenario = if ($alreadyPromoted) {
-            $frozenScenario
-          } elseif ('${{ matrix.target }}' -eq 'wsl') {
+          $scenario = if ('${{ matrix.target }}' -eq 'wsl') {
             'wsl-combined'
           } else {
             'combined'
           }
-          $components = if ($alreadyPromoted) { '' } else { 'shell,runtime:win32-x64' }
+          $components = 'shell,runtime:win32-x64'
           $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$candidate.signature.value)
           $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
           "previous_installer=$previousRoot/$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -446,7 +497,6 @@ jobs:
     name: Bootstrap signed Desktop stable pointer
     needs:
       - prepare
-      - accept-legacy-upgrade
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -548,11 +598,45 @@ jobs:
             exit 1
           fi
 
+  pin-bridge-latest:
+    name: Expose bridge through repository-wide latest
+    needs:
+      - prepare
+      - verify-stable-feeds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
+      CONFIRM_LATEST: ${{ inputs.confirm_latest }}
+    steps:
+      - name: Reconfirm the one-time latest migration
+        run: |
+          if [[ "${CONFIRM_LATEST}" != "PROMOTE_BRIDGE_TO_LATEST" ]]; then
+            echo "Bridge promotion requires PROMOTE_BRIDGE_TO_LATEST" >&2
+            exit 1
+          fi
+
+      - name: Temporarily mark the bridge candidate as repository-wide latest
+        run: gh release edit "${BRIDGE_CANDIDATE_TAG}" --latest
+
+      - name: Verify bridge candidate is repository-wide latest
+        run: |
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          if [[ "${latest}" != "${BRIDGE_CANDIDATE_TAG}" ]]; then
+            echo "Repository-wide latest did not advance to the bridge candidate" >&2
+            exit 1
+          fi
+
   accept-independent-feeds:
     name: Accept independent stable feeds (${{ matrix.target }})
     needs:
       - prepare
       - verify-stable-feeds
+      - accept-legacy-upgrade
     runs-on: windows-latest
     timeout-minutes: 90
     environment: desktop-production
@@ -695,7 +779,8 @@ jobs:
     name: Make the bridge the final repository-wide latest
     needs:
       - prepare
-      - verify-stable-feeds
+      - pin-bridge-latest
+      - accept-legacy-upgrade
       - accept-independent-feeds
     if: success()
     runs-on: ubuntu-latest
