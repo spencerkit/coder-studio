@@ -739,6 +739,7 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         await armInstalledRestart(options.controlPath);
       },
       waitForRestartAfterInstall: async () => {
+        await session.close().catch(() => undefined);
         const relaunch = await waitForRelaunch(options.controlPath, "install-restart");
         activeCdpUrl = relaunch.cdpUrl ?? activeCdpUrl;
         activeSidecarUrl = relaunch.sidecarUrl ?? activeSidecarUrl;
