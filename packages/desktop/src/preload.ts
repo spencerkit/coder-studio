@@ -6,9 +6,26 @@ import type {
   DesktopEnvironmentOpenResult,
   DesktopEnvironmentProgress,
   DesktopEnvironmentSummary,
+  DesktopNotificationRequest,
+  DesktopNotificationResult,
+  DesktopNotificationTarget,
   DesktopRuntimeUpdateState,
   DesktopWindowActivityState,
 } from "./protocol.js";
+
+const notificationClickListeners = new Set<(target: DesktopNotificationTarget) => void>();
+let pendingNotificationClick: DesktopNotificationTarget | null = null;
+
+ipcRenderer.on(
+  "desktop:notification-clicked",
+  (_event: Electron.IpcRendererEvent, target: DesktopNotificationTarget) => {
+    if (notificationClickListeners.size === 0) {
+      pendingNotificationClick = target;
+      return;
+    }
+    for (const listener of notificationClickListeners) listener(target);
+  }
+);
 
 const api: DesktopApi = {
   platform: process.platform,
@@ -32,6 +49,19 @@ const api: DesktopApi = {
       listener(state);
     ipcRenderer.on("desktop:window-activity-state-changed", handler);
     return () => ipcRenderer.removeListener("desktop:window-activity-state-changed", handler);
+  },
+  getNotificationSupport: () =>
+    ipcRenderer.invoke("desktop:get-notification-support") as Promise<boolean>,
+  showNotification: (request: DesktopNotificationRequest) =>
+    ipcRenderer.invoke("desktop:show-notification", request) as Promise<DesktopNotificationResult>,
+  onNotificationClicked: (listener: (target: DesktopNotificationTarget) => void) => {
+    notificationClickListeners.add(listener);
+    if (pendingNotificationClick) {
+      const target = pendingNotificationClick;
+      pendingNotificationClick = null;
+      listener(target);
+    }
+    return () => notificationClickListeners.delete(listener);
   },
   listEnvironments: () =>
     ipcRenderer.invoke("desktop:list-environments") as Promise<DesktopEnvironmentSummary[]>,

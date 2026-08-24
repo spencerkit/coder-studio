@@ -1,14 +1,36 @@
 import { createHash } from "node:crypto";
-import { access, chmod, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  cp,
+  lstat,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { DESKTOP_NODE_VERSION } from "../packages/desktop/src/runtime-manifest.js";
+import { join, relative, resolve } from "node:path";
+import {
+  type FactoryProductProvenance,
+  type ProductRuntimeTarget,
+  parseFactoryProductProvenance,
+} from "../packages/desktop/src/product-channel.js";
+import {
+  DESKTOP_NODE_VERSION,
+  hashRuntimeFile,
+  parseInstalledRuntimeManifest,
+  resolveRuntimeFile,
+} from "../packages/desktop/src/runtime-manifest.js";
 import { DESKTOP_DIST_DIR } from "./build-desktop.js";
 import { ensureDir, error, log, ROOT_DIR, run, step, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
 export { DESKTOP_NODE_VERSION } from "../packages/desktop/src/runtime-manifest.js";
 export const DESKTOP_ENGINE_DIR = resolve(DESKTOP_DIST_DIR, "engine");
+export const DESKTOP_FACTORY_RUNTIME_DIR = resolve(DESKTOP_DIST_DIR, "factory-runtime");
+export const DESKTOP_FACTORY_PRODUCT_PATH = resolve(DESKTOP_DIST_DIR, "factory-product.json");
 
 interface RuntimeTarget {
   archiveName: string;
@@ -161,7 +183,92 @@ async function removeEngineSourcemaps(directory = DESKTOP_ENGINE_DIR): Promise<v
   );
 }
 
-export async function prepareDesktopPackage(): Promise<void> {
+async function collectRegularFiles(root: string, directory = root): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const path = resolve(directory, entry.name);
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`Factory Runtime contains an unsupported symbolic link: ${entry.name}`);
+    }
+    if (metadata.isDirectory()) files.push(...(await collectRegularFiles(root, path)));
+    else if (metadata.isFile()) files.push(relative(root, path).replaceAll("\\", "/"));
+    else throw new Error(`Factory Runtime contains an unsupported filesystem entry: ${entry.name}`);
+  }
+  return files.sort();
+}
+
+export async function stageAcceptedFactoryRuntime(options: {
+  sourceRuntimeDir: string;
+  sourceProvenanceFile: string;
+  runtimeDestination?: string;
+  provenanceDestination?: string;
+  target?: ProductRuntimeTarget;
+}): Promise<FactoryProductProvenance> {
+  const sourceRuntimeDir = resolve(options.sourceRuntimeDir);
+  const sourceProvenanceFile = resolve(options.sourceProvenanceFile);
+  const runtimeDestination = resolve(options.runtimeDestination ?? DESKTOP_FACTORY_RUNTIME_DIR);
+  const provenanceDestination = resolve(
+    options.provenanceDestination ?? DESKTOP_FACTORY_PRODUCT_PATH
+  );
+  if (sourceRuntimeDir === runtimeDestination) {
+    throw new Error("Factory Runtime source must be an independently resolved directory");
+  }
+  const target = options.target ?? `${process.platform}-${process.arch}`;
+  if (target !== "win32-x64" && target !== "linux-x64") {
+    throw new Error(`Unsupported Factory Runtime target: ${target}`);
+  }
+  const provenance = parseFactoryProductProvenance(
+    JSON.parse(await readFile(sourceProvenanceFile, "utf8"))
+  );
+  const manifestPath = resolve(sourceRuntimeDir, "manifest.json");
+  const manifestBytes = await readFile(manifestPath);
+  const expected = provenance.runtimes[target];
+  const manifestDigest = createHash("sha256").update(manifestBytes).digest("hex");
+  if (manifestDigest !== expected.manifestSha256) {
+    throw new Error("Factory Runtime manifest digest does not match accepted Product provenance");
+  }
+  const manifest = parseInstalledRuntimeManifest(JSON.parse(manifestBytes.toString("utf8")));
+  const [platform, arch] = target.split("-");
+  if (
+    manifest.runtimeVersion !== provenance.version ||
+    manifest.platform !== platform ||
+    manifest.arch !== arch
+  ) {
+    throw new Error("Factory Runtime manifest does not match accepted Product identity");
+  }
+  const actualFiles = (await collectRegularFiles(sourceRuntimeDir)).filter(
+    (path) => path !== "manifest.json"
+  );
+  const expectedFiles = manifest.files.map((file) => file.path).sort();
+  if (
+    actualFiles.length !== expectedFiles.length ||
+    actualFiles.some((path, index) => path !== expectedFiles[index])
+  ) {
+    throw new Error("Factory Runtime file set does not match its manifest");
+  }
+  for (const file of manifest.files) {
+    const actual = await hashRuntimeFile(resolveRuntimeFile(sourceRuntimeDir, file.path));
+    if (actual.sha256 !== file.sha256 || actual.size !== file.size) {
+      throw new Error(`Factory Runtime file verification failed: ${file.path}`);
+    }
+  }
+
+  await rm(runtimeDestination, { recursive: true, force: true });
+  await ensureDir(resolve(provenanceDestination, ".."));
+  await cp(sourceRuntimeDir, runtimeDestination, {
+    recursive: true,
+    errorOnExist: true,
+    force: false,
+  });
+  await writeFile(provenanceDestination, `${JSON.stringify(provenance, null, 2)}\n`, "utf8");
+  return provenance;
+}
+
+export async function prepareDesktopPackage(
+  options: { includeFactoryRuntime?: boolean } = {}
+): Promise<void> {
   step("PREPARE DESKTOP", "Staging the desktop Engine and stable dependencies...\n");
   await rm(DESKTOP_ENGINE_DIR, { recursive: true, force: true });
   await ensureDir(DESKTOP_ENGINE_DIR);
@@ -169,6 +276,16 @@ export async function prepareDesktopPackage(): Promise<void> {
   await repairPortableNodeLaunchers();
   await stageEngineDependencies();
   await removeEngineSourcemaps();
+  if (options.includeFactoryRuntime !== false) {
+    const sourceRuntimeDir = process.env.CODER_STUDIO_FACTORY_RUNTIME_DIR?.trim();
+    const sourceProvenanceFile = process.env.CODER_STUDIO_FACTORY_PRODUCT_FILE?.trim();
+    if (!sourceRuntimeDir || !sourceProvenanceFile) {
+      throw new Error(
+        "Desktop packaging requires CODER_STUDIO_FACTORY_RUNTIME_DIR and CODER_STUDIO_FACTORY_PRODUCT_FILE"
+      );
+    }
+    await stageAcceptedFactoryRuntime({ sourceRuntimeDir, sourceProvenanceFile });
+  }
   success(`Desktop Engine prepared with Node ${DESKTOP_NODE_VERSION}`);
 }
 

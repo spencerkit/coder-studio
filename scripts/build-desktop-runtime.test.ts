@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { verifyRuntimeManifestSignature } from "../packages/desktop/src/runtime-manifest.js";
-import { buildDesktopShell, DESKTOP_DIST_DIR, resolveDesktopRuntimeUrls } from "./build-desktop.js";
+import { buildDesktopShell, DESKTOP_DIST_DIR, resolveDesktopChannelUrls } from "./build-desktop.js";
 import {
   buildDesktopRuntime,
   createDesktopRuntimeBuildOptions,
@@ -15,8 +15,8 @@ const originalSigningKey = process.env.CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY;
 const originalPublicKey = process.env.CODER_STUDIO_RUNTIME_PUBLIC_KEY;
 const originalPublishedAt = process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT;
 const originalRuntimeMinShellVersion = process.env.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION;
-const originalRuntimeUpdateUrl = process.env.CODER_STUDIO_RUNTIME_UPDATE_URL;
-const originalFactoryReleaseBaseUrl = process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL;
+const originalProductChannelUrl = process.env.CODER_STUDIO_PRODUCT_CHANNEL_URL;
+const originalDesktopChannelUrl = process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL;
 
 afterEach(() => {
   for (const [key, value] of [
@@ -24,8 +24,8 @@ afterEach(() => {
     ["CODER_STUDIO_RUNTIME_PUBLIC_KEY", originalPublicKey],
     ["CODER_STUDIO_RELEASE_PUBLISHED_AT", originalPublishedAt],
     ["CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION", originalRuntimeMinShellVersion],
-    ["CODER_STUDIO_RUNTIME_UPDATE_URL", originalRuntimeUpdateUrl],
-    ["CODER_STUDIO_FACTORY_RELEASE_BASE_URL", originalFactoryReleaseBaseUrl],
+    ["CODER_STUDIO_PRODUCT_CHANNEL_URL", originalProductChannelUrl],
+    ["CODER_STUDIO_DESKTOP_CHANNEL_URL", originalDesktopChannelUrl],
   ] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -35,12 +35,25 @@ afterEach(() => {
 describe("build-desktop-runtime", () => {
   it.each([
     {},
-    { CODER_STUDIO_RUNTIME_UPDATE_URL: "", CODER_STUDIO_FACTORY_RELEASE_BASE_URL: "" },
-  ])("uses release defaults when Desktop Runtime URL variables are absent or empty", (env) => {
-    expect(resolveDesktopRuntimeUrls(env, "win32", "x64")).toEqual({
-      runtimeUpdateUrl:
-        "https://github.com/spencerkit/coder-studio/releases/latest/download/coder-studio-runtime-win32-x64.manifest.json",
-      factoryReleaseBaseUrl: "https://github.com/spencerkit/coder-studio/releases/latest/download/",
+    { CODER_STUDIO_PRODUCT_CHANNEL_URL: "", CODER_STUDIO_DESKTOP_CHANNEL_URL: "" },
+  ])("compiles independent stable channel URLs when build overrides are absent or empty", (env) => {
+    expect(resolveDesktopChannelUrls(env)).toEqual({
+      productChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-channel.json",
+      desktopChannelUrl:
+        "https://github.com/spencerkit/coder-studio/releases/download/desktop-stable/desktop-channel.json",
+    });
+  });
+
+  it("compiles explicit Product and Desktop channel URLs independently", () => {
+    expect(
+      resolveDesktopChannelUrls({
+        CODER_STUDIO_PRODUCT_CHANNEL_URL: "https://updates.example/product.json",
+        CODER_STUDIO_DESKTOP_CHANNEL_URL: "https://updates.example/desktop.json",
+      })
+    ).toEqual({
+      productChannelUrl: "https://updates.example/product.json",
+      desktopChannelUrl: "https://updates.example/desktop.json",
     });
   });
 
@@ -102,8 +115,8 @@ describe("build-desktop-runtime", () => {
 
   it("writes packaged Shell build info with the shared release timestamp", async () => {
     process.env.CODER_STUDIO_RELEASE_PUBLISHED_AT = "2026-08-08T01:02:03.000Z";
-    process.env.CODER_STUDIO_RUNTIME_UPDATE_URL = "";
-    process.env.CODER_STUDIO_FACTORY_RELEASE_BASE_URL = "";
+    process.env.CODER_STUDIO_PRODUCT_CHANNEL_URL = "";
+    process.env.CODER_STUDIO_DESKTOP_CHANNEL_URL = "";
     const desktopPackage = JSON.parse(
       await readFile(resolve(DESKTOP_DIR, "package.json"), "utf8")
     ) as { version: string };
@@ -123,8 +136,8 @@ describe("build-desktop-runtime", () => {
       dataSchemaVersion: 1,
     });
     const bundledMain = await readFile(resolve(DESKTOP_DIST_DIR, "main.cjs"), "utf8");
-    expect(bundledMain).toContain(
-      "https://github.com/spencerkit/coder-studio/releases/latest/download/"
-    );
+    expect(bundledMain).toContain("/releases/download/product-stable/product-channel.json");
+    expect(bundledMain).toContain("/releases/download/desktop-stable/desktop-channel.json");
+    expect(bundledMain).not.toContain("/releases/latest/download/");
   }, 60_000);
 });

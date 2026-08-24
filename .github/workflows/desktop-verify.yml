@@ -15,11 +15,29 @@ on:
         type: string
         required: false
         default: ""
+      product_channel_url:
+        type: string
+        required: false
+        default: ""
+      desktop_channel_url:
+        type: string
+        required: false
+        default: ""
+      product_release_tag:
+        type: string
+        required: false
+        default: ""
+      desktop_release_tag:
+        type: string
+        required: false
+        default: ""
       runtime_update_url:
+        description: Legacy acceptance input retained until the bridge workflow is isolated
         type: string
         required: false
         default: ""
       release_tag:
+        description: Legacy acceptance tag retained until the bridge workflow is isolated
         type: string
         required: false
         default: ""
@@ -33,14 +51,17 @@ on:
       windows_csc_key_password:
         required: false
     outputs:
+      product_artifact:
+        description: Complete signed Product verification bundle
+        value: ${{ jobs['product-channel-verify'].outputs.artifact_name }}
       windows_artifact:
         description: Windows Desktop verification artifact
         value: ${{ jobs['desktop-windows-verify'].outputs.artifact_name }}
       linux_artifact:
-        description: Linux Desktop verification artifact
+        description: WSL Engine verification artifact
         value: ${{ jobs['desktop-linux-assets-verify'].outputs.artifact_name }}
       complete_artifact:
-        description: Complete signed Desktop verification bundle
+        description: Complete split Product and Desktop verification bundle
         value: ${{ jobs['desktop-channel-verify'].outputs.artifact_name }}
   workflow_dispatch:
   pull_request:
@@ -60,8 +81,7 @@ on:
       - packages/cli/**
       - scripts/**
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
@@ -72,19 +92,25 @@ concurrency:
 
 jobs:
   prepare:
-    name: Resolve shared Desktop release metadata
+    name: Resolve split verification identities
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       published_at: ${{ steps.metadata.outputs.published_at }}
+      product_tag: ${{ steps.metadata.outputs.product_tag }}
+      desktop_tag: ${{ steps.metadata.outputs.desktop_tag }}
       signing_key_artifact: ${{ steps.metadata.outputs.signing_key_artifact }}
-      public_key_artifact: ${{ steps.metadata.outputs.public_key_artifact }}
     steps:
       - name: Resolve shared release metadata
         id: metadata
-        shell: bash
+        env:
+          PRODUCT_RELEASE_TAG: ${{ inputs.product_release_tag }}
+          DESKTOP_RELEASE_TAG: ${{ inputs.desktop_release_tag }}
+          LEGACY_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+          product_tag="${PRODUCT_RELEASE_TAG:-product-verify-${GITHUB_SHA}}"
+          desktop_tag="${DESKTOP_RELEASE_TAG:-${LEGACY_RELEASE_TAG:-desktop-verify-${GITHUB_SHA}}}"
           if [[ "${{ inputs.signed }}" == "true" ]]; then
             if [[ -z "${{ inputs.signing_key_artifact }}" ]]; then
               echo "A signing key artifact is required for signed verification" >&2
@@ -95,12 +121,12 @@ jobs:
             signing_key_artifact="desktop-verify-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           fi
           echo "published_at=${published_at}" >> "${GITHUB_OUTPUT}"
+          echo "product_tag=${product_tag}" >> "${GITHUB_OUTPUT}"
+          echo "desktop_tag=${desktop_tag}" >> "${GITHUB_OUTPUT}"
           echo "signing_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
-          echo "public_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
 
       - name: Generate ephemeral verification signing key
         if: ${{ !inputs.signed }}
-        shell: bash
         run: |
           mkdir -p release/desktop-verify-signing
           openssl genpkey -algorithm Ed25519 -out release/desktop-verify-signing/runtime-private.pem
@@ -115,20 +141,255 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  desktop-windows-verify:
-    name: Desktop Windows package and smoke
+  product-windows-verify:
+    name: Windows Product Runtime verification
     needs: prepare
     runs-on: windows-latest
     timeout-minutes: 60
     env:
       CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
       CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ inputs.runtime_min_shell_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download verification signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Configure signed verification artifacts
+        shell: pwsh
+        run: |
+          $privateKey = Get-Content release/desktop-ci-signing/runtime-private.pem -Raw
+          $publicKey = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
+          @"
+          CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY<<PRIVATE_KEY
+          $privateKey
+          PRIVATE_KEY
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY
+          $publicKey
+          PUBLIC_KEY
+          "@ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Test Desktop and type-check repository
+        run: |
+          pnpm --filter @coder-studio/desktop test
+          pnpm ci:typecheck
+
+      - name: Build Windows Product Runtime
+        run: pnpm build:desktop-runtime
+
+      - name: Stage Windows Product assets
+        shell: bash
+        run: |
+          pnpm release:artifacts stage-product \
+            --directory release/product-windows \
+            --components win-runtime
+
+      - name: Upload Windows Product assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-windows-${{ github.sha }}
+          path: release/product-windows/
+          if-no-files-found: error
+          retention-days: 3
+          overwrite: true
+
+  desktop-linux-assets-verify:
+    name: WSL Product Runtime and Desktop Engine verification
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ inputs.runtime_min_shell_version }}
+    outputs:
+      artifact_name: desktop-linux-${{ github.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download verification signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Configure signed verification artifacts
+        run: |
+          {
+            echo 'CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY<<PRIVATE_KEY'
+            cat release/desktop-ci-signing/runtime-private.pem
+            echo 'PRIVATE_KEY'
+            echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
+            cat release/desktop-ci-signing/runtime-public.pem
+            echo 'PUBLIC_KEY'
+          } >> "${GITHUB_ENV}"
+
+      - name: Build WSL Runtime and Engine
+        run: |
+          pnpm build:wsl-runtime
+          pnpm build:wsl-engine
+
+      - name: Stage WSL Product assets
+        run: |
+          pnpm release:artifacts stage-product \
+            --directory release/product-wsl \
+            --components wsl-runtime
+
+      - name: Stage WSL Desktop assets
+        run: |
+          pnpm release:artifacts stage-desktop \
+            --directory release/desktop-linux \
+            --components wsl-engine
+
+      - name: Upload WSL Product assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-wsl-${{ github.sha }}
+          path: release/product-wsl/
+          if-no-files-found: error
+          retention-days: 3
+          overwrite: true
+
+      - name: Upload WSL Desktop assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-${{ github.sha }}
+          path: release/desktop-linux/
+          if-no-files-found: error
+          retention-days: 3
+          overwrite: true
+
+  product-channel-verify:
+    name: Validate complete signed Product channel
+    needs:
+      - prepare
+      - product-windows-verify
+      - desktop-linux-assets-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      artifact_name: ${{ steps.artifact_name.outputs.value }}
+    steps:
+      - name: Resolve Product artifact name
+        id: artifact_name
+        run: echo "value=product-complete-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Product Runtime assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: product-*-${{ github.sha }}
+          path: release/runtime
+          merge-multiple: true
+
+      - name: Download verification signing key
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.signing_key_artifact }}
+          path: release/desktop-ci-signing
+
+      - name: Assemble signed Product channel
+        run: |
+          mkdir -p release/cli-candidate
+          pnpm build:web
+          pnpm build:cli
+          pack_json=$(pnpm --dir ./packages/cli pack --json --pack-destination "${PWD}/release/cli-candidate")
+          tarball=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d).filename))")
+          product_version=$(node -p "require('./packages/cli/package.json').version")
+          pnpm release:artifacts stage-product \
+            --directory release/product-complete \
+            --components 'cli,win-runtime,wsl-runtime' \
+            --cli-tarball "${tarball}"
+          pnpm release:channel product \
+            --directory release/product-complete \
+            --release-tag "${{ needs.prepare.outputs.product_tag }}" \
+            --generated-at "${{ needs.prepare.outputs.published_at }}" \
+            --private-key release/desktop-ci-signing/runtime-private.pem \
+            --product-version "${product_version}"
+
+      - name: Validate signed Product channel
+        run: |
+          CODER_STUDIO_RUNTIME_PUBLIC_KEY=$(cat release/desktop-ci-signing/runtime-public.pem) \
+            pnpm release:artifacts validate-product \
+              --directory release/product-complete \
+              --source-package-json packages/cli/package.json
+
+      - name: Upload complete Product bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.value }}
+          path: release/product-complete/
+          if-no-files-found: error
+          retention-days: 3
+          overwrite: true
+
+  desktop-windows-verify:
+    name: Desktop Windows package and smoke
+    needs:
+      - prepare
+      - product-channel-verify
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
       CSC_LINK: ${{ inputs.windows_signing && secrets.windows_csc_link || '' }}
       CSC_KEY_PASSWORD: ${{ inputs.windows_signing && secrets.windows_csc_key_password || '' }}
       CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.windows_signing && 'true' || 'false' }}
+      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
+      CODER_STUDIO_PRODUCT_CHANNEL_URL: ${{ inputs.product_channel_url }}
+      CODER_STUDIO_DESKTOP_CHANNEL_URL: ${{ inputs.desktop_channel_url }}
     outputs:
       artifact_name: ${{ steps.artifact_name.outputs.value }}
-
     steps:
       - name: Resolve Windows artifact name
         id: artifact_name
@@ -153,31 +414,51 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download acceptance signing key
+      - name: Download accepted Product verification bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.product-channel-verify.outputs.artifact_name }}
+          path: release/product-complete
+
+      - name: Download verification signing key
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.signing_key_artifact }}
           path: release/desktop-ci-signing
 
-      - name: Configure signed acceptance channel
-        shell: pwsh
+      - name: Resolve accepted Factory Runtime provenance
+        shell: bash
         run: |
-          $privateKey = Get-Content release/desktop-ci-signing/runtime-private.pem -Raw
-          $publicKey = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
-          @"
-          CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY<<PRIVATE_KEY
-          $privateKey
-          PRIVATE_KEY
-          CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY
-          $publicKey
-          PUBLIC_KEY
-          CODER_STUDIO_RUNTIME_UPDATE_URL=${{ inputs.runtime_update_url }}
-          "@ | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Test Desktop and type-check repository
-        run: |
-          pnpm --filter @coder-studio/desktop test
-          pnpm ci:typecheck
+          mkdir -p release/factory-runtime release/factory-product
+          manifest_name=$(node -p "require('./release/product-complete/product-channel.json').runtimes['win32-x64'].manifest")
+          package_name=$(node -p "require('./release/product-complete/' + '${manifest_name}').packageFile")
+          tar -xzf "release/product-complete/${package_name}" -C release/factory-runtime
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const channel = JSON.parse(readFileSync("release/product-complete/product-channel.json", "utf8"));
+          writeFileSync("release/factory-product/factory-product.json", `${JSON.stringify({
+            schemaVersion: 1,
+            version: channel.version,
+            releaseTag: channel.releaseTag,
+            runtimes: {
+              "win32-x64": {
+                manifest: channel.runtimes["win32-x64"].manifest,
+                manifestSha256: channel.runtimes["win32-x64"].manifestSha256,
+              },
+              "linux-x64": {
+                manifest: channel.runtimes["linux-x64"].manifest,
+                manifestSha256: channel.runtimes["linux-x64"].manifestSha256,
+              },
+            },
+          }, null, 2)}\n`);
+          NODE
+          {
+            echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
+            cat release/desktop-ci-signing/runtime-public.pem
+            echo 'PUBLIC_KEY'
+            echo "CODER_STUDIO_FACTORY_RUNTIME_DIR=$(node -p \"require('node:path').resolve('release/factory-runtime')\")"
+            echo "CODER_STUDIO_FACTORY_PRODUCT_FILE=$(node -p \"require('node:path').resolve('release/factory-product/factory-product.json')\")"
+          } >> "${GITHUB_ENV}"
 
       - name: Require acceptance Authenticode credentials
         if: inputs.windows_signing
@@ -187,7 +468,7 @@ jobs:
             throw 'Windows Authenticode signing secrets are required when windows_signing is enabled'
           }
 
-      - name: Build Windows installer and Runtime
+      - name: Build Windows installer with accepted Factory Runtime
         run: pnpm dist:desktop
 
       - name: Verify acceptance Authenticode signatures
@@ -211,84 +492,18 @@ jobs:
       - name: Smoke packaged Engine, Runtime, PTY, and Electron window
         run: pnpm smoke:desktop
 
-      - name: Stage Windows release assets
-        run: pnpm desktop:artifacts stage --directory release/desktop-release-windows --components 'desktop,win-runtime'
+      - name: Stage Windows Desktop assets
+        shell: bash
+        run: |
+          pnpm release:artifacts stage-desktop \
+            --directory release/desktop-windows \
+            --components windows
 
-      - name: Upload Windows verification assets
+      - name: Upload Windows Desktop assets
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.artifact_name.outputs.value }}
-          path: release/desktop-release-windows/
-          if-no-files-found: error
-          retention-days: 3
-          overwrite: true
-
-  desktop-linux-assets-verify:
-    name: WSL Engine and Runtime verification
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      CODER_STUDIO_RELEASE_PUBLISHED_AT: ${{ needs.prepare.outputs.published_at }}
-      CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION: ${{ inputs.runtime_min_shell_version }}
-    outputs:
-      artifact_name: ${{ steps.artifact_name.outputs.value }}
-
-    steps:
-      - name: Resolve Linux artifact name
-        id: artifact_name
-        shell: bash
-        run: echo "value=desktop-linux-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download acceptance signing key
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.prepare.outputs.signing_key_artifact }}
-          path: release/desktop-ci-signing
-
-      - name: Configure signed acceptance channel
-        shell: bash
-        run: |
-          {
-            echo 'CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY<<PRIVATE_KEY'
-            cat release/desktop-ci-signing/runtime-private.pem
-            echo 'PRIVATE_KEY'
-            echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
-            cat release/desktop-ci-signing/runtime-public.pem
-            echo 'PUBLIC_KEY'
-          } >> "${GITHUB_ENV}"
-
-      - name: Build WSL Engine and Server Runtime
-        run: |
-          pnpm build:wsl-engine
-          pnpm build:wsl-runtime
-
-      - name: Stage WSL release assets
-        run: pnpm desktop:artifacts stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'
-
-      - name: Upload WSL verification assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.artifact_name.outputs.value }}
-          path: release/desktop-release-linux/
+          path: release/desktop-windows/
           if-no-files-found: error
           retention-days: 3
           overwrite: true
@@ -297,6 +512,7 @@ jobs:
     name: Validate complete signed Desktop channel
     needs:
       - prepare
+      - product-channel-verify
       - desktop-windows-verify
       - desktop-linux-assets-verify
     runs-on: ubuntu-latest
@@ -306,7 +522,6 @@ jobs:
     steps:
       - name: Resolve complete artifact name
         id: artifact_name
-        shell: bash
         run: echo "value=desktop-complete-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout repository
@@ -327,52 +542,59 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download Windows verification assets
+      - name: Download Windows Desktop assets
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-windows-verify.outputs.artifact_name }}
-          path: release/desktop-release-complete
+          path: release/desktop-complete
 
-      - name: Download WSL verification assets
+      - name: Download WSL Desktop assets
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.desktop-linux-assets-verify.outputs.artifact_name }}
-          path: release/desktop-release-complete
+          path: release/desktop-complete
 
-      - name: Download channel signing key
+      - name: Download complete Product bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.product-channel-verify.outputs.artifact_name }}
+          path: release/product-complete
+
+      - name: Download verification signing key
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.signing_key_artifact }}
           path: release/desktop-ci-signing
 
       - name: Build signed Desktop channel
-        shell: bash
         run: |
-          release_tag="${{ inputs.release_tag }}"
-          if [[ -z "${release_tag}" ]]; then
-            release_tag="desktop-verify-${GITHUB_SHA}"
-          fi
-          pnpm desktop:channel -- \
-            --directory release/desktop-release-complete \
-            --release-tag "${release_tag}" \
-            --channel prerelease \
+          pnpm release:channel desktop \
+            --directory release/desktop-complete \
+            --release-tag "${{ needs.prepare.outputs.desktop_tag }}" \
             --generated-at "${{ needs.prepare.outputs.published_at }}" \
-            --private-key release/desktop-ci-signing/runtime-private.pem
+            --private-key release/desktop-ci-signing/runtime-private.pem \
+            --factory-product factory-product.json
 
-      - name: Validate complete signed Desktop channel
-        env:
-          CODER_STUDIO_RUNTIME_PUBLIC_KEY_FILE: release/desktop-ci-signing/runtime-public.pem
+      - name: Validate split release bundles
         run: |
-          CODER_STUDIO_RUNTIME_PUBLIC_KEY=$(cat "${CODER_STUDIO_RUNTIME_PUBLIC_KEY_FILE}") \
-            pnpm desktop:artifacts validate \
-              --directory release/desktop-release-complete \
-              --components 'desktop,win-runtime,wsl-engine,wsl-runtime' \
-              --release-kind full
+          export CODER_STUDIO_RUNTIME_PUBLIC_KEY="$(cat release/desktop-ci-signing/runtime-public.pem)"
+          pnpm release:artifacts validate-product \
+            --directory release/product-complete \
+            --source-package-json packages/cli/package.json
+          pnpm release:artifacts validate-desktop \
+            --directory release/desktop-complete
 
-      - name: Upload complete Desktop verification bundle
+      - name: Assemble complete verification artifact
+        run: |
+          mkdir -p release/verification-complete/product release/verification-complete/desktop
+          cp -R release/product-complete/. release/verification-complete/product/
+          cp -R release/desktop-complete/. release/verification-complete/desktop/
+
+      - name: Upload complete split verification bundle
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.artifact_name.outputs.value }}
-          path: release/desktop-release-complete/
+          path: release/verification-complete/
           if-no-files-found: error
           retention-days: 3
+          overwrite: true

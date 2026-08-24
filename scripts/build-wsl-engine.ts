@@ -59,7 +59,7 @@ export async function buildWslEngine(): Promise<{ manifest: EngineManifest; pack
   if (process.arch !== "x64" && process.arch !== "arm64") {
     throw new Error(`Unsupported WSL Engine architecture: ${process.arch}`);
   }
-  await prepareDesktopPackage();
+  await prepareDesktopPackage({ includeFactoryRuntime: false });
   await verifyNodeToolLaunchers();
   await ensureDir(WSL_ENGINE_RELEASE_DIR);
 

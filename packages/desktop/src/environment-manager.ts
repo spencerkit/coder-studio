@@ -1,5 +1,9 @@
-import type { DesktopChannel } from "./desktop-channel.js";
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
+import type {
+  FactoryProductProvenance,
+  ProductChannel,
+  ProductChannelRuntime,
+} from "./product-channel.js";
 import type {
   DesktopEnvironmentProgress,
   DesktopEnvironmentSummary,
@@ -35,7 +39,9 @@ export interface DesktopEnvironmentManagerOptions {
   publicKeyPem: string;
   releaseBaseUrl: string;
   factoryReleaseBaseUrl?: string;
-  loadChannel?: () => Promise<DesktopChannel>;
+  productChannelUrl?: string;
+  loadProductChannel?: () => Promise<ProductChannel>;
+  factoryProduct?: FactoryProductProvenance;
   enableWsl?: boolean;
   fetch?: typeof fetch;
   wslRunner?: WslCommandRunner;
@@ -134,6 +140,7 @@ export class DesktopEnvironmentManager {
           `coder-studio-server-runtime-linux-${arch}.manifest.json`,
           this.options.releaseBaseUrl
         ).toString(),
+      productChannelUrl: this.options.productChannelUrl,
       ...(this.options.factoryReleaseBaseUrl
         ? {
             factoryEngineManifestUrl: (arch: "x64" | "arm64") =>
@@ -153,17 +160,36 @@ export class DesktopEnvironmentManager {
       onProgress: (progress) =>
         this.emit(target.id, progress.phase, progress.message, progress.percent),
     });
-    let channel: DesktopChannel | null = null;
-    if (this.options.loadChannel) {
+    let channel: ProductChannel | null = null;
+    if (this.options.loadProductChannel) {
       try {
-        channel = await this.options.loadChannel();
+        channel = await this.options.loadProductChannel();
       } catch {
         // Factory Runtime remains the offline/bootstrap fallback.
       }
     }
-    const expected = channel?.runtimes["linux-x64"];
-    if (expected?.version === this.options.runtimeVersion) {
-      const metadata = await installer.checkRuntime(probe, expected, this.options.shellVersion);
+    let expected:
+      | ProductChannelRuntime
+      | (Omit<ProductChannelRuntime, "publishedAt"> & { publishedAt?: string })
+      | null = null;
+    let releaseTag: string | null = null;
+    if (channel?.version === this.options.runtimeVersion) {
+      expected = channel.runtimes["linux-x64"];
+      releaseTag = channel.releaseTag;
+    } else if (this.options.factoryProduct?.version === this.options.runtimeVersion) {
+      expected = {
+        ...this.options.factoryProduct.runtimes["linux-x64"],
+        version: this.options.factoryProduct.version,
+      };
+      releaseTag = this.options.factoryProduct.releaseTag;
+    }
+    if (expected && releaseTag) {
+      const metadata = await installer.checkRuntime(
+        probe,
+        expected,
+        this.options.shellVersion,
+        releaseTag
+      );
       await installer.downloadAndStageRuntime(metadata, {
         signal: new AbortController().signal,
         onProgress: () => {},
@@ -229,6 +255,7 @@ export class DesktopEnvironmentManager {
           `coder-studio-server-runtime-linux-${arch}.manifest.json`,
           this.options.releaseBaseUrl
         ).toString(),
+      productChannelUrl: this.options.productChannelUrl,
       ...(this.options.factoryReleaseBaseUrl
         ? {
             factoryEngineManifestUrl: (arch: "x64" | "arm64") =>

@@ -349,6 +349,92 @@ describe("useSessionNotifications", () => {
     expect(store.get(toastsAtom)).toHaveLength(0);
   });
 
+  it("prefers the Desktop native notification bridge over Web Notification", async () => {
+    setDocumentHidden(true);
+    const showNotification = vi.fn(async () => ({ status: "shown" as const }));
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { showNotification } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
+      });
+    });
+
+    await waitFor(() => expect(showNotification).toHaveBeenCalledOnce());
+    expect(showNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        sessionId: "sess-1",
+        title: expect.any(String),
+        body: expect.any(String),
+        tag: expect.stringContaining("session-sess-1-"),
+      })
+    );
+    expect(NotificationMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "unsupported",
+    "failed",
+  ] as const)("falls back to Web Notification when Desktop delivery reports %s", async (status) => {
+    setDocumentHidden(true);
+    const showNotification = vi.fn(async () => ({ status }));
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { showNotification } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
+      });
+    });
+
+    await waitFor(() => expect(showNotification).toHaveBeenCalledOnce());
+    await waitFor(() => expect(NotificationMock).toHaveBeenCalledOnce());
+  });
+
+  it("falls back to Web Notification when the Desktop bridge rejects", async () => {
+    setDocumentHidden(true);
+    const showNotification = vi.fn(async () => {
+      throw new Error("IPC unavailable");
+    });
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { showNotification } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-1");
+    store.set(activeWorkspaceIdAtom, "ws-1");
+    seedRunningSession(store, "sess-1", "ws-1");
+
+    mountAndCompleteTurn(store, () => {
+      store.set(sessionsAtom, {
+        "sess-1": createSession("sess-1", "idle", "ws-1"),
+      });
+    });
+
+    await waitFor(() => expect(showNotification).toHaveBeenCalledOnce());
+    await waitFor(() => expect(NotificationMock).toHaveBeenCalledOnce());
+  });
+
   it("uses a system push when the page is visible but the browser window is unfocused", async () => {
     vi.mocked(document.hasFocus).mockReturnValue(false);
     const store = createStore();
@@ -451,6 +537,180 @@ describe("useSessionNotifications", () => {
       sessionId: "sess-target",
     });
     expect(window.location.pathname).toBe("/workspace");
+  });
+
+  it("focuses a live session when a Desktop native notification is clicked", async () => {
+    let clickListener: ((target: { workspaceId: string; sessionId: string }) => void) | null = null;
+    const unsubscribe = vi.fn();
+    const onNotificationClicked = vi.fn(
+      (listener: (target: { workspaceId: string; sessionId: string }) => void) => {
+        clickListener = listener;
+        return unsubscribe;
+      }
+    );
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { onNotificationClicked } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-current");
+    seedWorkspace(store, "ws-target");
+    store.set(activeWorkspaceIdAtom, "ws-current");
+    store.set(sessionsAtom, {
+      "sess-target": createSession("sess-target", "idle", "ws-target"),
+    });
+    window.history.pushState({}, "", "/settings");
+
+    const view = render(
+      <Provider store={store}>
+        <Harness />
+      </Provider>
+    );
+
+    expect(onNotificationClicked).toHaveBeenCalledOnce();
+    const listener = clickListener as
+      | ((target: { workspaceId: string; sessionId: string }) => void)
+      | null;
+    act(() => {
+      listener?.({ workspaceId: "ws-target", sessionId: "sess-target" });
+    });
+
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-target");
+    expect(store.get(pendingFocusSessionAtom)).toBe("sess-target");
+    expect(window.location.pathname).toBe("/workspace");
+
+    view.unmount();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("retries a Desktop native click after the recreated window hydrates its target", async () => {
+    let clickListener: ((target: { workspaceId: string; sessionId: string }) => void) | null = null;
+    const onNotificationClicked = vi.fn(
+      (listener: (target: { workspaceId: string; sessionId: string }) => void) => {
+        clickListener = listener;
+        return vi.fn();
+      }
+    );
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: { onNotificationClicked } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-current");
+    store.set(activeWorkspaceIdAtom, "ws-current");
+    window.history.pushState({}, "", "/settings");
+
+    render(
+      <Provider store={store}>
+        <Harness />
+      </Provider>
+    );
+    const listener = clickListener as
+      | ((target: { workspaceId: string; sessionId: string }) => void)
+      | null;
+
+    act(() => {
+      listener?.({ workspaceId: "ws-target", sessionId: "sess-target" });
+      store.set(wsClientAtom, { sendCommand: vi.fn() } as never);
+    });
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-current");
+    await waitFor(() => expect(onNotificationClicked).toHaveBeenCalledOnce());
+
+    act(() => {
+      seedWorkspace(store, "ws-target");
+      store.set(sessionsAtom, {
+        "sess-target": createSession("sess-target", "idle", "ws-target"),
+      });
+    });
+
+    await waitFor(() => expect(store.get(activeWorkspaceIdAtom)).toBe("ws-target"));
+    expect(store.get(pendingFocusSessionAtom)).toBe("sess-target");
+    expect(window.location.pathname).toBe("/workspace");
+  });
+
+  it("expires a Desktop native click whose target never hydrates", async () => {
+    let clickListener: ((target: { workspaceId: string; sessionId: string }) => void) | null = null;
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        onNotificationClicked: vi.fn(
+          (listener: (target: { workspaceId: string; sessionId: string }) => void) => {
+            clickListener = listener;
+            return vi.fn();
+          }
+        ),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-current");
+    store.set(activeWorkspaceIdAtom, "ws-current");
+    window.history.pushState({}, "", "/settings");
+
+    render(
+      <Provider store={store}>
+        <Harness />
+      </Provider>
+    );
+    const listener = clickListener as
+      | ((target: { workspaceId: string; sessionId: string }) => void)
+      | null;
+
+    act(() => {
+      listener?.({ workspaceId: "ws-deleted", sessionId: "sess-deleted" });
+      vi.advanceTimersByTime(30_001);
+      seedWorkspace(store, "ws-deleted");
+      store.set(sessionsAtom, {
+        "sess-deleted": createSession("sess-deleted", "idle", "ws-deleted"),
+      });
+    });
+
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-current");
+    expect(store.get(pendingFocusSessionAtom)).toBeNull();
+    expect(window.location.pathname).toBe("/settings");
+  });
+
+  it("ignores a Desktop native click target that no longer exists", () => {
+    let clickListener: ((target: { workspaceId: string; sessionId: string }) => void) | null = null;
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        onNotificationClicked: vi.fn(
+          (listener: (target: { workspaceId: string; sessionId: string }) => void) => {
+            clickListener = listener;
+            return vi.fn();
+          }
+        ),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createStore();
+    store.set(connectionStatusAtom, "disconnected");
+    store.set(notificationPreferencesAtom, { enabled: true, soundEnabled: false });
+    seedWorkspace(store, "ws-current");
+    store.set(activeWorkspaceIdAtom, "ws-current");
+    window.history.pushState({}, "", "/settings");
+
+    render(
+      <Provider store={store}>
+        <Harness />
+      </Provider>
+    );
+    const listener = clickListener as
+      | ((target: { workspaceId: string; sessionId: string }) => void)
+      | null;
+
+    act(() => {
+      listener?.({ workspaceId: "ws-missing", sessionId: "sess-missing" });
+    });
+
+    expect(store.get(activeWorkspaceIdAtom)).toBe("ws-current");
+    expect(store.get(pendingFocusSessionAtom)).toBeNull();
+    expect(window.location.pathname).toBe("/settings");
   });
 
   it("suppresses the notification when the resolved active workspace matches even if the raw active id is stale", async () => {

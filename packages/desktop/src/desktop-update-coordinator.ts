@@ -7,12 +7,15 @@ import {
   type UpdateRuntimeContext,
 } from "@coder-studio/core";
 import type { DesktopBuildInfo } from "./build-info.js";
-import type { DesktopChannel, DesktopChannelRuntime } from "./desktop-channel.js";
+import type { DesktopChannel } from "./desktop-channel.js";
 import type { DesktopUpdateJournal, DesktopUpdateJournalRecord } from "./desktop-update-journal.js";
 import type { DesktopUpdateSettingsRepo } from "./desktop-update-settings.js";
-import { compareVersions } from "./runtime-manifest.js";
+import type { ProductChannel, ProductChannelRuntime } from "./product-channel.js";
+import { compareVersions, type RuntimeManifest } from "./runtime-manifest.js";
 import type { RuntimeUpdateAdapter, RuntimeUpdateMetadata } from "./runtime-update-manager.js";
 import type { DesktopShellUpdateAdapter, ShellUpdateMetadata } from "./update-manager.js";
+
+type RuntimeTarget = "win32-x64" | "linux-x64";
 
 export interface DesktopUpdateCoordinatorDeps {
   runtimeContext: UpdateRuntimeContext;
@@ -20,13 +23,14 @@ export interface DesktopUpdateCoordinatorDeps {
   currentSharedWebVersion: () => string;
   currentProductPublishedAt: () => string | null;
   getBuildInfo: () => DesktopBuildInfo;
-  loadChannel: () => Promise<DesktopChannel>;
+  loadProductChannel: () => Promise<ProductChannel>;
+  loadDesktopChannel: () => Promise<DesktopChannel>;
   shell: DesktopShellUpdateAdapter;
   getRuntimeAdapter: (
-    target: "win32-x64" | "linux-x64",
+    target: RuntimeTarget,
     environmentId: string
   ) => Promise<RuntimeUpdateAdapter>;
-  initialRuntimeTarget: "win32-x64" | "linux-x64";
+  initialRuntimeTarget: RuntimeTarget;
   initialEnvironmentId: string;
   settings: DesktopUpdateSettingsRepo;
   journal: DesktopUpdateJournal;
@@ -45,19 +49,38 @@ function updateError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function targetFromComponent(id: UpdateComponentId): "win32-x64" | "linux-x64" | null {
   if (id === "runtime:win32-x64") return "win32-x64";
   if (id === "runtime:linux-x64") return "linux-x64";
   return id === "shell" ? "win32-x64" : null;
 }
 
+interface CheckedRuntime {
+  target: RuntimeTarget;
+  adapter: RuntimeUpdateAdapter;
+  currentManifest: RuntimeManifest;
+  metadata: RuntimeUpdateMetadata | null;
+}
+
+interface StartupComponentVersions {
+  shellVersion: string;
+  runtimeVersion: string;
+  pendingRuntimeVersion: string | null;
+  sharedWebVersion?: string;
+  pendingSharedWebVersion?: string | null;
+}
+
 export class DesktopUpdateCoordinator {
   private state: ProductUpdateState;
-  private runtimeTarget: "win32-x64" | "linux-x64";
+  private runtimeTarget: RuntimeTarget;
   private runtimeEnvironmentId: string;
   private runtimeContext: UpdateRuntimeContext;
-  private runtimeAdapter: RuntimeUpdateAdapter | null = null;
-  private runtimeMetadata: RuntimeUpdateMetadata | null = null;
+  private runtimeAdapters = new Map<RuntimeTarget, RuntimeUpdateAdapter>();
+  private runtimeMetadata = new Map<RuntimeTarget, RuntimeUpdateMetadata>();
   private shellMetadata: ShellUpdateMetadata | null = null;
   private busyPhase: BusyPhase | null = null;
   private controllers = new Map<UpdateComponentId, AbortController>();
@@ -146,40 +169,129 @@ export class DesktopUpdateCoordinator {
     };
     this.publish();
     try {
-      const channel = await this.deps.loadChannel();
-      const buildInfo = this.deps.getBuildInfo();
-      const runtimeEntry = channel.runtimes[this.runtimeTarget];
-      const plannedShellVersion =
-        compareVersions(channel.shell.version, buildInfo.shellVersion) > 0
-          ? channel.shell.version
-          : buildInfo.shellVersion;
-      const runtimeAdapter = await this.deps.getRuntimeAdapter(
-        this.runtimeTarget,
-        this.runtimeEnvironmentId
-      );
-      const [shellMetadata, runtimeMetadata] = await Promise.all([
-        this.deps.shell.checkMetadata(channel.shell),
-        runtimeAdapter.checkMetadata(runtimeEntry, plannedShellVersion),
+      this.runtimeAdapters.clear();
+      this.runtimeMetadata.clear();
+      this.shellMetadata = null;
+      const [productResult, desktopResult] = await Promise.allSettled([
+        this.deps.loadProductChannel(),
+        this.deps.loadDesktopChannel(),
       ]);
-      this.assertSourceMatchesChannel(channel, shellMetadata, runtimeMetadata);
-      this.runtimeAdapter = runtimeAdapter;
-      this.shellMetadata = shellMetadata;
-      this.runtimeMetadata = runtimeMetadata;
-      const components = this.createNeededComponents(
-        channel,
-        buildInfo,
-        runtimeEntry,
-        shellMetadata,
-        runtimeMetadata
+      let productChannelError =
+        productResult.status === "rejected" ? errorMessage(productResult.reason) : null;
+      let desktopChannelError =
+        desktopResult.status === "rejected" ? errorMessage(desktopResult.reason) : null;
+      let productChannel = productResult.status === "fulfilled" ? productResult.value : null;
+      let desktopChannel = desktopResult.status === "fulfilled" ? desktopResult.value : null;
+      const buildInfo = this.deps.getBuildInfo();
+      let shellMetadata: ShellUpdateMetadata | null = null;
+      if (desktopChannel) {
+        try {
+          shellMetadata = await this.deps.shell.checkMetadata(desktopChannel);
+          this.assertSourceMatchesShell(desktopChannel, shellMetadata);
+        } catch (error) {
+          desktopChannelError = errorMessage(error);
+          desktopChannel = null;
+          shellMetadata = null;
+        }
+      }
+      const plannedShellVersion =
+        desktopChannel && compareVersions(desktopChannel.shell.version, buildInfo.shellVersion) > 0
+          ? desktopChannel.shell.version
+          : buildInfo.shellVersion;
+      let checkedRuntimes = await Promise.all(
+        this.runtimeTargetsForCheck().map(async (target): Promise<CheckedRuntime> => {
+          const adapter = await this.deps.getRuntimeAdapter(
+            target,
+            this.environmentIdForTarget(target)
+          );
+          return {
+            target,
+            adapter,
+            currentManifest: await adapter.getCurrentManifest(),
+            metadata: null,
+          };
+        })
       );
-      const compatibility = this.validatePlan(channel, buildInfo, components, runtimeMetadata);
+      for (const checked of checkedRuntimes) {
+        this.runtimeAdapters.set(checked.target, checked.adapter);
+      }
+      if (productChannel) {
+        const acceptedProductChannel = productChannel;
+        const checkedProductRuntimes = await Promise.allSettled(
+          checkedRuntimes.map(async (checked): Promise<CheckedRuntime> => {
+            const metadata = await checked.adapter.checkMetadata(
+              acceptedProductChannel.runtimes[checked.target],
+              plannedShellVersion,
+              acceptedProductChannel.releaseTag
+            );
+            this.assertSourceMatchesRuntime(
+              acceptedProductChannel.runtimes[checked.target],
+              metadata,
+              checked.target
+            );
+            return { ...checked, metadata };
+          })
+        );
+        const failures = checkedProductRuntimes.filter(
+          (result): result is PromiseRejectedResult => result.status === "rejected"
+        );
+        if (failures.length > 0) {
+          productChannelError = failures.map((result) => errorMessage(result.reason)).join("; ");
+          productChannel = null;
+        } else {
+          checkedRuntimes = checkedProductRuntimes.map(
+            (result) => (result as PromiseFulfilledResult<CheckedRuntime>).value
+          );
+          for (const checked of checkedRuntimes) {
+            if (checked.metadata) this.runtimeMetadata.set(checked.target, checked.metadata);
+          }
+        }
+      }
+      this.state = {
+        ...this.state,
+        diagnostics: {
+          ...this.state.diagnostics,
+          productChannelError,
+          desktopChannelError,
+        },
+      };
+      if (!productChannel && !desktopChannel) {
+        throw new AggregateError(
+          [productChannelError, desktopChannelError]
+            .filter((message): message is string => Boolean(message))
+            .map((message) => new Error(message)),
+          "Product and Desktop update channels are unavailable"
+        );
+      }
+      this.shellMetadata = shellMetadata;
+      const components = this.createNeededComponents(
+        productChannel,
+        buildInfo,
+        shellMetadata,
+        checkedRuntimes
+      );
+      const compatibility = this.validatePlan(
+        productChannel,
+        desktopChannel,
+        buildInfo,
+        components,
+        checkedRuntimes
+      );
       const checkedAt = this.deps.now();
       if (components.length === 0) {
         await this.clearJournal();
+        const channelError = productChannelError ?? desktopChannelError;
         this.state = {
           ...this.createBaseState(),
-          status: "idle",
+          status: channelError ? "failed" : "idle",
           lastCheckedAt: checkedAt,
+          diagnostics: {
+            ...this.createDiagnostics(buildInfo),
+            productChannelError,
+            desktopChannelError,
+            failedPhase: channelError ? "checking" : null,
+          },
+          errorSummary: channelError,
         };
       } else {
         const timestamp = new Date(checkedAt).toISOString();
@@ -195,7 +307,11 @@ export class DesktopUpdateCoordinator {
             status: compatibility.compatible ? "available" : "failed",
           })),
           compatibility,
-          diagnostics: this.createDiagnostics(buildInfo),
+          diagnostics: {
+            ...this.createDiagnostics(buildInfo),
+            productChannelError,
+            desktopChannelError,
+          },
           errorSummary: compatibility.summary,
         };
         await this.persistPlan();
@@ -229,13 +345,16 @@ export class DesktopUpdateCoordinator {
     const failedPlanNeedsRecheck =
       this.state.status === "failed" &&
       this.state.components.some((component) => component.status === "available");
-    const failedWithoutMetadata = this.state.components.some(
-      (component) =>
+    const failedWithoutMetadata = this.state.components.some((component) => {
+      const target = targetFromComponent(component.id);
+      return (
         component.status === "failed" &&
         !component.verified &&
-        ((component.kind === "runtime" && (!this.runtimeAdapter || !this.runtimeMetadata)) ||
+        ((component.kind === "runtime" &&
+          (!target || !this.runtimeAdapters.has(target) || !this.runtimeMetadata.has(target))) ||
           (component.kind === "shell" && !this.shellMetadata))
-    );
+      );
+    });
     if (failedPlanNeedsRecheck || failedWithoutMetadata) {
       await this.check({ manual: true });
       return this.downloadComponents(false);
@@ -339,12 +458,16 @@ export class DesktopUpdateCoordinator {
     this.busyPhase = "checking";
     try {
       const [channel, adapter] = await Promise.all([
-        this.deps.loadChannel(),
+        this.deps.loadProductChannel(),
         this.deps.getRuntimeAdapter(target, environmentId),
       ]);
       const buildInfo = this.deps.getBuildInfo();
       const expected = channel.runtimes[target];
-      const metadata = await adapter.checkMetadata(expected, buildInfo.shellVersion);
+      const metadata = await adapter.checkMetadata(
+        expected,
+        buildInfo.shellVersion,
+        channel.releaseTag
+      );
       const currentVersion = await adapter.getCurrentVersion();
       this.assertNotStopping();
       if (compareVersions(metadata.version, currentVersion) <= 0) return;
@@ -379,8 +502,8 @@ export class DesktopUpdateCoordinator {
     this.runtimeTarget = target;
     this.runtimeEnvironmentId = environmentId;
     this.runtimeContext = runtimeContext;
-    this.runtimeAdapter = null;
-    this.runtimeMetadata = null;
+    this.runtimeAdapters.clear();
+    this.runtimeMetadata.clear();
     if (this.state.status !== "ready" && this.state.status !== "restarting") {
       this.state = this.createBaseState();
     } else {
@@ -389,11 +512,7 @@ export class DesktopUpdateCoordinator {
     return this.publish();
   }
 
-  async reconcileOnStartup(actual: {
-    shellVersion: string;
-    runtimeVersion: string;
-    pendingRuntimeVersion: string | null;
-  }): Promise<ProductUpdateState> {
+  async reconcileOnStartup(actual: StartupComponentVersions): Promise<ProductUpdateState> {
     const ownsUpdates = await this.ensureUpdateOwnership(false);
     const journal = await this.deps.journal.read();
     this.startupReconciled = true;
@@ -417,14 +536,12 @@ export class DesktopUpdateCoordinator {
     }
     this.restoreJournal(journal, false);
     const components = this.state.components.map((component) => {
-      const installed =
-        component.id === "shell"
-          ? actual.shellVersion === component.targetVersion
-          : actual.runtimeVersion === component.targetVersion;
+      const actualVersion = this.actualVersionForComponent(component.id, actual);
+      const installed = actualVersion === component.targetVersion;
       return installed
         ? {
             ...component,
-            currentVersion: component.id === "shell" ? actual.shellVersion : actual.runtimeVersion,
+            currentVersion: actualVersion,
             currentPublishedAt: component.targetPublishedAt,
             status: "succeeded" as const,
             downloaded: true,
@@ -455,7 +572,7 @@ export class DesktopUpdateCoordinator {
         component.kind === "runtime" &&
         component.status !== "succeeded" &&
         component.verified &&
-        component.targetVersion !== actual.pendingRuntimeVersion
+        component.targetVersion !== this.pendingVersionForComponent(component.id, actual)
     );
     if (!journal.restartIntent && missingPendingRuntime) {
       const summary = "The staged Desktop Runtime is no longer available";
@@ -508,7 +625,7 @@ export class DesktopUpdateCoordinator {
       shell.status !== "succeeded" &&
       (!runtime ||
         runtime.status === "succeeded" ||
-        runtime.targetVersion === actual.pendingRuntimeVersion)
+        runtime.targetVersion === this.pendingVersionForComponent(runtime.id, actual))
     ) {
       const shellFailureSummary = "Desktop Shell installation did not reach the planned version";
       this.state = {
@@ -628,7 +745,13 @@ export class DesktopUpdateCoordinator {
         "There are no Desktop update components to download"
       );
     }
-    if (!this.runtimeAdapter && selected.some((component) => component.kind === "runtime")) {
+    if (
+      selected.some((component) => {
+        if (component.kind !== "runtime") return false;
+        const target = targetFromComponent(component.id);
+        return !target || !this.runtimeAdapters.has(target) || !this.runtimeMetadata.has(target);
+      })
+    ) {
       throw updateError("update_plan_invalid", "The Runtime update adapter is unavailable");
     }
     const availableState = this.state;
@@ -666,10 +789,13 @@ export class DesktopUpdateCoordinator {
             this.updateProgress(component.id, percent)
           );
         } else {
-          if (!this.runtimeMetadata || !this.runtimeAdapter) {
+          const target = targetFromComponent(component.id);
+          const metadata = target ? this.runtimeMetadata.get(target) : null;
+          const adapter = target ? this.runtimeAdapters.get(target) : null;
+          if (!metadata || !adapter) {
             throw new Error("Runtime update metadata is unavailable");
           }
-          await this.runtimeAdapter.downloadAndStage(this.runtimeMetadata, {
+          await adapter.downloadAndStage(metadata, {
             signal: controller.signal,
             onProgress: (percent) => this.updateProgress(component.id, percent),
             explicitRetry,
@@ -736,14 +862,13 @@ export class DesktopUpdateCoordinator {
   }
 
   private createNeededComponents(
-    channel: DesktopChannel,
+    productChannel: ProductChannel | null,
     buildInfo: DesktopBuildInfo,
-    runtimeEntry: DesktopChannelRuntime,
-    shellMetadata: ShellUpdateMetadata,
-    runtimeMetadata: RuntimeUpdateMetadata
+    shellMetadata: ShellUpdateMetadata | null,
+    checkedRuntimes: CheckedRuntime[]
   ): ProductUpdateComponent[] {
     const components: ProductUpdateComponent[] = [];
-    if (shellMetadata.updateNeeded) {
+    if (shellMetadata?.updateNeeded) {
       components.push({
         id: "shell",
         kind: "shell",
@@ -759,21 +884,20 @@ export class DesktopUpdateCoordinator {
         errorSummary: null,
       });
     }
-    const webVersionAfterRestart = shellMetadata.updateNeeded
-      ? channel.runtimes["win32-x64"].version
-      : this.deps.currentSharedWebVersion();
-    const runtimeCanFollowSharedWeb =
-      this.runtimeTarget !== "linux-x64" || runtimeMetadata.version === webVersionAfterRestart;
-    if (
-      runtimeCanFollowSharedWeb &&
-      compareVersions(runtimeMetadata.version, this.deps.currentProductVersion()) > 0
-    ) {
+    if (!productChannel) return components;
+    for (const checked of checkedRuntimes) {
+      const metadata = checked.metadata;
+      if (!metadata) continue;
+      const currentVersion = this.currentVersionForTarget(checked.target);
+      if (compareVersions(metadata.version, currentVersion) <= 0) continue;
+      const runtimeEntry = productChannel.runtimes[checked.target];
       components.push({
-        id: runtimeMetadata.componentId,
+        id: metadata.componentId,
         kind: "runtime",
-        target: this.runtimeTarget,
-        currentVersion: this.deps.currentProductVersion(),
-        currentPublishedAt: this.deps.currentProductPublishedAt(),
+        target: checked.target,
+        currentVersion,
+        currentPublishedAt:
+          checked.target === this.runtimeTarget ? this.deps.currentProductPublishedAt() : null,
         targetVersion: runtimeEntry.version,
         targetPublishedAt: runtimeEntry.publishedAt,
         status: "available",
@@ -787,43 +911,72 @@ export class DesktopUpdateCoordinator {
   }
 
   private validatePlan(
-    channel: DesktopChannel,
+    productChannel: ProductChannel | null,
+    desktopChannel: DesktopChannel | null,
     buildInfo: DesktopBuildInfo,
     components: ProductUpdateComponent[],
-    runtime: RuntimeUpdateMetadata
+    checkedRuntimes: CheckedRuntime[]
   ): ProductUpdateState["compatibility"] {
     const shellIncluded = components.some((component) => component.id === "shell");
-    const runtimeIncluded = components.some((component) => component.kind === "runtime");
-    const host = shellIncluded ? channel.shell : buildInfo;
-    const capabilityPairs: Array<[unknown, unknown]> = [
-      [runtime.manifest.requiredEngineVersion, host.engineVersion],
-      [runtime.manifest.requiredNodeVersion, host.nodeVersion],
-      [runtime.manifest.runtimeHostApiVersion, host.runtimeHostApiVersion],
-      [runtime.manifest.apiProtocolVersion, host.apiProtocolVersion],
-      [runtime.manifest.dataSchemaVersion, host.dataSchemaVersion],
-    ];
-    const target = `${runtime.manifest.platform}-${runtime.manifest.arch}`;
-    if (
-      target !== this.runtimeTarget ||
-      capabilityPairs.some(([required, actual]) => required !== actual) ||
-      compareVersions(
-        shellIncluded ? channel.shell.version : buildInfo.shellVersion,
-        runtime.manifest.minShellVersion
-      ) < 0
-    ) {
+    const host = shellIncluded ? desktopChannel?.shell : buildInfo;
+    const effectiveShellVersion = shellIncluded
+      ? (desktopChannel?.shell.version ?? buildInfo.shellVersion)
+      : buildInfo.shellVersion;
+    if (!host) {
       return {
         compatible: false,
         code: "runtime_host_incompatible",
         summary: "The selected Runtime is incompatible with the planned Desktop Shell",
       };
     }
+    for (const checked of checkedRuntimes) {
+      const runtimeIncluded = components.some(
+        (component) => component.kind === "runtime" && component.target === checked.target
+      );
+      const manifest = runtimeIncluded ? checked.metadata?.manifest : checked.currentManifest;
+      const capabilityPairs: Array<[unknown, unknown]> = manifest
+        ? [
+            [manifest.requiredEngineVersion, host.engineVersion],
+            [manifest.requiredNodeVersion, host.nodeVersion],
+            [manifest.runtimeHostApiVersion, host.runtimeHostApiVersion],
+            [manifest.apiProtocolVersion, host.apiProtocolVersion],
+            [manifest.dataSchemaVersion, host.dataSchemaVersion],
+          ]
+        : [];
+      if (runtimeIncluded && productChannel) {
+        capabilityPairs.push(
+          [productChannel.requirements.engineVersion, host.engineVersion],
+          [productChannel.requirements.nodeVersion, host.nodeVersion],
+          [productChannel.requirements.runtimeHostApiVersion, host.runtimeHostApiVersion],
+          [productChannel.requirements.apiProtocolVersion, host.apiProtocolVersion],
+          [productChannel.requirements.dataSchemaVersion, host.dataSchemaVersion]
+        );
+      }
+      const target = manifest ? `${manifest.platform}-${manifest.arch}` : null;
+      if (
+        !manifest ||
+        target !== checked.target ||
+        capabilityPairs.some(([required, actual]) => required !== actual) ||
+        compareVersions(effectiveShellVersion, manifest.minShellVersion) < 0 ||
+        (runtimeIncluded &&
+          productChannel !== null &&
+          compareVersions(effectiveShellVersion, productChannel.minShellVersion) < 0)
+      ) {
+        const shellBreaksInstalledRuntime = shellIncluded && !runtimeIncluded;
+        return {
+          compatible: false,
+          code: shellBreaksInstalledRuntime
+            ? "shell_breaks_current_runtime"
+            : "runtime_host_incompatible",
+          summary: shellBreaksInstalledRuntime
+            ? "The target Desktop Shell cannot safely carry the current Runtime"
+            : "The selected Runtime is incompatible with the planned Desktop Shell",
+        };
+      }
+    }
     if (this.runtimeTarget === "linux-x64") {
-      const effectiveWebVersion = shellIncluded
-        ? channel.runtimes["win32-x64"].version
-        : this.deps.currentSharedWebVersion();
-      const effectiveRuntimeVersion = runtimeIncluded
-        ? runtime.version
-        : this.deps.currentProductVersion();
+      const effectiveWebVersion = this.effectiveRuntimeVersion("win32-x64", components);
+      const effectiveRuntimeVersion = this.effectiveRuntimeVersion("linux-x64", components);
       if (effectiveRuntimeVersion !== effectiveWebVersion) {
         return {
           compatible: false,
@@ -832,62 +985,75 @@ export class DesktopUpdateCoordinator {
         };
       }
     }
-    if (shellIncluded && !runtimeIncluded) {
-      const currentCapabilities = [
-        buildInfo.engineVersion,
-        buildInfo.nodeVersion,
-        buildInfo.runtimeHostApiVersion,
-        buildInfo.apiProtocolVersion,
-        buildInfo.dataSchemaVersion,
-      ];
-      const targetCapabilities = [
-        channel.shell.engineVersion,
-        channel.shell.nodeVersion,
-        channel.shell.runtimeHostApiVersion,
-        channel.shell.apiProtocolVersion,
-        channel.shell.dataSchemaVersion,
-      ];
-      if (currentCapabilities.some((value, index) => value !== targetCapabilities[index])) {
-        return {
-          compatible: false,
-          code: "shell_breaks_current_runtime",
-          summary: "The target Desktop Shell cannot safely carry the current Runtime",
-        };
-      }
-    }
     return { compatible: true, code: null, summary: null };
   }
 
-  private assertSourceMatchesChannel(
-    channel: DesktopChannel,
-    shell: ShellUpdateMetadata,
-    runtime: RuntimeUpdateMetadata
-  ): void {
+  private assertSourceMatchesShell(channel: DesktopChannel, shell: ShellUpdateMetadata): void {
     if (
       shell.version !== channel.shell.version ||
       shell.publishedAt !== channel.shell.publishedAt
     ) {
       throw new Error("Desktop Shell source does not match signed Desktop channel");
     }
-    this.assertSourceMatchesRuntime(
-      channel.runtimes[this.runtimeTarget],
-      runtime,
-      this.runtimeTarget
-    );
   }
 
   private assertSourceMatchesRuntime(
-    expected: DesktopChannelRuntime,
+    expected: ProductChannelRuntime,
     runtime: RuntimeUpdateMetadata,
-    target: "win32-x64" | "linux-x64"
+    target: RuntimeTarget
   ): void {
     if (
       runtime.componentId !== `runtime:${target}` ||
       runtime.version !== expected.version ||
       runtime.publishedAt !== expected.publishedAt
     ) {
-      throw new Error("Runtime source does not match signed Desktop channel");
+      throw new Error("Runtime source does not match signed Product channel");
     }
+  }
+
+  private runtimeTargetsForCheck(): RuntimeTarget[] {
+    return this.runtimeTarget === "linux-x64" ? ["win32-x64", "linux-x64"] : ["win32-x64"];
+  }
+
+  private environmentIdForTarget(target: RuntimeTarget): string {
+    return target === this.runtimeTarget ? this.runtimeEnvironmentId : "native";
+  }
+
+  private currentVersionForTarget(target: RuntimeTarget): string {
+    return target === "win32-x64" && this.runtimeTarget === "linux-x64"
+      ? this.deps.currentSharedWebVersion()
+      : this.deps.currentProductVersion();
+  }
+
+  private effectiveRuntimeVersion(
+    target: RuntimeTarget,
+    components: ProductUpdateComponent[]
+  ): string {
+    return (
+      components.find((component) => component.kind === "runtime" && component.target === target)
+        ?.targetVersion ?? this.currentVersionForTarget(target)
+    );
+  }
+
+  private actualVersionForComponent(
+    id: UpdateComponentId,
+    actual: StartupComponentVersions
+  ): string {
+    if (id === "shell") return actual.shellVersion;
+    if (id === "runtime:win32-x64" && this.runtimeTarget === "linux-x64") {
+      return actual.sharedWebVersion ?? this.deps.currentSharedWebVersion();
+    }
+    return actual.runtimeVersion;
+  }
+
+  private pendingVersionForComponent(
+    id: UpdateComponentId,
+    actual: StartupComponentVersions
+  ): string | null {
+    if (id === "runtime:win32-x64" && this.runtimeTarget === "linux-x64") {
+      return actual.pendingSharedWebVersion ?? null;
+    }
+    return actual.pendingRuntimeVersion;
   }
 
   private createBaseState(): ProductUpdateState {
@@ -907,6 +1073,8 @@ export class DesktopUpdateCoordinator {
     return {
       failedComponentId: null,
       failedPhase: null,
+      productChannelError: null,
+      desktopChannelError: null,
       shellVersion: buildInfo.shellVersion,
       shellPublishedAt: buildInfo.publishedAt,
       shellBuiltAt: buildInfo.builtAt,

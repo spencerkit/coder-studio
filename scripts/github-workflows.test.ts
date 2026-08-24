@@ -1,41 +1,60 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
+interface WorkflowStep {
+  id?: string;
+  name?: string;
+  uses?: string;
+  if?: string;
+  run?: string;
+  env?: Record<string, string>;
+  with?: Record<string, unknown>;
+}
+
 interface WorkflowJob {
   uses?: string;
   needs?: string | string[];
+  if?: string;
+  environment?: string;
   env?: Record<string, string>;
   permissions?: Record<string, string>;
   outputs?: Record<string, string>;
   with?: Record<string, unknown>;
   strategy?: { matrix?: Record<string, unknown> };
-  secrets?: Record<string, string>;
-  steps?: Array<{
-    id?: string;
-    name?: string;
-    uses?: string;
-    if?: string;
-    run?: string;
-    env?: Record<string, string>;
-    with?: Record<string, unknown>;
-  }>;
+  concurrency?: { group: string; "cancel-in-progress": boolean };
+  secrets?: Record<string, string> | "inherit";
+  steps?: WorkflowStep[];
 }
 
 interface Workflow {
+  name?: string;
   on: Record<string, unknown>;
   permissions?: Record<string, string>;
+  concurrency?: { group: string; "cancel-in-progress": boolean };
   jobs: Record<string, WorkflowJob>;
 }
 
 const workflowsRoot = resolve(import.meta.dirname, "../.github/workflows");
 
-function loadWorkflow(name: string): Workflow {
-  return parse(readFileSync(resolve(workflowsRoot, name), "utf8")) as Workflow;
+function workflowPath(name: string): string {
+  return resolve(workflowsRoot, name);
 }
 
-describe("GitHub workflow boundaries", () => {
+function loadWorkflow(name: string): Workflow {
+  return parse(readFileSync(workflowPath(name), "utf8")) as Workflow;
+}
+
+function jobText(job: WorkflowJob): string {
+  return JSON.stringify(job);
+}
+
+function step(job: WorkflowJob, name: string): WorkflowStep | undefined {
+  return (job.steps ?? []).find((candidate) => candidate.name === name);
+}
+
+describe("repository verification workflows", () => {
   it("keeps repository CI fast and reusable", () => {
     const workflow = loadWorkflow("ci.yml");
     expect(workflow.on).toEqual({
@@ -44,727 +63,665 @@ describe("GitHub workflow boundaries", () => {
       push: { branches: ["main"] },
     });
     expect(Object.keys(workflow.jobs).sort()).toEqual(["verify", "windows-runtime-verify"].sort());
-    const verifySteps = workflow.jobs.verify.steps ?? [];
-    expect(verifySteps.find((step) => step.name === "Run type checks")?.run).toBe(
-      "pnpm ci:typecheck"
-    );
+    expect(step(workflow.jobs.verify, "Run type checks")?.run).toBe("pnpm ci:typecheck");
   });
 
-  it("runs Desktop integration for relevant changes and reusable signed builds", () => {
+  it("uses split Product and Desktop artifact commands in Desktop verification", () => {
     const workflow = loadWorkflow("desktop-verify.yml");
+    const source = readFileSync(workflowPath("desktop-verify.yml"), "utf8");
     const pullRequest = workflow.on.pull_request as { paths: string[] };
-    const push = workflow.on.push as { branches: string[]; paths?: string[] };
-    const workflowCall = workflow.on.workflow_call as {
-      inputs: Record<string, { type: string; required: boolean; default?: unknown }>;
-      outputs: Record<string, { description: string; value: string }>;
+
+    expect(pullRequest.paths).toContain("packages/desktop/**");
+    expect(pullRequest.paths).toContain("packages/cli/**");
+    expect(source).toContain("pnpm release:artifacts stage-product");
+    expect(source).toContain("--components win-runtime");
+    expect(source).toContain("--components wsl-runtime");
+    expect(source).toContain("pnpm release:artifacts stage-desktop");
+    expect(source).toContain("--components windows");
+    expect(source).toContain("--components wsl-engine");
+    expect(source).toContain("pnpm release:artifacts validate-product");
+    expect(source).toContain("pnpm release:artifacts validate-desktop");
+    expect(source).not.toContain("desktop:artifacts");
+    expect(source).not.toContain("--release-kind");
+    expect(source).not.toContain("--previous-release-directory");
+  });
+});
+
+describe("Product publication workflow", () => {
+  it("triggers only for Product version releases and supports idempotent recovery", () => {
+    const workflow = loadWorkflow("product-release.yml");
+    const push = workflow.on.push as { branches: string[]; paths: string[] };
+    const dispatch = workflow.on.workflow_dispatch as {
+      inputs: Record<string, Record<string, unknown>>;
+    };
+
+    expect(push).toEqual({
+      branches: ["main"],
+      paths: ["packages/cli/package.json"],
+    });
+    expect(dispatch.inputs).toEqual({
+      candidate_tag: {
+        description: "Existing immutable Product candidate tag to resume",
+        required: false,
+        default: "",
+        type: "string",
+      },
+      final_dist_tag: {
+        description: "Final npm dist-tag advanced after acceptance",
+        required: true,
+        default: "latest",
+        type: "string",
+      },
+    });
+    expect(workflow.concurrency).toEqual({
+      group: "product-production",
+      "cancel-in-progress": false,
+    });
+    expect(step(workflow.jobs.prepare, "Resolve immutable Product identity")?.run).toContain(
+      'if [[ -n "${REQUESTED_CANDIDATE_TAG}" ]]'
+    );
+    expect(JSON.stringify(workflow.on)).not.toContain("run_id");
+    expect(existsSync(workflowPath("publish.yml"))).toBe(false);
+  });
+
+  it("builds one immutable Product candidate and gates automatic promotion on every acceptance", () => {
+    const workflow = loadWorkflow("product-release.yml");
+    const jobs = workflow.jobs;
+    expect(Object.keys(jobs)).toEqual([
+      "prepare",
+      "windows-runtime",
+      "wsl-runtime",
+      "publish-candidate",
+      "accept-cli",
+      "accept-runtime",
+      "compatibility",
+      "promote",
+    ]);
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(jobs["windows-runtime"].needs).toBe("prepare");
+    expect(jobs["wsl-runtime"].needs).toBe("prepare");
+    expect(jobs["publish-candidate"].needs).toEqual(["prepare", "windows-runtime", "wsl-runtime"]);
+    expect(jobs["accept-cli"].needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs["accept-runtime"].needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs.compatibility.needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs.promote.needs).toEqual([
+      "prepare",
+      "publish-candidate",
+      "accept-cli",
+      "accept-runtime",
+      "compatibility",
+    ]);
+    expect(jobs.promote.if).toBe("success()");
+    expect(jobs.promote.environment).toBeUndefined();
+
+    const publish = jobs["publish-candidate"];
+    const publishText = jobText(publish);
+    expect(publish.permissions).toEqual({ contents: "write", "id-token": "write" });
+    expect(publishText).toContain("pnpm --dir ./packages/cli pack --json");
+    expect(publishText).toContain("pnpm validate:cli-package");
+    expect(publishText).toContain("pnpm release:channel product");
+    expect(publishText).toContain("pnpm release:artifacts validate-product");
+    expect(publishText).toContain("pnpm publish");
+    expect(publishText).toContain("ACCEPTANCE_DIST_TAG");
+    expect(publishText).toContain("gh release create");
+    expect(publishText).toContain("--prerelease --latest=false");
+    expect(publishText).toContain("--compare-tarball");
+    expect(step(publish, "Record accepted candidate identity")?.run).toContain(
+      'entry.name !== "promotion.json"'
+    );
+    expect(publish.outputs?.candidate_commit).toBeDefined();
+    expect(publishText).not.toContain("desktop-channel.json");
+    expect(publishText).not.toContain("Coder-Studio-Setup");
+    expect(publishText).not.toContain("desktop-release");
+
+    expect(jobText(jobs["accept-cli"])).toContain("pnpm acceptance:cli:update");
+    expect(jobText(jobs["accept-runtime"])).toContain("pnpm acceptance:desktop:installed");
+    expect(jobText(jobs["accept-runtime"])).toContain("sha256sum");
+    expect(jobs["accept-runtime"].strategy?.matrix?.scenario).toEqual([
+      "runtime-only",
+      "wsl",
+      "runtime-health-rollback",
+      "interrupted-download",
+      "restart-journal-recovery",
+      "external-sidecar-browser",
+    ]);
+    expect(jobText(jobs["accept-runtime"])).toContain("ProductChannelUrl");
+    expect(jobText(jobs["accept-runtime"])).toContain("Prepare disposable WSL distribution");
+    expect(jobText(jobs["accept-runtime"])).not.toContain("ACCEPTANCE_TARGET");
+    expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
+    expect(jobs.compatibility.secrets).toEqual({
+      runtime_public_key: "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}",
+    });
+    expect(jobs.compatibility.with).toMatchObject({
+      product_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
+      product_channel_sha256: "${{ needs.publish-candidate.outputs.product_channel_sha256 }}",
+      windows_manifest_sha256: "${{ needs.publish-candidate.outputs.windows_manifest_sha256 }}",
+      linux_manifest_sha256: "${{ needs.publish-candidate.outputs.linux_manifest_sha256 }}",
+      desktop_tag: "${{ needs.prepare.outputs.desktop_tag }}",
+      desktop_channel_sha256: "${{ needs.prepare.outputs.desktop_channel_sha256 }}",
+    });
+  });
+
+  it("promotes npm before Product release and pointer, verifies, then cleans the temporary tag", () => {
+    const workflow = loadWorkflow("product-release.yml");
+    const promote = workflow.jobs.promote;
+    const steps = promote.steps ?? [];
+    const immutableIndex = steps.findIndex(
+      (candidate) => candidate.name === "Verify accepted immutable Product bytes"
+    );
+    const npmIndex = steps.findIndex(
+      (candidate) => candidate.name === "Advance final npm dist-tag"
+    );
+    const releaseIndex = steps.findIndex(
+      (candidate) => candidate.name === "Promote Product versioned release"
+    );
+    const pointerIndex = steps.findIndex(
+      (candidate) => candidate.name === "Advance signed Product stable pointer"
+    );
+    const verifyIndex = steps.findIndex(
+      (candidate) => candidate.name === "Verify promoted Product"
+    );
+    const cleanupIndex = steps.findIndex(
+      (candidate) => candidate.name === "Remove temporary npm dist-tag"
+    );
+    const recordIndex = steps.findIndex(
+      (candidate) => candidate.name === "Record Product promotion"
+    );
+
+    expect(immutableIndex).toBeGreaterThan(-1);
+    expect(npmIndex).toBeGreaterThan(immutableIndex);
+    expect(releaseIndex).toBeGreaterThan(npmIndex);
+    expect(pointerIndex).toBeGreaterThan(releaseIndex);
+    expect(verifyIndex).toBeGreaterThan(pointerIndex);
+    expect(cleanupIndex).toBeGreaterThan(verifyIndex);
+    expect(recordIndex).toBeGreaterThan(cleanupIndex);
+    expect(steps[immutableIndex]?.run).toContain("Immutable Product digest mismatch");
+    expect(steps[releaseIndex]?.run).toContain("--prerelease=false --latest=false");
+    expect(steps[pointerIndex]?.run).toContain("product-stable");
+    expect(steps[pointerIndex]?.run).toContain("product-channel.json");
+    expect(steps[cleanupIndex]?.run).toContain("npm dist-tag rm");
+    expect(steps[recordIndex]?.run).toContain("promotion.json");
+    expect(steps[recordIndex]?.run).toContain("previousPointerDigest");
+    expect(steps[recordIndex]?.run).toContain("finalPointerDigest");
+    expect(steps[recordIndex]?.run).toContain("acceptanceRun");
+    expect(steps[recordIndex]?.run).toContain("Existing Product promotion record");
+    expect(promote.concurrency).toEqual({
+      group: "product-desktop-stable-promotion",
+      "cancel-in-progress": false,
+    });
+    expect(step(promote, "Revalidate accepted Desktop stable pointer")?.run).toContain(
+      "Desktop stable pointer changed after compatibility acceptance"
+    );
+    expect(step(promote, "Revalidate accepted Desktop stable pointer")?.run).toContain(
+      "desktop-stable"
+    );
+    expect(jobText(promote)).not.toMatch(/pnpm (build|dist)/);
+    expect(steps.map((candidate) => candidate.run ?? "").join("\n")).not.toMatch(
+      /gh release upload[^\n]*(?:runtime|product-channel\.json)[^\n]*--clobber/
+    );
+  });
+});
+
+describe("reusable compatibility acceptance", () => {
+  it("requires explicit immutable Product and Desktop identities", () => {
+    const workflow = loadWorkflow("compatibility-acceptance.yml");
+    const call = workflow.on.workflow_call as {
+      inputs: Record<string, { type: string; required: boolean }>;
       secrets: Record<string, { required: boolean }>;
     };
-    const windowsJob = workflow.jobs["desktop-windows-verify"];
-    const linuxJob = workflow.jobs["desktop-linux-assets-verify"];
-    const merged = workflow.jobs["desktop-channel-verify"];
-    const windowsSteps = windowsJob.steps ?? [];
-    const linuxSteps = linuxJob.steps ?? [];
-    const windowsUpload = windowsSteps.find((step) => step.uses === "actions/upload-artifact@v4");
-    const linuxUpload = linuxSteps.find((step) => step.uses === "actions/upload-artifact@v4");
-    const windowsStage = windowsSteps.find((step) => step.name === "Stage Windows release assets");
-    const linuxStage = linuxSteps.find((step) => step.name === "Stage WSL release assets");
-    const windowsTypecheck = windowsSteps.find(
-      (step) => step.name === "Test Desktop and type-check repository"
-    );
 
-    expect(workflow.on).toHaveProperty("workflow_dispatch");
-    expect(push).toEqual({ branches: ["main"] });
-    expect(pullRequest.paths).toEqual([
-      ".github/workflows/desktop-verify.yml",
-      "package.json",
-      "pnpm-lock.yaml",
-      "pnpm-workspace.yaml",
-      "tsconfig.base.json",
-      "packages/desktop/**",
-      "packages/desktop-engine/**",
-      "packages/server/**",
-      "packages/web/**",
-      "packages/providers/**",
-      "packages/core/**",
-      "packages/utils/**",
-      "packages/cli/**",
-      "scripts/**",
-    ]);
+    expect(call.inputs).toEqual({
+      product_tag: { type: "string", required: true },
+      product_channel_sha256: { type: "string", required: true },
+      windows_manifest_sha256: { type: "string", required: true },
+      linux_manifest_sha256: { type: "string", required: true },
+      desktop_tag: { type: "string", required: true },
+      desktop_channel_sha256: { type: "string", required: true },
+    });
+    expect(call.secrets).toEqual({ runtime_public_key: { required: true } });
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(workflowCall.inputs).toEqual({
-      signed: { type: "boolean", required: false, default: false },
-      windows_signing: { type: "boolean", required: false, default: true },
-      signing_key_artifact: { type: "string", required: false, default: "" },
-      runtime_update_url: { type: "string", required: false, default: "" },
-      release_tag: { type: "string", required: false, default: "" },
-      runtime_min_shell_version: { type: "string", required: false, default: "" },
-    });
-    expect(workflowCall.secrets).toEqual({
-      windows_csc_link: { required: false },
-      windows_csc_key_password: { required: false },
-    });
-    expect(workflowCall.outputs).toEqual({
-      windows_artifact: {
-        description: "Windows Desktop verification artifact",
-        value: "${{ jobs['desktop-windows-verify'].outputs.artifact_name }}",
-      },
-      linux_artifact: {
-        description: "Linux Desktop verification artifact",
-        value: "${{ jobs['desktop-linux-assets-verify'].outputs.artifact_name }}",
-      },
-      complete_artifact: {
-        description: "Complete signed Desktop verification bundle",
-        value: "${{ jobs['desktop-channel-verify'].outputs.artifact_name }}",
-      },
-    });
-    expect(Object.keys(workflow.jobs)).toEqual([
-      "prepare",
-      "desktop-windows-verify",
-      "desktop-linux-assets-verify",
-      "desktop-channel-verify",
-    ]);
-    expect(merged.outputs).toEqual({
-      artifact_name: "${{ steps.artifact_name.outputs.value }}",
-    });
-    expect(windowsJob.outputs).toEqual({
-      artifact_name: "${{ steps.artifact_name.outputs.value }}",
-    });
-    expect(linuxJob.outputs).toEqual({
-      artifact_name: "${{ steps.artifact_name.outputs.value }}",
-    });
-    expect(windowsSteps[0]).toMatchObject({
-      id: "artifact_name",
-      run: '"value=desktop-windows-${{ github.sha }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append',
-    });
-    expect(linuxSteps[0]).toMatchObject({
-      id: "artifact_name",
-      run: 'echo "value=desktop-linux-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"',
-    });
-    expect(windowsUpload?.with).toMatchObject({
-      name: "${{ steps.artifact_name.outputs.value }}",
-      overwrite: true,
-    });
-    expect(windowsJob.env).toMatchObject({
-      CSC_LINK: "${{ inputs.windows_signing && secrets.windows_csc_link || '' }}",
-      CSC_KEY_PASSWORD: "${{ inputs.windows_signing && secrets.windows_csc_key_password || '' }}",
-      CSC_IDENTITY_AUTO_DISCOVERY: "${{ inputs.windows_signing && 'true' || 'false' }}",
-    });
-    const authenticode = windowsSteps.find(
-      (step) => step.name === "Verify acceptance Authenticode signatures"
-    );
-    expect(authenticode?.if).toBe("inputs.windows_signing");
-    expect(authenticode?.run).toContain("Get-AuthenticodeSignature");
-    expect(authenticode?.run).toContain("release/desktop/latest.yml");
-    expect(windowsTypecheck?.run).toContain("pnpm ci:typecheck");
-    expect(linuxUpload?.with).toMatchObject({
-      name: "${{ steps.artifact_name.outputs.value }}",
-      overwrite: true,
-    });
-    expect(
-      windowsSteps.filter(
-        (step) => step.name?.includes("signing key") || step.name?.includes("signed acceptance")
-      )
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "Download acceptance signing key" }),
-        expect.objectContaining({ name: "Configure signed acceptance channel" }),
-      ])
-    );
-    expect(
-      linuxSteps.filter(
-        (step) => step.name?.includes("signing key") || step.name?.includes("signed acceptance")
-      )
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "Download acceptance signing key" }),
-        expect.objectContaining({ name: "Configure signed acceptance channel" }),
-      ])
-    );
-    expect(windowsStage?.run).toContain(
-      "stage --directory release/desktop-release-windows --components 'desktop,win-runtime'"
-    );
-    expect(linuxStage?.run).toContain(
-      "stage --directory release/desktop-release-linux --components 'wsl-engine,wsl-runtime'"
-    );
   });
 
-  it("publishes acceptance assets only through an explicit manual workflow", () => {
+  it("downloads only tag-pinned assets, checks digests, and never builds or publishes", () => {
+    const workflow = loadWorkflow("compatibility-acceptance.yml");
+    const verify = workflow.jobs.verify;
+    const text = jobText(verify);
+    const download = step(verify, "Download immutable Product and Desktop metadata")?.run;
+
+    expect(Object.keys(workflow.jobs)).toEqual(["verify"]);
+    expect(verify.strategy?.matrix?.target).toEqual(["native", "wsl"]);
+    expect(download).toContain('gh release download "${PRODUCT_TAG}"');
+    expect(download).toContain('gh release download "${DESKTOP_TAG}"');
+    expect(download).toContain("desktop-channel-modern.json");
+    expect(text).toContain("PRODUCT_CHANNEL_SHA256");
+    expect(text).toContain("WINDOWS_MANIFEST_SHA256");
+    expect(text).toContain("LINUX_MANIFEST_SHA256");
+    expect(text).toContain("DESKTOP_CHANNEL_SHA256");
+    expect(text).toContain("sha256sum");
+    expect(text).toContain("compatibility-report");
+    expect(text).toContain("CODER_STUDIO_RUNTIME_PUBLIC_KEY");
+    expect(text).toContain("scripts/verify-release-compatibility.ts");
+    expect(text).not.toContain("releases/latest");
+    expect(text).not.toContain("product-stable");
+    expect(text).not.toContain("desktop-stable");
+    expect(text).not.toMatch(/pnpm (build|dist|publish)|gh release (create|edit|upload)/);
+
+    const verifierPath = resolve(import.meta.dirname, "verify-release-compatibility.ts");
+    const verifier = existsSync(verifierPath) ? readFileSync(verifierPath, "utf8") : "";
+    expect(existsSync(verifierPath)).toBe(true);
+    expect(verifier).toContain("parseProductChannel");
+    expect(verifier).toContain("parseDesktopChannel");
+    expect(verifier).toContain("manifestSha256");
+  });
+});
+
+describe("Desktop publication workflow", () => {
+  it("triggers only for Desktop version releases and supports immutable recovery", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const push = workflow.on.push as { branches: string[]; paths: string[] };
+    const dispatch = workflow.on.workflow_dispatch as {
+      inputs: Record<string, Record<string, unknown>>;
+    };
+
+    expect(push).toEqual({
+      branches: ["main"],
+      paths: ["packages/desktop/package.json"],
+    });
+    expect(dispatch.inputs).toEqual({
+      candidate_tag: {
+        description: "Existing immutable Desktop candidate tag to resume",
+        required: false,
+        default: "",
+        type: "string",
+      },
+    });
+    expect(workflow.concurrency).toEqual({
+      group: "desktop-production",
+      "cancel-in-progress": false,
+    });
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(JSON.stringify(workflow)).not.toContain("run_id");
+    expect(JSON.stringify(workflow)).not.toContain('"environment"');
+  });
+
+  it("builds one Shell and Engine candidate from the accepted stable Factory Product", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const jobs = workflow.jobs;
+    expect(Object.keys(jobs)).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "windows-assets",
+      "wsl-engine",
+      "publish-candidate",
+      "accept-installation",
+      "accept-factory",
+      "compatibility",
+      "promote",
+    ]);
+    expect(jobs["resolve-factory-product"].needs).toBe("prepare");
+    expect(jobs["windows-assets"].needs).toEqual(["prepare", "resolve-factory-product"]);
+    expect(jobs["wsl-engine"].needs).toBe("prepare");
+    expect(jobs["publish-candidate"].needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "windows-assets",
+      "wsl-engine",
+    ]);
+    expect(jobs["accept-installation"].needs).toEqual(["prepare", "publish-candidate"]);
+    expect(jobs["accept-factory"].needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "publish-candidate",
+    ]);
+    expect(jobs.compatibility.needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "publish-candidate",
+    ]);
+    expect(jobs.promote.needs).toEqual([
+      "prepare",
+      "resolve-factory-product",
+      "publish-candidate",
+      "accept-installation",
+      "accept-factory",
+      "compatibility",
+    ]);
+    expect(jobs.promote.if).toBe("success()");
+
+    const factoryText = jobText(jobs["resolve-factory-product"]);
+    expect(factoryText).toContain("gh release download product-stable");
+    expect(factoryText).toContain("product-channel.json");
+    expect(factoryText).toContain("pnpm release:artifacts validate-product");
+    expect(factoryText).toContain("factory-product.json");
+    expect(factoryText).toContain("factory-runtime");
+    expect(factoryText).not.toMatch(/pnpm (?:build:desktop-runtime|build:wsl-runtime)/);
+
+    const windowsText = jobText(jobs["windows-assets"]);
+    expect(windowsText).toContain("CODER_STUDIO_FACTORY_RUNTIME_DIR");
+    expect(windowsText).toContain("CODER_STUDIO_FACTORY_PRODUCT_FILE");
+    expect(windowsText).toContain("pnpm dist:desktop");
+    expect(windowsText).toContain("pnpm release:artifacts stage-desktop");
+    expect(windowsText).toContain("--components windows");
+    expect(windowsText).not.toContain("build:desktop-runtime");
+    const recoverWindows = step(
+      jobs["windows-assets"],
+      "Build or recover Windows Desktop bytes"
+    )?.run;
+    expect(recoverWindows).toContain("tar -tzf");
+    expect(recoverWindows).toContain(
+      "Legacy Desktop candidate evidence contains Factory Runtime bytes"
+    );
+    expect(recoverWindows).toContain(
+      "cp -R release/factory-product/factory-runtime release/desktop-windows/factory-runtime"
+    );
+
+    const linuxText = jobText(jobs["wsl-engine"]);
+    expect(linuxText).toContain("pnpm build:wsl-engine");
+    expect(linuxText).toContain("--components wsl-engine");
+    expect(linuxText).not.toContain("build:wsl-runtime");
+
+    const publishText = jobText(jobs["publish-candidate"]);
+    expect(publishText).toContain("pnpm release:channel desktop");
+    expect(publishText).toContain("pnpm release:artifacts validate-desktop");
+    expect(publishText).toContain("gh release create");
+    expect(publishText).toContain("--prerelease --latest=false");
+    expect(publishText).not.toContain("product-channel.json");
+    expect(publishText).not.toMatch(/pnpm (?:publish|build:desktop-runtime|build:wsl-runtime)/);
+    expect(
+      step(jobs["publish-candidate"], "Assemble or recover signed Desktop bundle")?.run
+    ).toContain("-C release/desktop-candidate windows-engine");
+    expect(
+      step(jobs["publish-candidate"], "Assemble or recover signed Desktop bundle")?.run
+    ).not.toContain("-C release/desktop-candidate factory-runtime windows-engine");
+  });
+
+  it("accepts installation, Factory fallback, and current and previous Product compatibility", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const jobs = workflow.jobs;
+
+    expect(jobs["accept-installation"].strategy?.matrix?.scenario).toEqual([
+      "fresh-native",
+      "fresh-wsl",
+      "installed-upgrade",
+    ]);
+    expect(jobText(jobs["accept-installation"])).toContain("pnpm acceptance:desktop:installed");
+    expect(jobText(jobs["accept-installation"])).toContain(
+      "needs.publish-candidate.outputs.candidate_tag"
+    );
+    expect(jobText(jobs["accept-installation"])).toContain("gh release download desktop-stable");
+    expect(jobs["accept-factory"].strategy?.matrix?.scenario).toEqual([
+      "offline-factory",
+      "factory-fallback",
+    ]);
+    expect(jobText(jobs["accept-factory"])).toContain("factory-runtime");
+    expect(jobText(jobs["accept-factory"])).toContain("factoryProduct.releaseTag");
+    expect(jobText(jobs["accept-factory"])).toContain("pnpm release:artifacts validate-product");
+    expect(jobText(jobs["accept-factory"])).toContain("pnpm release:artifacts validate-desktop");
+    expect(jobText(jobs["accept-factory"])).toContain("DESKTOP_CHANNEL_SHA256");
+    expect(jobText(jobs["accept-factory"])).toContain("PRODUCT_CHANNEL_SHA256");
+    expect(jobText(jobs["accept-factory"])).toContain(
+      "Packaged Factory Runtime file set differs from accepted Product bytes"
+    );
+    expect(jobText(jobs["accept-factory"])).not.toContain(
+      "--pattern desktop-validation-evidence.tgz"
+    );
+    expect(jobs.compatibility.strategy?.matrix?.product).toEqual(["current", "previous"]);
+    expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
+    expect(jobs.compatibility.secrets).toEqual({
+      runtime_public_key: "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}",
+    });
+    expect(jobText(jobs.compatibility)).toContain("current_product_tag");
+    expect(jobText(jobs.compatibility)).toContain("previous_product_tag");
+    expect(jobs.compatibility.with).toMatchObject({
+      desktop_tag: "${{ needs.publish-candidate.outputs.candidate_tag }}",
+      desktop_channel_sha256: "${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}",
+    });
+  });
+
+  it("promotes only Desktop release and pointer after acceptance", () => {
+    const workflow = loadWorkflow("desktop-release.yml");
+    const promote = workflow.jobs.promote;
+    const steps = promote.steps ?? [];
+    const names = steps.map((candidate) => candidate.name);
+    const expectedOrder = [
+      "Verify accepted immutable Desktop bytes",
+      "Promote Desktop versioned release",
+      "Advance signed Desktop stable pointer",
+      "Verify promoted Desktop",
+      "Record Desktop promotion",
+    ];
+    let previousIndex = -1;
+    for (const name of expectedOrder) {
+      const index = names.indexOf(name);
+      expect(index).toBeGreaterThan(previousIndex);
+      previousIndex = index;
+    }
+
+    expect(step(promote, "Verify accepted immutable Desktop bytes")?.run).toContain(
+      "Immutable Desktop digest mismatch"
+    );
+    expect(step(promote, "Promote Desktop versioned release")?.run).toContain(
+      "--prerelease=false --latest=false"
+    );
+    expect(step(promote, "Advance signed Desktop stable pointer")?.run).toContain("desktop-stable");
+    expect(step(promote, "Advance signed Desktop stable pointer")?.run).toContain(
+      "desktop-channel.json"
+    );
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("promotion.json");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("previousPointerDigest");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("finalPointerDigest");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain("acceptanceRun");
+    expect(promote.concurrency).toEqual({
+      group: "product-desktop-stable-promotion",
+      "cancel-in-progress": false,
+    });
+    expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
+      "Product stable pointer changed after compatibility acceptance"
+    );
+    expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
+      "product-stable"
+    );
+    expect(jobText(promote)).not.toMatch(/npm|pnpm (build|dist)/);
+  });
+});
+
+describe("legacy Desktop acceptance", () => {
+  it("is reserved for the explicit migration bridge", () => {
     const workflow = loadWorkflow("desktop-acceptance.yml");
-    const prepare = workflow.jobs.prepare;
-    const repositoryVerify = workflow.jobs["repository-verify"];
-    const buildAssets = workflow.jobs["build-assets"];
-    const publish = workflow.jobs.publish;
-    const prepareSteps = prepare.steps ?? [];
-    const publishSteps = publish.steps ?? [];
-    const resolveChannel = prepareSteps.find((step) => step.name === "Resolve acceptance channel");
-    const generateKey = prepareSteps.find(
-      (step) => step.name === "Generate ephemeral Runtime signing key"
-    );
-    const signingKeyUpload = prepareSteps.find(
-      (step) => step.name === "Upload ephemeral signing key"
-    );
-    const publicKeyUpload = prepareSteps.find(
-      (step) => step.name === "Upload acceptance public key"
-    );
-    const artifactDownloads = publishSteps.filter(
-      (step) =>
-        step.uses === "actions/download-artifact@v4" && step.name?.includes("acceptance bundle")
-    );
-    const publicKeyDownload = publishSteps.find(
-      (step) => step.name === "Download acceptance public key"
-    );
-    const previousShellBlockmapIndex = publishSteps.findIndex(
-      (step) => step.name === "Carry forward previous Shell blockmap for legacy updater fallback"
-    );
-    const forceFullDownloadIndex = publishSteps.findIndex(
-      (step) => step.name === "Force full Shell installer download"
-    );
-    const previousReleaseIndex = publishSteps.findIndex(
-      (step) => step.name === "Download previous immutable Desktop release"
-    );
-    const migrationChannelIndex = publishSteps.findIndex(
-      (step) => step.name === "Build legacy Runtime and manual modern Shell channels"
-    );
-    const validation = publishSteps.find(
-      (step) => step.name === "Validate complete signed acceptance channel"
-    );
-    const validationIndex = publishSteps.findIndex(
-      (step) => step.name === "Validate complete signed acceptance channel"
-    );
-    const release = publishSteps.find((step) => step.name === "Publish tag-pinned prerelease");
+    const desktopReleaseSource = readFileSync(workflowPath("desktop-release.yml"), "utf8");
+    expect(workflow.name).toContain("Legacy bridge");
+    expect(Object.keys(workflow.on)).toEqual(["workflow_dispatch"]);
+    expect(JSON.stringify(workflow.on)).toContain("bridge_candidate_tag");
+    expect(jobText(workflow.jobs.accept)).toContain("inputs.bridge_candidate_tag");
+    const source = readFileSync(workflowPath("desktop-acceptance.yml"), "utf8");
+    expect(source).not.toContain("desktop:channel");
+    expect(source).not.toContain("desktop:artifacts");
+    expect(source).not.toContain("--release-kind");
+    expect(source).not.toContain("--previous-release-directory");
+    expect(source).not.toContain("desktop-ci-");
+    expect(source).not.toContain("gh release create");
+    expect(source).toContain("pnpm acceptance:desktop:installed");
+    expect(desktopReleaseSource).not.toContain("desktop-acceptance.yml");
+  });
+});
 
-    expect(workflow.on).toEqual({
-      workflow_dispatch: {
-        inputs: {
-          windows_signing: {
-            description: "Sign Windows executables with Authenticode",
-            required: true,
-            default: true,
-            type: "boolean",
-          },
-        },
+describe("one-time Product and Desktop migration bridge", () => {
+  it("is an explicit manual operation with a serialized confirmation", () => {
+    expect(existsSync(workflowPath("desktop-bridge-release.yml"))).toBe(true);
+    const workflow = loadWorkflow("desktop-bridge-release.yml");
+    const dispatch = workflow.on.workflow_dispatch as {
+      inputs: Record<string, Record<string, unknown>>;
+    };
+
+    expect(dispatch.inputs).toEqual({
+      bridge_candidate_tag: {
+        description: "Existing immutable bridge candidate tag",
+        required: true,
+        type: "string",
       },
+      confirm_latest: {
+        description: "Type PROMOTE_BRIDGE_TO_LATEST to confirm the one-time migration",
+        required: true,
+        type: "string",
+      },
+    });
+    expect(workflow.concurrency).toEqual({
+      group: "product-desktop-migration-bridge",
+      "cancel-in-progress": false,
     });
     expect(workflow.permissions).toEqual({ contents: "read" });
-    expect(Object.keys(workflow.jobs)).toEqual([
+    expect(workflow.on.push).toBeUndefined();
+  });
+
+  it("orders immutable preparation, both acceptance phases, and final promotion", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+
+    expect(Object.keys(jobs)).toEqual([
       "prepare",
-      "repository-verify",
-      "build-assets",
-      "publish",
-      "installed-upgrades",
+      "bootstrap-product",
+      "accept-legacy-upgrade",
+      "bootstrap-desktop",
+      "verify-stable-feeds",
+      "accept-independent-feeds",
+      "promote-bridge",
     ]);
-    expect(prepare.permissions).toEqual({ contents: "read" });
-    expect(prepare.outputs).toEqual({
-      release_tag: "${{ steps.channel.outputs.release_tag }}",
-      release_base_url: "${{ steps.channel.outputs.release_base_url }}",
-      runtime_update_url: "${{ steps.channel.outputs.runtime_update_url }}",
-      signing_key_artifact: "${{ steps.channel.outputs.signing_key_artifact }}",
-      public_key_artifact: "${{ steps.channel.outputs.public_key_artifact }}",
-      has_previous_desktop: "${{ steps.channel.outputs.has_previous_desktop }}",
-      release_kind: "${{ steps.channel.outputs.release_kind }}",
-      runtime_min_shell_version: "${{ steps.channel.outputs.runtime_min_shell_version }}",
-      acceptance_scenarios: "${{ steps.channel.outputs.acceptance_scenarios }}",
-    });
-    expect(resolveChannel?.run).toContain(
-      'release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
-    );
-    expect(resolveChannel?.run).toContain(
-      'release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"'
-    );
-    expect(resolveChannel?.run).toContain(
-      "runtime_update_url=${release_base_url}/coder-studio-runtime-win32-x64.manifest.json"
-    );
-    expect(resolveChannel?.run).toContain(
-      'signing_key_artifact="desktop-ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
-    );
-    expect(resolveChannel?.run).toContain(
-      'public_key_artifact="desktop-acceptance-public-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
-    );
-    expect(resolveChannel?.run).toContain("has_previous_desktop=false");
-    expect(resolveChannel?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
-    expect(resolveChannel?.run).toContain("require('./packages/desktop/package.json').version");
-    expect(resolveChannel?.run).toContain("require('./packages/cli/package.json').version");
-    expect(resolveChannel?.run).toContain("channel?.shell?.version===currentShell");
-    expect(resolveChannel?.run).toContain("?'false':'true'");
-    expect(resolveChannel?.run).toContain("release_kind=runtime-only");
-    expect(resolveChannel?.run).toContain("release_kind=migration");
-    expect(resolveChannel?.run).toContain("desktop-channel-modern.json");
-    expect(resolveChannel?.run).toContain('runtime_min_shell_version="${current_shell}"');
-    expect(resolveChannel?.run).toContain('runtime_min_shell_version="${previous_shell}"');
-    expect(resolveChannel?.run).toContain("latest_legacy_channel");
-    expect(resolveChannel?.run).toContain("--pattern 'desktop-channel.json'");
-    expect(resolveChannel?.run).toContain(
-      'acceptance_scenarios=\'["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
-    );
-    expect(resolveChannel?.run).toContain(
-      'acceptance_scenarios=\'["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]\''
-    );
-    expect(resolveChannel?.run).toContain(
-      'acceptance_scenarios=\'["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]\''
-    );
-    expect(resolveChannel?.run).toContain('acceptance_scenarios=\'["fresh-native","fresh-wsl"]\'');
-    expect(generateKey?.run).toContain("openssl genpkey -algorithm Ed25519");
-    expect(signingKeyUpload?.with).toMatchObject({
-      name: "${{ steps.channel.outputs.signing_key_artifact }}",
-      path: "release/desktop-ci-signing/",
-      "retention-days": 1,
-    });
-    expect(publicKeyUpload?.with).toMatchObject({
-      name: "${{ steps.channel.outputs.public_key_artifact }}",
-      path: "release/desktop-ci-signing/runtime-public.pem",
-    });
-    expect(repositoryVerify).toMatchObject({
-      permissions: { contents: "read" },
-      uses: "./.github/workflows/ci.yml",
-    });
-    expect(buildAssets).toMatchObject({
-      needs: "prepare",
-      permissions: { contents: "read" },
-      uses: "./.github/workflows/desktop-verify.yml",
-      with: {
-        signed: true,
-        windows_signing: "${{ inputs.windows_signing }}",
-        signing_key_artifact: "${{ needs.prepare.outputs.signing_key_artifact }}",
-        runtime_update_url: "${{ needs.prepare.outputs.runtime_update_url }}",
-        release_tag: "${{ needs.prepare.outputs.release_tag }}",
-        runtime_min_shell_version: "${{ needs.prepare.outputs.runtime_min_shell_version }}",
-      },
-      secrets: {
-        windows_csc_link: "${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}",
-        windows_csc_key_password: "${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}",
-      },
-    });
-    expect(publish.needs).toEqual(["prepare", "repository-verify", "build-assets"]);
-    expect(publish.environment).toBe("desktop-production");
-    expect(publish.permissions).toEqual({ contents: "write" });
-    for (const [name, job] of Object.entries(workflow.jobs)) {
-      if (name !== "publish") expect(job.permissions?.contents).not.toBe("write");
-    }
-    expect(artifactDownloads.map((step) => step.with?.name)).toEqual([
-      "${{ needs.build-assets.outputs.complete_artifact }}",
+    expect(jobs["bootstrap-product"].needs).toBe("prepare");
+    expect(jobs["accept-legacy-upgrade"].needs).toEqual(["prepare", "bootstrap-product"]);
+    expect(jobs["bootstrap-desktop"].needs).toEqual(["prepare", "accept-legacy-upgrade"]);
+    expect(jobs["verify-stable-feeds"].needs).toEqual([
+      "prepare",
+      "bootstrap-product",
+      "bootstrap-desktop",
     ]);
-    for (const download of artifactDownloads) {
-      expect(download.with?.path).toBe("release/desktop-acceptance");
-    }
-    expect(publicKeyDownload?.with).toMatchObject({
-      name: "${{ needs.prepare.outputs.public_key_artifact }}",
-      path: "release/desktop-ci-signing",
-    });
-    expect(previousShellBlockmapIndex).toBe(-1);
-    expect(forceFullDownloadIndex).toBe(-1);
-    expect(previousReleaseIndex).toBeGreaterThan(-1);
-    expect(migrationChannelIndex).toBeGreaterThan(previousReleaseIndex);
-    expect(validationIndex).toBeGreaterThan(migrationChannelIndex);
-    expect(publishSteps[previousReleaseIndex]?.if).toBe(
-      "needs.prepare.outputs.release_kind != 'full'"
+    expect(jobs["accept-independent-feeds"].needs).toEqual(["prepare", "verify-stable-feeds"]);
+    expect(jobs["promote-bridge"].needs).toEqual([
+      "prepare",
+      "verify-stable-feeds",
+      "accept-independent-feeds",
+    ]);
+    expect(jobs["promote-bridge"].if).toBe("success()");
+    expect(JSON.stringify(jobs)).not.toContain('"environment"');
+  });
+
+  it("can recover when the accepted bridge already became repository-wide latest", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const prepare = jobs.prepare;
+
+    expect(prepare.outputs?.already_promoted).toBe(
+      "${{ steps.identity.outputs.already_promoted }}"
     );
-    expect(publishSteps[migrationChannelIndex]?.run).toContain("--prepare-modern-base");
-    expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-modern-from");
-    expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-shell-from");
-    expect(publishSteps[migrationChannelIndex]?.run).toContain("--carry-forward-legacy-from");
-    expect(publishSteps[migrationChannelIndex]?.run).toContain(
-      "coder-studio-runtime-modern-win32-x64.manifest.json"
+    expect(step(prepare, "Download existing immutable bridge candidate")?.run).toContain(
+      "A normal bridge release is recoverable only when it is repository-wide latest"
     );
-    expect(publishSteps[migrationChannelIndex]?.run).toContain(
-      "--output desktop-channel-modern.json"
-    );
-    expect(validation?.run).toContain('--release-kind "${{ needs.prepare.outputs.release_kind }}"');
-    expect(validation?.run).toContain("--previous-release-directory");
-    expect(validation?.run).toContain("--allow-resigned-engine");
-    expect(validation?.run).toContain("Previous Desktop Runtime public key is required");
-    expect(validation?.env?.CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY).toBe(
-      "${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}"
-    );
-    expect(JSON.stringify(publish)).not.toContain("desktop:force-full-download");
-    expect(publish.outputs?.complete_artifact).toBe("${{ steps.bundle.outputs.name }}");
-    expect(release?.run).toContain("gh release create");
-    expect(release?.run).toContain("--draft");
-    expect(release?.run).toContain(
-      "gh api \"repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}\" --jq '.draft'"
-    );
-    expect(release?.run).toContain('if [[ "${existing_is_draft}" != "true" ]]');
-    expect(release?.run).toContain("Refusing to overwrite non-draft release");
-    expect(release?.run).toContain("elif grep -q '(HTTP 404)'");
-    expect(release?.run).toContain(
-      'gh release upload "${RELEASE_TAG}" release/desktop-acceptance/* --clobber'
-    );
-    expect(release?.run).toContain(
-      'gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false'
+    expect(jobText(jobs["accept-legacy-upgrade"])).toContain(
+      "needs.prepare.outputs.already_promoted"
     );
   });
 
-  it("builds and validates one immutable signed Desktop channel before exposure", () => {
-    const verify = loadWorkflow("desktop-verify.yml");
-    const verifyPrepare = verify.jobs.prepare;
-    const windows = verify.jobs["desktop-windows-verify"];
-    const linux = verify.jobs["desktop-linux-assets-verify"];
-    const merged = verify.jobs["desktop-channel-verify"];
-    const mergedSteps = merged.steps ?? [];
+  it("validates an existing immutable candidate without rebuilding or publishing it", () => {
+    const prepare = loadWorkflow("desktop-bridge-release.yml").jobs.prepare;
+    const text = jobText(prepare);
+    const download = step(prepare, "Download existing immutable bridge candidate")?.run;
 
-    expect(verifyPrepare.outputs).toMatchObject({
-      published_at: "${{ steps.metadata.outputs.published_at }}",
-      signing_key_artifact: "${{ steps.metadata.outputs.signing_key_artifact }}",
-      public_key_artifact: "${{ steps.metadata.outputs.public_key_artifact }}",
-    });
-    const prepareMetadata = (verifyPrepare.steps ?? []).find(
-      (step) => step.name === "Resolve shared release metadata"
+    expect(text).toContain("bridge_candidate_tag");
+    expect(download).toContain('gh release download "${BRIDGE_CANDIDATE_TAG}"');
+    expect(text).toContain("product-channel.json");
+    expect(text).toContain("desktop-channel.json");
+    expect(text).toContain("desktop-channel-modern.json");
+    expect(text).toContain("pnpm release:artifacts validate-product");
+    expect(text).toContain("pnpm release:artifacts validate-desktop");
+    expect(text).toContain("sha256sum");
+    expect(step(prepare, "Record accepted bridge identities")?.run).toContain(
+      'expected_desktop_tag="desktop-v${desktop_version}"'
     );
-    expect(prepareMetadata?.run).toContain("date -u +'%Y-%m-%dT%H:%M:%S.000Z'");
-    expect(prepareMetadata?.run).toContain("published_at=${published_at}");
-    expect(windows.needs).toBe("prepare");
-    expect(linux.needs).toBe("prepare");
-    expect(windows.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
-      "${{ needs.prepare.outputs.published_at }}"
-    );
-    expect(linux.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
-      "${{ needs.prepare.outputs.published_at }}"
-    );
-    expect(windows.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
-      "${{ inputs.runtime_min_shell_version }}"
-    );
-    expect(linux.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
-      "${{ inputs.runtime_min_shell_version }}"
-    );
-    expect(merged.needs).toEqual([
-      "prepare",
-      "desktop-windows-verify",
-      "desktop-linux-assets-verify",
-    ]);
-    const buildIndex = mergedSteps.findIndex(
-      (step) => step.name === "Build signed Desktop channel"
-    );
-    const validateIndex = mergedSteps.findIndex(
-      (step) => step.name === "Validate complete signed Desktop channel"
-    );
-    const uploadIndex = mergedSteps.findIndex(
-      (step) => step.name === "Upload complete Desktop verification bundle"
-    );
-    expect(buildIndex).toBeGreaterThan(-1);
-    expect(validateIndex).toBeGreaterThan(buildIndex);
-    expect(uploadIndex).toBeGreaterThan(validateIndex);
-    expect(mergedSteps[buildIndex]?.run).toContain("pnpm desktop:channel");
-    expect(mergedSteps[validateIndex]?.run).toContain(
-      "--components 'desktop,win-runtime,wsl-engine,wsl-runtime'"
-    );
-
-    const release = loadWorkflow("desktop-release.yml");
-    const releaseInputs = (release.on.workflow_dispatch as { inputs: Record<string, unknown> })
-      .inputs;
-    expect(releaseInputs).not.toHaveProperty("mode");
-    expect(releaseInputs.windows_signing).toMatchObject({
-      default: true,
-      required: true,
-      type: "boolean",
-    });
-    expect(release.jobs.prepare.outputs).toMatchObject({
-      published_at: "${{ steps.release.outputs.published_at }}",
-      release_kind: "${{ steps.release.outputs.release_kind }}",
-      has_previous_desktop: "${{ steps.release.outputs.has_previous_desktop }}",
-      runtime_min_shell_version: "${{ steps.release.outputs.runtime_min_shell_version }}",
-      installed_targets: "${{ steps.release.outputs.installed_targets }}",
-    });
-    const resolveRelease = (release.jobs.prepare.steps ?? []).find(
-      (step) => step.name === "Resolve versions and release tag"
-    );
-    expect(resolveRelease?.run).toContain("has_desktop_channel");
-    expect(resolveRelease?.run).toContain('--pattern "${channel_asset}"');
-    expect(resolveRelease?.run).toContain("desktop-channel-modern.json");
-    expect(resolveRelease?.run).toContain('runtime_min_shell_version="${desktop_version}"');
-    expect(resolveRelease?.run).toContain('runtime_min_shell_version="${previous_shell_version}"');
-    expect(resolveRelease?.run).toContain(
-      "require('./release/desktop-release-boundary/desktop-channel.json')"
-    );
-    expect(resolveRelease?.run).toContain("shell_change=$(node -e");
-    expect(resolveRelease?.run).toContain('if [[ "${shell_change}" == "same" ]]');
-    expect(resolveRelease?.run).toContain('elif [[ "${shell_change}" == "downgrade" ]]');
-    expect(resolveRelease?.run).toContain("elif ! grep -q '(HTTP 404)'");
-    expect(resolveRelease?.run).toContain('release_kind="runtime-only"');
-    expect(resolveRelease?.run).toContain('release_kind="migration"');
-    expect(resolveRelease?.run).toContain(
-      'installed_targets=["native","wsl","fresh-native","fresh-wsl"]'
-    );
-    expect(resolveRelease?.run).toContain('echo "release_kind=${release_kind}"');
-    const linuxBuild = release.jobs["linux-assets"];
-    const windowsBuild = release.jobs["windows-assets"];
-    const releaseTypecheck = (windowsBuild.steps ?? []).find(
-      (step) => step.name === "Test Desktop and type-check repository"
-    );
-    expect(linuxBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
-      "${{ needs.prepare.outputs.published_at }}"
-    );
-    expect(windowsBuild.env?.CODER_STUDIO_RELEASE_PUBLISHED_AT).toBe(
-      "${{ needs.prepare.outputs.published_at }}"
-    );
-    expect(linuxBuild.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
-      "${{ needs.prepare.outputs.runtime_min_shell_version }}"
-    );
-    expect(windowsBuild.env?.CODER_STUDIO_RUNTIME_MIN_SHELL_VERSION).toBe(
-      "${{ needs.prepare.outputs.runtime_min_shell_version }}"
-    );
-    expect(windowsBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBe(
-      "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/"
-    );
-    expect(windowsBuild.env?.CSC_IDENTITY_AUTO_DISCOVERY).toBe(
-      "${{ inputs.windows_signing && 'true' || 'false' }}"
-    );
-    expect(JSON.stringify(linuxBuild)).toContain("needs.prepare.outputs.release_kind");
-    expect(JSON.stringify(windowsBuild)).toContain("needs.prepare.outputs.release_kind");
-    expect(linuxBuild.env?.CODER_STUDIO_FACTORY_RELEASE_BASE_URL).toBeUndefined();
-    expect(releaseTypecheck?.run).toContain("pnpm ci:typecheck");
-    const publishSteps = release.jobs.publish.steps ?? [];
-    const previousIndex = publishSteps.findIndex(
-      (step) => step.name === "Download previous immutable release"
-    );
-    const prepareBasesIndex = publishSteps.findIndex(
-      (step) => step.name === "Prepare legacy and modern Shell bases"
-    );
-    const channelIndex = publishSteps.findIndex(
-      (step) => step.name === "Build signed Desktop channel"
-    );
-    const previousShellBlockmapIndex = publishSteps.findIndex(
-      (step) => step.name === "Carry forward previous Shell blockmap for legacy updater fallback"
-    );
-    const forceFullDownloadIndex = publishSteps.findIndex(
-      (step) => step.name === "Force full Shell installer download"
-    );
-    const productionValidateIndex = publishSteps.findIndex(
-      (step) => step.name === "Validate complete production release"
-    );
-    const attestIndex = publishSteps.findIndex((step) => step.name === "Attest release artifacts");
-    const releaseIndex = publishSteps.findIndex(
-      (step) => step.name === "Publish immutable prerelease"
-    );
-    expect(previousIndex).toBeGreaterThan(-1);
-    expect(prepareBasesIndex).toBeGreaterThan(previousIndex);
-    expect(previousShellBlockmapIndex).toBe(-1);
-    expect(forceFullDownloadIndex).toBe(-1);
-    expect(channelIndex).toBeGreaterThan(prepareBasesIndex);
-    expect(productionValidateIndex).toBeGreaterThan(channelIndex);
-    expect(attestIndex).toBeGreaterThan(productionValidateIndex);
-    expect(releaseIndex).toBeGreaterThan(attestIndex);
-    expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-modern-from");
-    expect(publishSteps[prepareBasesIndex]?.run).toContain("--prepare-modern-base");
-    expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-from");
-    expect(publishSteps[prepareBasesIndex]?.run).toContain("--carry-forward-legacy-from");
-    expect(publishSteps[channelIndex]?.run).toContain("--output desktop-channel-modern.json");
-    expect(publishSteps[channelIndex]?.run).toContain(
-      "coder-studio-runtime-modern-win32-x64.manifest.json"
-    );
-    expect(publishSteps[productionValidateIndex]?.run).toContain("--release-kind");
-    expect(publishSteps[productionValidateIndex]?.run).toContain("--previous-release-directory");
-    expect(publishSteps[releaseIndex]?.run).toContain("--prerelease --latest=false");
-    expect(publishSteps[releaseIndex]?.run).toContain("Install Coder-Studio-Setup-");
-    expect(publishSteps[releaseIndex]?.run).toContain("not Authenticode-signed");
-    expect(JSON.stringify(release.jobs.publish)).not.toContain("desktop:force-full-download");
+    expect(text).not.toMatch(/pnpm (?:build|dist|publish)/);
+    expect(text).not.toContain("gh release create");
+    expect(text).not.toContain("gh release upload");
   });
 
-  it("gates Desktop and CLI promotion on immutable installed-upgrade reports", () => {
-    const acceptance = loadWorkflow("desktop-acceptance.yml");
-    const installed = acceptance.jobs["installed-upgrades"];
-    const installedSteps = installed.steps ?? [];
-    const runInstalled = installedSteps.find(
-      (step) => step.name === "Run installed Desktop update scenario"
-    );
-    const downloadPrevious = installedSteps.find(
-      (step) => step.name === "Download previous stable Desktop release"
-    );
-    const prepareScenario = installedSteps.find(
-      (step) => step.name === "Prepare scenario-specific signed channel"
-    );
-    const prepareWsl = installedSteps.find(
-      (step) => step.name === "Prepare disposable WSL distribution"
-    );
-    expect(installed.needs).toEqual(["prepare", "publish"]);
-    expect(installed.environment).toBe("desktop-production");
-    expect(installed.strategy?.matrix?.scenario).toBe(
-      "${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}"
-    );
-    expect(runInstalled?.run).toContain("pnpm acceptance:desktop:installed");
-    expect(runInstalled?.run).not.toContain("pnpm acceptance:desktop:installed --");
-    expect(runInstalled?.run).toContain("-CandidateInstaller");
-    expect(runInstalled?.run).toContain("-PublicKeyPath");
-    expect(downloadPrevious?.run).toContain("'modern.yml'");
-    expect(downloadPrevious?.run).toContain("'build-info-modern.json'");
-    expect(downloadPrevious?.run).toContain("'desktop-channel-modern.json'");
-    expect(runInstalled?.run).toContain("if ('${{ steps.scenario.outputs.components }}')");
-    expect(runInstalled?.run).toContain("-SkipAuthenticode");
-    expect(runInstalled?.run).toContain("scripts/serve-static-http.mjs");
-    expect(runInstalled?.run).toContain("Invoke-WebRequest -UseBasicParsing -Method Head");
-    expect(runInstalled?.run).toContain(
-      "desktop-installed-report/${{ matrix.scenario }}.http.stderr.log"
-    );
-    expect(runInstalled?.run).toContain("try {");
-    expect(runInstalled?.run).toContain("} finally {");
-    expect(runInstalled?.run).toContain("'-ChannelUrl', $channelUrl");
-    expect(runInstalled?.run).toContain("${{ steps.scenario.outputs.channel_root }}");
-    expect(runInstalled?.run).toContain("${{ steps.scenario.outputs.channel_file }}");
-    expect(runInstalled?.run).not.toContain("steps.scenario.outputs.channel_url");
-    expect(prepareScenario?.run).toContain("'runtime:win32-x64'");
-    expect(prepareScenario?.run).toContain("'wsl-combined'");
-    expect(prepareScenario?.run).toContain("$useModernChannel");
-    expect(prepareScenario?.run).toContain("$isFrozenLegacy");
-    expect(prepareScenario?.run).toContain("runtime-previous-public.pem");
-    expect(prepareScenario?.run).toContain("'desktop-channel-modern.json'");
-    expect(prepareScenario?.run).toContain("$releaseKind -eq 'full'");
-    expect(prepareScenario?.run).toContain("yyyy-MM-ddTHH:mm:ss.fffZ");
-    expect(prepareScenario?.run).toContain("InvariantCulture");
-    expect(prepareScenario?.run).toContain("'desktop:artifacts', 'validate'");
-    expect(prepareScenario?.run).not.toContain("'desktop:artifacts', '--', 'validate'");
-    expect(prepareScenario?.run).toContain('"channel_root=$channelRoot"');
-    expect(prepareScenario?.run).toContain('"channel_file=$channelFile"');
-    expect(prepareScenario?.run).not.toContain("scripts/serve-static-http.mjs");
-    expect(runInstalled?.run).toContain(
-      "@('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')"
-    );
-    expect(prepareWsl?.run).toContain("systemd=false");
-    expect(prepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
-    expect(prepareWsl?.run).toContain("default=coderstudio");
-    expect(prepareWsl?.run).toContain("wsl.exe --terminate $distro");
-    expect(installedSteps.some((step) => step.name === "Upload installed-upgrade report")).toBe(
-      true
-    );
+  it("bootstraps both signed stable pointers without changing immutable bytes", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const product = jobText(jobs["bootstrap-product"]);
+    const desktop = jobText(jobs["bootstrap-desktop"]);
 
-    const release = loadWorkflow("desktop-release.yml");
-    const releaseInstalled = release.jobs["installed-upgrade"];
-    const promotion = release.jobs.promote;
-    expect(releaseInstalled.needs).toEqual(["prepare", "publish"]);
-    expect(releaseInstalled.strategy?.matrix?.target).toBe(
-      "${{ fromJSON(needs.prepare.outputs.installed_targets) }}"
-    );
-    const releaseRunInstalled = (releaseInstalled.steps ?? []).find(
-      (step) => step.name === "Run production installed Desktop update"
-    );
-    const releasePrepareWsl = (releaseInstalled.steps ?? []).find(
-      (step) => step.name === "Prepare disposable production WSL distribution"
-    );
-    expect(releaseRunInstalled?.run).not.toContain("pnpm acceptance:desktop:installed --");
-    expect(releaseRunInstalled?.run).toContain("if ('${{ steps.identity.outputs.components }}')");
-    expect(releaseRunInstalled?.run).toContain("-SkipAuthenticode");
-    expect(releasePrepareWsl?.run).toContain("systemd=false");
-    expect(releasePrepareWsl?.run).toContain("useradd --create-home --shell /bin/bash coderstudio");
-    expect(releasePrepareWsl?.run).toContain("default=coderstudio");
-    expect(releasePrepareWsl?.run).toContain("wsl.exe --terminate $distro");
-    expect(promotion.needs).toEqual(["prepare", "publish", "installed-upgrade"]);
-    const promotionSteps = promotion.steps ?? [];
-    const validateReports = promotionSteps.find(
-      (step) => step.name === "Validate promotion report identities"
-    );
-    const downloadChannel = promotionSteps.find(
-      (step) => step.name === "Download immutable channel identity"
-    );
-    const promote = promotionSteps.find((step) => step.name === "Promote existing prerelease");
-    expect(downloadChannel?.run).toContain('--repo "${GITHUB_REPOSITORY}"');
-    expect(downloadChannel?.run).toContain("--pattern 'desktop-channel*.json'");
-    expect(validateReports?.run).toContain("channelSignatureDigest");
-    expect(validateReports?.run).toContain("modernChannelSignatureDigest");
-    expect(validateReports?.run).toContain('report.scenario.startsWith("fresh-")');
-    expect(validateReports?.run).toContain(
-      'const expectedProductionCount = releaseKind === "migration" ? 4 : 2'
-    );
-    expect(validateReports?.run).toContain("text.charCodeAt(0) === 0xfeff");
-    expect(validateReports?.run).toContain("commitSha");
-    expect(validateReports?.run).toContain("wslRuntimeVersion");
-    expect(validateReports?.run).toContain("wsl-combined");
-    expect(validateReports?.run).toContain("legacy-wsl-current");
-    expect(validateReports?.run).toContain("report.releaseKind !== releaseKind");
-    expect(validateReports?.run).toContain(
-      '["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]'
-    );
-    expect(promote?.run?.trim()).toBe(
-      'gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${GITHUB_REPOSITORY}" --prerelease=false --latest'
-    );
-    const promotionText = JSON.stringify(promotion);
-    expect(promotionText).not.toMatch(/pnpm (build|dist)|gh release upload|--clobber/);
+    expect(jobs["bootstrap-product"].permissions).toEqual({ contents: "write" });
+    expect(product).toContain("product-stable");
+    expect(product).toContain("product-channel.json");
+    expect(product).toContain("Immutable Product pointer digest mismatch");
+    expect(product).toContain("--latest=false");
 
-    const cli = loadWorkflow("publish.yml");
-    const cliInputs = (cli.on.workflow_dispatch as { inputs: Record<string, unknown> }).inputs;
-    expect(cliInputs.promote).toMatchObject({ default: true, type: "boolean" });
-    const steps = cli.jobs.publish.steps ?? [];
-    const readVersion = steps.find((step) => step.name === "Read CLI version");
-    const packIndex = steps.findIndex((step) => step.name === "Pack CLI candidate once");
-    const validatePackageIndex = steps.findIndex(
-      (step) => step.name === "Validate packed CLI assets"
+    expect(jobs["bootstrap-desktop"].permissions).toEqual({ contents: "write" });
+    expect(desktop).toContain("desktop-stable");
+    expect(desktop).toContain("desktop-channel-modern.json");
+    expect(desktop).toContain("desktop-channel.json");
+    expect(desktop).toContain("Immutable Desktop pointer digest mismatch");
+    expect(desktop).toContain("--latest=false");
+  });
+
+  it("accepts legacy installed upgrades before independent-feed upgrades", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const legacy = jobs["accept-legacy-upgrade"];
+    const independent = jobs["accept-independent-feeds"];
+
+    expect(legacy.strategy?.matrix?.target).toEqual(["native", "wsl"]);
+    expect(jobText(legacy)).toContain("releases/latest");
+    expect(jobText(legacy)).toContain("legacy-current");
+    expect(jobText(legacy)).toContain("legacy-wsl-current");
+    expect(jobText(legacy)).toContain("pnpm acceptance:desktop:installed");
+    expect(jobText(legacy)).toContain("bridge_candidate_tag");
+
+    expect(independent.strategy?.matrix?.target).toEqual(["native", "wsl"]);
+    expect(jobText(independent)).toContain("product-stable");
+    expect(jobText(independent)).toContain("desktop-stable");
+    expect(jobText(independent)).toContain("pnpm acceptance:desktop:installed");
+  });
+
+  it("verifies both stable feeds before making the bridge repository-wide latest", () => {
+    const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
+    const verify = jobText(jobs["verify-stable-feeds"]);
+    const promote = jobs["promote-bridge"];
+
+    expect(verify).toContain("gh release download product-stable");
+    expect(verify).toContain("gh release download desktop-stable");
+    expect(verify).toContain("product-channel.json");
+    expect(verify).toContain("desktop-channel.json");
+    expect(verify).toContain("sha256sum");
+    expect(jobText(promote)).toContain("PROMOTE_BRIDGE_TO_LATEST");
+    expect(step(promote, "Make bridge the final repository-wide latest")?.run).toBe(
+      'gh release edit "${BRIDGE_CANDIDATE_TAG}" --prerelease=false --latest'
     );
-    const stageIndex = steps.findIndex(
-      (step) => step.name === "Publish or reuse immutable CLI candidate"
+    expect(step(promote, "Verify bridge is repository-wide latest")?.run).toContain(
+      'releases/latest" --jq .tag_name'
     );
-    const acceptanceIndex = steps.findIndex(
-      (step) => step.name === "Run isolated packaged CLI acceptance"
+  });
+
+  it("keeps repository-wide latest ownership exclusive to the bridge", () => {
+    const workflowFiles = readdirSync(workflowsRoot).filter((name) => name.endsWith(".yml"));
+    const latestOwners = workflowFiles.filter((name) => {
+      const source = readFileSync(workflowPath(name), "utf8");
+      return /--latest(?![=]false)/.test(source);
+    });
+
+    expect(latestOwners).toEqual(["desktop-bridge-release.yml"]);
+    expect(readFileSync(workflowPath("product-release.yml"), "utf8")).toContain("--latest=false");
+    expect(readFileSync(workflowPath("desktop-release.yml"), "utf8")).toContain("--latest=false");
+  });
+
+  it("documents normal operations, recovery, migration, and compatibility sequencing", () => {
+    const runbookPath = resolve(
+      import.meta.dirname,
+      "../docs/promotion/product-desktop-release-runbook.md"
     );
-    const candidateCleanupIndex = steps.findIndex(
-      (step) => step.name === "Remove candidate-only npm dist-tag"
-    );
-    const desktopReportIndex = steps.findIndex(
-      (step) => step.name === "Validate required Desktop acceptance report"
-    );
-    const promoteIndex = steps.findIndex((step) => step.name === "Promote accepted CLI dist-tag");
-    const preserveDesktopIndex = steps.findIndex(
-      (step) => step.name === "Preserve Desktop update channel assets"
-    );
-    const tagIndex = steps.findIndex((step) => step.name === "Create and push release tag");
-    const githubReleaseIndex = steps.findIndex((step) => step.name === "Create GitHub release");
-    const preserveDesktop = steps[preserveDesktopIndex];
-    expect(packIndex).toBeGreaterThan(-1);
-    expect(readVersion?.run).toContain(
-      'acceptance_tag="rc-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
-    );
-    expect(validatePackageIndex).toBeGreaterThan(packIndex);
-    expect(stageIndex).toBeGreaterThan(validatePackageIndex);
-    expect(acceptanceIndex).toBeGreaterThan(stageIndex);
-    expect(candidateCleanupIndex).toBeGreaterThan(acceptanceIndex);
-    expect(desktopReportIndex).toBeGreaterThan(acceptanceIndex);
-    expect(preserveDesktopIndex).toBeGreaterThan(desktopReportIndex);
-    expect(promoteIndex).toBeGreaterThan(preserveDesktopIndex);
-    expect(tagIndex).toBeGreaterThan(preserveDesktopIndex);
-    expect(githubReleaseIndex).toBeGreaterThan(tagIndex);
-    expect(promoteIndex).toBeGreaterThan(desktopReportIndex);
-    expect(steps[packIndex]?.run).toContain("pnpm --dir ./packages/cli pack --json");
-    expect(steps[packIndex]?.run).not.toMatch(/(^|\s)npm pack/);
-    expect(steps[validatePackageIndex]?.run).toContain("pnpm validate:cli-package");
-    expect(steps[validatePackageIndex]?.run).toContain('--tarball "${TARBALL}"');
-    expect(steps[validatePackageIndex]?.run).toContain(
-      "--source-package-json packages/cli/package.json"
-    );
-    expect(steps[stageIndex]?.run).toContain("dist.integrity");
-    expect(steps[stageIndex]?.run).toContain('pnpm publish "${tarball}"');
-    expect(steps[stageIndex]?.run).toContain('npm pack "${PACKAGE_NAME}@${CANDIDATE_VERSION}"');
-    expect(steps[stageIndex]?.run).toContain('--compare-tarball "${registry_tarball}"');
-    expect(steps[stageIndex]?.run).toContain("npm dist-tag add");
-    expect(steps[stageIndex]?.run).not.toMatch(/(^|\s)npm publish "\$\{tarball\}"/);
-    expect(steps[acceptanceIndex]?.run).toContain("pnpm acceptance:cli:update");
-    expect(steps[candidateCleanupIndex]?.if).toBe("inputs.promote == false");
-    expect(steps[candidateCleanupIndex]?.run).toContain("if ! npm dist-tag rm");
-    expect(steps[candidateCleanupIndex]?.run).toContain("::warning");
-    expect(steps[desktopReportIndex]?.run).toContain("wsl-combined");
-    expect(steps[desktopReportIndex]?.run).toContain("fresh-native");
-    expect(steps[desktopReportIndex]?.run).toContain("fresh-wsl");
-    expect(steps[desktopReportIndex]?.run).toContain("legacy-current");
-    expect(steps[desktopReportIndex]?.run).toContain("legacy-wsl-current");
-    expect(steps[desktopReportIndex]?.run).toContain("releaseKinds");
-    expect(steps[desktopReportIndex]?.run).toContain('releaseKind === "full"');
-    expect(steps[desktopReportIndex]?.run).toContain('releaseKind !== "migration"');
-    expect(steps[desktopReportIndex]?.run).toContain(
-      '["runtime-only", "wsl", "runtime-health-rollback", "interrupted-download", "restart-journal-recovery", "external-sidecar-browser"]'
-    );
-    expect(steps[desktopReportIndex]?.run).toContain("reports.length === 2");
-    expect(steps[desktopReportIndex]?.run).toContain(
-      'report.scenario !== "runtime-health-rollback"'
-    );
-    expect(steps[desktopReportIndex]?.run).toContain("report.rollbackRuntimeVersion");
-    expect(steps[desktopReportIndex]?.run).toContain("text.charCodeAt(0) === 0xfeff");
-    expect(steps[preserveDesktopIndex]?.if).toBe("inputs.promote");
-    expect(steps[promoteIndex]?.run).toContain("npm dist-tag add");
-    expect(steps[promoteIndex]?.run).toContain("if ! npm dist-tag rm");
-    expect(steps[promoteIndex]?.run).toContain("::warning");
-    expect(steps[promoteIndex]?.run?.indexOf("npm dist-tag add")).toBeLessThan(
-      steps[promoteIndex]?.run?.indexOf("if ! npm dist-tag rm") ?? -1
-    );
-    expect(preserveDesktop?.run).toContain(
-      'gh release download "${latest_tag}" --dir desktop-channel-assets --clobber'
-    );
-    expect(preserveDesktop?.run).not.toContain("--pattern");
-    expect(preserveDesktop?.run).not.toContain("|| true");
-    expect(preserveDesktop?.run).toContain('test -n "${latest_tag}"');
-    expect(JSON.stringify(cli)).not.toContain("pnpm publish:cli -- --publish");
+    expect(existsSync(runbookPath)).toBe(true);
+    const runbook = readFileSync(runbookPath, "utf8");
+
+    expect(runbook).toContain("Product release");
+    expect(runbook).toContain("Desktop release");
+    expect(runbook).toContain("candidate_tag");
+    expect(runbook).toContain("immutable-byte mismatch");
+    expect(runbook).toContain("product-stable");
+    expect(runbook).toContain("desktop-stable");
+    expect(runbook).toContain("PROMOTE_BRIDGE_TO_LATEST");
+    expect(runbook).toContain("two-release compatibility window");
   });
 });

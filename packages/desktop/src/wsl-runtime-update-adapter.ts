@@ -1,4 +1,5 @@
-import type { DesktopChannelRuntime } from "./desktop-channel.js";
+import type { ProductChannelRuntime } from "./product-channel.js";
+import type { RuntimeManifest } from "./runtime-manifest.js";
 import type {
   RuntimeDownloadOptions,
   RuntimeUpdateAdapter,
@@ -26,11 +27,21 @@ export class WslRuntimeUpdateAdapter implements RuntimeUpdateAdapter {
     return (await this.options.runtimeStore.getLaunchCandidate()).manifest.runtimeVersion;
   }
 
+  async getCurrentManifest(): Promise<RuntimeManifest> {
+    return (await this.options.runtimeStore.getLaunchCandidate()).manifest;
+  }
+
   checkMetadata(
-    expected: DesktopChannelRuntime,
-    plannedShellVersion: string
+    expected: ProductChannelRuntime,
+    plannedShellVersion: string,
+    releaseTag: string
   ): Promise<WslRuntimeUpdateMetadata> {
-    return this.options.installer.checkRuntime(this.options.probe, expected, plannedShellVersion);
+    return this.options.installer.checkRuntime(
+      this.options.probe,
+      expected,
+      plannedShellVersion,
+      releaseTag
+    );
   }
 
   downloadAndStage(

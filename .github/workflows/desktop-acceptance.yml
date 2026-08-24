@@ -1,365 +1,33 @@
-name: Publish Desktop acceptance
+name: Legacy bridge Desktop acceptance
 
 on:
   workflow_dispatch:
     inputs:
-      windows_signing:
-        description: "Sign Windows executables with Authenticode"
+      bridge_candidate_tag:
+        description: "Existing immutable legacy bridge candidate tag"
         required: true
-        default: true
-        type: boolean
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: legacy-bridge-acceptance-${{ inputs.bridge_candidate_tag }}
+  cancel-in-progress: false
+
 jobs:
-  prepare:
-    name: Prepare acceptance channel
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      release_tag: ${{ steps.channel.outputs.release_tag }}
-      release_base_url: ${{ steps.channel.outputs.release_base_url }}
-      runtime_update_url: ${{ steps.channel.outputs.runtime_update_url }}
-      signing_key_artifact: ${{ steps.channel.outputs.signing_key_artifact }}
-      public_key_artifact: ${{ steps.channel.outputs.public_key_artifact }}
-      has_previous_desktop: ${{ steps.channel.outputs.has_previous_desktop }}
-      release_kind: ${{ steps.channel.outputs.release_kind }}
-      runtime_min_shell_version: ${{ steps.channel.outputs.runtime_min_shell_version }}
-      acceptance_scenarios: ${{ steps.channel.outputs.acceptance_scenarios }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Resolve acceptance channel
-        id: channel
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          release_tag="desktop-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          release_base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}"
-          runtime_update_url=${release_base_url}/coder-studio-runtime-win32-x64.manifest.json
-          signing_key_artifact="desktop-ci-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          public_key_artifact="desktop-acceptance-public-key-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
-          echo "release_base_url=${release_base_url}" >> "${GITHUB_OUTPUT}"
-          echo "runtime_update_url=${runtime_update_url}" >> "${GITHUB_OUTPUT}"
-          echo "signing_key_artifact=${signing_key_artifact}" >> "${GITHUB_OUTPUT}"
-          echo "public_key_artifact=${public_key_artifact}" >> "${GITHUB_OUTPUT}"
-          latest_release_json="${RUNNER_TEMP}/coder-studio-latest-release.json"
-          latest_release_error="${RUNNER_TEMP}/coder-studio-latest-release-error.log"
-          current_shell=$(node -p "require('./packages/desktop/package.json').version")
-          current_runtime=$(node -p "require('./packages/cli/package.json').version")
-          runtime_min_shell_version="${current_shell}"
-          has_previous_desktop=false
-          release_kind=full
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/latest" > "${latest_release_json}" 2> "${latest_release_error}"; then
-            has_previous_desktop=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel.json')?'true':'false')" "${latest_release_json}")
-            if [[ "${has_previous_desktop}" == "true" ]]; then
-              latest_tag=$(node -e "const release=require(process.argv[1]); process.stdout.write(release.tag_name)" "${latest_release_json}")
-              has_modern_channel=$(node -e "const release=require(process.argv[1]); process.stdout.write(Array.isArray(release.assets)&&release.assets.some((asset)=>asset?.name==='desktop-channel-modern.json')?'true':'false')" "${latest_release_json}")
-              channel_asset=desktop-channel.json
-              if [[ "${has_modern_channel}" == "true" ]]; then
-                channel_asset=desktop-channel-modern.json
-              fi
-              latest_channel="${RUNNER_TEMP}/coder-studio-latest-channel.json"
-              gh release download "${latest_tag}" \
-                --repo "${GITHUB_REPOSITORY}" \
-                --pattern "${channel_asset}" \
-                --output "${latest_channel}"
-              has_previous_desktop=$(node -e "const channel=require(process.argv[1]); const currentShell=process.argv[2]; const currentRuntime=process.argv[3]; process.stdout.write(channel?.shell?.version===currentShell&&channel?.runtimes?.['win32-x64']?.version===currentRuntime&&channel?.runtimes?.['linux-x64']?.version===currentRuntime?'false':'true')" "${latest_channel}" "${current_shell}" "${current_runtime}")
-              if [[ "${has_previous_desktop}" == "true" ]]; then
-                previous_shell=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${latest_channel}")
-                shell_change=$(node -e "const parse=(value)=>{const match=/^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(value);if(!match)throw new Error('Invalid Shell version: '+value);return {core:match.slice(1,4).map(Number),pre:match[4]??null}};const [current,previous]=process.argv.slice(1).map(parse);let order=0;for(let i=0;i<3&&!order;i++)order=Math.sign(current.core[i]-previous.core[i]);if(!order&&current.pre!==previous.pre)order=current.pre===null?1:previous.pre===null?-1:current.pre.localeCompare(previous.pre,undefined,{numeric:true});process.stdout.write(order>0?'upgrade':order<0?'downgrade':'same')" "${current_shell}" "${previous_shell}")
-                if [[ "${shell_change}" == "same" ]]; then
-                  release_kind=runtime-only
-                  runtime_min_shell_version="${previous_shell}"
-                  if [[ "${has_modern_channel}" == "true" ]]; then
-                    latest_legacy_channel="${RUNNER_TEMP}/coder-studio-latest-legacy-channel.json"
-                    gh release download "${latest_tag}" \
-                      --repo "${GITHUB_REPOSITORY}" \
-                      --pattern 'desktop-channel.json' \
-                      --output "${latest_legacy_channel}"
-                    runtime_min_shell_version=$(node -e "const channel=require(process.argv[1]); if(typeof channel?.shell?.version!=='string'||!channel.shell.version) process.exit(1); process.stdout.write(channel.shell.version)" "${latest_legacy_channel}")
-                  fi
-                elif [[ "${shell_change}" == "downgrade" ]]; then
-                  echo "Desktop Shell ${current_shell} is older than stable ${previous_shell}" >&2
-                  exit 1
-                else
-                  release_kind=migration
-                fi
-              fi
-            fi
-          elif ! grep -q '(HTTP 404)' "${latest_release_error}"; then
-            cat "${latest_release_error}" >&2
-            exit 1
-          fi
-          if [[ "${has_previous_desktop}" == "true" ]]; then
-            if [[ "${release_kind}" == "full" ]]; then
-              acceptance_scenarios='["combined","wsl-combined","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
-            elif [[ "${release_kind}" == "migration" ]]; then
-              acceptance_scenarios='["legacy-current","legacy-wsl-current","fresh-native","fresh-wsl","external-sidecar-browser"]'
-            else
-              acceptance_scenarios='["runtime-only","wsl","runtime-health-rollback","interrupted-download","restart-journal-recovery","external-sidecar-browser"]'
-            fi
-          else
-            acceptance_scenarios='["fresh-native","fresh-wsl"]'
-          fi
-          echo "has_previous_desktop=${has_previous_desktop}" >> "${GITHUB_OUTPUT}"
-          echo "release_kind=${release_kind}" >> "${GITHUB_OUTPUT}"
-          echo "runtime_min_shell_version=${runtime_min_shell_version}" >> "${GITHUB_OUTPUT}"
-          echo "acceptance_scenarios=${acceptance_scenarios}" >> "${GITHUB_OUTPUT}"
-
-      - name: Generate ephemeral Runtime signing key
-        shell: bash
-        run: |
-          mkdir -p release/desktop-ci-signing
-          openssl genpkey -algorithm Ed25519 -out release/desktop-ci-signing/runtime-private.pem
-          openssl pkey \
-            -in release/desktop-ci-signing/runtime-private.pem \
-            -pubout \
-            -out release/desktop-ci-signing/runtime-public.pem
-
-      - name: Upload ephemeral signing key
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.channel.outputs.signing_key_artifact }}
-          path: release/desktop-ci-signing/
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Upload acceptance public key
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.channel.outputs.public_key_artifact }}
-          path: release/desktop-ci-signing/runtime-public.pem
-          if-no-files-found: error
-          retention-days: 3
-
-  repository-verify:
-    permissions:
-      contents: read
-    uses: ./.github/workflows/ci.yml
-
-  build-assets:
-    needs: prepare
-    permissions:
-      contents: read
-    uses: ./.github/workflows/desktop-verify.yml
-    with:
-      signed: true
-      windows_signing: ${{ inputs.windows_signing }}
-      signing_key_artifact: ${{ needs.prepare.outputs.signing_key_artifact }}
-      runtime_update_url: ${{ needs.prepare.outputs.runtime_update_url }}
-      release_tag: ${{ needs.prepare.outputs.release_tag }}
-      runtime_min_shell_version: ${{ needs.prepare.outputs.runtime_min_shell_version }}
-    secrets:
-      windows_csc_link: ${{ secrets.DESKTOP_WINDOWS_CSC_LINK }}
-      windows_csc_key_password: ${{ secrets.DESKTOP_WINDOWS_CSC_KEY_PASSWORD }}
-
-  publish:
-    name: Publish signed Desktop acceptance channel
-    needs:
-      - prepare
-      - repository-verify
-      - build-assets
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: desktop-production
-    permissions:
-      contents: write
-    outputs:
-      complete_artifact: ${{ steps.bundle.outputs.name }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download complete acceptance bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build-assets.outputs.complete_artifact }}
-          path: release/desktop-acceptance
-
-      - name: Download previous immutable Desktop release
-        if: needs.prepare.outputs.release_kind != 'full'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p release/desktop-acceptance-previous
-          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
-          gh release download "${latest_tag}" --dir release/desktop-acceptance-previous
-
-      - name: Download acceptance private signing key
-        if: needs.prepare.outputs.release_kind != 'full'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.prepare.outputs.signing_key_artifact }}
-          path: release/desktop-ci-signing
-
-      - name: Build legacy Runtime and manual modern Shell channels
-        if: needs.prepare.outputs.release_kind != 'full'
-        shell: bash
-        run: |
-          directory=release/desktop-acceptance
-          previous=release/desktop-acceptance-previous
-          generated_at=$(node -e "const channel=require('./release/desktop-acceptance/desktop-channel.json'); process.stdout.write(channel.generatedAt)")
-          if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
-            pnpm desktop:channel -- --directory "${directory}" --prepare-modern-base
-            pnpm desktop:channel -- --directory "${directory}" --carry-forward-legacy-from "${previous}"
-          else
-            pnpm desktop:channel -- --directory "${directory}" --carry-forward-modern-from "${previous}"
-            pnpm desktop:channel -- --directory "${directory}" --carry-forward-shell-from "${previous}"
-          fi
-          if [[ "${{ needs.prepare.outputs.release_kind }}" != "migration" ]]; then
-            pnpm desktop:channel -- \
-              --directory "${directory}" \
-              --release-tag "${{ needs.prepare.outputs.release_tag }}" \
-              --channel prerelease \
-              --generated-at "${generated_at}" \
-              --private-key release/desktop-ci-signing/runtime-private.pem
-          fi
-          modern_runtime_args=()
-          if [[ "${{ needs.prepare.outputs.release_kind }}" == "migration" ]]; then
-            modern_runtime_args+=(
-              --windows-runtime-manifest coder-studio-runtime-modern-win32-x64.manifest.json
-              --linux-runtime-manifest coder-studio-server-runtime-modern-linux-x64.manifest.json
-            )
-          fi
-          pnpm desktop:channel -- \
-            --directory "${directory}" \
-            --release-tag "${{ needs.prepare.outputs.release_tag }}" \
-            --channel prerelease \
-            --generated-at "${generated_at}" \
-            --private-key release/desktop-ci-signing/runtime-private.pem \
-            --build-info build-info-modern.json \
-            --updater-metadata modern.yml \
-            "${modern_runtime_args[@]}" \
-            --output desktop-channel-modern.json
-
-      - name: Download acceptance public key
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.prepare.outputs.public_key_artifact }}
-          path: release/desktop-ci-signing
-
-      - name: Load acceptance public key
-        shell: bash
-        run: |
-          {
-            echo 'CODER_STUDIO_RUNTIME_PUBLIC_KEY<<PUBLIC_KEY'
-            cat release/desktop-ci-signing/runtime-public.pem
-            echo 'PUBLIC_KEY'
-          } >> "${GITHUB_ENV}"
-
-      - name: Validate complete signed acceptance channel
-        shell: bash
-        env:
-          CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
-        run: |
-          if [[ "${{ needs.prepare.outputs.release_kind }}" != "full" && -z "${CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY}" ]]; then
-            echo "Previous Desktop Runtime public key is required for migration acceptance" >&2
-            exit 1
-          fi
-          validation_args=(
-            validate
-            --directory release/desktop-acceptance
-            --components 'desktop,win-runtime,wsl-engine,wsl-runtime'
-            --release-kind "${{ needs.prepare.outputs.release_kind }}"
-          )
-          if [[ "${{ needs.prepare.outputs.release_kind }}" != "full" ]]; then
-            validation_args+=(
-              --previous-release-directory release/desktop-acceptance-previous
-              --allow-resigned-engine
-            )
-          fi
-          pnpm desktop:artifacts "${validation_args[@]}"
-
-      - name: Resolve installed acceptance bundle identity
-        id: bundle
-        shell: bash
-        run: echo "name=desktop-acceptance-channel-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
-
-      - name: Upload installed acceptance bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.bundle.outputs.name }}
-          path: release/desktop-acceptance/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Publish tag-pinned prerelease
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-        run: |
-          desktop_version=$(node -p "require('./packages/desktop/package.json').version")
-          installer="Coder-Studio-Setup-${desktop_version}.exe"
-          release_error="${RUNNER_TEMP}/desktop-acceptance-release-error.log"
-          if existing_is_draft=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.draft' 2>"${release_error}"); then
-            if [[ "${existing_is_draft}" != "true" ]]; then
-              echo "Refusing to overwrite non-draft release ${RELEASE_TAG}." >&2
-              exit 1
-            fi
-          elif grep -q '(HTTP 404)' "${release_error}"; then
-            windows_signing_note=""
-            if [[ "${{ inputs.windows_signing }}" != "true" ]]; then
-              windows_signing_note=" WARNING: Windows executables in this acceptance build are not Authenticode-signed."
-            fi
-            gh release create "${RELEASE_TAG}" \
-              --target "${GITHUB_SHA}" \
-              --title "Coder Studio Desktop acceptance ${GITHUB_RUN_NUMBER}" \
-              --notes "Ephemeral Runtime-signed acceptance channel for ${GITHUB_SHA}. The Runtime signing key is test-only; do not promote these assets to production.${windows_signing_note}" \
-              --draft
-          else
-            cat "${release_error}" >&2
-            exit 1
-          fi
-          gh release upload "${RELEASE_TAG}" release/desktop-acceptance/* --clobber
-          gh release edit "${RELEASE_TAG}" --draft=false --prerelease --latest=false
-          {
-            echo "## Desktop acceptance channel"
-            echo
-            echo "- Installer: ${{ needs.prepare.outputs.release_base_url }}/${installer}"
-            echo "- Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
-            echo "- Runtime channel: ${{ needs.prepare.outputs.runtime_update_url }}"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-  installed-upgrades:
-    name: Installed Desktop upgrade (${{ matrix.scenario }})
-    needs:
-      - prepare
-      - publish
+  accept:
+    name: Accept immutable legacy bridge (${{ matrix.target }})
     runs-on: windows-latest
-    timeout-minutes: 90
-    environment: desktop-production
-    permissions:
-      contents: read
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        scenario: ${{ fromJSON(needs.prepare.outputs.acceptance_scenarios) }}
-
+        target: [native, wsl]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      BRIDGE_CANDIDATE_TAG: ${{ inputs.bridge_candidate_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -379,282 +47,161 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download complete candidate bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.publish.outputs.complete_artifact }}
-          path: release/desktop-installed-candidate
-
-      - name: Download acceptance signing key
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.prepare.outputs.signing_key_artifact }}
-          path: release/desktop-ci-signing
-
-      - name: Download previous stable Desktop release
-        if: needs.prepare.outputs.has_previous_desktop == 'true'
+      - name: Download current latest and immutable bridge assets
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          New-Item -ItemType Directory -Path release/desktop-installed-previous -Force | Out-Null
+          if (-not $env:BRIDGE_CANDIDATE_TAG) { throw 'bridge_candidate_tag is required' }
+          if ($env:BRIDGE_CANDIDATE_TAG -in @('product-stable', 'desktop-stable')) {
+            throw 'A stable pointer tag cannot be used as a bridge candidate'
+          }
+          $candidate = gh release view $env:BRIDGE_CANDIDATE_TAG --json tagName,isDraft,isPrerelease | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $candidate.tagName -ne $env:BRIDGE_CANDIDATE_TAG) {
+            throw 'Unable to resolve the immutable bridge candidate'
+          }
+          if ($candidate.isDraft) { throw 'Bridge acceptance requires a published candidate' }
           $latestTag = gh api "repos/${env:GITHUB_REPOSITORY}/releases/latest" --jq .tag_name
           if ($LASTEXITCODE -ne 0 -or -not $latestTag) {
-            throw 'A previous stable unified Desktop release is required for installed acceptance'
+            throw 'A supported repository-wide latest Desktop release is required'
           }
-          $patterns = @(
-            'latest.yml',
-            'modern.yml',
-            'Coder-Studio-Setup-*.exe',
-            '*.blockmap',
-            'build-info.json',
-            'build-info-modern.json',
-            'desktop-channel.json',
-            'desktop-channel-modern.json',
-            'coder-studio-engine-linux-x64.manifest.json',
-            'coder-studio-engine-*-linux-x64.tgz',
-            'coder-studio-runtime-win32-x64.manifest.json',
-            'coder-studio-runtime-*-win32-x64.tgz',
-            'coder-studio-server-runtime-linux-x64.manifest.json',
-            'coder-studio-server-runtime-*-linux-x64.tgz'
-          )
-          foreach ($pattern in $patterns) {
-            gh release download $latestTag --pattern $pattern --dir release/desktop-installed-previous --clobber
-            if ($LASTEXITCODE -ne 0) { throw "Previous Desktop asset is missing: $pattern" }
+          if (-not $candidate.isPrerelease -and $latestTag -ne $env:BRIDGE_CANDIDATE_TAG) {
+            throw 'A normal bridge release is accepted only when it is repository-wide latest'
           }
+          New-Item -ItemType Directory -Force -Path release/legacy-bridge/previous | Out-Null
+          New-Item -ItemType Directory -Force -Path release/legacy-bridge/candidate | Out-Null
+          gh release download $latestTag `
+            --pattern desktop-channel.json `
+            --pattern latest.yml `
+            --pattern 'Coder-Studio-Setup-*.exe' `
+            --dir release/legacy-bridge/previous
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download the supported legacy Desktop' }
+          gh release download $env:BRIDGE_CANDIDATE_TAG `
+            --pattern desktop-channel.json `
+            --pattern latest.yml `
+            --pattern 'Coder-Studio-Setup-*.exe' `
+            --dir release/legacy-bridge/candidate
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to download immutable bridge assets' }
 
-      - name: Prepare scenario-specific signed channel
-        id: scenario
+      - name: Resolve tag-pinned legacy acceptance identity
+        id: identity
         shell: pwsh
-        env:
-          CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
         run: |
-          $candidate = 'release/desktop-installed-candidate'
-          $previous = 'release/desktop-installed-previous'
-          $scenario = '${{ matrix.scenario }}'
-          $hasPreviousDesktop = '${{ needs.prepare.outputs.has_previous_desktop }}' -eq 'true'
-          $releaseKind = '${{ needs.prepare.outputs.release_kind }}'
-          $isFrozenLegacy = $releaseKind -eq 'migration' -and $scenario -in @('legacy-current', 'legacy-wsl-current')
-          $useModernChannel = $releaseKind -in @('migration', 'runtime-only') -and $scenario -in @('fresh-native', 'fresh-wsl', 'external-sidecar-browser')
-          $originalChannelFile = if ($useModernChannel) { 'desktop-channel-modern.json' } else { 'desktop-channel.json' }
-          $originalChannel = Get-Content (Join-Path $candidate $originalChannelFile) -Raw | ConvertFrom-Json
-          $generatedAt = ([DateTimeOffset]$originalChannel.generatedAt).UtcDateTime.ToString(
-            'yyyy-MM-ddTHH:mm:ss.fffZ',
-            [Globalization.CultureInfo]::InvariantCulture
-          )
-          $scenarioTag = "${{ needs.prepare.outputs.release_tag }}-$scenario"
-          $channelArguments = @(
-            '--directory', $candidate,
-            '--release-tag', $scenarioTag,
-            '--channel', 'prerelease',
-            '--generated-at', $generatedAt,
-            '--private-key', 'release/desktop-ci-signing/runtime-private.pem'
-          )
-          if ($useModernChannel) {
-            $channelArguments += @(
-              '--build-info', 'build-info-modern.json',
-              '--updater-metadata', 'modern.yml',
-              '--output', 'desktop-channel-modern.json'
-            )
-            if ($releaseKind -eq 'migration') {
-              $channelArguments += @(
-                '--windows-runtime-manifest', 'coder-studio-runtime-modern-win32-x64.manifest.json',
-                '--linux-runtime-manifest', 'coder-studio-server-runtime-modern-linux-x64.manifest.json'
-              )
-            }
+          if (-not $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY) {
+            throw 'Desktop Runtime public key is required for legacy bridge acceptance'
           }
-          if (-not $isFrozenLegacy) {
-            pnpm desktop:channel -- @channelArguments
-            if ($LASTEXITCODE -ne 0) { throw 'Unable to build scenario Desktop channel' }
+          New-Item -ItemType Directory -Force -Path release/legacy-bridge/key | Out-Null
+          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY | Set-Content release/legacy-bridge/key/runtime-public.pem -NoNewline
+          $previousRoot = 'release/legacy-bridge/previous'
+          $candidateRoot = 'release/legacy-bridge/candidate'
+          $previous = Get-Content "$previousRoot/desktop-channel.json" -Raw | ConvertFrom-Json
+          $candidate = Get-Content "$candidateRoot/desktop-channel.json" -Raw | ConvertFrom-Json
+          $expectedTag = "desktop-v$($candidate.shell.version)"
+          if ($env:BRIDGE_CANDIDATE_TAG -ne $expectedTag) {
+            throw "Bridge candidate tag must match the Desktop identity $expectedTag"
           }
-          $env:CODER_STUDIO_RUNTIME_PUBLIC_KEY = Get-Content release/desktop-ci-signing/runtime-public.pem -Raw
-          if ($releaseKind -eq 'migration') {
-            if (-not $env:CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY) {
-              throw 'Previous Runtime public key is required for frozen legacy acceptance'
-            }
-            $env:CODER_STUDIO_PREVIOUS_RUNTIME_PUBLIC_KEY | Set-Content release/desktop-ci-signing/runtime-previous-public.pem -NoNewline
-          }
-          $validation = @(
-            'desktop:artifacts', 'validate',
-            '--directory', $candidate,
-            '--components', 'desktop,win-runtime,wsl-engine,wsl-runtime'
-          )
-          if ($releaseKind -in @('migration', 'runtime-only')) {
-            $validation += @(
-              '--release-kind', $releaseKind,
-              '--previous-release-directory', $previous,
-              '--allow-resigned-engine'
-            )
+          $previousMetadata = Get-Content "$previousRoot/latest.yml" -Raw
+          $candidateMetadata = Get-Content "$candidateRoot/latest.yml" -Raw
+          $previousInstaller = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $candidateInstaller = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
+          $alreadyPromoted = $previous.shell.version -eq $candidate.shell.version
+          $frozenScenario = if ('${{ matrix.target }}' -eq 'wsl') { 'legacy-wsl-current' } else { 'legacy-current' }
+          $scenario = if ($alreadyPromoted) {
+            $frozenScenario
+          } elseif ('${{ matrix.target }}' -eq 'wsl') {
+            'wsl-combined'
           } else {
-            $validation += @('--release-kind', 'full')
+            'combined'
           }
-          pnpm @validation
-          if ($LASTEXITCODE -ne 0) { throw 'Scenario Desktop channel validation failed' }
-
-          $channelRoot = if ($isFrozenLegacy) { $previous } else { $candidate }
-          $channelFile = if ($useModernChannel) { 'desktop-channel-modern.json' } else { 'desktop-channel.json' }
-          $metadataFile = if ($useModernChannel) { 'modern.yml' } else { 'latest.yml' }
-          $channel = Get-Content (Join-Path $channelRoot $channelFile) -Raw | ConvertFrom-Json
-          $candidateMetadata = Get-Content (Join-Path $channelRoot $metadataFile) -Raw
-          $candidateInstallerName = [regex]::Match($candidateMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
-          if ($hasPreviousDesktop) {
-            $previousChannel = Get-Content (Join-Path $previous 'desktop-channel.json') -Raw | ConvertFrom-Json
-            $previousMetadata = Get-Content (Join-Path $previous 'latest.yml') -Raw
-            $previousInstallerName = [regex]::Match($previousMetadata, '(?m)^path:\s*(.+?)\s*$').Groups[1].Value.Trim('"', "'")
-            $previousInstaller = "$previous/$previousInstallerName"
-            $previousShell = $previousChannel.shell.version
-            $previousRuntime = $previousChannel.runtimes.'win32-x64'.version
-          } else {
-            $previousInstaller = "$candidate/$candidateInstallerName"
-            $previousShell = $channel.shell.version
-            $previousRuntime = $channel.runtimes.'win32-x64'.version
-          }
-          $components = if ($scenario -in @('fresh-native', 'fresh-wsl', 'legacy-current', 'legacy-wsl-current')) {
-            ''
-          } elseif ($scenario -eq 'external-sidecar-browser') {
-            ''
-          } elseif ($releaseKind -eq 'full') {
-            'shell,runtime:win32-x64'
-          } elseif ($scenario -eq 'combined') {
-            'shell,runtime:win32-x64'
-          } elseif ($scenario -eq 'wsl-combined') {
-            'shell,runtime:win32-x64'
-          } elseif ($scenario -eq 'wsl') {
-            'runtime:win32-x64'
-          } else {
-            'runtime:win32-x64'
-          }
-          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$channel.signature.value)
+          $components = if ($alreadyPromoted) { '' } else { 'shell,runtime:win32-x64' }
+          $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$candidate.signature.value)
           $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
-          "channel_root=$channelRoot" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "channel_file=$channelFile" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "scenario_tag=$scenarioTag" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "candidate_installer=$channelRoot/$candidateInstallerName" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_installer=$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_shell=$previousShell" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "previous_runtime=$previousRuntime" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "target_shell=$($channel.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "target_runtime=$($channel.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_installer=$previousRoot/$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate_installer=$candidateRoot/$candidateInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_shell=$($previous.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "previous_runtime=$($previous.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_shell=$($candidate.shell.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "target_runtime=$($candidate.runtimes.'win32-x64'.version)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "scenario=$scenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "frozen_scenario=$frozenScenario" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "components=$components" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "signature_digest=$signatureDigest" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
-          $publicKeyPath = if ($isFrozenLegacy) { 'release/desktop-ci-signing/runtime-previous-public.pem' } else { 'release/desktop-ci-signing/runtime-public.pem' }
-          "public_key_path=$publicKeyPath" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Prepare disposable WSL distribution
-        if: matrix.scenario == 'fresh-wsl' || matrix.scenario == 'legacy-wsl-current' || matrix.scenario == 'wsl' || matrix.scenario == 'wsl-combined'
+        if: matrix.target == 'wsl'
         id: wsl
         shell: pwsh
         run: |
-          $distro = "coder-studio-acceptance-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
+          $distro = "coder-studio-acceptance-bridge-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}"
           wsl.exe --install -d Ubuntu --no-launch
           wsl.exe -d Ubuntu -u root -- true
           wsl.exe --export Ubuntu "${env:RUNNER_TEMP}\ubuntu-rootfs.tar"
           wsl.exe --import $distro "${env:RUNNER_TEMP}\$distro" "${env:RUNNER_TEMP}\ubuntu-rootfs.tar" --version 2
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable WSL acceptance distribution' }
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to create disposable bridge WSL distribution' }
           wsl.exe -d $distro -u root -- sh -lc "useradd --create-home --shell /bin/bash coderstudio && printf '[boot]\nsystemd=false\n[user]\ndefault=coderstudio\n' > /etc/wsl.conf"
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to configure the disposable WSL acceptance user' }
           wsl.exe --terminate $distro
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to restart disposable WSL acceptance distribution' }
           "name=$distro" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      - name: Run installed Desktop update scenario
+      - name: Run immutable legacy bridge upgrade
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path 'release/desktop-installed-report' | Out-Null
-          $channelRoot = '${{ steps.scenario.outputs.channel_root }}'
-          $channelFile = '${{ steps.scenario.outputs.channel_file }}'
-          $portListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
-          $portListener.Start()
-          $port = ([Net.IPEndPoint]$portListener.LocalEndpoint).Port
-          $portListener.Stop()
-          $serverStdout = 'release/desktop-installed-report/${{ matrix.scenario }}.http.stdout.log'
-          $serverStderr = 'release/desktop-installed-report/${{ matrix.scenario }}.http.stderr.log'
-          $server = Start-Process node -ArgumentList @(
-            'scripts/serve-static-http.mjs',
-            '--host', '127.0.0.1',
-            '--port', "$port",
-            '--directory', $channelRoot
-          ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverStdout -RedirectStandardError $serverStderr
-          try {
-            $deadline = (Get-Date).AddSeconds(15)
-            $channelUrl = "http://127.0.0.1:$port/$channelFile"
-            $serverReady = $false
-            while ((Get-Date) -lt $deadline) {
-              $server.Refresh()
-              if ($server.HasExited) {
-                $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
-                $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
-                throw "Installed Desktop channel server exited early with code $($server.ExitCode).`n$stdout`n$stderr"
-              }
-              try {
-                $probe = Invoke-WebRequest -UseBasicParsing -Method Head $channelUrl -TimeoutSec 2
-                if ($probe.StatusCode -eq 200) {
-                  $serverReady = $true
-                  break
-                }
-              } catch {
-              }
-              Start-Sleep -Milliseconds 200
-            }
-            if (-not $serverReady) {
-              $stdout = if (Test-Path $serverStdout) { Get-Content $serverStdout -Raw } else { '' }
-              $stderr = if (Test-Path $serverStderr) { Get-Content $serverStderr -Raw } else { '' }
-              throw "Installed Desktop channel server did not become ready in time.`n$stdout`n$stderr"
-            }
-
-            $arguments = @(
-              '-PreviousInstaller', '${{ steps.scenario.outputs.previous_installer }}',
-              '-CandidateInstaller', '${{ steps.scenario.outputs.candidate_installer }}',
-              '-CandidateTag', '${{ steps.scenario.outputs.scenario_tag }}',
-              '-ChannelUrl', $channelUrl,
-              '-PreviousShellVersion', '${{ steps.scenario.outputs.previous_shell }}',
-              '-PreviousRuntimeVersion', '${{ steps.scenario.outputs.previous_runtime }}',
-              '-ExpectedShellVersion', '${{ steps.scenario.outputs.target_shell }}',
-              '-ExpectedRuntimeVersion', '${{ steps.scenario.outputs.target_runtime }}',
-              '-PublicKeyPath', '${{ steps.scenario.outputs.public_key_path }}',
-              '-Scenario', '${{ matrix.scenario }}',
-              '-ReportPath', 'release/desktop-installed-report/${{ matrix.scenario }}.json',
-              '-CommitSha', '${{ github.sha }}',
-              '-ChannelSignatureDigest', '${{ steps.scenario.outputs.signature_digest }}'
-            )
-            if ('${{ steps.scenario.outputs.components }}') {
-              $arguments += @('-ExpectedComponents', '${{ steps.scenario.outputs.components }}')
-            }
-            if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
-              $arguments += @('-ExpectedRuntimeAfterRestart', '${{ steps.scenario.outputs.previous_runtime }}')
-            }
-            if ('${{ matrix.scenario }}' -in @('fresh-wsl', 'legacy-wsl-current', 'wsl', 'wsl-combined')) {
-              $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
-            }
-            if ('${{ inputs.windows_signing }}' -ne 'true') {
-              $arguments += '-SkipAuthenticode'
-            }
-            pnpm acceptance:desktop:installed @arguments
-            if ($LASTEXITCODE -ne 0) { throw 'Installed Desktop acceptance failed' }
-            $reportPath = 'release/desktop-installed-report/${{ matrix.scenario }}.json'
-            $report = Get-Content $reportPath -Raw | ConvertFrom-Json
-            $report | Add-Member -NotePropertyName releaseKind -NotePropertyValue '${{ needs.prepare.outputs.release_kind }}' -Force
-            $report | ConvertTo-Json -Depth 32 | Set-Content $reportPath -Encoding utf8
-          } finally {
-            if ($server) {
-              $server.Refresh()
-              if (-not $server.HasExited) {
-                Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-              }
-            }
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.previous_installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ inputs.bridge_candidate_tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ inputs.bridge_candidate_tag }}/desktop-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.previous_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.previous_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-PublicKeyPath', 'release/legacy-bridge/key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.scenario }}',
+            '-ReportPath', 'release/legacy-bridge-report/${{ matrix.target }}.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ steps.identity.outputs.components }}') {
+            $arguments += @('-ExpectedComponents', '${{ steps.identity.outputs.components }}')
           }
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable legacy bridge upgrade failed' }
 
-      - name: Upload installed-upgrade report
+      - name: Verify the bridge legacy channel remains frozen
+        shell: pwsh
+        run: |
+          $arguments = @(
+            '-PreviousInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateInstaller', '${{ steps.identity.outputs.candidate_installer }}',
+            '-CandidateTag', '${{ inputs.bridge_candidate_tag }}',
+            '-ChannelUrl', 'https://github.com/${{ github.repository }}/releases/download/${{ inputs.bridge_candidate_tag }}/desktop-channel.json',
+            '-PreviousShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-PreviousRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-ExpectedShellVersion', '${{ steps.identity.outputs.target_shell }}',
+            '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
+            '-PublicKeyPath', 'release/legacy-bridge/key/runtime-public.pem',
+            '-Scenario', '${{ steps.identity.outputs.frozen_scenario }}',
+            '-ReportPath', 'release/legacy-bridge-report/${{ matrix.target }}-frozen.json',
+            '-CommitSha', '${{ github.sha }}',
+            '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
+          )
+          if ('${{ matrix.target }}' -eq 'wsl') {
+            $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          pnpm acceptance:desktop:installed @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen legacy bridge verification failed' }
+
+      - name: Upload legacy bridge acceptance reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-installed-upgrade-${{ matrix.scenario }}-${{ github.sha }}
-          path: release/desktop-installed-report/
+          name: legacy-bridge-${{ matrix.target }}-${{ github.sha }}
+          path: release/legacy-bridge-report/
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 90
 
-      - name: Clean up acceptance services
-        if: always()
+      - name: Clean up disposable WSL distribution
+        if: always() && matrix.target == 'wsl'
         shell: pwsh
         run: |
           $distro = '${{ steps.wsl.outputs.name }}'

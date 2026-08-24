@@ -84,6 +84,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("$initialScenario");
     expect(runner).toContain("'runtime:win32-x64'");
     expect(runner).toContain("CODER_STUDIO_FACTORY_RELEASE_BASE_URL");
+    expect(runner).toContain("[string]$ProductChannelUrl = ''");
+    expect(runner).toContain("CODER_STUDIO_PRODUCT_CHANNEL_URL");
     expect(runner).toContain("Join-Path $factoryRuntime 'manifest.json'");
     expect(runner).not.toContain("Join-Path $factoryRuntime 'runtime.manifest.json'");
     expect(runner).toContain("$driverProcess.Handle | Out-Null");
@@ -267,17 +269,54 @@ describe("verify-desktop-installed-update", () => {
   });
 
   it("relaunches and resumes after an interrupted download before installing once", async () => {
-    const deps = createDeps();
+    let downloadAttempts = 0;
+    let firstDownloadSettled = false;
+    let rejectFirstDownload: ((reason?: unknown) => void) | undefined;
+    const deps = createDeps({
+      invoke: vi.fn(async (method) => {
+        if (method === "checkForUpdates") return state("available");
+        if (method === "downloadUpdate") {
+          downloadAttempts += 1;
+          if (downloadAttempts === 1) {
+            return await new Promise<never>((_resolve, reject) => {
+              rejectFirstDownload = reject;
+            }).finally(() => {
+              firstDownloadSettled = true;
+            });
+          }
+          return state("ready");
+        }
+        if (method === "prepareUpdateRestart") return state("ready");
+        if (method === "restartAndInstallUpdate") return true;
+        if (method === "getUpdateState") return state("succeeded");
+        throw new Error(`Unexpected method: ${method}`);
+      }),
+      waitForState: vi.fn(async (status) => {
+        if (status === "downloading") {
+          return { ...state("available"), status: "downloading" };
+        }
+        return state("ready");
+      }),
+      interruptAtPhase: vi.fn(async (phase) => {
+        expect(phase).toBe("downloading");
+        expect(firstDownloadSettled).toBe(false);
+        rejectFirstDownload?.(new Error("Desktop stopped during download"));
+        await Promise.resolve();
+      }),
+    });
     const scenario: InstalledDesktopScenario = {
       ...combinedScenario,
       name: "interrupted-download",
     };
 
-    const report = await verifyInstalledDesktopScenario(scenario, deps);
+    const report = await verifyInstalledDesktopScenario(scenario, deps, {
+      downloadTimeoutMs: 100,
+    });
 
+    expect(deps.waitForState).toHaveBeenCalledWith("downloading");
     expect(deps.interruptAtPhase).toHaveBeenCalledWith("downloading");
     expect(deps.reconnectAfterRestart).toHaveBeenCalledTimes(2);
-    expect(deps.invoke).toHaveBeenCalledWith("checkForUpdates");
+    expect(downloadAttempts).toBe(2);
     expect(report.restartCount).toBe(1);
   });
 
