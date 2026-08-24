@@ -131,6 +131,10 @@ jobs:
             release/bridge-candidate/desktop-validate/
           tar -xzf release/bridge-candidate/candidate/desktop-validation-evidence.tgz \
             -C release/bridge-candidate/desktop-validate
+          windows_package=$(node -p "require('./release/bridge-candidate/product/coder-studio-runtime-win32-x64.manifest.json').packageFile")
+          mkdir -p release/bridge-candidate/desktop-validate/factory-runtime
+          tar -xzf "release/bridge-candidate/product/${windows_package}" \
+            -C release/bridge-candidate/desktop-validate/factory-runtime
           pnpm release:artifacts validate-desktop \
             --directory release/bridge-candidate/desktop-validate
 
