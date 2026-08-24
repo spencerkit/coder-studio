@@ -309,6 +309,7 @@ jobs:
           if [[ "${{ needs.prepare.outputs.resume_candidate }}" == "true" ]]; then
             gh release download "${CANDIDATE_TAG}" --dir release/product-candidate
           else
+            pnpm build:cli
             pack_json=$(pnpm --dir ./packages/cli pack --json --pack-destination "${PWD}/release/cli-candidate")
             tarball=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d).filename))")
             pnpm validate:cli-package -- \
