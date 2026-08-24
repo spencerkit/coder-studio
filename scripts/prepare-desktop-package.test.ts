@@ -191,15 +191,36 @@ describe("prepare-desktop-package", () => {
     await access(npmPath);
     await expect(readFile(npmPath, "utf8")).resolves.toBe("windows-launcher");
   });
-  it("uses workdir-relative tar paths when extracting the Node runtime archive", () => {
+  it("uses PowerShell archive extraction for Windows Node runtime archives", () => {
     const execution = createNodeRuntimeExtractionExecution(
       "C:\\temp\\coder-studio-node-runtime-123\\node-v24.19.0-win-x64.zip",
-      "C:\\temp\\coder-studio-node-runtime-123"
+      "C:\\temp\\coder-studio-node-runtime-123",
+      "win32"
     );
 
     expect(execution).toEqual({
+      command: "powershell",
       cwd: "C:\\temp\\coder-studio-node-runtime-123",
-      args: ["-xf", "node-v24.19.0-win-x64.zip", "-C", "."],
+      args: [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        "Expand-Archive -LiteralPath 'node-v24.19.0-win-x64.zip' -DestinationPath '.' -Force",
+      ],
+    });
+  });
+
+  it("uses workdir-relative tar paths for non-Windows Node runtime archives", () => {
+    const execution = createNodeRuntimeExtractionExecution(
+      "/tmp/coder-studio-node-runtime-123/node-v24.19.0-linux-x64.tar.xz",
+      "/tmp/coder-studio-node-runtime-123",
+      "linux"
+    );
+
+    expect(execution).toEqual({
+      command: "tar",
+      cwd: "/tmp/coder-studio-node-runtime-123",
+      args: ["-xf", "node-v24.19.0-linux-x64.tar.xz", "-C", "."],
     });
   });
 });

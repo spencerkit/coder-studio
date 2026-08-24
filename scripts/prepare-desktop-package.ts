@@ -37,7 +37,8 @@ interface RuntimeTarget {
   rootDirName: string;
 }
 
-interface TarExecution {
+interface ExtractionExecution {
+  command: string;
   cwd: string;
   args: string[];
 }
@@ -104,11 +105,26 @@ function toTarRelativePath(root: string, target: string, label: string): string 
 
 export function createNodeRuntimeExtractionExecution(
   archivePath: string,
-  cwd: string
-): TarExecution {
+  cwd: string,
+  platform: NodeJS.Platform = process.platform
+): ExtractionExecution {
+  const relativeArchivePath = toTarRelativePath(cwd, archivePath, "Desktop Node archive");
+  if (platform === "win32" && archivePath.toLowerCase().endsWith(".zip")) {
+    return {
+      command: "powershell",
+      cwd,
+      args: [
+        "-NoLogo",
+        "-NoProfile",
+        "-Command",
+        `Expand-Archive -LiteralPath '${relativeArchivePath.replaceAll("'", "''")}' -DestinationPath '.' -Force`,
+      ],
+    };
+  }
   return {
+    command: "tar",
     cwd,
-    args: ["-xf", toTarRelativePath(cwd, archivePath, "Desktop Node archive"), "-C", "."],
+    args: ["-xf", relativeArchivePath, "-C", "."],
   };
 }
 
@@ -131,7 +147,7 @@ async function stageNodeRuntime(): Promise<void> {
     ]);
     await verifyArchive(archivePath, target.archiveName, await readFile(checksumsPath, "utf8"));
     const extraction = createNodeRuntimeExtractionExecution(archivePath, workDir);
-    await run("tar", extraction.args, { cwd: extraction.cwd });
+    await run(extraction.command, extraction.args, { cwd: extraction.cwd });
     const extractedDir = join(workDir, target.rootDirName);
     await copyEngineTree(extractedDir, DESKTOP_ENGINE_DIR);
   } finally {
