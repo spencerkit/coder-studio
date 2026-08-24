@@ -806,11 +806,13 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(jobText(legacy)).toContain("legacy-wsl-current");
     expect(jobText(legacy)).toContain("pnpm acceptance:desktop:installed");
     expect(jobText(legacy)).toContain("bridge_candidate_tag");
+    expect(jobText(legacy)).toContain("-SkipAuthenticode");
 
     expect(independent.strategy?.matrix?.target).toEqual(["native", "wsl"]);
     expect(jobText(independent)).toContain("product-stable");
     expect(jobText(independent)).toContain("desktop-stable");
     expect(jobText(independent)).toContain("pnpm acceptance:desktop:installed");
+    expect(jobText(independent)).toContain("-SkipAuthenticode");
   });
 
   it("verifies both stable feeds before making the bridge repository-wide latest", () => {
