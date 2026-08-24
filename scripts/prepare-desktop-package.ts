@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve, sep, win32 } from "node:path";
 import {
   type FactoryProductProvenance,
   type ProductRuntimeTarget,
@@ -93,8 +93,10 @@ async function verifyArchive(
 }
 
 function toTarRelativePath(root: string, target: string, label: string): string {
-  const path = relative(root, target);
-  if (!path || path === "." || path === ".." || path.startsWith(`..${sep}`)) {
+  const isWindowsPath = /^[A-Za-z]:[\\/]/.test(root) || /^[A-Za-z]:[\\/]/.test(target);
+  const path = isWindowsPath ? win32.relative(root, target) : relative(root, target);
+  const parentPrefix = `..${isWindowsPath ? win32.sep : sep}`;
+  if (!path || path === "." || path === ".." || path.startsWith(parentPrefix)) {
     throw new Error(`${label} must stay inside ${root}`);
   }
   return path.replaceAll("\\", "/");
