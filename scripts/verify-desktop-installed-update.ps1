@@ -167,6 +167,59 @@ function Get-SidecarUrl([object[]]$Pages) {
   return ''
 }
 
+function Test-ShellVersionMatch([string]$ObservedVersion, [string]$ExpectedVersion) {
+  if ([string]::IsNullOrWhiteSpace($ObservedVersion) -or [string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+    return $false
+  }
+  return $ObservedVersion -eq $ExpectedVersion -or
+    $ObservedVersion.StartsWith("$ExpectedVersion.", [StringComparison]::Ordinal)
+}
+
+function Get-InstalledDesktopShellVersion([string]$InstallDirectory, [string]$Executable) {
+  $buildInfoPath = Join-Path $InstallDirectory 'resources/build-info.json'
+  if (Test-Path -LiteralPath $buildInfoPath -PathType Leaf) {
+    try {
+      $buildInfo = Get-Content -LiteralPath $buildInfoPath -Raw | ConvertFrom-Json
+      if ($buildInfo.shellVersion) {
+        return [string]$buildInfo.shellVersion
+      }
+    } catch {
+      # Fall through to file metadata when build-info.json is missing or incomplete.
+    }
+  }
+  if (Test-Path -LiteralPath $Executable -PathType Leaf) {
+    try {
+      $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($Executable)
+      foreach ($candidate in @($versionInfo.ProductVersion, $versionInfo.FileVersion)) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+          return [string]$candidate
+        }
+      }
+    } catch {
+      # Ignore metadata read failures and let the caller retry.
+    }
+  }
+  return $null
+}
+
+function Wait-ForInstalledShellVersion(
+  [string]$InstallDirectory,
+  [string]$Executable,
+  [string]$ExpectedVersion,
+  [int]$TimeoutSeconds = 20
+) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $lastObservedVersion = $null
+  while ([DateTime]::UtcNow -lt $deadline) {
+    $lastObservedVersion = Get-InstalledDesktopShellVersion $InstallDirectory $Executable
+    if (Test-ShellVersionMatch $lastObservedVersion $ExpectedVersion) {
+      return $lastObservedVersion
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  throw "Timed out waiting for installed Desktop Shell version $ExpectedVersion. Observed: $lastObservedVersion"
+}
+
 function Write-JsonAtomic([string]$Path, [object]$Value) {
   $destination = [System.IO.Path]::GetFullPath($Path)
   $directory = Split-Path -Parent $destination
@@ -443,6 +496,7 @@ try {
         $relaunchError = $null
         while ([DateTime]::UtcNow -lt $restartDeadline) {
           try {
+            Wait-ForInstalledShellVersion $installDirectory $desktopExecutable $ExpectedShellVersion | Out-Null
             Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
             $cdpPort = Get-FreeTcpPort
             $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
