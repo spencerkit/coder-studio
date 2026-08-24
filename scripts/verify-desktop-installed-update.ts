@@ -82,6 +82,12 @@ export interface InstalledDesktopScenarioReport extends InstalledEvidence {
   logPaths: string[];
 }
 
+interface SidecarCommandPayload {
+  wsUrl: string;
+  operation: string;
+  operationArgs: unknown;
+}
+
 export function toSidecarWebSocketUrl(apiUrl: string): string {
   const url = new URL(apiUrl.endsWith("/") ? apiUrl.slice(0, -1) : apiUrl);
   if (url.protocol === "http:") {
@@ -95,6 +101,71 @@ export function toSidecarWebSocketUrl(apiUrl: string): string {
   url.search = "";
   url.hash = "";
   return url.toString();
+}
+
+export function buildSidecarCommandPageScript(payload: SidecarCommandPayload): string {
+  return [
+    "(async () => {",
+    `  const payload = ${JSON.stringify(payload)};`,
+    "  const { wsUrl, operation, operationArgs } = payload;",
+    "  return await new Promise((resolve, reject) => {",
+    '    const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + "-" + String(Math.random());',
+    "    const socket = new WebSocket(wsUrl);",
+    "    let settled = false;",
+    "    let timer = 0;",
+    "    const finish = (callback) => {",
+    "      if (settled) {",
+    "        return;",
+    "      }",
+    "      settled = true;",
+    "      clearTimeout(timer);",
+    "      try {",
+    "        socket.close();",
+    "      } catch {",
+    "        // Ignore close errors because the command result already settled the promise.",
+    "      }",
+    "      callback();",
+    "    };",
+    "    timer = setTimeout(() => {",
+    '      finish(() => reject(new Error("Timed out waiting for " + operation + " result")));',
+    "    }, 30000);",
+    '    socket.addEventListener("open", () => {',
+    "      socket.send(",
+    "        JSON.stringify({",
+    '          kind: "command",',
+    "          id,",
+    "          op: operation,",
+    "          args: operationArgs,",
+    "        })",
+    "      );",
+    "    });",
+    '    socket.addEventListener("message", (event) => {',
+    "      try {",
+    "        const message = JSON.parse(String(event.data));",
+    '        if (message.kind !== "result" || message.id !== id) {',
+    "          return;",
+    "        }",
+    "        if (message.ok) {",
+    "          finish(() => resolve(message.data));",
+    "          return;",
+    "        }",
+    '        const code = message.error?.code ? String(message.error.code) + ": " : "";',
+    '        finish(() => reject(new Error(code + (message.error?.message ?? "Command failed"))));',
+    "      } catch (error) {",
+    "        finish(() => reject(error instanceof Error ? error : new Error(String(error))));",
+    "      }",
+    "    });",
+    '    socket.addEventListener("error", () => {',
+    '      finish(() => reject(new Error("WebSocket error while waiting for " + operation)));',
+    "    });",
+    '    socket.addEventListener("close", () => {',
+    "      if (!settled) {",
+    '        finish(() => reject(new Error("Coder Studio command connection closed before a result")));',
+    "      }",
+    "    });",
+    "  });",
+    "})()",
+  ].join("\n");
 }
 
 function asState(value: unknown, phase: string): ProductUpdateState {
@@ -371,6 +442,7 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
       connectOverCDP(url: string): Promise<{
         contexts(): Array<{
           pages(): Array<{
+            evaluate<T>(expression: string): Promise<T>;
             evaluate<T, A>(callback: (argument: A) => T | Promise<T>, argument: A): Promise<T>;
           }>;
           newPage(): Promise<{
@@ -406,78 +478,11 @@ async function connectBrowser(cdpUrl: string): Promise<BrowserSession> {
       }, method),
     callSidecarCommand: <T>(url: string, op: string, args: unknown): Promise<T> =>
       page.evaluate(
-        ({ wsUrl, operation, operationArgs }) =>
-          new Promise<unknown>((resolve, reject) => {
-            const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-            const socket = new WebSocket(wsUrl);
-            let settled = false;
-            const timer = setTimeout(() => {
-              finish(() => reject(new Error(`Timed out waiting for ${operation} result`)));
-            }, 30_000);
-
-            const finish = (callback: () => void) => {
-              if (settled) {
-                return;
-              }
-              settled = true;
-              clearTimeout(timer);
-              socket.close();
-              callback();
-            };
-
-            socket.addEventListener("open", () => {
-              socket.send(
-                JSON.stringify({
-                  kind: "command",
-                  id,
-                  op: operation,
-                  args: operationArgs,
-                })
-              );
-            });
-
-            socket.addEventListener("message", (event) => {
-              try {
-                const message = JSON.parse(String(event.data)) as {
-                  kind?: string;
-                  id?: string;
-                  ok?: boolean;
-                  data?: unknown;
-                  error?: { code?: string; message?: string };
-                };
-                if (message.kind !== "result" || message.id !== id) {
-                  return;
-                }
-                if (message.ok) {
-                  finish(() => resolve(message.data));
-                  return;
-                }
-                const code = message.error?.code ? `${message.error.code}: ` : "";
-                finish(() =>
-                  reject(new Error(`${code}${message.error?.message ?? "Command failed"}`))
-                );
-              } catch (error) {
-                finish(() => reject(error instanceof Error ? error : new Error(String(error))));
-              }
-            });
-
-            socket.addEventListener("error", () => {
-              finish(() => reject(new Error(`WebSocket error while waiting for ${operation}`)));
-            });
-
-            socket.addEventListener("close", () => {
-              if (!settled) {
-                finish(() =>
-                  reject(new Error("Coder Studio command connection closed before a result"))
-                );
-              }
-            });
-          }),
-        {
+        buildSidecarCommandPageScript({
           wsUrl: toSidecarWebSocketUrl(url),
           operation: op,
           operationArgs: args,
-        }
+        })
       ) as Promise<T>,
     verifyExternalSidecar: async (url) => {
       const externalBrowser = await playwright.chromium.launch({

@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildSidecarCommandPageScript,
   type InstalledDesktopScenario,
   toSidecarWebSocketUrl,
   type VerifyInstalledDesktopDeps,
@@ -129,6 +131,80 @@ describe("verify-desktop-installed-update", () => {
     expect(toSidecarWebSocketUrl("http://127.0.0.1:4173")).toBe("ws://127.0.0.1:4173/ws");
     expect(toSidecarWebSocketUrl("https://example.com/app/")).toBe("wss://example.com/app/ws");
     expect(() => toSidecarWebSocketUrl("file:///tmp/coder-studio")).toThrow("Unsupported");
+  });
+
+  it("builds a page-side sidecar command script without bundler-only helpers", async () => {
+    const sentMessages: string[] = [];
+    const openedUrls: string[] = [];
+
+    class FakeWebSocket {
+      private listeners = new Map<string, Array<(event?: { data?: string }) => void>>();
+
+      constructor(url: string) {
+        openedUrls.push(url);
+        Promise.resolve().then(() => this.emit("open"));
+      }
+
+      addEventListener(type: string, listener: (event?: { data?: string }) => void) {
+        const existing = this.listeners.get(type) ?? [];
+        existing.push(listener);
+        this.listeners.set(type, existing);
+      }
+
+      close() {}
+
+      send(data: string) {
+        sentMessages.push(data);
+        const message = JSON.parse(data) as { id: string };
+        Promise.resolve().then(() =>
+          this.emit("message", {
+            data: JSON.stringify({
+              kind: "result",
+              id: message.id,
+              ok: true,
+              data: { hasActiveWork: true },
+            }),
+          })
+        );
+      }
+
+      private emit(type: string, event?: { data?: string }) {
+        for (const listener of this.listeners.get(type) ?? []) {
+          listener(event);
+        }
+      }
+    }
+
+    const script = buildSidecarCommandPageScript({
+      wsUrl: "ws://127.0.0.1:4173/ws",
+      operation: "updates.prepareInstall",
+      operationArgs: {},
+    });
+
+    expect(script).not.toContain("__name");
+
+    const result = await runInNewContext(script, {
+      WebSocket: FakeWebSocket,
+      crypto: { randomUUID: () => "sidecar-command-id" },
+      setTimeout,
+      clearTimeout,
+      Date,
+      Math,
+      Error,
+      JSON,
+      String,
+    });
+
+    expect(openedUrls).toEqual(["ws://127.0.0.1:4173/ws"]);
+    expect(sentMessages).toEqual([
+      JSON.stringify({
+        kind: "command",
+        id: "sidecar-command-id",
+        op: "updates.prepareInstall",
+        args: {},
+      }),
+    ]);
+    expect(result).toEqual({ hasActiveWork: true });
   });
 
   it("drives one confirmation and validates actual component versions", async () => {
