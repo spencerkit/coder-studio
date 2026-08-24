@@ -358,6 +358,12 @@ describe("Desktop publication workflow", () => {
         default: "",
         type: "string",
       },
+      windows_signing: {
+        description: "Require Windows Authenticode signing for workflow_dispatch runs",
+        required: false,
+        default: true,
+        type: "boolean",
+      },
     });
     expect(workflow.concurrency).toEqual({
       group: "desktop-production",
@@ -431,6 +437,7 @@ describe("Desktop publication workflow", () => {
     const windowsText = jobText(jobs["windows-assets"]);
     expect(windowsText).toContain("CODER_STUDIO_FACTORY_RUNTIME_DIR");
     expect(windowsText).toContain("CODER_STUDIO_FACTORY_PRODUCT_FILE");
+    expect(windowsText).toContain("WINDOWS_SIGNING_ENABLED");
     expect(windowsText).toContain("pnpm dist:desktop");
     expect(windowsText).toContain("pnpm release:artifacts stage-desktop");
     expect(windowsText).toContain("--components windows");
@@ -446,6 +453,7 @@ describe("Desktop publication workflow", () => {
     expect(recoverWindows).toContain(
       "cp -R release/factory-product/factory-runtime release/desktop-windows/factory-runtime"
     );
+    expect(recoverWindows).toContain("windows_signing is enabled");
 
     const linuxText = jobText(jobs["wsl-engine"]);
     expect(linuxText).toContain("pnpm build:wsl-engine");
