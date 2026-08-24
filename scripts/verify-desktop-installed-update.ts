@@ -59,6 +59,20 @@ type InstalledDesktopInterruptionPhase =
   | "wsl-follow"
   | "install-restart";
 
+interface InstalledDesktopRelaunchState {
+  phase?: unknown;
+  status?: unknown;
+  journalRecovered?: unknown;
+  cdpUrl?: unknown;
+  sidecarUrl?: unknown;
+}
+
+interface InstalledDesktopRelaunchInfo {
+  journalRecovered: boolean;
+  cdpUrl: string | null;
+  sidecarUrl: string | null;
+}
+
 export interface VerifyInstalledDesktopDeps {
   invoke(method: DesktopBridgeMethod): Promise<unknown>;
   waitForState(status: ProductUpdateState["status"]): Promise<unknown>;
@@ -577,18 +591,21 @@ async function readEvidenceFile(path: string | undefined): Promise<Partial<Insta
 async function waitForRelaunch(
   path: string | undefined,
   phase: InstalledDesktopInterruptionPhase
-): Promise<boolean> {
+): Promise<InstalledDesktopRelaunchInfo> {
   if (!path) throw new Error(`Installed Desktop interruption control is required for ${phase}`);
   const controlPath = resolve(path);
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     try {
-      const state = JSON.parse(await readFile(controlPath, "utf8")) as {
-        phase?: unknown;
-        status?: unknown;
-      };
+      const state = JSON.parse(
+        await readFile(controlPath, "utf8")
+      ) as InstalledDesktopRelaunchState;
       if (state.phase === phase && state.status === "relaunched") {
-        return (state as { journalRecovered?: unknown }).journalRecovered === true;
+        return {
+          journalRecovered: state.journalRecovered === true,
+          cdpUrl: typeof state.cdpUrl === "string" ? state.cdpUrl : null,
+          sidecarUrl: typeof state.sidecarUrl === "string" ? state.sidecarUrl : null,
+        };
       }
     } catch {
       // The PowerShell orchestrator may be replacing the control file atomically.
@@ -601,7 +618,7 @@ async function waitForRelaunch(
 async function requestInterruption(
   path: string | undefined,
   phase: Exclude<InstalledDesktopInterruptionPhase, "install-restart">
-): Promise<boolean> {
+): Promise<InstalledDesktopRelaunchInfo> {
   if (!path) throw new Error(`Installed Desktop interruption control is required for ${phase}`);
   const controlPath = resolve(path);
   await writeJsonAtomic(controlPath, { schemaVersion: 1, phase, status: "requested" });
@@ -684,7 +701,9 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
   deps: VerifyInstalledDesktopDeps;
   close(): Promise<void>;
 }> {
-  let session = await connectBrowser(options.cdpUrl);
+  let activeCdpUrl = options.cdpUrl;
+  let activeSidecarUrl = options.sidecarUrl;
+  let session = await connectBrowser(activeCdpUrl);
   let journalRecovered = false;
   const invoke = (method: DesktopBridgeMethod) => session.evaluate(method);
   return {
@@ -701,30 +720,34 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         throw new Error(`Timed out waiting for Desktop update state ${status}: ${state?.status}`);
       },
       prepareActivity: async () => {
-        if (!options.sidecarUrl) {
+        if (!activeSidecarUrl) {
           return { hasActiveWork: false } as UpdatePrepareInstallResponse;
         }
         return session.callSidecarCommand<UpdatePrepareInstallResponse>(
-          options.sidecarUrl,
+          activeSidecarUrl,
           "updates.prepareInstall",
           {}
         );
       },
       interruptAtPhase: async (phase) => {
-        journalRecovered =
-          (await requestInterruption(options.controlPath, phase)) || journalRecovered;
+        const relaunch = await requestInterruption(options.controlPath, phase);
+        journalRecovered = relaunch.journalRecovered || journalRecovered;
+        activeCdpUrl = relaunch.cdpUrl ?? activeCdpUrl;
+        activeSidecarUrl = relaunch.sidecarUrl ?? activeSidecarUrl;
       },
       armRestartAfterInstall: async () => {
         await armInstalledRestart(options.controlPath);
       },
       waitForRestartAfterInstall: async () => {
-        await waitForRelaunch(options.controlPath, "install-restart");
+        const relaunch = await waitForRelaunch(options.controlPath, "install-restart");
+        activeCdpUrl = relaunch.cdpUrl ?? activeCdpUrl;
+        activeSidecarUrl = relaunch.sidecarUrl ?? activeSidecarUrl;
       },
       verifyExternalSidecar: async () => {
-        if (!options.sidecarUrl) {
+        if (!activeSidecarUrl) {
           throw new Error("External sidecar scenario requires --sidecar-url");
         }
-        return session.verifyExternalSidecar(options.sidecarUrl);
+        return session.verifyExternalSidecar(activeSidecarUrl);
       },
       reconnectAfterRestart: async () => {
         await session.close().catch(() => undefined);
@@ -732,7 +755,7 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         let lastError: unknown;
         while (Date.now() < deadline) {
           try {
-            session = await connectBrowser(options.cdpUrl);
+            session = await connectBrowser(activeCdpUrl);
             await invoke("getUpdateState");
             return;
           } catch (connectError) {
