@@ -827,6 +827,7 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(jobText(legacy)).toContain("pnpm acceptance:desktop:installed");
     expect(jobText(legacy)).toContain("bridge_candidate_tag");
     expect(jobText(legacy)).toContain("-SkipAuthenticode");
+    expect(jobText(legacy)).toContain("-PinLegacyShellUpdaterToChannel");
 
     expect(independent.strategy?.matrix?.target).toEqual(["native", "wsl"]);
     expect(jobText(independent)).toContain("product-stable");

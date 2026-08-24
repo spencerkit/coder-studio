@@ -33,6 +33,7 @@ param(
   [string]$ChannelSignatureDigest = '',
   [string]$WslDistro = '',
   [switch]$SkipAuthenticode,
+  [switch]$PinLegacyShellUpdaterToChannel,
   [switch]$KeepOnFailure
 )
 
@@ -52,6 +53,25 @@ function Assert-Authenticode([string]$Path, [string]$Label) {
   if ($signature.Status -ne 'Valid') {
     throw "$Label is not Authenticode-valid: $Path ($($signature.Status))"
   }
+}
+
+function Set-LegacyShellUpdaterFeed([string]$InstallDirectory, [string]$ChannelUrl) {
+  $appUpdatePath = Join-Path $InstallDirectory 'resources/app-update.yml'
+  if (-not (Test-Path -LiteralPath $appUpdatePath -PathType Leaf)) {
+    throw "Installed Desktop updater config is missing: $appUpdatePath"
+  }
+  $existingConfig = Get-Content -LiteralPath $appUpdatePath -Raw
+  $cacheLine = [regex]::Match($existingConfig, '(?m)^updaterCacheDirName:\s*.+$').Value.Trim()
+  $releaseBaseUrl = ([Uri]::new([Uri]$ChannelUrl, '.')).AbsoluteUri
+  $content = @(
+    'provider: generic'
+    "url: $releaseBaseUrl"
+    'channel: latest'
+  )
+  if ($cacheLine) {
+    $content += $cacheLine
+  }
+  ($content -join "`n") + "`n" | Set-Content -LiteralPath $appUpdatePath -Encoding utf8
 }
 
 function Get-FreeTcpPort {
@@ -247,6 +267,9 @@ try {
   }
   if (-not $SkipAuthenticode) {
     Assert-Authenticode $desktopExecutable 'Installed Desktop executable'
+  }
+  if ($PinLegacyShellUpdaterToChannel) {
+    Set-LegacyShellUpdaterFeed $installDirectory $ChannelUrl
   }
 
   if ($isWslScenario) {

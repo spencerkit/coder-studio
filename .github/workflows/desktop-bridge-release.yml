@@ -448,6 +448,7 @@ jobs:
             $arguments += @('-ExpectedComponents', '${{ steps.identity.outputs.components }}')
           }
           $arguments += '-SkipAuthenticode'
+          $arguments += '-PinLegacyShellUpdaterToChannel'
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }

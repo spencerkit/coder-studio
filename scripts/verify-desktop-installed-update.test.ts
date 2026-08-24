@@ -113,6 +113,11 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("'legacy-wsl-current'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");
+    expect(runner).toContain("[switch]$PinLegacyShellUpdaterToChannel");
+    expect(runner).toContain("function Set-LegacyShellUpdaterFeed");
+    expect(runner).toContain("provider: generic");
+    expect(runner).toContain("channel: latest");
+    expect(runner).toContain("Set-LegacyShellUpdaterFeed $installDirectory $ChannelUrl");
     expect(runner).toContain("$report.logPaths = @($preservedPaths)");
     expect(runner.indexOf("Preserve-AcceptanceEvidence")).toBeLessThan(
       runner.lastIndexOf("Remove-Item -LiteralPath $runRoot -Recurse")
