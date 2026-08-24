@@ -24,6 +24,7 @@ jobs:
     name: Validate immutable bridge candidate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: desktop-production
     outputs:
       bridge_candidate_tag: ${{ steps.identity.outputs.bridge_candidate_tag }}
       previous_latest_tag: ${{ steps.identity.outputs.previous_latest_tag }}
@@ -258,6 +259,7 @@ jobs:
       - bootstrap-product
     runs-on: windows-latest
     timeout-minutes: 120
+    environment: desktop-production
     strategy:
       fail-fast: false
       matrix:
@@ -548,6 +550,7 @@ jobs:
       - verify-stable-feeds
     runs-on: windows-latest
     timeout-minutes: 90
+    environment: desktop-production
     strategy:
       fail-fast: false
       matrix:

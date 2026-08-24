@@ -732,7 +732,9 @@ describe("one-time Product and Desktop migration bridge", () => {
       "accept-independent-feeds",
     ]);
     expect(jobs["promote-bridge"].if).toBe("success()");
-    expect(JSON.stringify(jobs)).not.toContain('"environment"');
+    expect(jobs.prepare.environment).toBe("desktop-production");
+    expect(jobs["accept-legacy-upgrade"].environment).toBe("desktop-production");
+    expect(jobs["accept-independent-feeds"].environment).toBe("desktop-production");
   });
 
   it("can recover when the accepted bridge already became repository-wide latest", () => {
