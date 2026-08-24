@@ -158,6 +158,15 @@ function Start-AcceptanceDesktop(
     -RedirectStandardOutput $StandardOut -RedirectStandardError $StandardError
 }
 
+function Get-SidecarUrl([object[]]$Pages) {
+  foreach ($page in $Pages) {
+    if ($page.type -eq 'page' -and $page.url -match '^https?://') {
+      return ([Uri]$page.url).GetLeftPart([System.UriPartial]::Authority)
+    }
+  }
+  return ''
+}
+
 function Write-JsonAtomic([string]$Path, [object]$Value) {
   $destination = [System.IO.Path]::GetFullPath($Path)
   $directory = Split-Path -Parent $destination
@@ -337,13 +346,7 @@ try {
   # creates a page. Keep native and subsequent restart checks at the stricter default.
   $startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }
   $pages = Wait-Cdp $cdpPort $startupTimeoutSeconds
-  $sidecarUrl = ''
-  foreach ($page in $pages) {
-    if ($page.type -eq 'page' -and $page.url -match '^https?://') {
-      $sidecarUrl = ([Uri]$page.url).GetLeftPart([System.UriPartial]::Authority)
-      break
-    }
-  }
+  $sidecarUrl = Get-SidecarUrl $pages
 
   $driverArgs = @(
     'exec', 'tsx', 'scripts/verify-desktop-installed-update.ts',
@@ -410,13 +413,17 @@ try {
           }
           $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro $desktopOut $desktopErr
           $desktopProcess.Handle | Out-Null
-          Wait-Cdp $cdpPort | Out-Null
+          $restartPages = Wait-Cdp $cdpPort
+          $restartSidecarUrl = Get-SidecarUrl $restartPages
+          $sidecarUrl = $restartSidecarUrl
           $journalAfter = Read-JournalIdentity $journalPath
           Write-JsonAtomic $controlPath @{
             schemaVersion = 1
             phase = $control.phase
             status = 'relaunched'
             journalRecovered = ($null -ne $journalBefore -and $journalBefore -eq $journalAfter)
+            cdpUrl = "http://127.0.0.1:$cdpPort"
+            sidecarUrl = $restartSidecarUrl
           }
           $handledInterruptions.Add($phase) | Out-Null
         }
@@ -437,13 +444,18 @@ try {
         while ([DateTime]::UtcNow -lt $restartDeadline) {
           try {
             Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
+            $cdpPort = Get-FreeTcpPort
             $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
             $desktopProcess.Handle | Out-Null
-            Wait-Cdp $cdpPort 15 | Out-Null
+            $restartPages = Wait-Cdp $cdpPort 15
+            $restartSidecarUrl = Get-SidecarUrl $restartPages
+            $sidecarUrl = $restartSidecarUrl
             Write-JsonAtomic $controlPath @{
               schemaVersion = 1
               phase = 'install-restart'
               status = 'relaunched'
+              cdpUrl = "http://127.0.0.1:$cdpPort"
+              sidecarUrl = $restartSidecarUrl
             }
             $restartAfterInstallHandled = $true
             break
