@@ -780,12 +780,14 @@ describe("one-time Product and Desktop migration bridge", () => {
     const desktop = jobText(jobs["bootstrap-desktop"]);
 
     expect(jobs["bootstrap-product"].permissions).toEqual({ contents: "write" });
+    expect(jobs["bootstrap-product"].env?.GH_REPO).toBe("${{ github.repository }}");
     expect(product).toContain("product-stable");
     expect(product).toContain("product-channel.json");
     expect(product).toContain("Immutable Product pointer digest mismatch");
     expect(product).toContain("--latest=false");
 
     expect(jobs["bootstrap-desktop"].permissions).toEqual({ contents: "write" });
+    expect(jobs["bootstrap-desktop"].env?.GH_REPO).toBe("${{ github.repository }}");
     expect(desktop).toContain("desktop-stable");
     expect(desktop).toContain("desktop-channel-modern.json");
     expect(desktop).toContain("desktop-channel.json");
@@ -816,11 +818,13 @@ describe("one-time Product and Desktop migration bridge", () => {
     const verify = jobText(jobs["verify-stable-feeds"]);
     const promote = jobs["promote-bridge"];
 
+    expect(jobs["verify-stable-feeds"].env?.GH_REPO).toBe("${{ github.repository }}");
     expect(verify).toContain("gh release download product-stable");
     expect(verify).toContain("gh release download desktop-stable");
     expect(verify).toContain("product-channel.json");
     expect(verify).toContain("desktop-channel.json");
     expect(verify).toContain("sha256sum");
+    expect(promote.env?.GH_REPO).toBe("${{ github.repository }}");
     expect(jobText(promote)).toContain("PROMOTE_BRIDGE_TO_LATEST");
     expect(step(promote, "Make bridge the final repository-wide latest")?.run).toBe(
       'gh release edit "${BRIDGE_CANDIDATE_TAG}" --prerelease=false --latest'

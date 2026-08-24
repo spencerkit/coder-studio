@@ -207,6 +207,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
       PRODUCT_TAG: ${{ needs.prepare.outputs.product_tag }}
       PRODUCT_CHANNEL_SHA256: ${{ needs.prepare.outputs.product_channel_sha256 }}
@@ -450,6 +451,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
       DESKTOP_CHANNEL_SHA256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
     steps:
@@ -501,6 +503,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
       PRODUCT_TAG: ${{ needs.prepare.outputs.product_tag }}
       PRODUCT_CHANNEL_SHA256: ${{ needs.prepare.outputs.product_channel_sha256 }}
@@ -698,6 +701,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       BRIDGE_CANDIDATE_TAG: ${{ needs.prepare.outputs.bridge_candidate_tag }}
       CONFIRM_LATEST: ${{ inputs.confirm_latest }}
     steps:
