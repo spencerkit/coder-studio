@@ -250,6 +250,19 @@ function Get-InstallerProcesses([string]$InstallerFileName) {
   )
 }
 
+function Stop-InstallerProcesses([string]$InstallerFileName) {
+  foreach ($process in @(Get-InstallerProcesses $InstallerFileName)) {
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Start-SilentInstaller([string]$InstallerPath, [string]$InstallDirectory) {
+  $installerArguments = @('/S', "/D=$InstallDirectory")
+  $installerProcess = Start-Process -FilePath $InstallerPath -ArgumentList $installerArguments -PassThru
+  $installerProcess.Handle | Out-Null
+  return $installerProcess
+}
+
 function Wait-ForInstalledShellInstall(
   [string]$InstallDirectory,
   [string]$Executable,
@@ -546,6 +559,11 @@ try {
         $desktopProcess.Refresh()
       }
       if ($desktopProcess.HasExited) {
+        if ($PinLegacyShellUpdaterToChannel) {
+          Stop-InstallerProcesses $candidateInstallerName
+          Start-Sleep -Seconds 1
+          Start-SilentInstaller $candidateInstallerPath $installDirectory | Out-Null
+        }
         Wait-ForInstalledShellInstall `
           $installDirectory `
           $desktopExecutable `
