@@ -37,6 +37,7 @@ import {
   openFilesAtomFamily,
 } from "../workspace/atoms";
 import { OpenEditorsSection } from "../workspace/views/shared/open-editors-section";
+import { __resetPendingEditorLoadsForTests } from "./actions/pending-editor-loads";
 import { useCodeEditorActions } from "./actions/use-code-editor-actions";
 import { useOpenLocation } from "./actions/use-open-location";
 import { CodeEditorHost } from "./views/shared/code-editor-host";
@@ -192,6 +193,7 @@ function pressSaveShortcut() {
 
 describe("CodeEditorHost", () => {
   afterEach(() => {
+    __resetPendingEditorLoadsForTests();
     vi.restoreAllMocks();
     mockRegistryUpdateFromDisk.mockClear();
     mockRegistryDisposeFile.mockClear();
