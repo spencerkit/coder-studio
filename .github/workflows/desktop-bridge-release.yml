@@ -394,6 +394,7 @@ jobs:
           if ('${{ steps.identity.outputs.components }}') {
             $arguments += @('-ExpectedComponents', '${{ steps.identity.outputs.components }}')
           }
+          $arguments += '-SkipAuthenticode'
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
@@ -418,6 +419,7 @@ jobs:
             '-CommitSha', '${{ github.sha }}',
             '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
           )
+          $arguments += '-SkipAuthenticode'
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
@@ -666,6 +668,7 @@ jobs:
             '-CommitSha', '${{ github.sha }}',
             '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
           )
+          $arguments += '-SkipAuthenticode'
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }
