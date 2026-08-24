@@ -385,26 +385,10 @@ jobs:
           if gh release view "${CANDIDATE_TAG}" >/dev/null 2>&1; then
             mkdir -p release/existing-candidate
             gh release download "${CANDIDATE_TAG}" --dir release/existing-candidate
-            EXPECTED_ROOT=release/product-candidate ACTUAL_ROOT=release/existing-candidate node --input-type=module <<'NODE'
-            import { createHash } from "node:crypto";
-            import { readdirSync, readFileSync } from "node:fs";
-            import { basename, join } from "node:path";
-            const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
-            const names = (root) => readdirSync(root, { withFileTypes: true })
-              .filter((entry) => entry.isFile() && entry.name !== "promotion.json")
-              .map((entry) => entry.name)
-              .sort();
-            const expected = names(process.env.EXPECTED_ROOT);
-            const actual = names(process.env.ACTUAL_ROOT);
-            if (JSON.stringify(expected) !== JSON.stringify(actual)) {
-              throw new Error("Immutable Product release asset set differs from the candidate bundle");
-            }
-            for (const name of expected) {
-              if (digest(join(process.env.EXPECTED_ROOT, basename(name))) !== digest(join(process.env.ACTUAL_ROOT, basename(name)))) {
-                throw new Error(`Immutable Product release asset differs: ${name}`);
-              }
-            }
-            NODE
+            node --import tsx scripts/release-workflow-helpers.ts compare-assets \
+              --channel product \
+              --expected-root release/product-candidate \
+              --actual-root release/existing-candidate
           else
             gh release create "${CANDIDATE_TAG}" release/product-candidate/* \
               --target "${GITHUB_SHA}" \
@@ -423,28 +407,13 @@ jobs:
           if [[ ! "${candidate_commit}" =~ ^[0-9a-fA-F]{40}$ ]]; then
             candidate_commit=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${candidate_commit}" --jq .sha)
           fi
-          CANDIDATE_ROOT=release/product-candidate GITHUB_OUTPUT_FILE="${GITHUB_OUTPUT}" NPM_INTEGRITY="${npm_integrity}" CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_COMMIT="${candidate_commit}" node --input-type=module <<'NODE'
-          import { createHash } from "node:crypto";
-          import { appendFileSync, readdirSync, readFileSync } from "node:fs";
-          import { join } from "node:path";
-          const digest = (name) => createHash("sha256").update(readFileSync(join(process.env.CANDIDATE_ROOT, name))).digest("hex");
-          const artifactDigests = Object.fromEntries(
-            readdirSync(process.env.CANDIDATE_ROOT, { withFileTypes: true })
-              .filter((entry) => entry.isFile() && entry.name !== "promotion.json")
-              .map((entry) => [entry.name, digest(entry.name)])
-              .sort(([left], [right]) => left.localeCompare(right))
-          );
-          appendFileSync(process.env.GITHUB_OUTPUT_FILE, [
-            `candidate_tag=${process.env.CANDIDATE_TAG}`,
-            `product_channel_sha256=${artifactDigests["product-channel.json"]}`,
-            `windows_manifest_sha256=${artifactDigests["coder-studio-runtime-win32-x64.manifest.json"]}`,
-            `linux_manifest_sha256=${artifactDigests["coder-studio-server-runtime-linux-x64.manifest.json"]}`,
-            `npm_integrity=${process.env.NPM_INTEGRITY}`,
-            `artifact_digests=${JSON.stringify(artifactDigests)}`,
-            `candidate_commit=${process.env.CANDIDATE_COMMIT}`,
-            "",
-          ].join("\n"));
-          NODE
+          node --import tsx scripts/release-workflow-helpers.ts write-candidate-outputs \
+            --channel product \
+            --candidate-root release/product-candidate \
+            --output-file "${GITHUB_OUTPUT}" \
+            --candidate-tag "${CANDIDATE_TAG}" \
+            --candidate-commit "${candidate_commit}" \
+            --npm-integrity "${npm_integrity}"
 
   accept-cli:
     name: Accept installed CLI update
@@ -760,23 +729,10 @@ jobs:
         run: |
           mkdir -p release/product-promotion/candidate
           gh release download "${CANDIDATE_TAG}" --dir release/product-promotion/candidate
-          ACTUAL_ROOT=release/product-promotion/candidate EXPECTED_DIGESTS="${ARTIFACT_DIGESTS}" node --input-type=module <<'NODE'
-          import { createHash } from "node:crypto";
-          import { readdirSync, readFileSync } from "node:fs";
-          import { join } from "node:path";
-          const expected = JSON.parse(process.env.EXPECTED_DIGESTS);
-          const actualNames = readdirSync(process.env.ACTUAL_ROOT, { withFileTypes: true })
-            .filter((entry) => entry.isFile() && entry.name !== "promotion.json")
-            .map((entry) => entry.name)
-            .sort();
-          if (JSON.stringify(actualNames) !== JSON.stringify(Object.keys(expected).sort())) {
-            throw new Error("Immutable Product digest mismatch: release asset set");
-          }
-          for (const [name, digest] of Object.entries(expected)) {
-            const actual = createHash("sha256").update(readFileSync(join(process.env.ACTUAL_ROOT, name))).digest("hex");
-            if (actual !== digest) throw new Error(`Immutable Product digest mismatch: ${name}`);
-          }
-          NODE
+          node --import tsx scripts/release-workflow-helpers.ts verify-digests \
+            --channel product \
+            --actual-root release/product-promotion/candidate \
+            --expected-digests "${ARTIFACT_DIGESTS}"
           registry_integrity=$(npm view "${PACKAGE_NAME}@${PRODUCT_VERSION}" dist.integrity --json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8'))")
           if [[ "${registry_integrity}" != "${NPM_INTEGRITY}" ]]; then
             echo "Immutable Product digest mismatch: npm integrity" >&2
@@ -839,41 +795,27 @@ jobs:
         run: |
           mkdir -p release/product-promotion/record release/product-promotion/existing-record
           if gh release download "${CANDIDATE_TAG}" --pattern promotion.json --dir release/product-promotion/existing-record 2>/dev/null; then
-            EXISTING_RECORD=release/product-promotion/existing-record/promotion.json PRODUCT_VERSION="${PRODUCT_VERSION}" CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_COMMIT="${CANDIDATE_COMMIT}" ARTIFACT_DIGESTS="${ARTIFACT_DIGESTS}" FINAL_POINTER_DIGEST="${PRODUCT_CHANNEL_SHA256}" node --input-type=module <<'NODE'
-            import { copyFileSync, readFileSync } from "node:fs";
-            const existing = JSON.parse(readFileSync(process.env.EXISTING_RECORD, "utf8"));
-            const matches = existing.schemaVersion === 1
-              && existing.channel === "product"
-              && existing.version === process.env.PRODUCT_VERSION
-              && existing.commit === process.env.CANDIDATE_COMMIT
-              && existing.candidateTag === process.env.CANDIDATE_TAG
-              && JSON.stringify(existing.artifactDigests) === process.env.ARTIFACT_DIGESTS
-              && existing.finalPointerDigest === process.env.FINAL_POINTER_DIGEST;
-            if (!matches) throw new Error("Existing Product promotion record differs from accepted identity");
-            copyFileSync(process.env.EXISTING_RECORD, "release/product-promotion/record/promotion.json");
-            NODE
+            node --import tsx scripts/release-workflow-helpers.ts verify-existing-promotion-record \
+              --channel product \
+              --existing-record release/product-promotion/existing-record/promotion.json \
+              --output-file release/product-promotion/record/promotion.json \
+              --version "${PRODUCT_VERSION}" \
+              --candidate-tag "${CANDIDATE_TAG}" \
+              --candidate-commit "${CANDIDATE_COMMIT}" \
+              --artifact-digests "${ARTIFACT_DIGESTS}" \
+              --final-pointer-digest "${PRODUCT_CHANNEL_SHA256}"
             echo "Existing Product promotion record matches the accepted immutable identity"
           else
-            PRODUCT_VERSION="${PRODUCT_VERSION}" CANDIDATE_TAG="${CANDIDATE_TAG}" CANDIDATE_COMMIT="${CANDIDATE_COMMIT}" ARTIFACT_DIGESTS="${ARTIFACT_DIGESTS}" PREVIOUS_POINTER_DIGEST="${PREVIOUS_POINTER_DIGEST}" FINAL_POINTER_DIGEST="${PRODUCT_CHANNEL_SHA256}" node --input-type=module <<'NODE'
-            import { writeFileSync } from "node:fs";
-            const promotion = {
-              schemaVersion: 1,
-              channel: "product",
-              version: process.env.PRODUCT_VERSION,
-              commit: process.env.CANDIDATE_COMMIT,
-              candidateTag: process.env.CANDIDATE_TAG,
-              artifactDigests: JSON.parse(process.env.ARTIFACT_DIGESTS),
-              acceptanceRun: {
-                workflow: "product-release",
-                runId: process.env.GITHUB_RUN_ID,
-                attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
-              },
-              previousPointerDigest: process.env.PREVIOUS_POINTER_DIGEST || null,
-              finalPointerDigest: process.env.FINAL_POINTER_DIGEST,
-              promotedAt: new Date().toISOString(),
-            };
-            writeFileSync("release/product-promotion/record/promotion.json", `${JSON.stringify(promotion, null, 2)}\n`);
-            NODE
+            node --import tsx scripts/release-workflow-helpers.ts write-promotion-record \
+              --channel product \
+              --workflow product-release \
+              --output-file release/product-promotion/record/promotion.json \
+              --version "${PRODUCT_VERSION}" \
+              --candidate-tag "${CANDIDATE_TAG}" \
+              --candidate-commit "${CANDIDATE_COMMIT}" \
+              --artifact-digests "${ARTIFACT_DIGESTS}" \
+              --previous-pointer-digest "${PREVIOUS_POINTER_DIGEST}" \
+              --final-pointer-digest "${PRODUCT_CHANNEL_SHA256}"
             gh release upload "${CANDIDATE_TAG}" release/product-promotion/record/promotion.json
           fi
 

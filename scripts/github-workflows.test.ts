@@ -167,7 +167,7 @@ describe("Product publication workflow", () => {
     expect(publishText).toContain("--prerelease --latest=false");
     expect(publishText).toContain("--compare-tarball");
     expect(step(publish, "Record accepted candidate identity")?.run).toContain(
-      'entry.name !== "promotion.json"'
+      "release-workflow-helpers.ts write-candidate-outputs"
     );
     expect(publish.outputs?.candidate_commit).toBeDefined();
     expect(publishText).not.toContain("desktop-channel.json");
@@ -237,15 +237,17 @@ describe("Product publication workflow", () => {
     expect(verifyIndex).toBeGreaterThan(pointerIndex);
     expect(cleanupIndex).toBeGreaterThan(verifyIndex);
     expect(recordIndex).toBeGreaterThan(cleanupIndex);
-    expect(steps[immutableIndex]?.run).toContain("Immutable Product digest mismatch");
+    expect(steps[immutableIndex]?.run).toContain("release-workflow-helpers.ts verify-digests");
+    expect(steps[immutableIndex]?.run).toContain("--channel product");
     expect(steps[releaseIndex]?.run).toContain("--prerelease=false --latest=false");
     expect(steps[pointerIndex]?.run).toContain("product-stable");
     expect(steps[pointerIndex]?.run).toContain("product-channel.json");
     expect(steps[cleanupIndex]?.run).toContain("npm dist-tag rm");
     expect(steps[recordIndex]?.run).toContain("promotion.json");
-    expect(steps[recordIndex]?.run).toContain("previousPointerDigest");
-    expect(steps[recordIndex]?.run).toContain("finalPointerDigest");
-    expect(steps[recordIndex]?.run).toContain("acceptanceRun");
+    expect(steps[recordIndex]?.run).toContain(
+      "release-workflow-helpers.ts verify-existing-promotion-record"
+    );
+    expect(steps[recordIndex]?.run).toContain("release-workflow-helpers.ts write-promotion-record");
     expect(steps[recordIndex]?.run).toContain("Existing Product promotion record");
     expect(promote.concurrency).toEqual({
       group: "product-desktop-stable-promotion",
@@ -504,7 +506,10 @@ describe("Desktop publication workflow", () => {
     }
 
     expect(step(promote, "Verify accepted immutable Desktop bytes")?.run).toContain(
-      "Immutable Desktop digest mismatch"
+      "release-workflow-helpers.ts verify-digests"
+    );
+    expect(step(promote, "Verify accepted immutable Desktop bytes")?.run).toContain(
+      "--channel desktop"
     );
     expect(step(promote, "Promote Desktop versioned release")?.run).toContain(
       "--prerelease=false --latest=false"
@@ -514,9 +519,12 @@ describe("Desktop publication workflow", () => {
       "desktop-channel.json"
     );
     expect(step(promote, "Record Desktop promotion")?.run).toContain("promotion.json");
-    expect(step(promote, "Record Desktop promotion")?.run).toContain("previousPointerDigest");
-    expect(step(promote, "Record Desktop promotion")?.run).toContain("finalPointerDigest");
-    expect(step(promote, "Record Desktop promotion")?.run).toContain("acceptanceRun");
+    expect(step(promote, "Record Desktop promotion")?.run).toContain(
+      "release-workflow-helpers.ts verify-existing-promotion-record"
+    );
+    expect(step(promote, "Record Desktop promotion")?.run).toContain(
+      "release-workflow-helpers.ts write-promotion-record"
+    );
     expect(promote.concurrency).toEqual({
       group: "product-desktop-stable-promotion",
       "cancel-in-progress": false,
