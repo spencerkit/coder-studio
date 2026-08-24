@@ -81,6 +81,7 @@ const DESKTOP_CHANNEL_URL =
 const CLI_PACKAGE_NAME = "@spencer-kit/coder-studio";
 const PRODUCT_COMPONENTS = new Set<ProductReleaseComponent>(["cli", "win-runtime", "wsl-runtime"]);
 const DESKTOP_COMPONENTS = new Set<DesktopReleaseComponent>(["windows", "wsl-engine"]);
+const ALLOWED_EMPTY_WINDOWS_ENGINE_FILES = new Set(["node_modules/node-addon-api/nothing.c"]);
 
 function readArgumentValue(argv: string[], index: number, option: string): string {
   const value = argv[index];
@@ -671,7 +672,9 @@ async function validateWindowsEngine(directory: string): Promise<void> {
   }
   for (const file of files) {
     const metadata = await lstat(resolve(engineRoot, ...file.split("/")));
-    if (metadata.size <= 0) throw new Error(`Packaged Windows Engine file is empty: ${file}`);
+    if (metadata.size <= 0 && !ALLOWED_EMPTY_WINDOWS_ENGINE_FILES.has(file)) {
+      throw new Error(`Packaged Windows Engine file is empty: ${file}`);
+    }
   }
 }
 

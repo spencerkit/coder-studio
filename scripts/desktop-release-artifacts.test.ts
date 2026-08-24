@@ -583,6 +583,16 @@ describe("Desktop release artifacts", () => {
     await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
   });
 
+  it("allows known zero-byte Windows Engine placeholder files", async () => {
+    const fixture = await createDesktopFixture();
+    await mkdir(join(fixture.root, "windows-engine/node_modules/node-addon-api"), {
+      recursive: true,
+    });
+    await writeFile(join(fixture.root, "windows-engine/node_modules/node-addon-api/nothing.c"), "");
+
+    await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
+  });
+
   it("rejects Factory provenance or bytes that differ from the accepted Product", async () => {
     const provenance = await createDesktopFixture();
     await writeFile(
@@ -606,6 +616,15 @@ describe("Desktop release artifacts", () => {
 
     await expect(validateDesktopReleaseArtifacts(fixture.options)).rejects.toThrow(
       /Desktop bundle.*Product Runtime|does not own Product Runtime/i
+    );
+  });
+
+  it("rejects unexpected empty Windows Engine files", async () => {
+    const fixture = await createDesktopFixture();
+    await writeFile(join(fixture.root, "windows-engine/empty.txt"), "");
+
+    await expect(validateDesktopReleaseArtifacts(fixture.options)).rejects.toThrow(
+      "Packaged Windows Engine file is empty: empty.txt"
     );
   });
 });
