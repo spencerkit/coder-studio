@@ -92,6 +92,7 @@ export interface VerifyInstalledDesktopDeps {
 
 export interface VerifyInstalledDesktopOptions {
   downloadTimeoutMs?: number;
+  allowFailedFrozenState?: boolean;
 }
 
 export interface InstalledDesktopScenarioReport extends InstalledEvidence {
@@ -330,7 +331,11 @@ export async function verifyInstalledDesktopScenario(
   if (scenario.name === "legacy-current" || scenario.name === "legacy-wsl-current") {
     const checked = asState(await deps.invoke("checkForUpdates"), "checkForUpdates");
     assertPlanComponents(checked, []);
-    if (checked.status !== "idle" && checked.status !== "succeeded") {
+    if (
+      checked.status !== "idle" &&
+      checked.status !== "succeeded" &&
+      !(options.allowFailedFrozenState === true && checked.status === "failed")
+    ) {
       throw new Error(`Frozen legacy Desktop channel produced update state ${checked.status}`);
     }
     const evidence = await deps.readEvidence();
@@ -460,6 +465,7 @@ interface InstalledDriverOptions {
   commitSha?: string;
   releaseTag?: string;
   channelSignatureDigest?: string;
+  allowFailedFrozenState?: boolean;
 }
 
 interface BrowserSession {
@@ -881,10 +887,13 @@ async function main(): Promise<void> {
     commitSha: values.get("commit-sha"),
     releaseTag: values.get("release-tag"),
     channelSignatureDigest: values.get("channel-signature-digest"),
+    allowFailedFrozenState: values.get("allow-failed-frozen-state") === "true",
   };
   const runtime = await createDefaultDeps(options);
   try {
-    const scenarioReport = await verifyInstalledDesktopScenario(scenario, runtime.deps);
+    const scenarioReport = await verifyInstalledDesktopScenario(scenario, runtime.deps, {
+      allowFailedFrozenState: options.allowFailedFrozenState,
+    });
     const report = {
       ...scenarioReport,
       commitSha: options.commitSha ?? null,

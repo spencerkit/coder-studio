@@ -480,6 +480,7 @@ jobs:
             '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
           )
           $arguments += '-SkipAuthenticode'
+          $arguments += '-AllowFailedFrozenState'
           if ('${{ matrix.target }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
           }

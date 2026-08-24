@@ -33,6 +33,7 @@ param(
   [string]$ChannelSignatureDigest = '',
   [string]$WslDistro = '',
   [switch]$SkipAuthenticode,
+  [switch]$AllowFailedFrozenState,
   [switch]$PinLegacyShellUpdaterToChannel,
   [switch]$KeepOnFailure
 )
@@ -492,6 +493,9 @@ try {
   }
   if ($ChannelSignatureDigest) {
     $driverArgs += @('--channel-signature-digest', $ChannelSignatureDigest)
+  }
+  if ($AllowFailedFrozenState) {
+    $driverArgs += @('--allow-failed-frozen-state', 'true')
   }
   if ($sidecarUrl) {
     $driverArgs += @('--sidecar-url', $sidecarUrl)

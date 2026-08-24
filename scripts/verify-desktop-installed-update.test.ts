@@ -122,6 +122,7 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("'legacy-wsl-current'");
     expect(runner).toContain("[switch]$SkipAuthenticode");
     expect(runner).toContain("if (-not $SkipAuthenticode)");
+    expect(runner).toContain("[switch]$AllowFailedFrozenState");
     expect(runner).toContain("[switch]$PinLegacyShellUpdaterToChannel");
     expect(runner).toContain("function Set-LegacyShellUpdaterFeed");
     expect(runner).toContain("provider: generic");
@@ -152,6 +153,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain(
       "$lastInstallerCount = @(Get-InstallerProcesses $InstallerFileName).Count"
     );
+    expect(runner).toContain("if ($AllowFailedFrozenState) {");
+    expect(runner).toContain("--allow-failed-frozen-state");
     expect(runner).toContain("if ($PinLegacyShellUpdaterToChannel) {");
     expect(runner).toContain("Stop-InstallerProcesses $candidateInstallerName");
     expect(runner).toContain("Start-SilentInstaller $candidateInstallerPath $installDirectory");
@@ -172,6 +175,8 @@ describe("verify-desktop-installed-update", () => {
     expect(driver).toContain("activeSidecarUrl = relaunch.sidecarUrl ?? activeSidecarUrl;");
     expect(driver).toContain("await session.close().catch(() => undefined);");
     expect(driver).toContain("session = await connectBrowser(activeCdpUrl);");
+    expect(driver).toContain("allowFailedFrozenState?: boolean;");
+    expect(driver).toContain('values.get("allow-failed-frozen-state") === "true"');
   });
 
   it("normalizes sidecar websocket urls for browser-issued commands", () => {
@@ -361,6 +366,41 @@ describe("verify-desktop-installed-update", () => {
 
     expect(deps.invoke).toHaveBeenCalledOnce();
     expect(deps.invoke).toHaveBeenCalledWith("checkForUpdates");
+    expect(report).toMatchObject({
+      scenario: "legacy-current",
+      confirmationCount: 0,
+      restartCount: 0,
+      actualShellVersion: "0.2.0",
+      actualRuntimeVersion: "0.5.0",
+    });
+  });
+
+  it("accepts a failed-closed frozen legacy bridge when versions remain unchanged", async () => {
+    const deps = createDeps({
+      invoke: vi.fn(async (method) => {
+        if (method === "checkForUpdates") return { status: "failed", components: [] };
+        throw new Error(`Unexpected method: ${method}`);
+      }),
+      readEvidence: vi.fn(async () => ({
+        actualShellVersion: "0.2.0",
+        actualRuntimeVersion: "0.5.0",
+        wslRuntimeVersion: null,
+        wslNpmMarkerExists: false,
+        journalRecovered: false,
+      })),
+    });
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "legacy-current",
+      expectedComponentIds: [],
+      targetShellVersion: "0.2.0",
+      targetRuntimeVersion: "0.5.0",
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps, {
+      allowFailedFrozenState: true,
+    });
+
     expect(report).toMatchObject({
       scenario: "legacy-current",
       confirmationCount: 0,
