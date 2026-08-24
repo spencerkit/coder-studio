@@ -388,7 +388,13 @@ jobs:
           } else {
             'combined'
           }
-          $components = 'shell,runtime:win32-x64'
+          $components = if (
+            $previous.runtimes.'win32-x64'.version -ne $candidate.runtimes.'win32-x64'.version
+          ) {
+            'shell,runtime:win32-x64'
+          } else {
+            'shell'
+          }
           $signatureBytes = [Text.Encoding]::UTF8.GetBytes([string]$candidate.signature.value)
           $signatureDigest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($signatureBytes)).ToLowerInvariant()
           "previous_installer=$previousRoot/$previousInstaller" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
