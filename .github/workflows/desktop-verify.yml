@@ -342,6 +342,7 @@ jobs:
       - name: Assemble signed Product channel
         run: |
           mkdir -p release/cli-candidate
+          pnpm build:web
           pnpm build:cli
           pack_json=$(pnpm --dir ./packages/cli pack --json --pack-destination "${PWD}/release/cli-candidate")
           tarball=$(printf '%s' "${pack_json}" | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => console.log(JSON.parse(d).filename))")
