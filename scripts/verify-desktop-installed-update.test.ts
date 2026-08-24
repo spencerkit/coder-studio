@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  formatCookieHeader,
   type InstalledDesktopScenario,
   type VerifyInstalledDesktopDeps,
   verifyInstalledDesktopScenario,
@@ -122,6 +123,16 @@ describe("verify-desktop-installed-update", () => {
     expect(runner.indexOf("Preserve-AcceptanceEvidence")).toBeLessThan(
       runner.lastIndexOf("Remove-Item -LiteralPath $runRoot -Recurse")
     );
+  });
+
+  it("formats persisted browser cookies for sidecar websocket reuse", () => {
+    expect(
+      formatCookieHeader([
+        { name: "coder_studio_auth", value: "session-cookie" },
+        { name: "theme", value: "light" },
+      ])
+    ).toBe("coder_studio_auth=session-cookie; theme=light");
+    expect(formatCookieHeader([{ name: " ", value: "ignored" }, {}])).toBeUndefined();
   });
 
   it("drives one confirmation and validates actual component versions", async () => {

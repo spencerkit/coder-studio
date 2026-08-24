@@ -59,6 +59,7 @@ vi.mock("ws", () => ({
 }));
 
 import { callCoderStudioCommand } from "./automation-command-client.js";
+import { callCoderStudioWsCommand } from "./automation-ws-client.js";
 
 describe("automation command client", () => {
   beforeEach(() => {
@@ -158,6 +159,52 @@ describe("automation command client", () => {
     );
 
     await expect(pending).resolves.toEqual([]);
+  });
+
+  it("merges explicit websocket headers with session bearer auth", async () => {
+    vi.stubEnv("CODER_STUDIO_SESSION_TOKEN", "session-token-123");
+
+    const pending = callCoderStudioWsCommand({
+      apiUrl: "http://127.0.0.1:4173",
+      op: "updates.prepareInstall",
+      args: {},
+      headers: {
+        Cookie: "coder_studio_auth=session-cookie",
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(socketInstances).toHaveLength(1);
+    });
+
+    const socket = socketInstances[0]!;
+    expect(socket.options).toEqual({
+      headers: {
+        Cookie: "coder_studio_auth=session-cookie",
+        Authorization: "Bearer session-token-123",
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(socket.send).toHaveBeenCalledTimes(1);
+    });
+
+    const sentPayload = JSON.parse(socket.send.mock.calls[0]?.[0] as string) as {
+      id: string;
+    };
+    socket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          kind: "result",
+          id: sentPayload.id,
+          ok: true,
+          data: { hasActiveWork: false },
+        })
+      )
+    );
+
+    await expect(pending).resolves.toEqual({ hasActiveWork: false });
   });
 
   it("rejects session-scoped calls when CODER_STUDIO_API_URL is unavailable without falling back to managed-server discovery", async () => {

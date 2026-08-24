@@ -8,6 +8,7 @@ export interface CoderStudioWsCommandInput {
   apiUrl: string;
   op: string;
   args: unknown;
+  headers?: Record<string, string>;
   timeoutMs?: number;
 }
 
@@ -55,14 +56,15 @@ export async function callCoderStudioWsCommand<T = unknown>(
   const id = randomUUID();
   const timeoutMs = input.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const sessionToken = process.env.CODER_STUDIO_SESSION_TOKEN?.trim();
-  const socketOptions =
-    sessionToken && sessionToken.length > 0
+  const headers = {
+    ...(input.headers ?? {}),
+    ...(sessionToken && sessionToken.length > 0
       ? {
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-          },
+          Authorization: `Bearer ${sessionToken}`,
         }
-      : undefined;
+      : {}),
+  };
+  const socketOptions = Object.keys(headers).length > 0 ? { headers } : undefined;
 
   return new Promise<T>((resolve, reject) => {
     const socket = new WebSocket(wsUrl, socketOptions);
