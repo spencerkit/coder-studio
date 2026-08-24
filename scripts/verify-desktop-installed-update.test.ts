@@ -155,14 +155,21 @@ describe("verify-desktop-installed-update", () => {
 
       send(data: string) {
         sentMessages.push(data);
-        const message = JSON.parse(data) as { id: string };
+        const message = JSON.parse(data) as { id: string; op: string };
         Promise.resolve().then(() =>
           this.emit("message", {
             data: JSON.stringify({
               kind: "result",
               id: message.id,
               ok: true,
-              data: { hasActiveWork: true },
+              data:
+                message.op === "activation.claim"
+                  ? {
+                      active: true,
+                      generation: 1,
+                      recoveryMode: "takeover",
+                    }
+                  : { hasActiveWork: true },
             }),
           })
         );
@@ -199,7 +206,13 @@ describe("verify-desktop-installed-update", () => {
     expect(sentMessages).toEqual([
       JSON.stringify({
         kind: "command",
-        id: "sidecar-command-id",
+        id: "sidecar-command-id-activation",
+        op: "activation.claim",
+        args: { clientInstanceId: "desktop-installed-update-acceptance-sidecar-command-id" },
+      }),
+      JSON.stringify({
+        kind: "command",
+        id: "sidecar-command-id-command",
         op: "updates.prepareInstall",
         args: {},
       }),
