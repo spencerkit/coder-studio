@@ -705,30 +705,43 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(workflow.on.push).toBeUndefined();
   });
 
-  it("orders immutable preparation, both acceptance phases, and final promotion", () => {
+  it("wires immutable preparation, both acceptance phases, and final promotion", () => {
     const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
 
-    expect(Object.keys(jobs)).toEqual([
-      "prepare",
-      "bootstrap-product",
-      "accept-legacy-upgrade",
-      "bootstrap-desktop",
-      "verify-stable-feeds",
-      "accept-independent-feeds",
-      "promote-bridge",
-    ]);
+    expect([...Object.keys(jobs)].sort()).toEqual(
+      [
+        "prepare",
+        "bootstrap-product",
+        "accept-legacy-upgrade",
+        "bootstrap-desktop",
+        "verify-stable-feeds",
+        "pin-bridge-latest",
+        "accept-independent-feeds",
+        "promote-bridge",
+      ].sort()
+    );
     expect(jobs["bootstrap-product"].needs).toBe("prepare");
-    expect(jobs["accept-legacy-upgrade"].needs).toEqual(["prepare", "bootstrap-product"]);
-    expect(jobs["bootstrap-desktop"].needs).toEqual(["prepare", "accept-legacy-upgrade"]);
+    expect(jobs["bootstrap-desktop"].needs).toEqual(["prepare"]);
     expect(jobs["verify-stable-feeds"].needs).toEqual([
       "prepare",
       "bootstrap-product",
       "bootstrap-desktop",
     ]);
-    expect(jobs["accept-independent-feeds"].needs).toEqual(["prepare", "verify-stable-feeds"]);
-    expect(jobs["promote-bridge"].needs).toEqual([
+    expect(jobs["pin-bridge-latest"].needs).toEqual(["prepare", "verify-stable-feeds"]);
+    expect(jobs["accept-legacy-upgrade"].needs).toEqual([
       "prepare",
       "verify-stable-feeds",
+      "pin-bridge-latest",
+    ]);
+    expect(jobs["accept-independent-feeds"].needs).toEqual([
+      "prepare",
+      "verify-stable-feeds",
+      "accept-legacy-upgrade",
+    ]);
+    expect(jobs["promote-bridge"].needs).toEqual([
+      "prepare",
+      "pin-bridge-latest",
+      "accept-legacy-upgrade",
       "accept-independent-feeds",
     ]);
     expect(jobs["promote-bridge"].if).toBe("success()");
@@ -741,14 +754,20 @@ describe("one-time Product and Desktop migration bridge", () => {
     const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
     const prepare = jobs.prepare;
 
+    expect(prepare.outputs?.legacy_source_tag).toBe(
+      "${{ steps.identity.outputs.legacy_source_tag }}"
+    );
     expect(prepare.outputs?.already_promoted).toBe(
       "${{ steps.identity.outputs.already_promoted }}"
     );
     expect(step(prepare, "Download existing immutable bridge candidate")?.run).toContain(
       "A normal bridge release is recoverable only when it is repository-wide latest"
     );
+    expect(step(prepare, "Record accepted bridge identities")?.run).toContain(
+      'echo "legacy_source_tag=${legacy_source_tag}"'
+    );
     expect(jobText(jobs["accept-legacy-upgrade"])).toContain(
-      "needs.prepare.outputs.already_promoted"
+      "needs.prepare.outputs.legacy_source_tag"
     );
   });
 
@@ -802,6 +821,7 @@ describe("one-time Product and Desktop migration bridge", () => {
 
     expect(legacy.strategy?.matrix?.target).toEqual(["native", "wsl"]);
     expect(jobText(legacy)).toContain("releases/latest");
+    expect(jobText(legacy)).toContain("legacy_source_tag");
     expect(jobText(legacy)).toContain("legacy-current");
     expect(jobText(legacy)).toContain("legacy-wsl-current");
     expect(jobText(legacy)).toContain("pnpm acceptance:desktop:installed");
@@ -818,6 +838,7 @@ describe("one-time Product and Desktop migration bridge", () => {
   it("verifies both stable feeds before making the bridge repository-wide latest", () => {
     const jobs = loadWorkflow("desktop-bridge-release.yml").jobs;
     const verify = jobText(jobs["verify-stable-feeds"]);
+    const pin = jobs["pin-bridge-latest"];
     const promote = jobs["promote-bridge"];
 
     expect(jobs["verify-stable-feeds"].env?.GH_REPO).toBe("${{ github.repository }}");
@@ -826,6 +847,11 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(verify).toContain("product-channel.json");
     expect(verify).toContain("desktop-channel.json");
     expect(verify).toContain("sha256sum");
+    expect(pin.env?.GH_REPO).toBe("${{ github.repository }}");
+    expect(jobText(pin)).toContain("PROMOTE_BRIDGE_TO_LATEST");
+    expect(step(pin, "Temporarily mark the bridge candidate as repository-wide latest")?.run).toBe(
+      'gh release edit "${BRIDGE_CANDIDATE_TAG}" --latest'
+    );
     expect(promote.env?.GH_REPO).toBe("${{ github.repository }}");
     expect(jobText(promote)).toContain("PROMOTE_BRIDGE_TO_LATEST");
     expect(step(promote, "Make bridge the final repository-wide latest")?.run).toBe(

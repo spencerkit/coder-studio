@@ -102,11 +102,14 @@ and cannot acquire both normal workflow locks at once.
    `PROMOTE_BRIDGE_TO_LATEST` in the confirmation input.
 3. The workflow validates both bundles and confirms that Product bytes already exist unchanged at the
    signed Product release tag.
-4. It bootstraps `product-stable`, then runs native and WSL installed-upgrade acceptance through the
-   legacy channel from the previously supported repository-wide latest release.
-5. Only after legacy acceptance does it bootstrap `desktop-stable`, verify both stable pointer bytes,
-   and run native and WSL checks from an installed bridge against the two independent feeds.
-6. Finally it converts the bridge prerelease to a normal release, makes it repository-wide latest,
+4. It bootstraps both `product-stable` and `desktop-stable`, then verifies that both fixed pointers
+   resolve byte-for-byte to the accepted immutable bridge artifacts.
+5. It temporarily marks the bridge candidate as repository-wide latest so the pre-bridge installed
+   Shells, which still follow the legacy `releases/latest/download` path, can reach the bridge.
+6. It runs native and WSL installed-upgrade acceptance from the previously supported published
+   legacy Desktop release into the bridge, then runs native and WSL checks from an installed bridge
+   against the two independent stable feeds.
+7. Finally it converts the bridge prerelease to a normal release, keeps it repository-wide latest,
    and verifies the selected tag.
 
 This is the only workflow permitted to issue a real GitHub `--latest` promotion. The bridge remains
@@ -127,8 +130,9 @@ After the hosted workflow succeeds, verify:
   identity.
 
 Never rerun the bridge for a routine release. If a post-bridge verification fails before latest is
-changed, correct the candidate with a higher version. If latest already points at the bridge, keep the
-legacy endpoint fixed and repair an independent feed with its owning normal release workflow.
+changed, correct the candidate with a higher version. If latest already points at the bridge, the
+workflow resolves the previous legacy Desktop source from published release history, keeps the legacy
+endpoint fixed, and repairs an independent feed with its owning normal release workflow.
 
 ## Two-release compatibility window
 
