@@ -128,21 +128,34 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("channel: latest");
     expect(runner).toContain("Set-LegacyShellUpdaterFeed $installDirectory $ChannelUrl");
     expect(runner).toContain("function Stop-CdpPortOwner");
+    expect(runner).toContain("function Get-ProcessesForExecutable");
+    expect(runner).toContain("function Stop-InstalledDesktopExecutable");
     expect(runner).toContain("function Get-SidecarUrl");
     expect(runner).toContain("function Get-InstalledDesktopShellVersion");
     expect(runner).toContain("function Wait-ForInstalledShellVersion");
+    expect(runner).toContain("function Get-InstallerProcesses");
+    expect(runner).toContain("function Wait-ForInstalledShellInstall");
     expect(runner).toContain("resources/build-info.json");
     expect(runner).toContain("[System.Diagnostics.FileVersionInfo]::GetVersionInfo");
     expect(runner).toContain("Get-NetTCPConnection -LocalPort $Port -State Listen");
     expect(runner).toContain("$restartAfterInstallArmed = $false");
     expect(runner).toContain("$phase -eq 'install-restart' -and $control.status -eq 'armed'");
+    expect(runner).toContain(
+      "$candidateInstallerName = [System.IO.Path]::GetFileName($candidateInstallerPath)"
+    );
     expect(runner).toContain("$cdpPort = Get-FreeTcpPort");
     expect(runner).toContain('cdpUrl = "http://127.0.0.1:$cdpPort"');
     expect(runner).toContain("sidecarUrl = $restartSidecarUrl");
+    expect(runner).toContain("Stop-InstalledDesktopExecutable $Executable $CdpPort");
     expect(runner).toContain(
-      "Wait-ForInstalledShellVersion $installDirectory $desktopExecutable $ExpectedShellVersion"
+      "$lastInstallerCount = @(Get-InstallerProcesses $InstallerFileName).Count"
     );
+    expect(runner).toContain("Wait-ForInstalledShellInstall `");
+    expect(runner).toContain("$candidateInstallerName `");
     expect(runner).toContain("Timed out relaunching the installed Desktop after Shell update");
+    expect(runner).toContain(
+      "Timed out waiting for the Desktop Shell installer to settle at version $ExpectedVersion"
+    );
     expect(runner).toContain("phase = 'install-restart'");
     expect(runner).toContain("$report.logPaths = @($preservedPaths)");
     expect(runner.indexOf("Preserve-AcceptanceEvidence")).toBeLessThan(

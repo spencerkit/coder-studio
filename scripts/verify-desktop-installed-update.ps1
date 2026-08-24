@@ -121,14 +121,28 @@ function Stop-CdpPortOwner([int]$Port) {
   }
 }
 
-function Stop-AcceptanceDesktop([string]$Executable, [string]$UserDataDirectory, [int]$CdpPort = 0) {
+function Get-ProcessesForExecutable([string]$Executable) {
   $escapedExecutable = [Regex]::Escape($Executable)
+  return @(
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $_.ExecutablePath -match "^$escapedExecutable$"
+    }
+  )
+}
+
+function Stop-AcceptanceDesktop([string]$Executable, [string]$UserDataDirectory, [int]$CdpPort = 0) {
   $escapedUserData = [Regex]::Escape($UserDataDirectory)
-  $processes = Get-CimInstance Win32_Process | Where-Object {
-    $_.ExecutablePath -match "^$escapedExecutable$" -and
+  $processes = Get-ProcessesForExecutable $Executable | Where-Object {
     $_.CommandLine -match $escapedUserData
   }
   foreach ($process in $processes) {
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+  }
+  Stop-CdpPortOwner $CdpPort
+}
+
+function Stop-InstalledDesktopExecutable([string]$Executable, [int]$CdpPort = 0) {
+  foreach ($process in @(Get-ProcessesForExecutable $Executable)) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
   }
   Stop-CdpPortOwner $CdpPort
@@ -220,6 +234,45 @@ function Wait-ForInstalledShellVersion(
   throw "Timed out waiting for installed Desktop Shell version $ExpectedVersion. Observed: $lastObservedVersion"
 }
 
+function Get-InstallerProcesses([string]$InstallerFileName) {
+  if ([string]::IsNullOrWhiteSpace($InstallerFileName)) {
+    return @()
+  }
+  $escapedInstallerName = [Regex]::Escape($InstallerFileName)
+  $installerBaseName = [System.IO.Path]::GetFileNameWithoutExtension($InstallerFileName)
+  $escapedInstallerBaseName = [Regex]::Escape($installerBaseName)
+  return @(
+    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      ($_.Name -match "^$escapedInstallerName$") -or
+      ($_.Name -match "^$escapedInstallerBaseName$") -or
+      ($_.ExecutablePath -and [System.IO.Path]::GetFileName($_.ExecutablePath) -match "^$escapedInstallerName$")
+    }
+  )
+}
+
+function Wait-ForInstalledShellInstall(
+  [string]$InstallDirectory,
+  [string]$Executable,
+  [string]$ExpectedVersion,
+  [string]$InstallerFileName,
+  [int]$TimeoutSeconds = 180,
+  [int]$CdpPort = 0
+) {
+  $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+  $lastObservedVersion = $null
+  $lastInstallerCount = 0
+  while ([DateTime]::UtcNow -lt $deadline) {
+    Stop-InstalledDesktopExecutable $Executable $CdpPort
+    $lastObservedVersion = Get-InstalledDesktopShellVersion $InstallDirectory $Executable
+    $lastInstallerCount = @(Get-InstallerProcesses $InstallerFileName).Count
+    if ($lastInstallerCount -eq 0 -and (Test-ShellVersionMatch $lastObservedVersion $ExpectedVersion)) {
+      return $lastObservedVersion
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  throw "Timed out waiting for the Desktop Shell installer to settle at version $ExpectedVersion. Observed: $lastObservedVersion. Installer processes: $lastInstallerCount"
+}
+
 function Write-JsonAtomic([string]$Path, [object]$Value) {
   $destination = [System.IO.Path]::GetFullPath($Path)
   $directory = Split-Path -Parent $destination
@@ -306,6 +359,7 @@ function Read-JournalIdentity([string]$Path) {
 
 $previousInstallerPath = Resolve-RequiredFile $PreviousInstaller 'Previous installer'
 $candidateInstallerPath = Resolve-RequiredFile $CandidateInstaller 'Candidate installer'
+$candidateInstallerName = [System.IO.Path]::GetFileName($candidateInstallerPath)
 $publicKeyFile = Resolve-RequiredFile $PublicKeyPath 'Desktop acceptance public key'
 if (-not $SkipAuthenticode) {
   Assert-Authenticode $previousInstallerPath 'Previous installer'
@@ -492,12 +546,18 @@ try {
         $desktopProcess.Refresh()
       }
       if ($desktopProcess.HasExited) {
-        $restartDeadline = [DateTime]::UtcNow.AddSeconds(90)
+        Wait-ForInstalledShellInstall `
+          $installDirectory `
+          $desktopExecutable `
+          $ExpectedShellVersion `
+          $candidateInstallerName `
+          180 `
+          $cdpPort | Out-Null
+        $restartDeadline = [DateTime]::UtcNow.AddSeconds(60)
         $relaunchError = $null
         while ([DateTime]::UtcNow -lt $restartDeadline) {
           try {
-            Wait-ForInstalledShellVersion $installDirectory $desktopExecutable $ExpectedShellVersion | Out-Null
-            Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
+            Stop-InstalledDesktopExecutable $desktopExecutable $cdpPort
             $cdpPort = Get-FreeTcpPort
             $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $initialScenario $WslDistro $desktopOut $desktopErr
             $desktopProcess.Handle | Out-Null
