@@ -1,7 +1,7 @@
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import * as esbuild from "esbuild";
 import {
   API_PROTOCOL_VERSION,
@@ -62,6 +62,31 @@ export function createDesktopRuntimeBuildOptions(): esbuild.BuildOptions {
         "const require = __coderStudioCreateRequire(import.meta.url);",
       ].join("\n"),
     },
+  };
+}
+
+function toTarRelativePath(root: string, target: string, label: string): string {
+  const path = relative(root, target);
+  if (!path || path === "." || path === ".." || path.startsWith(`..${sep}`)) {
+    throw new Error(`${label} must stay inside ${root}`);
+  }
+  return path.replaceAll("\\", "/");
+}
+
+export function createRuntimeArchiveExecution(
+  releasePackagePath: string,
+  runtimeDirectory: string,
+  cwd = ROOT_DIR
+): { cwd: string; args: string[] } {
+  return {
+    cwd,
+    args: [
+      "-czf",
+      toTarRelativePath(cwd, releasePackagePath, "Release package path"),
+      "-C",
+      toTarRelativePath(cwd, runtimeDirectory, "Runtime directory"),
+      ".",
+    ],
   };
 }
 
@@ -241,7 +266,8 @@ export async function buildDesktopRuntime(
     copy(resolve(DESKTOP_FACTORY_RUNTIME_DIR, "manifest.json"), channelManifestPath),
     rm(releasePackagePath, { force: true }),
   ]);
-  await run("tar", ["-czf", releasePackagePath, "-C", DESKTOP_FACTORY_RUNTIME_DIR, "."]);
+  const archive = createRuntimeArchiveExecution(releasePackagePath, DESKTOP_FACTORY_RUNTIME_DIR);
+  await run("tar", archive.args, { cwd: archive.cwd });
   if (!manifest.signature) {
     warn(
       "Product Runtime is unsigned: it is valid as the installed Factory Runtime but cannot be installed as a network update"
