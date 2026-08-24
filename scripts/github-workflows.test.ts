@@ -501,6 +501,7 @@ describe("Desktop publication workflow", () => {
     expect(jobText(jobs["accept-installation"])).toContain("desktop-channel-modern.json");
     expect(jobText(jobs["accept-installation"])).toContain("modern.yml");
     expect(jobText(jobs["accept-installation"])).toContain("shell.updaterMetadata");
+    expect(jobText(jobs["accept-installation"])).toContain("-SkipAuthenticode");
     expect(jobs["accept-factory"].strategy?.matrix?.scenario).toEqual([
       "offline-factory",
       "factory-fallback",
@@ -511,6 +512,10 @@ describe("Desktop publication workflow", () => {
     expect(jobText(jobs["accept-factory"])).toContain("pnpm release:artifacts validate-desktop");
     expect(jobText(jobs["accept-factory"])).toContain("DESKTOP_CHANNEL_SHA256");
     expect(jobText(jobs["accept-factory"])).toContain("PRODUCT_CHANNEL_SHA256");
+    expect(jobText(jobs["accept-factory"])).toContain("desktop.stdout.log");
+    expect(jobText(jobs["accept-factory"])).toContain("RedirectStandardError");
+    expect(jobText(jobs["accept-factory"])).toContain("Desktop process exit code");
+    expect(jobText(jobs["accept-factory"])).toContain("Write-AcceptanceReport");
     expect(step(jobs["accept-factory"], "Download accepted Product bundle")?.with).toEqual({
       name: "${{ needs.resolve-factory-product.outputs.current_product_bundle_artifact }}",
       path: "release/factory-acceptance/product",
