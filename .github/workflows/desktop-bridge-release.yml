@@ -122,6 +122,9 @@ jobs:
           cp "${source}/coder-studio-engine-linux-x64.manifest.json" "${desktop}/"
           cp "${source}"/coder-studio-engine-*-linux-x64.tgz "${desktop}/"
           tar -xzf "${source}/desktop-validation-evidence.tgz" -C "${desktop}"
+          windows_package=$(node -p "require('./release/bridge/product/coder-studio-runtime-win32-x64.manifest.json').packageFile")
+          mkdir -p "${desktop}/factory-runtime"
+          tar -xzf "${product}/${windows_package}" -C "${desktop}/factory-runtime"
 
       - name: Validate Product and Desktop bundles
         run: |

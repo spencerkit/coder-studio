@@ -669,6 +669,7 @@ describe("bridge candidate preparation workflow", () => {
     expect(text).toContain("pnpm release:artifacts validate-product");
     expect(text).toContain("pnpm release:artifacts validate-desktop");
     expect(text).toContain("desktop-channel-modern.json");
+    expect(text).toContain("factory-runtime");
     expect(resolveProduct?.run).toContain("desktop-channel-modern.json");
     expect(resolveProduct?.run).toContain('channel?.channel !== "desktop"');
     expect(uploadProduct?.run).toContain('gh release upload "${PRODUCT_TAG}"');
@@ -761,6 +762,7 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(text).toContain("desktop-channel-modern.json");
     expect(text).toContain("pnpm release:artifacts validate-product");
     expect(text).toContain("pnpm release:artifacts validate-desktop");
+    expect(text).toContain("factory-runtime");
     expect(text).toContain("sha256sum");
     expect(step(prepare, "Record accepted bridge identities")?.run).toContain(
       'expected_desktop_tag="desktop-v${desktop_version}"'
