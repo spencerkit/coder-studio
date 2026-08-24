@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  createNodeRuntimeExtractionExecution,
   repairPortableNodeLaunchers,
   stageAcceptedFactoryRuntime,
 } from "./prepare-desktop-package.js";
@@ -189,5 +190,16 @@ describe("prepare-desktop-package", () => {
 
     await access(npmPath);
     await expect(readFile(npmPath, "utf8")).resolves.toBe("windows-launcher");
+  });
+  it("uses workdir-relative tar paths when extracting the Node runtime archive", () => {
+    const execution = createNodeRuntimeExtractionExecution(
+      "C:\\temp\\coder-studio-node-runtime-123\\node-v24.19.0-win-x64.zip",
+      "C:\\temp\\coder-studio-node-runtime-123"
+    );
+
+    expect(execution).toEqual({
+      cwd: "C:\\temp\\coder-studio-node-runtime-123",
+      args: ["-xf", "node-v24.19.0-win-x64.zip", "-C", "."],
+    });
   });
 });
