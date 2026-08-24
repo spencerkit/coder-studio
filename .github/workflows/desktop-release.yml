@@ -523,6 +523,7 @@ jobs:
     timeout-minutes: 30
     environment: desktop-production
     permissions:
+      attestations: write
       contents: write
       id-token: write
     outputs:
