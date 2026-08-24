@@ -54,6 +54,8 @@ function createDeps(
     waitForState: vi.fn(async () => state("ready")),
     prepareActivity: vi.fn(async () => ({ hasActiveWork: true })),
     interruptAtPhase: vi.fn(async () => undefined),
+    armRestartAfterInstall: vi.fn(async () => undefined),
+    waitForRestartAfterInstall: vi.fn(async () => undefined),
     verifyExternalSidecar: vi.fn(async () => ({
       preloadAvailable: false,
       updateOperations: [],
@@ -121,6 +123,10 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("provider: generic");
     expect(runner).toContain("channel: latest");
     expect(runner).toContain("Set-LegacyShellUpdaterFeed $installDirectory $ChannelUrl");
+    expect(runner).toContain("$restartAfterInstallArmed = $false");
+    expect(runner).toContain("$phase -eq 'install-restart' -and $control.status -eq 'armed'");
+    expect(runner).toContain("Timed out relaunching the installed Desktop after Shell update");
+    expect(runner).toContain("phase = 'install-restart'");
     expect(runner).toContain("$report.logPaths = @($preservedPaths)");
     expect(runner.indexOf("Preserve-AcceptanceEvidence")).toBeLessThan(
       runner.lastIndexOf("Remove-Item -LiteralPath $runRoot -Recurse")
@@ -228,6 +234,8 @@ describe("verify-desktop-installed-update", () => {
     expect(deps.invoke).toHaveBeenCalledWith("checkForUpdates");
     expect(deps.invoke).toHaveBeenCalledWith("downloadUpdate");
     expect(deps.invoke).toHaveBeenCalledWith("prepareUpdateRestart");
+    expect(deps.armRestartAfterInstall).toHaveBeenCalledOnce();
+    expect(deps.waitForRestartAfterInstall).toHaveBeenCalledOnce();
     expect(deps.invoke).toHaveBeenCalledWith("restartAndInstallUpdate");
     expect(report).toMatchObject({
       scenario: "combined",

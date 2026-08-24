@@ -864,6 +864,7 @@ async function startApplication(): Promise<void> {
       currentVersion: app.getVersion(),
       isPackaged: true,
       allowPrerelease: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1",
+      forceRunAfterInstall: process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE !== "1",
       desktopChannelUrl: desktopChannelUrl,
       createCancellationToken: () => new CancellationToken(),
       logLocations: [join(app.getPath("logs"), "main.log")],

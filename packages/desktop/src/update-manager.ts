@@ -40,6 +40,7 @@ export interface DesktopShellUpdateAdapterOptions {
   currentVersion: string;
   isPackaged: boolean;
   allowPrerelease?: boolean;
+  forceRunAfterInstall?: boolean;
   updaterChannel?: string;
   desktopChannelUrl?: string;
   createCancellationToken?: () => ShellCancellationToken;
@@ -250,6 +251,6 @@ export class DesktopShellUpdateAdapter {
   quitAndInstall(): void {
     if (this.installInvoked) return;
     this.installInvoked = true;
-    this.options.updater.quitAndInstall(false, true);
+    this.options.updater.quitAndInstall(false, this.options.forceRunAfterInstall ?? true);
   }
 }
