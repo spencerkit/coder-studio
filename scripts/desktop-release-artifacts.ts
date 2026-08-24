@@ -83,6 +83,10 @@ const PRODUCT_COMPONENTS = new Set<ProductReleaseComponent>(["cli", "win-runtime
 const DESKTOP_COMPONENTS = new Set<DesktopReleaseComponent>(["windows", "wsl-engine"]);
 const ALLOWED_EMPTY_WINDOWS_ENGINE_FILES = new Set(["node_modules/node-addon-api/nothing.c"]);
 
+function isAllowedEmptyWindowsEngineFile(file: string): boolean {
+  return ALLOWED_EMPTY_WINDOWS_ENGINE_FILES.has(file) || file.endsWith("/__init__.py");
+}
+
 function readArgumentValue(argv: string[], index: number, option: string): string {
   const value = argv[index];
   if (!value || value.startsWith("--")) throw new Error(`${option} requires a value`);
@@ -672,7 +676,7 @@ async function validateWindowsEngine(directory: string): Promise<void> {
   }
   for (const file of files) {
     const metadata = await lstat(resolve(engineRoot, ...file.split("/")));
-    if (metadata.size <= 0 && !ALLOWED_EMPTY_WINDOWS_ENGINE_FILES.has(file)) {
+    if (metadata.size <= 0 && !isAllowedEmptyWindowsEngineFile(file)) {
       throw new Error(`Packaged Windows Engine file is empty: ${file}`);
     }
   }

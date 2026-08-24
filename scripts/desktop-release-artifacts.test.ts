@@ -593,6 +593,26 @@ describe("Desktop release artifacts", () => {
     await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
   });
 
+  it("allows zero-byte Windows Engine Python package markers", async () => {
+    const fixture = await createDesktopFixture();
+    await mkdir(
+      join(
+        fixture.root,
+        "windows-engine/node_modules/npm/node_modules/node-gyp/gyp/pylib/gyp/generator"
+      ),
+      { recursive: true }
+    );
+    await writeFile(
+      join(
+        fixture.root,
+        "windows-engine/node_modules/npm/node_modules/node-gyp/gyp/pylib/gyp/generator/__init__.py"
+      ),
+      ""
+    );
+
+    await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
+  });
+
   it("rejects Factory provenance or bytes that differ from the accepted Product", async () => {
     const provenance = await createDesktopFixture();
     await writeFile(
