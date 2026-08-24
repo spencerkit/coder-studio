@@ -145,6 +145,7 @@ describe("verify-desktop-installed-update", () => {
     expect(driver).toContain("let activeSidecarUrl = options.sidecarUrl;");
     expect(driver).toContain("activeCdpUrl = relaunch.cdpUrl ?? activeCdpUrl;");
     expect(driver).toContain("activeSidecarUrl = relaunch.sidecarUrl ?? activeSidecarUrl;");
+    expect(driver).toContain("await session.close().catch(() => undefined);");
     expect(driver).toContain("session = await connectBrowser(activeCdpUrl);");
   });
 
