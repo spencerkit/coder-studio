@@ -1,5 +1,12 @@
 # @coder-studio/desktop
 
+## 0.1.4
+
+### Patch Changes
+
+- [#142](https://github.com/spencerkit/coder-studio/pull/142) [`bcb4e20`](https://github.com/spencerkit/coder-studio/commit/bcb4e20643348be6394e03b74c4057cde04de8ce) Thanks [@pallyoung](https://github.com/pallyoung)! - Split Product and Desktop release channels, add signed promotion and compatibility validation for
+  independent bundles, and ship the Desktop native notification and update coordination changes.
+
 ## 0.1.3
 
 ### Patch Changes
