@@ -536,6 +536,11 @@ describe("Desktop publication workflow", () => {
     expect(jobs["windows-assets"].environment).toBe("desktop-production");
     expect(jobs["wsl-engine"].environment).toBe("desktop-production");
     expect(jobs["publish-candidate"].environment).toBe("desktop-production");
+    expect(jobs["publish-candidate"].permissions).toEqual({
+      attestations: "write",
+      contents: "write",
+      "id-token": "write",
+    });
     expect(jobs["accept-installation"].environment).toBe("desktop-production");
     expect(jobs["accept-factory"].environment).toBe("desktop-production");
   });
