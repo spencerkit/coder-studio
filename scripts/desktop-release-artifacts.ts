@@ -81,7 +81,10 @@ const DESKTOP_CHANNEL_URL =
 const CLI_PACKAGE_NAME = "@spencer-kit/coder-studio";
 const PRODUCT_COMPONENTS = new Set<ProductReleaseComponent>(["cli", "win-runtime", "wsl-runtime"]);
 const DESKTOP_COMPONENTS = new Set<DesktopReleaseComponent>(["windows", "wsl-engine"]);
-const ALLOWED_EMPTY_WINDOWS_ENGINE_FILES = new Set(["node_modules/node-addon-api/nothing.c"]);
+const ALLOWED_EMPTY_WINDOWS_ENGINE_FILES = new Set([
+  "node_modules/node-addon-api/nothing.c",
+  "node_modules/npm/node_modules/smart-buffer/docs/ROADMAP.md",
+]);
 
 function isAllowedEmptyWindowsEngineFile(file: string): boolean {
   return (

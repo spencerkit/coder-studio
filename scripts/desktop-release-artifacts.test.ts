@@ -627,6 +627,25 @@ describe("Desktop release artifacts", () => {
     await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
   });
 
+  it("allows known zero-byte Windows Engine documentation placeholders", async () => {
+    const fixture = await createDesktopFixture();
+    await mkdir(
+      join(fixture.root, "windows-engine/node_modules/npm/node_modules/smart-buffer/docs"),
+      {
+        recursive: true,
+      }
+    );
+    await writeFile(
+      join(
+        fixture.root,
+        "windows-engine/node_modules/npm/node_modules/smart-buffer/docs/ROADMAP.md"
+      ),
+      ""
+    );
+
+    await expect(validateDesktopReleaseArtifacts(fixture.options)).resolves.toBeUndefined();
+  });
+
   it("rejects Factory provenance or bytes that differ from the accepted Product", async () => {
     const provenance = await createDesktopFixture();
     await writeFile(
