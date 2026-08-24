@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import {
   type FactoryProductProvenance,
   type ProductRuntimeTarget,
@@ -35,6 +35,11 @@ export const DESKTOP_FACTORY_PRODUCT_PATH = resolve(DESKTOP_DIST_DIR, "factory-p
 interface RuntimeTarget {
   archiveName: string;
   rootDirName: string;
+}
+
+interface TarExecution {
+  cwd: string;
+  args: string[];
 }
 
 const PORTABLE_NODE_LAUNCHERS = [
@@ -87,6 +92,24 @@ async function verifyArchive(
   if (actual !== expected) throw new Error(`SHA-256 mismatch for ${archiveName}`);
 }
 
+function toTarRelativePath(root: string, target: string, label: string): string {
+  const path = relative(root, target);
+  if (!path || path === "." || path === ".." || path.startsWith(`..${sep}`)) {
+    throw new Error(`${label} must stay inside ${root}`);
+  }
+  return path.replaceAll("\\", "/");
+}
+
+export function createNodeRuntimeExtractionExecution(
+  archivePath: string,
+  cwd: string
+): TarExecution {
+  return {
+    cwd,
+    args: ["-xf", toTarRelativePath(cwd, archivePath, "Desktop Node archive"), "-C", "."],
+  };
+}
+
 async function stageNodeRuntime(): Promise<void> {
   const suppliedRuntime = process.env.CODER_STUDIO_DESKTOP_NODE_DIR?.trim();
   if (suppliedRuntime) {
@@ -105,7 +128,8 @@ async function stageNodeRuntime(): Promise<void> {
       download(`${baseUrl}/SHASUMS256.txt`, checksumsPath),
     ]);
     await verifyArchive(archivePath, target.archiveName, await readFile(checksumsPath, "utf8"));
-    await run("tar", ["-xf", archivePath, "-C", workDir]);
+    const extraction = createNodeRuntimeExtractionExecution(archivePath, workDir);
+    await run("tar", extraction.args, { cwd: extraction.cwd });
     const extractedDir = join(workDir, target.rootDirName);
     await copyEngineTree(extractedDir, DESKTOP_ENGINE_DIR);
   } finally {
