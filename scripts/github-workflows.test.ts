@@ -824,6 +824,11 @@ describe("one-time Product and Desktop migration bridge", () => {
     expect(jobText(legacy)).toContain("legacy_source_tag");
     expect(jobText(legacy)).toContain("legacy-current");
     expect(jobText(legacy)).toContain("legacy-wsl-current");
+    expect(jobText(legacy)).toContain(
+      "$previous.runtimes.'win32-x64'.version -ne $candidate.runtimes.'win32-x64'.version"
+    );
+    expect(jobText(legacy)).toContain("'shell,runtime:win32-x64'");
+    expect(jobText(legacy)).toContain("'shell'");
     expect(jobText(legacy)).toContain("pnpm acceptance:desktop:installed");
     expect(jobText(legacy)).toContain("bridge_candidate_tag");
     expect(jobText(legacy)).toContain("-SkipAuthenticode");
