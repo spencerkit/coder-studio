@@ -19,7 +19,7 @@ const combinedScenario: InstalledDesktopScenario = {
   targetRuntimeVersion: "0.6.0",
 };
 
-function state(status: "available" | "ready" | "succeeded") {
+function state(status: "available" | "ready" | "succeeded" | "failed") {
   return {
     status,
     components: [
@@ -131,6 +131,12 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("function Stop-CdpPortOwner");
     expect(runner).toContain("function Get-ProcessesForExecutable");
     expect(runner).toContain("function Stop-InstalledDesktopExecutable");
+    expect(runner).toContain("function Wait-ForUpdateOwnerLeaseExpiry");
+    expect(runner).toContain("Start-Sleep -Seconds 11");
+    expect(runner).toContain(
+      "Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort"
+    );
+    expect(runner).toContain("Wait-ForUpdateOwnerLeaseExpiry");
     expect(runner).toContain("function Get-SidecarUrl");
     expect(runner).toContain("function Get-InstalledDesktopShellVersion");
     expect(runner).toContain("function Wait-ForInstalledShellVersion");
@@ -512,6 +518,14 @@ describe("verify-desktop-installed-update", () => {
 
   it("requires health-failure rollback evidence to name the previous trusted Runtime", async () => {
     const deps = createDeps({
+      invoke: vi.fn(async (method) => {
+        if (method === "checkForUpdates") return state("available");
+        if (method === "downloadUpdate") return state("ready");
+        if (method === "prepareUpdateRestart") return state("ready");
+        if (method === "restartAndInstallUpdate") return true;
+        if (method === "getUpdateState") return state("failed");
+        throw new Error(`Unexpected method: ${method}`);
+      }),
       readEvidence: vi.fn(async () => ({
         actualShellVersion: "0.3.0",
         actualRuntimeVersion: "0.5.0",

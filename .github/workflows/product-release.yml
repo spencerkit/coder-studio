@@ -679,13 +679,15 @@ jobs:
             '-PreviousRuntimeVersion', $previousRuntime,
             '-ExpectedShellVersion', '${{ steps.identity.outputs.shell_version }}',
             '-ExpectedRuntimeVersion', '${{ steps.identity.outputs.target_runtime }}',
-            '-ExpectedComponents', '${{ steps.identity.outputs.components }}',
             '-PublicKeyPath', 'release/product-runtime-acceptance/key/runtime-public.pem',
             '-Scenario', '${{ matrix.scenario }}',
             '-ReportPath', 'release/product-runtime-report/${{ matrix.scenario }}.json',
             '-CommitSha', '${{ github.sha }}',
             '-ChannelSignatureDigest', '${{ steps.identity.outputs.signature_digest }}'
           )
+          if ('${{ steps.identity.outputs.components }}') {
+            $arguments += @('-ExpectedComponents', '${{ steps.identity.outputs.components }}')
+          }
           if ('${{ matrix.scenario }}' -eq 'runtime-health-rollback') {
             $arguments += @('-ExpectedRuntimeAfterRestart', $previousRuntime)
           }
