@@ -112,6 +112,12 @@ describe("Product publication workflow", () => {
         default: "latest",
         type: "string",
       },
+      windows_signing: {
+        description: "Require stable Desktop Authenticode signing for workflow_dispatch runs",
+        required: false,
+        default: true,
+        type: "boolean",
+      },
     });
     expect(workflow.concurrency).toEqual({
       group: "product-production",
@@ -196,6 +202,10 @@ describe("Product publication workflow", () => {
     ]);
     expect(jobText(jobs["accept-runtime"])).toContain("ProductChannelUrl");
     expect(jobText(jobs["accept-runtime"])).toContain("Prepare disposable WSL distribution");
+    expect(jobText(jobs["accept-runtime"])).toContain(
+      "github.event_name == 'workflow_dispatch' && !inputs.windows_signing"
+    );
+    expect(jobText(jobs["accept-runtime"])).toContain("-SkipAuthenticode");
     expect(jobText(jobs["accept-runtime"])).not.toContain("ACCEPTANCE_TARGET");
     expect(jobs.compatibility.uses).toBe("./.github/workflows/compatibility-acceptance.yml");
     expect(jobs.compatibility.secrets).toBeUndefined();
