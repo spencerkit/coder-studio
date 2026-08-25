@@ -183,6 +183,9 @@ describe("verify-desktop-installed-update", () => {
     expect(driver).toContain("session = await connectBrowser(activeCdpUrl);");
     expect(driver).toContain("allowFailedFrozenState?: boolean;");
     expect(driver).toContain('values.get("allow-failed-frozen-state") === "true"');
+    expect(driver).toContain(
+      'options.scenario.name === "runtime-health-rollback" ? actualRuntimeVersion : null'
+    );
   });
 
   it("normalizes sidecar websocket urls for browser-issued commands", () => {
@@ -546,6 +549,24 @@ describe("verify-desktop-installed-update", () => {
     const report = await verifyInstalledDesktopScenario(scenario, deps);
 
     expect(report.rollbackRuntimeVersion).toBe("0.5.0");
+  });
+
+  it("accepts a journal plan that reconciles completely during crash recovery", async () => {
+    const deps = createDeps();
+    const scenario: InstalledDesktopScenario = {
+      ...combinedScenario,
+      name: "restart-journal-recovery",
+    };
+
+    const report = await verifyInstalledDesktopScenario(scenario, deps);
+
+    expect(report.journalRecovered).toBe(true);
+    expect(report.restartCount).toBe(1);
+    expect(deps.interruptAtPhase).toHaveBeenCalledWith("restart-journal");
+    expect(deps.reconnectAfterRestart).toHaveBeenCalledOnce();
+    expect(deps.armRestartAfterInstall).not.toHaveBeenCalled();
+    expect(deps.waitForRestartAfterInstall).not.toHaveBeenCalled();
+    expect(deps.invoke).not.toHaveBeenCalledWith("restartAndInstallUpdate");
   });
 
   it("updates shared Web before following it with the WSL Runtime", async () => {
