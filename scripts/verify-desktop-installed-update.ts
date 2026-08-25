@@ -407,7 +407,11 @@ export async function verifyInstalledDesktopScenario(
   await deps.waitForRestartAfterInstall();
   await deps.reconnectAfterRestart();
   const finalState = asState(await deps.invoke("getUpdateState"), "getUpdateState");
-  if (finalState.status !== "succeeded" && finalState.status !== "idle") {
+  const finalStateAccepted =
+    scenario.name === "runtime-health-rollback"
+      ? finalState.status === "failed"
+      : finalState.status === "succeeded" || finalState.status === "idle";
+  if (!finalStateAccepted) {
     throw new Error(`Installed Desktop did not reconcile after restart: ${finalState.status}`);
   }
   if (stagedWslFollow) {

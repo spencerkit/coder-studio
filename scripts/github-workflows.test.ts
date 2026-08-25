@@ -203,6 +203,9 @@ describe("Product publication workflow", () => {
     expect(jobText(jobs["accept-runtime"])).toContain("ProductChannelUrl");
     expect(jobText(jobs["accept-runtime"])).toContain("Prepare disposable WSL distribution");
     expect(jobText(jobs["accept-runtime"])).toContain(
+      "if ('${{ steps.identity.outputs.components }}')"
+    );
+    expect(jobText(jobs["accept-runtime"])).toContain(
       "github.event_name == 'workflow_dispatch' && !inputs.windows_signing"
     );
     expect(jobText(jobs["accept-runtime"])).toContain("-SkipAuthenticode");

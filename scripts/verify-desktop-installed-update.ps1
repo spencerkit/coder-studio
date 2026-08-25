@@ -142,6 +142,11 @@ function Stop-AcceptanceDesktop([string]$Executable, [string]$UserDataDirectory,
   Stop-CdpPortOwner $CdpPort
 }
 
+function Wait-ForUpdateOwnerLeaseExpiry {
+  # Crash recovery must wait past the proper-lockfile owner lease's 10-second stale window.
+  Start-Sleep -Seconds 11
+}
+
 function Stop-InstalledDesktopExecutable([string]$Executable, [int]$CdpPort = 0) {
   foreach ($process in @(Get-ProcessesForExecutable $Executable)) {
     Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
@@ -527,6 +532,7 @@ try {
         } elseif ($control.status -eq 'requested' -and -not $handledInterruptions.Contains($phase)) {
           $journalBefore = Read-JournalIdentity $journalPath
           Stop-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort
+          Wait-ForUpdateOwnerLeaseExpiry
           $restartScenario = if ($phase -eq 'wsl-follow') {
             if ($Scenario -eq 'wsl-combined') {
               $env:CODER_STUDIO_DESKTOP_CHANNEL_URL = 'http://127.0.0.1:1/desktop-channel.json'
