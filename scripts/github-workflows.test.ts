@@ -268,7 +268,12 @@ describe("Product publication workflow", () => {
     expect(steps[releaseIndex]?.run).toContain("--prerelease=false --latest=false");
     expect(steps[pointerIndex]?.run).toContain("product-stable");
     expect(steps[pointerIndex]?.run).toContain("product-channel.json");
+    expect(steps[verifyIndex]?.run).toContain("for attempt in 1 2 3 4 5 6");
+    expect(steps[verifyIndex]?.run).toContain("sleep 10");
     expect(steps[cleanupIndex]?.run).toContain("npm dist-tag rm");
+    expect(steps[cleanupIndex]?.run).toContain(
+      "::warning::Unable to remove temporary npm dist-tag"
+    );
     expect(steps[recordIndex]?.run).toContain("promotion.json");
     expect(steps[recordIndex]?.run).toContain(
       "release-workflow-helpers.ts verify-existing-promotion-record"
