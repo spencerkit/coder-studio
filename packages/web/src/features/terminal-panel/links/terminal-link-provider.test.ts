@@ -204,6 +204,33 @@ describe("createTerminalWorkspaceLinkProvider", () => {
     });
   });
 
+  it("parses a line suffix followed by Chinese punctuation", async () => {
+    const { provider, openWorkspaceFile } = createProvider([
+      [
+        0,
+        createBufferLine(
+          "src/pages/home/components/browser-compatibility-tip/index.tsx:5，  这种格式"
+        ),
+      ],
+    ]);
+
+    const links = await provideLinks(provider, 1);
+
+    expect(links).toHaveLength(1);
+    expect(links?.[0]?.text).toBe(
+      "src/pages/home/components/browser-compatibility-tip/index.tsx:5"
+    );
+
+    links?.[0]?.activate(new MouseEvent("click"), links[0].text);
+    expect(openWorkspaceFile).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      path: "src/pages/home/components/browser-compatibility-tip/index.tsx",
+      line: 5,
+      column: undefined,
+      source: "manual",
+    });
+  });
+
   it("does not link truncated workspace paths on their own", async () => {
     const { provider, openWorkspaceFile } = createProvider(
       [
