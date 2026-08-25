@@ -1,9 +1,6 @@
 import { EnvironmentStateStore, NATIVE_ENVIRONMENT } from "./environment-state.js";
-import type {
-  FactoryProductProvenance,
-  ProductChannel,
-  ProductChannelRuntime,
-} from "./product-channel.js";
+import type { FactoryProductProvenance, ProductChannelRuntime } from "./product-channel.js";
+import { listCompatibleProductReleases, type ProductReleaseSource } from "./product-index.js";
 import type {
   DesktopEnvironmentProgress,
   DesktopEnvironmentSummary,
@@ -40,7 +37,7 @@ export interface DesktopEnvironmentManagerOptions {
   releaseBaseUrl: string;
   factoryReleaseBaseUrl?: string;
   productChannelUrl?: string;
-  loadProductChannel?: () => Promise<ProductChannel>;
+  loadProductChannel?: () => Promise<ProductReleaseSource>;
   factoryProduct?: FactoryProductProvenance;
   enableWsl?: boolean;
   fetch?: typeof fetch;
@@ -160,7 +157,7 @@ export class DesktopEnvironmentManager {
       onProgress: (progress) =>
         this.emit(target.id, progress.phase, progress.message, progress.percent),
     });
-    let channel: ProductChannel | null = null;
+    let channel: ProductReleaseSource | null = null;
     if (this.options.loadProductChannel) {
       try {
         channel = await this.options.loadProductChannel();
@@ -173,9 +170,19 @@ export class DesktopEnvironmentManager {
       | (Omit<ProductChannelRuntime, "publishedAt"> & { publishedAt?: string })
       | null = null;
     let releaseTag: string | null = null;
-    if (channel?.version === this.options.runtimeVersion) {
-      expected = channel.runtimes["linux-x64"];
-      releaseTag = channel.releaseTag;
+    const acceptedRelease = channel
+      ? listCompatibleProductReleases(channel, {
+          shellVersion: this.options.shellVersion,
+          engineVersion: DESKTOP_ENGINE_VERSION,
+          nodeVersion: this.options.nodeVersion,
+          runtimeHostApiVersion: RUNTIME_HOST_API_VERSION,
+          apiProtocolVersion: API_PROTOCOL_VERSION,
+          dataSchemaVersion: DATA_SCHEMA_VERSION,
+        }).find((release) => release.version === this.options.runtimeVersion)
+      : null;
+    if (acceptedRelease) {
+      expected = acceptedRelease.runtimes["linux-x64"];
+      releaseTag = acceptedRelease.releaseTag;
     } else if (this.options.factoryProduct?.version === this.options.runtimeVersion) {
       expected = {
         ...this.options.factoryProduct.runtimes["linux-x64"],

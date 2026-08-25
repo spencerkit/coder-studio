@@ -66,6 +66,7 @@ import {
   parseProductChannel,
   resolveProductChannelUrl,
 } from "./product-channel.js";
+import { parseProductIndex, resolveProductIndexUrl } from "./product-index.js";
 import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
 import { resolveVersionedReleaseAsset } from "./release-channel.js";
 import { DESKTOP_NODE_VERSION, getRuntimePublishedAt } from "./runtime-manifest.js";
@@ -659,20 +660,26 @@ async function startApplication(): Promise<void> {
       ? __CODER_STUDIO_PRODUCT_CHANNEL_URL__.trim()
       : "";
   const productChannelUrl = resolveProductChannelUrl(process.env, compiledProductChannelUrl);
+  const productIndexUrl = productChannelUrl ? resolveProductIndexUrl(productChannelUrl) : "";
   const compiledDesktopChannelUrl =
     typeof __CODER_STUDIO_DESKTOP_CHANNEL_URL__ === "string"
       ? __CODER_STUDIO_DESKTOP_CHANNEL_URL__.trim()
       : "";
   const desktopChannelUrl = resolveDesktopChannelUrl(process.env, compiledDesktopChannelUrl);
   const loadProductChannel = async () => {
-    if (!productChannelUrl || !runtimePublicKey) {
+    const acceptanceChannel = process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1";
+    const productSourceUrl = acceptanceChannel ? productChannelUrl : productIndexUrl;
+    if (!productSourceUrl || !runtimePublicKey) {
       throw new Error("Product update channel is not configured");
     }
-    const response = await fetch(productChannelUrl, { cache: "no-store" });
+    const response = await fetch(productSourceUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Product update channel check failed with ${response.status}`);
     }
-    return parseProductChannel(await response.json(), runtimePublicKey, productChannelUrl);
+    const value = await response.json();
+    return acceptanceChannel
+      ? parseProductChannel(value, runtimePublicKey, productSourceUrl)
+      : parseProductIndex(value, runtimePublicKey, productSourceUrl);
   };
   const loadDesktopChannel = async () => {
     if (!desktopChannelUrl || !runtimePublicKey) {

@@ -9,6 +9,7 @@ import type { DesktopChannel } from "./desktop-channel.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
 import type { ProductChannel } from "./product-channel.js";
+import type { ProductIndex } from "./product-index.js";
 import type { RuntimeManifestV2 } from "./runtime-manifest.js";
 import type { RuntimeDownloadOptions, RuntimeUpdateMetadata } from "./runtime-update-manager.js";
 
@@ -419,8 +420,61 @@ describe("DesktopUpdateCoordinator", () => {
 
     await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
       status: "failed",
-      compatibility: { compatible: false, code: "runtime_host_incompatible" },
+      diagnostics: {
+        productChannelError: "No accepted Product Runtime is compatible with Desktop Shell 0.3.0",
+      },
     });
+  });
+
+  it("skips an incompatible latest Runtime and selects the next accepted compatible release", async () => {
+    const { coordinator, loadProductChannel, runtime } = createHarness({
+      shellVersion: "0.3.0",
+      runtimeVersion: "0.5.0",
+    });
+    const compatible = {
+      version: productChannel.version,
+      releaseTag: productChannel.releaseTag,
+      publishedAt: productChannel.runtimes["win32-x64"].publishedAt,
+      minShellVersion: productChannel.minShellVersion,
+      requirements: productChannel.requirements,
+      runtimes: {
+        "win32-x64": {
+          manifest: productChannel.runtimes["win32-x64"].manifest,
+          manifestSha256: productChannel.runtimes["win32-x64"].manifestSha256,
+        },
+        "linux-x64": {
+          manifest: productChannel.runtimes["linux-x64"].manifest,
+          manifestSha256: productChannel.runtimes["linux-x64"].manifestSha256,
+        },
+      },
+    };
+    const index: ProductIndex = {
+      schemaVersion: 1,
+      channel: "product-index",
+      generatedAt: "2026-08-09T01:02:03.000Z",
+      latestVersion: "0.7.0",
+      releases: [
+        compatible,
+        {
+          ...compatible,
+          version: "0.7.0",
+          releaseTag: "v0.7.0",
+          requirements: { ...compatible.requirements, engineVersion: "3" },
+        },
+      ],
+      signature: { algorithm: "ed25519", value: "signed" },
+    };
+    loadProductChannel.mockResolvedValueOnce(index as never);
+
+    await expect(coordinator.check({ manual: true })).resolves.toMatchObject({
+      status: "available",
+      components: [expect.objectContaining({ id: "runtime:win32-x64", targetVersion: "0.6.0" })],
+    });
+    expect(runtime.checkMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ version: "0.6.0" }),
+      "0.3.0",
+      "v0.6.0"
+    );
   });
 
   it("validates a Shell-only plan against the installed Runtime manifest", async () => {

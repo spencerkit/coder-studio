@@ -86,6 +86,11 @@ describe("unified Desktop update IPC", () => {
     const source = await readFile(resolve(import.meta.dirname, "main.ts"), "utf8");
 
     expect(source).toContain("parseProductChannel");
+    expect(source).toContain("parseProductIndex");
+    expect(source).toContain("resolveProductIndexUrl(productChannelUrl)");
+    expect(source).toContain(
+      "const productSourceUrl = acceptanceChannel ? productChannelUrl : productIndexUrl"
+    );
     expect(source).toContain("productChannelUrl: productChannelUrl");
     expect(source).toContain("desktopChannelUrl: desktopChannelUrl");
     expect(source).toContain("loadProductChannel: loadProductChannel");

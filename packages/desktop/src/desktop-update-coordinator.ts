@@ -10,7 +10,12 @@ import type { DesktopBuildInfo } from "./build-info.js";
 import type { DesktopChannel } from "./desktop-channel.js";
 import type { DesktopUpdateJournal, DesktopUpdateJournalRecord } from "./desktop-update-journal.js";
 import type { DesktopUpdateSettingsRepo } from "./desktop-update-settings.js";
-import type { ProductChannel, ProductChannelRuntime } from "./product-channel.js";
+import type { ProductChannelRuntime, ProductRelease } from "./product-channel.js";
+import {
+  type ProductCompatibilityHost,
+  type ProductReleaseSource,
+  selectHighestCompatibleProductRelease,
+} from "./product-index.js";
 import { compareVersions, type RuntimeManifest } from "./runtime-manifest.js";
 import type { RuntimeUpdateAdapter, RuntimeUpdateMetadata } from "./runtime-update-manager.js";
 import type { DesktopShellUpdateAdapter, ShellUpdateMetadata } from "./update-manager.js";
@@ -23,7 +28,7 @@ export interface DesktopUpdateCoordinatorDeps {
   currentSharedWebVersion: () => string;
   currentProductPublishedAt: () => string | null;
   getBuildInfo: () => DesktopBuildInfo;
-  loadProductChannel: () => Promise<ProductChannel>;
+  loadProductChannel: () => Promise<ProductReleaseSource>;
   loadDesktopChannel: () => Promise<DesktopChannel>;
   shell: DesktopShellUpdateAdapter;
   getRuntimeAdapter: (
@@ -180,7 +185,8 @@ export class DesktopUpdateCoordinator {
         productResult.status === "rejected" ? errorMessage(productResult.reason) : null;
       let desktopChannelError =
         desktopResult.status === "rejected" ? errorMessage(desktopResult.reason) : null;
-      let productChannel = productResult.status === "fulfilled" ? productResult.value : null;
+      const productSource = productResult.status === "fulfilled" ? productResult.value : null;
+      let productChannel: ProductRelease | null = null;
       let desktopChannel = desktopResult.status === "fulfilled" ? desktopResult.value : null;
       const buildInfo = this.deps.getBuildInfo();
       let shellMetadata: ShellUpdateMetadata | null = null;
@@ -198,6 +204,26 @@ export class DesktopUpdateCoordinator {
         desktopChannel && compareVersions(desktopChannel.shell.version, buildInfo.shellVersion) > 0
           ? desktopChannel.shell.version
           : buildInfo.shellVersion;
+      if (productSource) {
+        try {
+          const plannedHost = this.productCompatibilityHost(
+            desktopChannel &&
+              compareVersions(desktopChannel.shell.version, buildInfo.shellVersion) > 0
+              ? desktopChannel.shell
+              : buildInfo
+          );
+          const selected = selectHighestCompatibleProductRelease(productSource, plannedHost);
+          if (!selected) {
+            throw new Error(
+              `No accepted Product Runtime is compatible with Desktop Shell ${plannedHost.shellVersion}`
+            );
+          }
+          productChannel = selected;
+        } catch (error) {
+          productChannelError = errorMessage(error);
+          productChannel = null;
+        }
+      }
       let checkedRuntimes = await Promise.all(
         this.runtimeTargetsForCheck().map(async (target): Promise<CheckedRuntime> => {
           const adapter = await this.deps.getRuntimeAdapter(
@@ -462,11 +488,18 @@ export class DesktopUpdateCoordinator {
         this.deps.getRuntimeAdapter(target, environmentId),
       ]);
       const buildInfo = this.deps.getBuildInfo();
-      const expected = channel.runtimes[target];
+      const host = this.productCompatibilityHost(buildInfo);
+      const selected = selectHighestCompatibleProductRelease(channel, host);
+      if (!selected) {
+        throw new Error(
+          `No accepted Product Runtime is compatible with Desktop Shell ${host.shellVersion}`
+        );
+      }
+      const expected = selected.runtimes[target];
       const metadata = await adapter.checkMetadata(
         expected,
         buildInfo.shellVersion,
-        channel.releaseTag
+        selected.releaseTag
       );
       const currentVersion = await adapter.getCurrentVersion();
       this.assertNotStopping();
@@ -862,7 +895,7 @@ export class DesktopUpdateCoordinator {
   }
 
   private createNeededComponents(
-    productChannel: ProductChannel | null,
+    productChannel: ProductRelease | null,
     buildInfo: DesktopBuildInfo,
     shellMetadata: ShellUpdateMetadata | null,
     checkedRuntimes: CheckedRuntime[]
@@ -911,7 +944,7 @@ export class DesktopUpdateCoordinator {
   }
 
   private validatePlan(
-    productChannel: ProductChannel | null,
+    productChannel: ProductRelease | null,
     desktopChannel: DesktopChannel | null,
     buildInfo: DesktopBuildInfo,
     components: ProductUpdateComponent[],
@@ -986,6 +1019,29 @@ export class DesktopUpdateCoordinator {
       }
     }
     return { compatible: true, code: null, summary: null };
+  }
+
+  private productCompatibilityHost(
+    source: DesktopBuildInfo | DesktopChannel["shell"]
+  ): ProductCompatibilityHost {
+    const shellVersion = "shellVersion" in source ? source.shellVersion : source.version;
+    if (
+      !source.engineVersion ||
+      !source.nodeVersion ||
+      !source.runtimeHostApiVersion ||
+      !source.apiProtocolVersion ||
+      !source.dataSchemaVersion
+    ) {
+      throw new Error(`Desktop Shell ${shellVersion} has incomplete Runtime capabilities`);
+    }
+    return {
+      shellVersion,
+      engineVersion: source.engineVersion,
+      nodeVersion: source.nodeVersion,
+      runtimeHostApiVersion: source.runtimeHostApiVersion,
+      apiProtocolVersion: source.apiProtocolVersion,
+      dataSchemaVersion: source.dataSchemaVersion,
+    };
   }
 
   private assertSourceMatchesShell(channel: DesktopChannel, shell: ShellUpdateMetadata): void {

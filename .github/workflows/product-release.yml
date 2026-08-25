@@ -748,6 +748,7 @@ jobs:
       - compatibility
     if: success()
     runs-on: ubuntu-latest
+    environment: desktop-production
     timeout-minutes: 20
     concurrency:
       group: product-desktop-stable-promotion
@@ -770,6 +771,8 @@ jobs:
       PREVIOUS_POINTER_DIGEST: ${{ needs.prepare.outputs.previous_product_channel_sha256 }}
       ACCEPTED_DESKTOP_CHANNEL_SHA256: ${{ needs.prepare.outputs.desktop_channel_sha256 }}
       CANDIDATE_COMMIT: ${{ needs.publish-candidate.outputs.candidate_commit }}
+      CODER_STUDIO_RUNTIME_PUBLIC_KEY: ${{ secrets.DESKTOP_RUNTIME_PUBLIC_KEY }}
+      CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY: ${{ secrets.DESKTOP_RUNTIME_SIGNING_PRIVATE_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -822,6 +825,40 @@ jobs:
             exit 1
           fi
 
+      - name: Build next signed Product index
+        id: product-index
+        run: |
+          if [[ -z "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" || -z "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" ]]; then
+            echo "Production Runtime signing keys are required to advance the Product index" >&2
+            exit 1
+          fi
+          mkdir -p \
+            release/product-promotion/keys \
+            release/product-promotion/index-bootstrap \
+            release/product-promotion/next
+          printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" \
+            > release/product-promotion/keys/runtime-public.pem
+          printf '%s' "${CODER_STUDIO_RUNTIME_SIGNING_PRIVATE_KEY}" \
+            > release/product-promotion/keys/runtime-private.pem
+          index_args=()
+          if gh release download product-stable \
+            --pattern product-index.json \
+            --dir release/product-promotion/index-bootstrap 2>/dev/null; then
+            index_args+=(--existing-index release/product-promotion/index-bootstrap/product-index.json)
+          elif gh release download product-stable \
+            --pattern product-channel.json \
+            --dir release/product-promotion/index-bootstrap 2>/dev/null; then
+            index_args+=(--previous-channel release/product-promotion/index-bootstrap/product-channel.json)
+          fi
+          node --import tsx scripts/build-product-index.ts \
+            --candidate-channel release/product-promotion/candidate/product-channel.json \
+            "${index_args[@]}" \
+            --public-key release/product-promotion/keys/runtime-public.pem \
+            --private-key release/product-promotion/keys/runtime-private.pem \
+            --output release/product-promotion/next/product-index.json
+          index_digest=$(sha256sum release/product-promotion/next/product-index.json | cut -d ' ' -f 1)
+          echo "product_index_sha256=${index_digest}" >> "${GITHUB_OUTPUT}"
+
       - name: Advance final npm dist-tag
         run: npm dist-tag add "${PACKAGE_NAME}@${PRODUCT_VERSION}" "${FINAL_DIST_TAG}"
 
@@ -831,6 +868,7 @@ jobs:
       - name: Advance signed Product stable pointer
         run: |
           pointer=release/product-promotion/candidate/product-channel.json
+          index_pointer=release/product-promotion/next/product-index.json
           final_digest=$(sha256sum "${pointer}" | cut -d ' ' -f 1)
           if [[ "${final_digest}" != "${PRODUCT_CHANNEL_SHA256}" ]]; then
             echo "Immutable Product digest mismatch: product-channel.json" >&2
@@ -846,12 +884,12 @@ jobs:
             exit 1
           fi
           if gh release view product-stable >/dev/null 2>&1; then
-            gh release upload product-stable "${pointer}" --clobber
+            gh release upload product-stable "${index_pointer}" "${pointer}" --clobber
           else
-            gh release create product-stable "${pointer}" \
+            gh release create product-stable "${index_pointer}" "${pointer}" \
               --target "${GITHUB_SHA}" \
               --title "Coder Studio Product stable channel" \
-              --notes "Signed mutable Product channel pointer." \
+              --notes "Signed mutable Product channel and accepted release index." \
               --latest=false
           fi
 
@@ -871,13 +909,36 @@ jobs:
             sleep 10
           done
           mkdir -p release/product-promotion/final
-          gh release download product-stable --pattern product-channel.json --dir release/product-promotion/final
+          gh release download product-stable --pattern 'product-*.json' --dir release/product-promotion/final
           final_digest=$(sha256sum release/product-promotion/final/product-channel.json | cut -d ' ' -f 1)
+          final_index_digest=$(sha256sum release/product-promotion/final/product-index.json | cut -d ' ' -f 1)
           final_version=$(node -p "require('./release/product-promotion/final/product-channel.json').version")
-          if [[ "${final_digest}" != "${PRODUCT_CHANNEL_SHA256}" || "${final_version}" != "${PRODUCT_VERSION}" ]]; then
+          if [[ "${final_digest}" != "${PRODUCT_CHANNEL_SHA256}" || \
+                "${final_index_digest}" != "${{ steps.product-index.outputs.product_index_sha256 }}" || \
+                "${final_version}" != "${PRODUCT_VERSION}" ]]; then
             echo "Promoted Product stable pointer verification failed" >&2
             exit 1
           fi
+          node --import tsx --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { parseProductChannel } from "./packages/desktop/src/product-channel.ts";
+          import { parseProductIndex } from "./packages/desktop/src/product-index.ts";
+          const root = "release/product-promotion/final";
+          const key = readFileSync("release/product-promotion/keys/runtime-public.pem", "utf8");
+          const channel = parseProductChannel(
+            JSON.parse(readFileSync(`${root}/product-channel.json`, "utf8")),
+            key,
+            "https://github.com/${{ github.repository }}/releases/download/product-stable/product-channel.json"
+          );
+          const index = parseProductIndex(
+            JSON.parse(readFileSync(`${root}/product-index.json`, "utf8")),
+            key,
+            "https://github.com/${{ github.repository }}/releases/download/product-stable/product-index.json"
+          );
+          if (channel.version !== process.env.PRODUCT_VERSION || index.latestVersion !== process.env.PRODUCT_VERSION) {
+            throw new Error("Promoted Product index does not contain the accepted latest Product");
+          }
+          NODE
 
       - name: Remove temporary npm dist-tag
         run: |

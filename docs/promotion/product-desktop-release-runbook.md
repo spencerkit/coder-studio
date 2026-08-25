@@ -3,15 +3,60 @@
 Coder Studio has two independently owned production release boundaries:
 
 - A **Product release** publishes the CLI together with the Windows and WSL Product Runtime at one
-  Product version. Its signed pointer is `product-stable/product-channel.json`.
+  Product version. Product owns both `product-stable/product-channel.json` (the latest-only legacy
+  pointer) and `product-stable/product-index.json` (the accepted Runtime history).
 - A **Desktop release** publishes the Desktop Shell, Windows Engine, and WSL Engine at one Desktop
   version. It packages the already accepted Factory Runtime identified by the Desktop channel, but
   does not rebuild or republish Product Runtime. Its signed pointer is
   `desktop-stable/desktop-channel.json`.
 
-The fixed pointer releases contain only signed channel documents. Channels name immutable versioned
-release tags and safe asset names; clients never infer component state from GitHub's repository-wide
-latest selection.
+The fixed pointer releases contain only signed channel/index documents. They name immutable
+versioned release tags and safe asset names; clients never infer component state by enumerating
+GitHub Releases or from GitHub's repository-wide latest selection.
+
+`product-index.json` is the source of truth for new Shell builds and installed Shell updates. Every
+successful Product promotion adds one accepted release and signs the complete index with the Runtime
+Ed25519 key. Failed candidates never enter it, and Desktop publication has read-only access. A
+consumer selects the highest semantic version compatible with its effective Shell version, Engine,
+Node, Runtime Host API, API Protocol, and Data Schema. If the newest entry is incompatible, the
+consumer continues with the next-highest accepted entry; if none is compatible, it fails closed.
+
+The schema is intentionally an index of immutable identities, not a second artifact store:
+
+```json
+{
+  "schemaVersion": 1,
+  "channel": "product-index",
+  "generatedAt": "2026-08-25T08:00:00.000Z",
+  "latestVersion": "0.5.13",
+  "releases": [
+    {
+      "version": "0.5.13",
+      "releaseTag": "v0.5.13",
+      "publishedAt": "2026-08-25T07:30:00.000Z",
+      "minShellVersion": "0.1.5",
+      "requirements": {
+        "engineVersion": "2",
+        "nodeVersion": "24.19.0",
+        "runtimeHostApiVersion": 1,
+        "apiProtocolVersion": 1,
+        "dataSchemaVersion": 1
+      },
+      "runtimes": {
+        "win32-x64": {
+          "manifest": "coder-studio-runtime-win32-x64.manifest.json",
+          "manifestSha256": "<64 lowercase hex characters>"
+        },
+        "linux-x64": {
+          "manifest": "coder-studio-server-runtime-linux-x64.manifest.json",
+          "manifestSha256": "<64 lowercase hex characters>"
+        }
+      }
+    }
+  ],
+  "signature": { "algorithm": "ed25519", "value": "<base64 signature>" }
+}
+```
 
 ## Normal Product release
 
@@ -24,13 +69,25 @@ After every acceptance job succeeds, promotion is automatic. It advances the req
 (normally `latest`), converts the versioned Product prerelease to a normal non-latest release,
 advances `product-stable`, verifies the result, removes the temporary dist-tag, and writes
 `promotion.json`. There is no run-ID handoff, environment approval, or separate manual promotion.
+The promotion job is the only writer of `product-index.json`: it verifies the accepted candidate and
+existing index, bootstraps from the previous signed `product-channel.json` when no index exists,
+merges idempotently, signs, uploads the index before the legacy pointer, and verifies the remote
+bytes and signatures.
 
 ## Normal Desktop release
 
 Merging a release-ready Desktop version change in `packages/desktop/package.json` to `main` starts
-`desktop-release.yml`. It resolves and verifies `product-stable`, embeds those exact Factory Runtime
-bytes and their provenance, and builds only the Shell, installer, Windows Engine, and WSL Engine. The
-candidate uses the final `desktop-v<version>` tag.
+`desktop-release.yml`. It builds the target `build-info.json`, requires the signed Product index, and
+selects the highest compatible accepted Runtime. It downloads only the exact immutable tag,
+manifests, and packages named by that entry, embeds those Factory Runtime bytes and their provenance,
+and builds only the Shell, installer, Windows Engine, and WSL Engine. Missing/invalid indexes and an
+empty compatible set are hard failures; normal publication never falls back to release enumeration
+or the legacy bundle-recovery script. The candidate uses the final `desktop-v<version>` tag.
+
+The selected index version must equal `factory-product.json`, the packaged Factory Runtime manifest,
+and the Desktop channel's `factoryProduct.version`. Installed production Shells use the same index
+selector. Explicit acceptance launches continue to consume their tag-pinned candidate
+`product-channel.json`, because a candidate is not accepted and indexed until promotion.
 
 Installed/fresh, offline Factory/fallback, and current/previous Product compatibility acceptance all
 consume the immutable candidate. After they pass, promotion automatically converts the versioned
@@ -47,6 +104,11 @@ it, and compares every accepted digest before continuing incomplete acceptance o
 The same rule applies to fixed pointers and `promotion.json`: an existing identical byte sequence is
 idempotent; an existing different byte sequence is a hard failure.
 
+A resumed Desktop candidate is also compared with the current highest compatible Product index
+entry. If a newer compatible Runtime was accepted after that candidate was built, the old candidate
+cannot be published: increment the Desktop patch version and build a new candidate with the current
+Factory Runtime.
+
 An **immutable-byte mismatch** is not repaired with `--clobber`. Retain the failed release for
 diagnosis, increment to a higher patch version, and publish a new immutable candidate. Never move a
 stable pointer backward as a downgrade mechanism.
@@ -57,7 +119,7 @@ Product and Desktop workflows use independent serialized locks (`product-product
 `desktop-production`) for candidate construction and acceptance. Their promotion jobs additionally
 share `product-desktop-stable-promotion`, so only one accepted tuple can move a stable pointer at a
 time. After acquiring that lock, Product rechecks the accepted `desktop-stable` digest and Desktop
-rechecks the accepted `product-stable` digest before changing any external state. If the counterpart
+rechecks the accepted Product index digest before changing any external state. If the counterpart
 changed after compatibility acceptance, promotion stops and the same `candidate_tag` must rerun the
 complete compatibility graph against the new stable tuple.
 
@@ -78,8 +140,10 @@ Normal publication may update a pointer only after immutable candidate acceptanc
 migration, `desktop-bridge-release.yml` creates a missing pointer or verifies that an existing pointer
 has exactly the expected digest. A different existing digest stops the bridge.
 
-The Product pointer is copied byte-for-byte from the bridge candidate's accepted
-`product-channel.json`. The Desktop pointer is copied byte-for-byte from
+The Product legacy pointer is copied byte-for-byte from the bridge candidate's accepted
+`product-channel.json`. The next accepted Product promotion bootstraps `product-index.json` from that
+pointer and its new candidate; run that Product promotion before the first index-based Desktop
+publication. The Desktop pointer is copied byte-for-byte from
 `desktop-channel-modern.json` and uploaded to `desktop-stable` under the canonical asset name
 `desktop-channel.json`. The bridge retains its legacy `desktop-channel.json` under the original name
 for already installed clients.
@@ -123,6 +187,8 @@ After the hosted workflow succeeds, verify:
 
 - repository-wide latest still names the bridge tag;
 - `product-stable/product-channel.json` has the accepted digest and names the immutable Product tag;
+- `product-stable/product-index.json` has a valid signature and contains every subsequently accepted
+  Product release exactly once;
 - `desktop-stable/desktop-channel.json` has the accepted modern-channel digest and names the bridge
   tag;
 - both native and WSL independent-feed acceptance reports were uploaded;

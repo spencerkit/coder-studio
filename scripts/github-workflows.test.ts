@@ -162,7 +162,7 @@ describe("Product publication workflow", () => {
       "compatibility",
     ]);
     expect(jobs.promote.if).toBe("success()");
-    expect(jobs.promote.environment).toBeUndefined();
+    expect(jobs.promote.environment).toBe("desktop-production");
 
     const publish = jobs["publish-candidate"];
     const publishText = jobText(publish);
@@ -238,6 +238,9 @@ describe("Product publication workflow", () => {
     const immutableIndex = steps.findIndex(
       (candidate) => candidate.name === "Verify accepted immutable Product bytes"
     );
+    const productIndex = steps.findIndex(
+      (candidate) => candidate.name === "Build next signed Product index"
+    );
     const npmIndex = steps.findIndex(
       (candidate) => candidate.name === "Advance final npm dist-tag"
     );
@@ -261,7 +264,8 @@ describe("Product publication workflow", () => {
     expect(step(promote, "Checkout repository")?.uses).toBe("actions/checkout@v4");
     expect(step(promote, "Setup pnpm")?.uses).toBe("pnpm/action-setup@v4");
     expect(step(promote, "Install dependencies")?.run).toBe("pnpm install --frozen-lockfile");
-    expect(npmIndex).toBeGreaterThan(immutableIndex);
+    expect(productIndex).toBeGreaterThan(immutableIndex);
+    expect(npmIndex).toBeGreaterThan(productIndex);
     expect(releaseIndex).toBeGreaterThan(npmIndex);
     expect(pointerIndex).toBeGreaterThan(releaseIndex);
     expect(verifyIndex).toBeGreaterThan(pointerIndex);
@@ -272,6 +276,11 @@ describe("Product publication workflow", () => {
     expect(steps[releaseIndex]?.run).toContain("--prerelease=false --latest=false");
     expect(steps[pointerIndex]?.run).toContain("product-stable");
     expect(steps[pointerIndex]?.run).toContain("product-channel.json");
+    expect(steps[pointerIndex]?.run).toContain("product-index.json");
+    expect(steps[productIndex]?.run).toContain("scripts/build-product-index.ts");
+    expect(steps[productIndex]?.run).toContain("--existing-index");
+    expect(steps[productIndex]?.run).toContain("--previous-channel");
+    expect(steps[verifyIndex]?.run).toContain("parseProductIndex");
     expect(steps[verifyIndex]?.run).toContain("for attempt in 1 2 3 4 5 6");
     expect(steps[verifyIndex]?.run).toContain("sleep 10");
     expect(steps[cleanupIndex]?.run).toContain("npm dist-tag rm");
@@ -441,7 +450,16 @@ describe("Desktop publication workflow", () => {
 
     const factoryText = jobText(jobs["resolve-factory-product"]);
     expect(factoryText).toContain("gh release download product-stable");
-    expect(factoryText).toContain("prepare-product-release-bundle.ts");
+    expect(factoryText).toContain("product-index.json");
+    expect(factoryText).toContain("select-product-index-release.ts");
+    expect(factoryText).toContain("--previous-to-version");
+    expect(factoryText).not.toContain("--before-version");
+    expect(factoryText).toContain("is no longer the highest compatible accepted Runtime");
+    expect(factoryText).not.toContain("prepare-product-release-bundle.ts");
+    expect(factoryText).not.toContain("gh release list");
+    expect(readFileSync(workflowPath("desktop-release.yml"), "utf8")).not.toContain(
+      "build-product-index.ts"
+    );
     expect(factoryText).toContain("product-channel.json");
     expect(factoryText).toContain("pnpm release:artifacts validate-product");
     expect(factoryText).toContain("factory-product.json");
@@ -450,6 +468,7 @@ describe("Desktop publication workflow", () => {
     expect(factoryText).toContain("accepted-product-previous-");
     expect(factoryText).not.toMatch(/pnpm (?:build:desktop-runtime|build:wsl-runtime)/);
     expect(jobs["resolve-factory-product"].outputs).toMatchObject({
+      current_product_index_sha256: "${{ steps.identity.outputs.current_product_index_sha256 }}",
       current_product_bundle_artifact:
         "${{ steps.identity.outputs.current_product_bundle_artifact }}",
       previous_product_bundle_artifact:

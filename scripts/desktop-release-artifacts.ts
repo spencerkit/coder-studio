@@ -750,7 +750,8 @@ async function assertDesktopDoesNotOwnProductArtifacts(directory: string): Promi
       (/^coder-studio-(?:server-)?runtime-.*\.tgz$/.test(path) ||
         path === "coder-studio-runtime-win32-x64.manifest.json" ||
         path === "coder-studio-server-runtime-linux-x64.manifest.json" ||
-        path === "product-channel.json")
+        path === "product-channel.json" ||
+        path === "product-index.json")
   );
   if (productAsset) {
     throw new Error(
