@@ -103,17 +103,24 @@ jobs:
             echo "Final npm dist-tag is unsafe" >&2
             exit 1
           fi
+          resume_candidate=false
+          if [[ -n "${REQUESTED_CANDIDATE_TAG}" ]]; then
+            resume_candidate=true
+          fi
           previous_version=$(npm view "${package_name}@${final_dist_tag}" version --json 2>/dev/null | node -e "let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { try { const v=JSON.parse(d); console.log(typeof v === 'string' ? v : '') } catch { console.log('') } })")
+          if [[ "${resume_candidate}" == "true" && "${previous_version}" == "${version}" ]]; then
+            previous_version=$(npm view "${package_name}" versions --json | node -e "let d=''; const target=process.argv[1]; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { const value=JSON.parse(d); const versions=Array.isArray(value) ? value : [value]; process.stdout.write([...versions].reverse().find(candidate => candidate !== target) || '') })" "${version}")
+            if [[ -z "${previous_version}" ]]; then
+              echo "No earlier published Product version is available for resumed CLI acceptance" >&2
+              exit 1
+            fi
+          fi
           temporary_dist_tag="rc-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           published_at=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
           echo "package_name=${package_name}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "previous_version=${previous_version}" >> "${GITHUB_OUTPUT}"
           echo "candidate_tag=${candidate_tag}" >> "${GITHUB_OUTPUT}"
-          resume_candidate=false
-          if [[ -n "${REQUESTED_CANDIDATE_TAG}" ]]; then
-            resume_candidate=true
-          fi
           echo "resume_candidate=${resume_candidate}" >> "${GITHUB_OUTPUT}"
           echo "temporary_dist_tag=${temporary_dist_tag}" >> "${GITHUB_OUTPUT}"
           echo "final_dist_tag=${final_dist_tag}" >> "${GITHUB_OUTPUT}"

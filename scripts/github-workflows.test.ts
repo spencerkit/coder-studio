@@ -123,8 +123,12 @@ describe("Product publication workflow", () => {
       group: "product-production",
       "cancel-in-progress": false,
     });
-    expect(step(workflow.jobs.prepare, "Resolve immutable Product identity")?.run).toContain(
-      'if [[ -n "${REQUESTED_CANDIDATE_TAG}" ]]'
+    const identityStep = step(workflow.jobs.prepare, "Resolve immutable Product identity")?.run;
+    expect(identityStep).toContain('if [[ -n "${REQUESTED_CANDIDATE_TAG}" ]]');
+    expect(identityStep).toContain('"${previous_version}" == "${version}"');
+    expect(identityStep).toContain('npm view "${package_name}" versions --json');
+    expect(identityStep).toContain(
+      "No earlier published Product version is available for resumed CLI acceptance"
     );
     expect(JSON.stringify(workflow.on)).not.toContain("run_id");
     expect(existsSync(workflowPath("publish.yml"))).toBe(false);
