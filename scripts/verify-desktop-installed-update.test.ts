@@ -113,6 +113,10 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("-RedirectStandardOutput $StandardOut");
     expect(runner).toContain("$startupTimeoutSeconds = if ($isWslScenario) { 300 } else { 90 }");
     expect(runner).toContain("Wait-Cdp $cdpPort $startupTimeoutSeconds");
+    expect(runner).toContain(
+      "$restartTimeoutSeconds = if ($phase -eq 'wsl-follow') { 300 } else { 90 }"
+    );
+    expect(runner).toContain("Wait-Cdp $cdpPort $restartTimeoutSeconds");
     expect(desktopMain).toContain('console.error("Unable to start Coder Studio", details)');
     expect(desktopMain).toContain("[desktop-acceptance:environment]");
     expect(desktopMain).toContain(
@@ -183,6 +187,7 @@ describe("verify-desktop-installed-update", () => {
     expect(driver).toContain("activeSidecarUrl = relaunch.sidecarUrl ?? activeSidecarUrl;");
     expect(driver).toContain("await session.close().catch(() => undefined);");
     expect(driver).toContain("session = await connectBrowser(activeCdpUrl);");
+    expect(driver).toContain('phase === "wsl-follow" ? 360_000 : 120_000');
     expect(driver).toContain("allowFailedFrozenState?: boolean;");
     expect(driver).toContain('values.get("allow-failed-frozen-state") === "true"');
     expect(driver).toContain(

@@ -543,7 +543,8 @@ try {
           }
           $desktopProcess = Start-AcceptanceDesktop $desktopExecutable $userDataDirectory $cdpPort $restartScenario $WslDistro $desktopOut $desktopErr
           $desktopProcess.Handle | Out-Null
-          $restartPages = Wait-Cdp $cdpPort
+          $restartTimeoutSeconds = if ($phase -eq 'wsl-follow') { 300 } else { 90 }
+          $restartPages = Wait-Cdp $cdpPort $restartTimeoutSeconds
           $restartSidecarUrl = Get-SidecarUrl $restartPages
           $sidecarUrl = $restartSidecarUrl
           $journalAfter = Read-JournalIdentity $journalPath

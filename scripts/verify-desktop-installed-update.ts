@@ -611,7 +611,8 @@ async function waitForRelaunch(
 ): Promise<InstalledDesktopRelaunchInfo> {
   if (!path) throw new Error(`Installed Desktop interruption control is required for ${phase}`);
   const controlPath = resolve(path);
-  const deadline = Date.now() + 120_000;
+  const relaunchTimeoutMs = phase === "wsl-follow" ? 360_000 : 120_000;
+  const deadline = Date.now() + relaunchTimeoutMs;
   while (Date.now() < deadline) {
     try {
       const state = JSON.parse(
