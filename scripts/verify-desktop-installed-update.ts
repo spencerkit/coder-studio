@@ -389,6 +389,7 @@ export async function verifyInstalledDesktopScenario(
   await deps.prepareActivity();
   const confirmationCount = 1;
   await deps.invoke("prepareUpdateRestart");
+  let finalState: ProductUpdateState | null = null;
   if (scenario.name === "restart-journal-recovery") {
     await deps.interruptAtPhase("restart-journal");
     await deps.reconnectAfterRestart();
@@ -396,17 +397,23 @@ export async function verifyInstalledDesktopScenario(
       await deps.invoke("getUpdateState"),
       "getUpdateState after journal interruption"
     );
-    if (recovered.status !== "ready") {
-      throw new Error(`Desktop did not recover a ready journal plan: ${recovered.status}`);
+    assertPlanComponents(recovered, scenario.expectedComponentIds);
+    if (recovered.status !== "ready" && recovered.status !== "succeeded") {
+      throw new Error(
+        `Desktop did not recover a ready or completed journal plan: ${recovered.status}`
+      );
     }
+    if (recovered.status === "succeeded") finalState = recovered;
   }
-  await deps.armRestartAfterInstall();
-  const restartResult = await deps.invoke("restartAndInstallUpdate");
-  if (restartResult !== true) throw new Error("Desktop rejected restart-and-install handoff");
+  if (!finalState) {
+    await deps.armRestartAfterInstall();
+    const restartResult = await deps.invoke("restartAndInstallUpdate");
+    if (restartResult !== true) throw new Error("Desktop rejected restart-and-install handoff");
+    await deps.waitForRestartAfterInstall();
+    await deps.reconnectAfterRestart();
+    finalState = asState(await deps.invoke("getUpdateState"), "getUpdateState");
+  }
   const restartCount = 1;
-  await deps.waitForRestartAfterInstall();
-  await deps.reconnectAfterRestart();
-  const finalState = asState(await deps.invoke("getUpdateState"), "getUpdateState");
   const finalStateAccepted =
     scenario.name === "runtime-health-rollback"
       ? finalState.status === "failed"
@@ -788,6 +795,11 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         const observedWslRuntimeVersion = await readWslActiveRuntimeVersion(options.wslDistro);
         const external = await readEvidenceFile(options.evidencePath);
         const observedWslMarker = await wslMarkerExists(options.wslDistro, options.wslMarkerPath);
+        const actualRuntimeVersion =
+          observedRuntimeVersion ??
+          external.actualRuntimeVersion ??
+          observedFactoryRuntimeVersion ??
+          state.productVersion;
         if (
           isWslScenario(options.scenario.name) &&
           typeof external.wslNpmMarkerExists !== "boolean" &&
@@ -808,19 +820,13 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
             external.actualShellVersion ??
             state.diagnostics.shellVersion ??
             "",
-          actualRuntimeVersion:
-            observedRuntimeVersion ??
-            external.actualRuntimeVersion ??
-            observedFactoryRuntimeVersion ??
-            state.productVersion,
+          actualRuntimeVersion,
           wslRuntimeVersion: observedWslRuntimeVersion ?? external.wslRuntimeVersion ?? null,
           wslNpmMarkerExists: external.wslNpmMarkerExists ?? observedWslMarker ?? false,
           journalRecovered: external.journalRecovered ?? journalRecovered,
           rollbackRuntimeVersion:
             external.rollbackRuntimeVersion ??
-            (options.scenario.name === "runtime-health-rollback"
-              ? await readActiveRuntimeVersion(options.userDataDir)
-              : null),
+            (options.scenario.name === "runtime-health-rollback" ? actualRuntimeVersion : null),
           externalSidecarReadOnly: external.externalSidecarReadOnly ?? false,
           logPaths: external.logPaths ?? state.diagnostics.logLocations,
         };
