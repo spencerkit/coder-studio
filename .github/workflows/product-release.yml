@@ -850,11 +850,19 @@ jobs:
 
       - name: Verify promoted Product
         run: |
-          selected_version=$(npm view "${PACKAGE_NAME}@${FINAL_DIST_TAG}" version --json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8'))")
-          if [[ "${selected_version}" != "${PRODUCT_VERSION}" ]]; then
-            echo "Final npm dist-tag does not resolve to the accepted Product" >&2
-            exit 1
-          fi
+          selected_version=""
+          for attempt in 1 2 3 4 5 6; do
+            selected_version=$(npm view "${PACKAGE_NAME}@${FINAL_DIST_TAG}" version --json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8'))") || true
+            if [[ "${selected_version}" == "${PRODUCT_VERSION}" ]]; then
+              break
+            fi
+            if [[ "${attempt}" == "6" ]]; then
+              echo "Final npm dist-tag does not resolve to the accepted Product" >&2
+              exit 1
+            fi
+            echo "npm dist-tag has not propagated yet (attempt ${attempt}/6); retrying in 10 seconds"
+            sleep 10
+          done
           mkdir -p release/product-promotion/final
           gh release download product-stable --pattern product-channel.json --dir release/product-promotion/final
           final_digest=$(sha256sum release/product-promotion/final/product-channel.json | cut -d ' ' -f 1)
@@ -865,7 +873,10 @@ jobs:
           fi
 
       - name: Remove temporary npm dist-tag
-        run: npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"
+        run: |
+          if ! npm dist-tag rm "${PACKAGE_NAME}" "${ACCEPTANCE_DIST_TAG}"; then
+            echo "::warning::Unable to remove temporary npm dist-tag ${ACCEPTANCE_DIST_TAG}; promotion is already complete"
+          fi
 
       - name: Record Product promotion
         run: |
