@@ -547,11 +547,16 @@ try {
           $restartSidecarUrl = Get-SidecarUrl $restartPages
           $sidecarUrl = $restartSidecarUrl
           $journalAfter = Read-JournalIdentity $journalPath
+          # A fully reconciled plan is cleared during startup; the recovered state is
+          # validated by the driver before this evidence is accepted.
+          $journalRecovered = $null -ne $journalBefore -and (
+            $null -eq $journalAfter -or $journalBefore -eq $journalAfter
+          )
           Write-JsonAtomic $controlPath @{
             schemaVersion = 1
             phase = $control.phase
             status = 'relaunched'
-            journalRecovered = ($null -ne $journalBefore -and $journalBefore -eq $journalAfter)
+            journalRecovered = $journalRecovered
             cdpUrl = "http://127.0.0.1:$cdpPort"
             sidecarUrl = $restartSidecarUrl
           }

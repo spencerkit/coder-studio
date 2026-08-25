@@ -155,6 +155,8 @@ describe("verify-desktop-installed-update", () => {
     expect(runner).toContain("$cdpPort = Get-FreeTcpPort");
     expect(runner).toContain('cdpUrl = "http://127.0.0.1:$cdpPort"');
     expect(runner).toContain("sidecarUrl = $restartSidecarUrl");
+    expect(runner).toContain("$null -eq $journalAfter -or $journalBefore -eq $journalAfter");
+    expect(runner).toContain("journalRecovered = $journalRecovered");
     expect(runner).toContain("Stop-InstalledDesktopExecutable $Executable $CdpPort");
     expect(runner).toContain(
       "$lastInstallerCount = @(Get-InstallerProcesses $InstallerFileName).Count"
