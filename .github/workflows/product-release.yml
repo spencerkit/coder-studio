@@ -17,6 +17,11 @@ on:
         required: true
         default: "latest"
         type: string
+      windows_signing:
+        description: "Require stable Desktop Authenticode signing for workflow_dispatch runs"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -686,6 +691,9 @@ jobs:
           }
           if ('${{ matrix.scenario }}' -eq 'wsl') {
             $arguments += @('-WslDistro', '${{ steps.wsl.outputs.name }}')
+          }
+          if ('${{ github.event_name == 'workflow_dispatch' && !inputs.windows_signing }}' -eq 'true') {
+            $arguments += '-SkipAuthenticode'
           }
           pnpm acceptance:desktop:installed @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Installed Product Runtime acceptance failed' }
