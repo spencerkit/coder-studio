@@ -2,6 +2,7 @@
 
 export * from "./domain/automation";
 export * from "./domain/canvas";
+export * from "./domain/desktop-preferences";
 export * from "./domain/diagnostics";
 export * from "./domain/events";
 export * from "./domain/lsp";

@@ -1,4 +1,9 @@
-import type { DesktopUpdateSettings, ProductUpdateState } from "@coder-studio/core";
+import type {
+  DesktopPreferencesPatch,
+  DesktopPreferencesSnapshot,
+  DesktopUpdateSettings,
+  ProductUpdateState,
+} from "@coder-studio/core";
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   DesktopApi,
@@ -29,6 +34,7 @@ ipcRenderer.on(
 
 const api: DesktopApi = {
   platform: process.platform,
+  desktopPreferencesApiVersion: 1,
   updateApiVersion: 1,
   getAppVersion: () => ipcRenderer.invoke("desktop:get-app-version") as Promise<string>,
   selectWorkspaceDirectory: () => ipcRenderer.invoke("desktop:select-workspace-directory"),
@@ -77,6 +83,21 @@ const api: DesktopApi = {
       listener(progress);
     ipcRenderer.on("desktop:environment-progress", handler);
     return () => ipcRenderer.removeListener("desktop:environment-progress", handler);
+  },
+  getDesktopPreferences: () =>
+    ipcRenderer.invoke("desktop:get-preferences") as Promise<DesktopPreferencesSnapshot>,
+  initializeDesktopTheme: (themeId: string) =>
+    ipcRenderer.invoke(
+      "desktop:initialize-theme-preference",
+      themeId
+    ) as Promise<DesktopPreferencesSnapshot>,
+  updateDesktopPreferences: (patch: DesktopPreferencesPatch) =>
+    ipcRenderer.invoke("desktop:update-preferences", patch) as Promise<DesktopPreferencesSnapshot>,
+  onDesktopPreferencesChanged: (listener: (snapshot: DesktopPreferencesSnapshot) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, snapshot: DesktopPreferencesSnapshot) =>
+      listener(snapshot);
+    ipcRenderer.on("desktop:preferences-changed", handler);
+    return () => ipcRenderer.removeListener("desktop:preferences-changed", handler);
   },
   getUpdateState: () =>
     ipcRenderer.invoke("desktop:get-update-state") as Promise<ProductUpdateState>,

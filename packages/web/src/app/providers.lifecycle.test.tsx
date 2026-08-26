@@ -1888,6 +1888,139 @@ describe("AppProviders lifecycle recovery", () => {
     });
   });
 
+  it("hydrates and follows Desktop shared theme snapshots without a Server round trip", async () => {
+    const store = createStore();
+    let preferencesListener:
+      | ((snapshot: import("@coder-studio/core").DesktopPreferencesSnapshot) => void)
+      | undefined;
+    const getDesktopPreferences = vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      revision: 3,
+      updatedAt: "2026-08-26T12:30:00.000Z",
+      appearance: { themeId: "graphite-light" },
+    }));
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        desktopPreferencesApiVersion: 1,
+        getDesktopPreferences,
+        initializeDesktopTheme: vi.fn(),
+        updateDesktopPreferences: vi.fn(),
+        onDesktopPreferencesChanged: vi.fn((listener) => {
+          preferencesListener = listener;
+          return () => {};
+        }),
+      } as unknown as CoderStudioDesktopApi,
+    });
+
+    renderProviders(store);
+
+    await vi.waitFor(() => {
+      expect(store.get(themeAtom)).toBe("graphite-light");
+      expect(document.documentElement).toHaveAttribute("data-theme", "graphite-light");
+    });
+
+    act(() => {
+      preferencesListener?.({
+        schemaVersion: 1,
+        revision: 4,
+        updatedAt: "2026-08-26T12:31:00.000Z",
+        appearance: { themeId: "winter-dark" },
+      });
+    });
+
+    expect(store.get(themeAtom)).toBe("winter-dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "winter-dark");
+    expect(localStorage.getItem("ui.themeId")).toBe(JSON.stringify("winter-dark"));
+  });
+
+  it("ignores an older Desktop read that resolves after a newer change event", async () => {
+    const store = createStore();
+    const initialRead = createDeferred<import("@coder-studio/core").DesktopPreferencesSnapshot>();
+    let preferencesListener:
+      | ((snapshot: import("@coder-studio/core").DesktopPreferencesSnapshot) => void)
+      | undefined;
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        desktopPreferencesApiVersion: 1,
+        getDesktopPreferences: vi.fn(() => initialRead.promise),
+        initializeDesktopTheme: vi.fn(),
+        updateDesktopPreferences: vi.fn(),
+        onDesktopPreferencesChanged: vi.fn((listener) => {
+          preferencesListener = listener;
+          return () => {};
+        }),
+      } as unknown as CoderStudioDesktopApi,
+    });
+
+    renderProviders(store);
+    act(() => {
+      preferencesListener?.({
+        schemaVersion: 1,
+        revision: 4,
+        updatedAt: "2026-08-26T12:31:00.000Z",
+        appearance: { themeId: "winter-dark" },
+      });
+    });
+    await vi.waitFor(() => expect(store.get(themeAtom)).toBe("winter-dark"));
+
+    await act(async () => {
+      initialRead.resolve({
+        schemaVersion: 1,
+        revision: 3,
+        updatedAt: "2026-08-26T12:30:00.000Z",
+        appearance: { themeId: "graphite-light" },
+      });
+      await initialRead.promise;
+    });
+
+    expect(store.get(themeAtom)).toBe("winter-dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "winter-dark");
+  });
+
+  it("initializes an empty Desktop theme from the connected environment once", async () => {
+    const store = createStore();
+    setVisibilityState("visible");
+    const emptySnapshot = {
+      schemaVersion: 1 as const,
+      revision: 0,
+      updatedAt: null,
+      appearance: { themeId: null },
+    };
+    const initializeDesktopTheme = vi.fn(async (themeId: string) => ({
+      schemaVersion: 1 as const,
+      revision: 1,
+      updatedAt: "2026-08-26T12:30:00.000Z",
+      appearance: { themeId },
+    }));
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        desktopPreferencesApiVersion: 1,
+        getDesktopPreferences: vi.fn(async () => emptySnapshot),
+        initializeDesktopTheme,
+        updateDesktopPreferences: vi.fn(),
+        onDesktopPreferencesChanged: vi.fn(() => () => {}),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    wsState.client!.sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string) =>
+        op === "settings.get" ? { "appearance.themeId": "nord-light" } : undefined
+      );
+
+    renderProviders(store);
+    await vi.waitFor(() => expect(wsState.client?.connect).toHaveBeenCalled());
+    act(() => wsState.client?.statusHandler?.("connected"));
+
+    await vi.waitFor(() => expect(initializeDesktopTheme).toHaveBeenCalledWith("nord-light"));
+    await vi.waitFor(() => {
+      expect(store.get(themeAtom)).toBe("nord-light");
+      expect(document.documentElement).toHaveAttribute("data-theme", "nord-light");
+    });
+  });
+
   it("hydrates appearance.personalization from settings.get into the in-memory atom", async () => {
     const store = createStore();
     setVisibilityState("visible");

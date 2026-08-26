@@ -1,5 +1,7 @@
 interface CoderStudioDesktopApi {
   platform: string;
+  // Optional while newer Web bundles can still be paired with an older Desktop shell.
+  desktopPreferencesApiVersion?: 1;
   updateApiVersion: 1;
   getAppVersion(): Promise<string>;
   selectWorkspaceDirectory(): Promise<string | null>;
@@ -23,6 +25,16 @@ interface CoderStudioDesktopApi {
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<{ status: "unchanged" | "opened" }>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
+  getDesktopPreferences?(): Promise<import("@coder-studio/core").DesktopPreferencesSnapshot>;
+  initializeDesktopTheme?(
+    themeId: string
+  ): Promise<import("@coder-studio/core").DesktopPreferencesSnapshot>;
+  updateDesktopPreferences?(
+    patch: import("@coder-studio/core").DesktopPreferencesPatch
+  ): Promise<import("@coder-studio/core").DesktopPreferencesSnapshot>;
+  onDesktopPreferencesChanged?(
+    listener: (snapshot: import("@coder-studio/core").DesktopPreferencesSnapshot) => void
+  ): () => void;
   getUpdateState(): Promise<import("@coder-studio/core").ProductUpdateState>;
   checkForUpdates(): Promise<import("@coder-studio/core").ProductUpdateState>;
   downloadUpdate(): Promise<import("@coder-studio/core").ProductUpdateState>;

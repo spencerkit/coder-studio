@@ -1,3 +1,10 @@
+import type {
+  DesktopPreferencesPatch,
+  DesktopPreferencesSnapshot,
+  DesktopUpdateSettings,
+  ProductUpdateState,
+} from "@coder-studio/core";
+
 export const DESKTOP_READY_PREFIX = "CODER_STUDIO_DESKTOP_READY ";
 export const DESKTOP_SHUTDOWN_MESSAGE = "CODER_STUDIO_DESKTOP_SHUTDOWN";
 
@@ -96,6 +103,7 @@ export interface DesktopRuntimeUpdateState {
 
 export interface DesktopApi {
   platform: NodeJS.Platform;
+  desktopPreferencesApiVersion: 1;
   updateApiVersion: 1;
   getAppVersion(): Promise<string>;
   selectWorkspaceDirectory(): Promise<string | null>;
@@ -112,6 +120,10 @@ export interface DesktopApi {
   getActiveEnvironment(): Promise<DesktopEnvironmentSummary>;
   openEnvironment(environmentId: string): Promise<DesktopEnvironmentOpenResult>;
   onEnvironmentProgress(listener: (event: DesktopEnvironmentProgress) => void): () => void;
+  getDesktopPreferences(): Promise<DesktopPreferencesSnapshot>;
+  initializeDesktopTheme(themeId: string): Promise<DesktopPreferencesSnapshot>;
+  updateDesktopPreferences(patch: DesktopPreferencesPatch): Promise<DesktopPreferencesSnapshot>;
+  onDesktopPreferencesChanged(listener: (snapshot: DesktopPreferencesSnapshot) => void): () => void;
   getUpdateState(): Promise<ProductUpdateState>;
   checkForUpdates(): Promise<ProductUpdateState>;
   downloadUpdate(): Promise<ProductUpdateState>;
@@ -129,5 +141,3 @@ export interface DesktopApi {
   restartForRuntimeUpdate(): Promise<boolean>;
   onRuntimeUpdateStateChanged(listener: (state: DesktopRuntimeUpdateState) => void): () => void;
 }
-
-import type { DesktopUpdateSettings, ProductUpdateState } from "@coder-studio/core";
