@@ -30,15 +30,18 @@ export interface FactoryProductProvenance {
   >;
 }
 
-export interface ProductChannel {
-  schemaVersion: 1;
-  channel: "product";
+export interface ProductRelease {
   version: string;
   releaseTag: string;
-  generatedAt: string;
   minShellVersion: string;
   requirements: ReleaseCapabilities;
   runtimes: Record<"win32-x64" | "linux-x64", ProductChannelRuntime>;
+}
+
+export interface ProductChannel extends ProductRelease {
+  schemaVersion: 1;
+  channel: "product";
+  generatedAt: string;
   signature: RuntimeSignature;
 }
 

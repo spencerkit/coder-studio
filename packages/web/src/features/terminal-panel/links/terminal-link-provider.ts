@@ -70,7 +70,7 @@ interface TerminalWorkspaceLinkProviderOptions {
 
 const LINK_CANDIDATE_PATTERN =
   /https?:\/\/[^\s<>"'`]+|[a-z]:[\\/][^\s<>"'`]+|\/[^\s<>"'`]+|(?:[a-z0-9_.@+-]+\/)+[^\s<>"'`]+/giu;
-const TRAILING_PUNCTUATION_PATTERN = /[),.;\]}]+$/;
+const TRAILING_PUNCTUATION_PATTERN = /[),.;\]}，]+$/;
 const PATH_CONTINUATION_CHARACTER_PATTERN = /[a-z0-9_./@+-]/iu;
 const TRUNCATED_PATH_TRAILING_PATTERN = /[-./]$/u;
 const HTTP_URL_PATTERN = /^https?:\/\//iu;

@@ -54,6 +54,7 @@ import { appearancePersonalizationAtom, localeAtom, themeAtom } from "../../../a
 import { connectionStatusAtom, serverInfoAtom } from "../../../atoms/connection";
 import { resolvedActiveWorkspaceIdAtom } from "../../../atoms/workspaces";
 import { Button, Input, Notice, Pill, Select, Switch, ThemedIcon } from "../../../components/ui";
+import { getDesktopPreferencesBridge } from "../../../desktop-preferences";
 import { useViewport } from "../../../hooks/use-viewport";
 import { useTranslation } from "../../../lib/i18n";
 import { getThemeById, resolveStoredThemeId, THEMES } from "../../../theme";
@@ -791,6 +792,7 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
         Object.prototype.hasOwnProperty.call(settings, "appearance.themeId") ||
         Object.prototype.hasOwnProperty.call(settings, "appearance.theme");
       if (
+        !getDesktopPreferencesBridge() &&
         hasServerThemeSetting &&
         appearanceSelectionVersionRef.current.theme ===
           appearanceSelectionVersionAtRequestStart.theme
@@ -853,9 +855,61 @@ export function SettingsPage({ embeddedSection, aboutView = "all" }: SettingsPag
     setLocaleState(value);
   };
 
-  const handleThemeSelection = (value: string) => {
+  const handleThemeSelection = async (value: string): Promise<boolean> => {
+    const nextThemeId = getThemeById(value).id;
+    const previousThemeId = resolveStoredThemeId(store.get(themeAtom));
+    if (nextThemeId === previousThemeId) return true;
     appearanceSelectionVersionRef.current.theme += 1;
-    setTheme(value);
+    const selectionVersion = appearanceSelectionVersionRef.current.theme;
+    setTheme(nextThemeId);
+    document.documentElement.setAttribute(
+      "data-theme",
+      getThemeById(nextThemeId).documentThemeAttr
+    );
+
+    const desktopPreferences = getDesktopPreferencesBridge();
+    if (desktopPreferences) {
+      try {
+        await desktopPreferences.updateDesktopPreferences({
+          appearance: { themeId: nextThemeId },
+        });
+        return true;
+      } catch (error) {
+        if (
+          appearanceSelectionVersionRef.current.theme === selectionVersion &&
+          resolveStoredThemeId(store.get(themeAtom)) === nextThemeId
+        ) {
+          setTheme(previousThemeId);
+          document.documentElement.setAttribute(
+            "data-theme",
+            getThemeById(previousThemeId).documentThemeAttr
+          );
+        }
+        setSettingsLoadError(
+          error instanceof Error ? error.message : settingsLoadFailedUnknownRef.current
+        );
+        return false;
+      }
+    }
+
+    const result = await dispatch("settings.update", {
+      settings: { appearance: { themeId: nextThemeId } },
+    });
+    if (!result?.ok) {
+      if (
+        appearanceSelectionVersionRef.current.theme === selectionVersion &&
+        resolveStoredThemeId(store.get(themeAtom)) === nextThemeId
+      ) {
+        setTheme(previousThemeId);
+        document.documentElement.setAttribute(
+          "data-theme",
+          getThemeById(previousThemeId).documentThemeAttr
+        );
+      }
+      setSettingsLoadError(result?.error?.message ?? settingsLoadFailedUnknownRef.current);
+      return false;
+    }
+    return true;
   };
 
   const saveAppearancePersonalization = async (next: AppearancePersonalization) => {
@@ -2168,7 +2222,7 @@ interface AppearanceSettingsProps {
   personalization: AppearancePersonalization;
   savePersonalization: (value: AppearancePersonalization) => Promise<boolean>;
   theme: string;
-  setTheme: (value: string) => void;
+  setTheme: (value: string) => Promise<boolean>;
 }
 
 function AppearanceSettings({
@@ -2192,7 +2246,6 @@ function AppearanceSettings({
   const mobileOverrideDescId = useId();
   const mobileGlassLabelId = useId();
   const mobileGlassDescId = useId();
-  const dispatch = useSessionGateDispatch();
   const currentThemeId = resolveStoredThemeId(theme);
   const themeDefinitionsById = new Map(
     THEMES.map((registeredTheme) => [registeredTheme.id, registeredTheme])
@@ -2261,10 +2314,6 @@ function AppearanceSettings({
   const [desktopSurfaceOpacityError, setDesktopSurfaceOpacityError] = useState<string | null>(null);
   const [mobileSurfaceOpacityError, setMobileSurfaceOpacityError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const saveSettings = async (settings: Record<string, unknown>) => {
-    return await dispatch("settings.update", { settings });
-  };
-
   useEffect(() => {
     setBackgroundDimnessDraft(String(personalization.common.backgroundDimness));
     setBackgroundBlurDraft(String(personalization.common.backgroundBlur));
@@ -2284,9 +2333,7 @@ function AppearanceSettings({
       return;
     }
 
-    setTheme(resolvedTheme.id);
-    document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
-    void saveSettings({ appearance: { themeId: resolvedTheme.id } });
+    void setTheme(resolvedTheme.id);
   };
 
   const updateCommon = <K extends keyof AppearancePersonalization["common"]>(

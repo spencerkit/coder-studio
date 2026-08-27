@@ -5,6 +5,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   createDefaultProductUpdateState,
+  type DesktopPreferencesSnapshot,
   type ProductUpdateState,
   type UpdateRuntimeContext,
 } from "@coder-studio/core";
@@ -39,6 +40,8 @@ import { installDesktopContextMenu } from "./desktop-context-menu.js";
 import { activateDesktopNotificationTarget } from "./desktop-notification-activation.js";
 import { registerDesktopNotificationIpc } from "./desktop-notification-ipc.js";
 import { createDesktopNotificationService } from "./desktop-notifications.js";
+import { registerDesktopPreferencesIpc } from "./desktop-preferences-ipc.js";
+import { DesktopPreferencesStore } from "./desktop-preferences-store.js";
 import { DesktopUpdateCoordinator } from "./desktop-update-coordinator.js";
 import { registerDesktopUpdateIpc, toLegacyRuntimeUpdateState } from "./desktop-update-ipc.js";
 import { DesktopUpdateJournal } from "./desktop-update-journal.js";
@@ -66,6 +69,7 @@ import {
   parseProductChannel,
   resolveProductChannelUrl,
 } from "./product-channel.js";
+import { parseProductIndex, resolveProductIndexUrl } from "./product-index.js";
 import type { DesktopEnvironmentProgress, DesktopEnvironmentTarget } from "./protocol.js";
 import { resolveVersionedReleaseAsset } from "./release-channel.js";
 import { DESKTOP_NODE_VERSION, getRuntimePublishedAt } from "./runtime-manifest.js";
@@ -104,6 +108,7 @@ let activeEnvironmentTarget: DesktopEnvironmentTarget = NATIVE_ENVIRONMENT;
 let environmentOpening = false;
 let environmentInstanceRoot: string | null = null;
 let environmentLaunchStore: EnvironmentLaunchStore | null = null;
+let desktopPreferencesStore: DesktopPreferencesStore | null = null;
 let releaseProductRuntimeLease: (() => Promise<void>) | null = null;
 let appOrigin: string | null = null;
 let shutdownComplete = false;
@@ -230,6 +235,20 @@ function emitEnvironmentProgress(progress: DesktopEnvironmentProgress): void {
   mainWindow?.webContents.send("desktop:environment-progress", progress);
 }
 
+function emitDesktopPreferencesChanged(snapshot: DesktopPreferencesSnapshot): void {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+  mainWindow.webContents.send("desktop:preferences-changed", snapshot);
+}
+
+function refreshDesktopPreferences(): void {
+  void desktopPreferencesStore?.refresh().catch((error) => {
+    console.warn(
+      "[desktop-preferences] Unable to refresh shared preferences",
+      error instanceof Error ? error.message : String(error)
+    );
+  });
+}
+
 async function openEnvironmentInstance(
   rootUserDataDir: string,
   target: DesktopEnvironmentTarget
@@ -319,6 +338,10 @@ async function waitForUrl(url: string, timeoutMs = 20_000): Promise<void> {
 
 function registerIpcHandlers(rootUserDataDir: string): void {
   registerDesktopNotificationIpc({ ipc: ipcMain, service: desktopNotifications });
+  registerDesktopPreferencesIpc({
+    ipc: ipcMain,
+    getStore: () => desktopPreferencesStore,
+  });
   registerDesktopUpdateIpc({
     ipc: ipcMain,
     getCoordinator: () => updateCoordinator,
@@ -558,10 +581,12 @@ function createMainWindow(url: string, browserSession = activeSession): BrowserW
     );
   };
   window.on("focus", emitWindowActivityState);
+  window.on("focus", refreshDesktopPreferences);
   window.on("blur", emitWindowActivityState);
   window.on("minimize", emitWindowActivityState);
   window.on("restore", emitWindowActivityState);
   window.on("show", emitWindowActivityState);
+  window.on("show", refreshDesktopPreferences);
   window.on("hide", emitWindowActivityState);
   window.on("closed", () => {
     if (mainWindow === window) {
@@ -641,6 +666,12 @@ async function startApplication(): Promise<void> {
   environmentInstanceRoot = rootUserDataDir;
   environmentLaunchStore = new EnvironmentLaunchStore(rootUserDataDir);
   void environmentLaunchStore.cleanupStale(ENVIRONMENT_LAUNCH_MAX_AGE_MS).catch(() => undefined);
+  desktopPreferencesStore = new DesktopPreferencesStore({
+    filePath: join(rootUserDataDir, "desktop-preferences.json"),
+    onChanged: emitDesktopPreferencesChanged,
+    onWarning: (message) => console.warn(`[desktop-preferences] ${message}`),
+  });
+  await desktopPreferencesStore.start();
   activeEnvironmentTarget = app.isPackaged
     ? readEnvironmentInstanceTarget(app.commandLine)
     : NATIVE_ENVIRONMENT;
@@ -659,20 +690,26 @@ async function startApplication(): Promise<void> {
       ? __CODER_STUDIO_PRODUCT_CHANNEL_URL__.trim()
       : "";
   const productChannelUrl = resolveProductChannelUrl(process.env, compiledProductChannelUrl);
+  const productIndexUrl = productChannelUrl ? resolveProductIndexUrl(productChannelUrl) : "";
   const compiledDesktopChannelUrl =
     typeof __CODER_STUDIO_DESKTOP_CHANNEL_URL__ === "string"
       ? __CODER_STUDIO_DESKTOP_CHANNEL_URL__.trim()
       : "";
   const desktopChannelUrl = resolveDesktopChannelUrl(process.env, compiledDesktopChannelUrl);
   const loadProductChannel = async () => {
-    if (!productChannelUrl || !runtimePublicKey) {
+    const acceptanceChannel = process.env.CODER_STUDIO_DESKTOP_ACCEPTANCE === "1";
+    const productSourceUrl = acceptanceChannel ? productChannelUrl : productIndexUrl;
+    if (!productSourceUrl || !runtimePublicKey) {
       throw new Error("Product update channel is not configured");
     }
-    const response = await fetch(productChannelUrl, { cache: "no-store" });
+    const response = await fetch(productSourceUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Product update channel check failed with ${response.status}`);
     }
-    return parseProductChannel(await response.json(), runtimePublicKey, productChannelUrl);
+    const value = await response.json();
+    return acceptanceChannel
+      ? parseProductChannel(value, runtimePublicKey, productSourceUrl)
+      : parseProductIndex(value, runtimePublicKey, productSourceUrl);
   };
   const loadDesktopChannel = async () => {
     if (!desktopChannelUrl || !runtimePublicKey) {
@@ -1001,6 +1038,7 @@ app.on("before-quit", (event: Event) => {
   if (shutdownComplete || shutdownStarted) return;
   event.preventDefault();
   shutdownStarted = true;
+  desktopPreferencesStore?.close();
   const activationFailurePromise = trackShutdownActivation(
     environmentActivation.failPending(ENVIRONMENT_SHUTDOWN_FAILURE_MESSAGE)
   );

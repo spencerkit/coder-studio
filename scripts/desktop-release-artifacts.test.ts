@@ -663,9 +663,12 @@ describe("Desktop release artifacts", () => {
     );
   });
 
-  it("rejects Product Runtime publication assets in a Desktop bundle", async () => {
+  it.each([
+    "product-channel.json",
+    "product-index.json",
+  ])("rejects Product publication asset %s in a Desktop bundle", async (productAsset) => {
     const fixture = await createDesktopFixture();
-    await writeFile(join(fixture.root, "coder-studio-runtime-win32-x64.manifest.json"), "{}\n");
+    await writeFile(join(fixture.root, productAsset), "{}\n");
 
     await expect(validateDesktopReleaseArtifacts(fixture.options)).rejects.toThrow(
       /Desktop bundle.*Product Runtime|does not own Product Runtime/i

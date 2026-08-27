@@ -30,7 +30,7 @@
     "ci:test:scripts": "pnpm exec vitest run --config scripts/vitest.config.ts --environment node",
     "ci:test:workspace": "pnpm -r --filter './packages/**' --filter '!@coder-studio/web' --if-present run test && pnpm --filter @coder-studio/web test",
     "ci:test": "pnpm ci:test:scripts && pnpm ci:test:workspace",
-    "ci:typecheck:strict": "pnpm --filter @spencer-kit/coder-studio exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/utils exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/core exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/providers exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/server exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/desktop typecheck",
+    "ci:typecheck:strict": "pnpm --filter @spencer-kit/coder-studio exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/utils exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/skill-manager exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/core exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/providers exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/server exec tsc -p tsconfig.json --noEmit && pnpm --filter @coder-studio/desktop typecheck",
     "ci:typecheck:web": "tsx scripts/check-typecheck-baseline.ts",
     "ci:typecheck": "pnpm ci:typecheck:strict && pnpm ci:typecheck:web",
     "ci:build": "pnpm --filter @coder-studio/server build && pnpm build",

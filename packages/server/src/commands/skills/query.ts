@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createCoderStudioSkillManager } from "../../skills/host/create-coder-studio-skill-manager.js";
 import { buildSkillRecommendations } from "../../skills/recommendation.js";
 import { inspectWorkspaceIntelligence } from "../../workspace/intelligence.js";
 import { registerCommand } from "../../ws/dispatch.js";
@@ -10,24 +11,7 @@ export function registerSkillQueryCommands(): void {
     z.object({ query: z.string().trim().min(1) }),
     async (args, ctx) => {
       requireSkillsQuerySupport(ctx);
-
-      const remote = await ctx.skillsHubClient.search(args.query);
-      return remote.map((item) => {
-        const installed = ctx.skillLibraryRepo.get(item.slug);
-        const mounts = ctx.skillMountRepo
-          .listBySkillSlug(item.slug)
-          .filter((entry) => entry.enabled);
-
-        return {
-          slug: item.slug,
-          displayName: item.displayName,
-          description: item.description,
-          version: item.version,
-          installed: Boolean(installed),
-          installedVersion: installed?.version,
-          mountedProviderIds: mounts.map((entry) => entry.providerId),
-        };
-      });
+      return createCoderStudioSkillManager(ctx).searchSkills(args.query);
     }
   );
 
@@ -69,19 +53,7 @@ export function registerSkillQueryCommands(): void {
     z.object({ slug: z.string().trim().min(1) }),
     async (args, ctx) => {
       requireSkillsQuerySupport(ctx);
-
-      const libraryEntry = ctx.skillLibraryRepo.get(args.slug);
-      const remote = await ctx.skillsHubClient.info(args.slug).catch(() => undefined);
-
-      return {
-        slug: args.slug,
-        displayName: remote?.name ?? libraryEntry?.displayName ?? args.slug,
-        description: remote?.description ?? libraryEntry?.description,
-        version: remote?.version ?? libraryEntry?.version,
-        installed: Boolean(libraryEntry),
-        libraryEntry,
-        mounts: ctx.skillMountRepo.listBySkillSlug(args.slug),
-      };
+      return createCoderStudioSkillManager(ctx).getSkillInfo(args.slug);
     }
   );
 }

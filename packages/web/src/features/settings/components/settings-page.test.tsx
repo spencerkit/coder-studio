@@ -8,7 +8,7 @@ import { createStore, Provider } from "jotai";
 import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type ActivationStatus, activationStatusAtom } from "../../../atoms/activation";
-import { appearancePersonalizationAtom } from "../../../atoms/app-ui";
+import { appearancePersonalizationAtom, themeAtom } from "../../../atoms/app-ui";
 import {
   type ConnectionStatus,
   connectionStatusAtom,
@@ -4080,6 +4080,131 @@ describe("SettingsPage", () => {
         undefined
       );
     });
+  });
+
+  it("persists Desktop theme changes through the shared preferences bridge", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const updateDesktopPreferences = vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      revision: 2,
+      updatedAt: "2026-08-26T12:30:00.000Z",
+      appearance: { themeId: "graphite-dark" },
+    }));
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        desktopPreferencesApiVersion: 1,
+        getDesktopPreferences: vi.fn(),
+        initializeDesktopTheme: vi.fn(),
+        updateDesktopPreferences,
+        onDesktopPreferencesChanged: vi.fn(() => () => {}),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    const sendCommand = vi
+      .fn()
+      .mockImplementation(async (op: string) =>
+        op === "settings.get" ? { "appearance.themeId": "nord-light" } : {}
+      );
+    const store = createConnectedStore(sendCommand);
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Theme Mint Dark" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { name: "Theme" })).getByRole("option", {
+        name: "Graphite Dark",
+      })
+    );
+
+    await waitFor(() => {
+      expect(updateDesktopPreferences).toHaveBeenCalledWith({
+        appearance: { themeId: "graphite-dark" },
+      });
+    });
+    expect(
+      sendCommand.mock.calls.some(
+        ([op, args]) =>
+          op === "settings.update" &&
+          (args as { settings?: { appearance?: { themeId?: string } } })?.settings?.appearance
+            ?.themeId === "graphite-dark"
+      )
+    ).toBe(false);
+    expect(document.documentElement).toHaveAttribute("data-theme", "graphite-dark");
+  });
+
+  it("does not let an older Desktop update response replace a newer shared theme", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    const updateDeferred =
+      createDeferred<import("@coder-studio/core").DesktopPreferencesSnapshot>();
+    const updateDesktopPreferences = vi.fn(() => updateDeferred.promise);
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        desktopPreferencesApiVersion: 1,
+        getDesktopPreferences: vi.fn(),
+        initializeDesktopTheme: vi.fn(),
+        updateDesktopPreferences,
+        onDesktopPreferencesChanged: vi.fn(() => () => {}),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createConnectedStore(
+      vi.fn().mockImplementation(async (op: string) => (op === "settings.get" ? {} : {}))
+    );
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Theme Mint Dark" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { name: "Theme" })).getByRole("option", {
+        name: "Graphite Dark",
+      })
+    );
+    await waitFor(() => expect(updateDesktopPreferences).toHaveBeenCalledTimes(1));
+
+    act(() => store.set(themeAtom, "winter-dark"));
+    await act(async () => {
+      updateDeferred.resolve({
+        schemaVersion: 1,
+        revision: 2,
+        updatedAt: "2026-08-26T12:30:00.000Z",
+        appearance: { themeId: "graphite-dark" },
+      });
+      await updateDeferred.promise;
+    });
+
+    expect(screen.getByRole("button", { name: "Theme Winter Dark" })).toBeInTheDocument();
+  });
+
+  it("restores the previous theme when the Desktop preference write fails", async () => {
+    window.localStorage.setItem("ui.locale", JSON.stringify("en"));
+    Object.defineProperty(window, "coderStudioDesktop", {
+      configurable: true,
+      value: {
+        desktopPreferencesApiVersion: 1,
+        getDesktopPreferences: vi.fn(),
+        initializeDesktopTheme: vi.fn(),
+        updateDesktopPreferences: vi.fn(async () => {
+          throw new Error("shared theme write failed");
+        }),
+        onDesktopPreferencesChanged: vi.fn(() => () => {}),
+      } as unknown as CoderStudioDesktopApi,
+    });
+    const store = createConnectedStore(
+      vi.fn().mockImplementation(async (op: string) => (op === "settings.get" ? {} : {}))
+    );
+
+    renderSettingsPage(store);
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Theme Mint Dark" }));
+    fireEvent.click(
+      within(await screen.findByRole("listbox", { name: "Theme" })).getByRole("option", {
+        name: "Graphite Light",
+      })
+    );
+
+    expect(await screen.findByText("shared theme write failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Theme Mint Dark" })).toBeInTheDocument();
+    expect(document.documentElement).toHaveAttribute("data-theme", "mint-dark");
   });
 
   it("hydrates the single theme picker from settings.get themeId", async () => {

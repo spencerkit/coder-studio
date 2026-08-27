@@ -90,6 +90,25 @@ describe("server runtime config", () => {
     expect(readRuntimeConfig()).toBeNull();
   });
 
+  it("uses the OS-assigned port in the session host API URL", async () => {
+    server = await createRuntimeServer({
+      stateDir: join(testHomeDir, "server-state-host-api-url"),
+      host: "127.0.0.1",
+      port: 0,
+      writeRuntimeConfig: false,
+    });
+
+    const address = server.app.server.address();
+    expect(address).not.toBeNull();
+    expect(typeof address).toBe("object");
+    if (!address || typeof address === "string") {
+      throw new Error("Expected the test server to expose a TCP listen address");
+    }
+
+    expect(address.port).toBeGreaterThan(0);
+    expect(server.__test__?.hostBridge.getHostApiUrl()).toBe(`http://127.0.0.1:${address.port}`);
+  });
+
   it("writes runtime config before post-listen workspace sync completes", async () => {
     const syncGate = Promise.withResolvers<void>();
     const syncStarted = Promise.withResolvers<void>();

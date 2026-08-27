@@ -51,7 +51,7 @@ import {
   buildProviderRuntimeStatus,
   type RuntimeStatusDeps,
 } from "./provider-runtime/runtime-status.js";
-import type { RuntimeHandle } from "./runtime/contract.js";
+import type { RuntimeHandle, RuntimeHostBridge } from "./runtime/contract.js";
 import { createNativeRuntime } from "./runtime/native-runtime.js";
 import { SessionManager } from "./session/manager.js";
 import { SessionAnalysisRunner } from "./session-analysis/runner.js";
@@ -139,6 +139,7 @@ export interface Server {
     sessionMgr: SessionManager;
     commandContext: CommandContext;
     hostContext: HostCommandContext;
+    hostBridge: RuntimeHostBridge;
     nativeRuntime: RuntimeHandle;
     sessionTokenRepo: SessionTokenRepo;
   };
@@ -347,7 +348,8 @@ export async function createServer(
   await builtinSkillSyncMgr.sync();
   logStartupPhase(null, "builtinSkillSync", startupAt);
 
-  const hostBridge = {
+  let hostApiPort = config.port;
+  const hostBridge: RuntimeHostBridge = {
     issueSessionToken: (input: {
       sessionId: string;
       workspaceId: string;
@@ -358,7 +360,7 @@ export async function createServer(
       sessionTokenRepo.revokeBySessionId(sessionId);
     },
     getHostApiUrl: () =>
-      `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${config.port}`,
+      `http://${config.host === "0.0.0.0" ? "127.0.0.1" : config.host}:${hostApiPort}`,
     emitDomainEvent: (event: DomainEvent) => {
       eventBus.emit(event);
     },
@@ -797,6 +799,7 @@ export async function createServer(
     host: config.host,
     port: config.port,
   });
+  hostApiPort = extractListenPort(app) ?? config.port;
   logStartupPhase(app, "listen", startupAt);
 
   if (configOverrides?.writeRuntimeConfig ?? process.env.NODE_ENV === "production") {
@@ -989,6 +992,7 @@ export async function createServer(
       sessionMgr,
       commandContext,
       hostContext,
+      hostBridge,
       nativeRuntime,
       sessionTokenRepo,
     },

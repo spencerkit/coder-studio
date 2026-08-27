@@ -218,6 +218,10 @@ function parseSemanticVersion(value: string): ParsedSemanticVersion | null {
   };
 }
 
+export function isSemanticVersion(value: string): boolean {
+  return parseSemanticVersion(value) !== null;
+}
+
 export function compareVersions(left: string, right: string): number {
   const leftVersion = parseSemanticVersion(left);
   const rightVersion = parseSemanticVersion(right);

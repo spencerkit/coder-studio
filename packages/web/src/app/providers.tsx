@@ -6,6 +6,7 @@
  */
 
 import type {
+  DesktopPreferencesSnapshot,
   GitBranch,
   GitStatus,
   Session,
@@ -16,7 +17,7 @@ import type {
 } from "@coder-studio/core";
 import { useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import type { Store } from "jotai/vanilla/store";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   applyAppearancePersonalizationToDocument,
   applyResolvedTheme,
@@ -48,6 +49,7 @@ import {
 import { appearancePersonalizationAtom, authenticatedAtom, themeAtom } from "../atoms/app-ui";
 import type { DispatchCommand } from "../atoms/connection";
 import { activeWorkspaceIdAtom } from "../atoms/workspaces";
+import { getDesktopPreferencesBridge, readDesktopThemeId } from "../desktop-preferences";
 import {
   normalizePaneLayout,
   paneLayoutAtomFamily,
@@ -377,7 +379,20 @@ export function AppProviders({ children }: AppProvidersProps) {
     theme: 0,
     personalization: 0,
   });
+  const desktopPreferencesSnapshotRef = useRef<DesktopPreferencesSnapshot | null>(null);
   const preferPersistedThemeOnFirstHydrationRef = useRef(false);
+
+  const applyDesktopPreferencesSnapshot = useCallback(
+    (snapshot: DesktopPreferencesSnapshot): DesktopPreferencesSnapshot => {
+      const current = desktopPreferencesSnapshotRef.current;
+      if (current && snapshot.revision <= current.revision) return current;
+      desktopPreferencesSnapshotRef.current = snapshot;
+      const sharedThemeId = readDesktopThemeId(snapshot);
+      if (sharedThemeId !== null) setTheme(applyResolvedTheme(sharedThemeId));
+      return snapshot;
+    },
+    [setTheme]
+  );
 
   // Keep dispatchRef in sync
   useEffect(() => {
@@ -579,6 +594,28 @@ export function AppProviders({ children }: AppProvidersProps) {
   }, [setTheme]);
 
   useEffect(() => {
+    const bridge = getDesktopPreferencesBridge();
+    if (!bridge) return;
+    let disposed = false;
+    const applySnapshot = (snapshot: DesktopPreferencesSnapshot) => {
+      if (disposed) return;
+      applyDesktopPreferencesSnapshot(snapshot);
+    };
+    const unsubscribe = bridge.onDesktopPreferencesChanged(applySnapshot);
+    void bridge
+      .getDesktopPreferences()
+      .then(applySnapshot)
+      .catch(() => {
+        // An older or shutting-down Desktop host can fail here. Server hydration remains the
+        // compatibility fallback and will initialize the shared value once the bridge recovers.
+      });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [applyDesktopPreferencesSnapshot]);
+
+  useEffect(() => {
     const resolvedTheme = getThemeById(theme);
     document.documentElement.setAttribute("data-theme", resolvedTheme.documentThemeAttr);
     localStorage.setItem(THEME_ID_STORAGE_KEY, JSON.stringify(resolvedTheme.id));
@@ -646,18 +683,45 @@ export function AppProviders({ children }: AppProvidersProps) {
       }
 
       const settings = result.data;
-      const shouldHydrateTheme =
+      const shouldHydrateTheme = () =>
         appearanceSelectionVersionRef.current.theme ===
         appearanceSelectionVersionAtRequestStart.theme;
-      if (preferPersistedThemeOnFirstHydrationRef.current) {
-        preferPersistedThemeOnFirstHydrationRef.current = false;
-      } else if (shouldHydrateTheme) {
-        const resolvedThemeId = resolveStoredThemeId(
-          settings["appearance.themeId"] ??
-            settings["appearance.theme"] ??
-            readStoredThemePreference()
-        );
-        setTheme(resolvedThemeId);
+      const desktopPreferences = getDesktopPreferencesBridge();
+      let hydratedFromDesktop = false;
+      if (desktopPreferences) {
+        try {
+          let snapshot = await desktopPreferences.getDesktopPreferences();
+          if (cancelled) return;
+          snapshot = applyDesktopPreferencesSnapshot(snapshot);
+          if (readDesktopThemeId(snapshot) === null) {
+            const migrationThemeId = resolveStoredThemeId(
+              preferPersistedThemeOnFirstHydrationRef.current
+                ? readStoredThemePreference()
+                : (settings["appearance.themeId"] ??
+                    settings["appearance.theme"] ??
+                    readStoredThemePreference())
+            );
+            snapshot = await desktopPreferences.initializeDesktopTheme(migrationThemeId);
+            if (cancelled) return;
+            applyDesktopPreferencesSnapshot(snapshot);
+          }
+          preferPersistedThemeOnFirstHydrationRef.current = false;
+          hydratedFromDesktop = true;
+        } catch {
+          // Preserve compatibility with an unavailable or older Desktop preference host.
+        }
+      }
+      if (!hydratedFromDesktop) {
+        if (preferPersistedThemeOnFirstHydrationRef.current) {
+          preferPersistedThemeOnFirstHydrationRef.current = false;
+        } else if (shouldHydrateTheme()) {
+          const resolvedThemeId = resolveStoredThemeId(
+            settings["appearance.themeId"] ??
+              settings["appearance.theme"] ??
+              readStoredThemePreference()
+          );
+          setTheme(resolvedThemeId);
+        }
       }
 
       if (
@@ -673,7 +737,7 @@ export function AppProviders({ children }: AppProvidersProps) {
     return () => {
       cancelled = true;
     };
-  }, [connectionStatus, dispatch, setTheme]);
+  }, [applyDesktopPreferencesSnapshot, connectionStatus, dispatch, setTheme]);
 
   useEffect(() => {
     const unsubscribeTheme = store.sub(themeAtom, () => {
