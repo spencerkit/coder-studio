@@ -24,13 +24,14 @@ interface InstallRecord {
 }
 
 interface SkillInfoLike {
+  registryRef?: string;
   name?: string;
   description?: string;
   version?: string;
 }
 
-function canOverwriteWithSkillHubInstall(existing: SkillLibraryEntry | undefined): boolean {
-  return !existing || (existing.source === "installed" && existing.origin === "skillhub");
+function canOverwriteWithSkillsShInstall(existing: SkillLibraryEntry | undefined): boolean {
+  return !existing || (existing.source === "installed" && existing.origin === "skills-sh");
 }
 
 export class SkillInstallManager {
@@ -41,7 +42,7 @@ export class SkillInstallManager {
 
   constructor(private readonly deps: SkillInstallManagerDeps) {}
 
-  async start(slug: string): Promise<SkillInstallJobSnapshot> {
+  async start(slug: string, registryRef?: string): Promise<SkillInstallJobSnapshot> {
     const active = this.getActiveJob(slug);
     if (active) {
       return cloneJobSnapshot(active);
@@ -52,7 +53,7 @@ export class SkillInstallManager {
       return cloneJobSnapshot(await inFlight);
     }
 
-    const promise = this.prepareAndRun(slug);
+    const promise = this.prepareAndRun(slug, registryRef);
     this.inFlightStartsBySlug.set(slug, promise);
 
     try {
@@ -69,8 +70,11 @@ export class SkillInstallManager {
     return job ? cloneJobSnapshot(job) : undefined;
   }
 
-  private async prepareAndRun(slug: string): Promise<SkillInstallJobSnapshot> {
-    const job = this.createJob(slug);
+  private async prepareAndRun(
+    slug: string,
+    registryRef?: string
+  ): Promise<SkillInstallJobSnapshot> {
+    const job = this.createJob(slug, registryRef);
     this.jobs.set(job.jobId, job);
     this.activeJobIdsBySlug.set(slug, job.jobId);
 
@@ -93,14 +97,12 @@ export class SkillInstallManager {
       this.jobs.set(job.jobId, job);
 
       const existing = this.deps.skillLibraryRepo.get(job.slug);
-      if (!canOverwriteWithSkillHubInstall(existing)) {
+      if (!canOverwriteWithSkillsShInstall(existing)) {
         throw new Error(`A skill with slug ${job.slug} already exists`);
       }
 
-      const info = (await this.deps.skillsHubClient.info(job.slug).catch(() => undefined)) as
-        | SkillInfoLike
-        | undefined;
-      const staged = await this.deps.skillsHubClient.stageInstall(job.slug);
+      const staged = await this.deps.skillsHubClient.stageInstall(job.slug, job.registryRef);
+      const info = staged.info as SkillInfoLike;
       record.tempHome = staged.tempHome;
 
       job.version = info?.version;
@@ -151,11 +153,12 @@ export class SkillInstallManager {
     const now = Date.now();
     const entry: SkillLibraryEntry = {
       slug,
+      ...(info?.registryRef ? { registryRef: info.registryRef } : {}),
       displayName: info?.name?.trim() || slug,
       description: info?.description?.trim() || undefined,
       version: info?.version?.trim() || "1",
       source: "installed",
-      origin: "skillhub",
+      origin: "skills-sh",
       libraryPath,
       installState: "installed",
       installedAt: existing?.installedAt ?? now,
@@ -165,7 +168,7 @@ export class SkillInstallManager {
     this.deps.skillLibraryRepo.set(entry);
   }
 
-  private createJob(slug: string): SkillInstallJobSnapshot {
+  private createJob(slug: string, registryRef?: string): SkillInstallJobSnapshot {
     const jobId = randomUUID();
     const steps: SkillInstallStepSnapshot[] = [
       {
@@ -191,6 +194,7 @@ export class SkillInstallManager {
     const job: SkillInstallJobSnapshot = {
       jobId,
       slug,
+      ...(registryRef ? { registryRef } : {}),
       status: "queued",
       currentStepId: steps[0]?.id,
       steps,

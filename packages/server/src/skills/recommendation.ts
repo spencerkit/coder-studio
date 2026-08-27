@@ -6,6 +6,7 @@ import type {
 
 export interface SkillRecommendationSearchResult {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
 }
@@ -18,6 +19,7 @@ interface RecommendationQuerySeed {
 
 interface RecommendationAccumulator {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   score: number;
@@ -51,8 +53,10 @@ export async function buildSkillRecommendationEntries(input: {
 
         const queryScore =
           seed.weight + Math.max(0, 12 - index) + scoreCandidate(result, seed.query);
-        const current = recommendations.get(result.slug) ?? {
+        const recommendationKey = result.registryRef ?? result.slug;
+        const current = recommendations.get(recommendationKey) ?? {
           slug: result.slug,
+          registryRef: result.registryRef,
           displayName: result.displayName,
           description: result.description,
           score: 0,
@@ -78,7 +82,7 @@ export async function buildSkillRecommendationEntries(input: {
           current.sourceQueryScore = queryScore;
         }
 
-        recommendations.set(result.slug, current);
+        recommendations.set(recommendationKey, current);
       });
     })
   );
@@ -93,6 +97,7 @@ export async function buildSkillRecommendationEntries(input: {
     })
     .map((entry) => ({
       slug: entry.slug,
+      ...(entry.registryRef ? { registryRef: entry.registryRef } : {}),
       displayName: entry.displayName,
       description: entry.description,
       reason: entry.reasons.join("; "),

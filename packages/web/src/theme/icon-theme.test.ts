@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, Terminal } from "lucide-react";
+import { AlertTriangle, Download, Info, Star, Terminal } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import { BASE_ICON_THEME, getIconPresentation, ICON_SEMANTICS, THEME_IDS } from "./index";
 
@@ -51,6 +51,17 @@ describe("theme icon resolver", () => {
     const refreshIcon = getIconPresentation("mint-dark", "git.action.refresh").Icon;
 
     expect(new Set([diffIcon, pushIcon, pullIcon, refreshIcon]).size).toBe(4);
+  });
+
+  it("uses stable glyphs for skill marketplace metrics", () => {
+    expect(BASE_ICON_THEME.icons["skill.metric.installs"]).toEqual({
+      glyph: Download,
+      tone: "muted",
+    });
+    expect(BASE_ICON_THEME.icons["skill.metric.githubStars"]).toEqual({
+      glyph: Star,
+      tone: "warning",
+    });
   });
 
   it("gives footer git status semantics a stable visual hierarchy", () => {

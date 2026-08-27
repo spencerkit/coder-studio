@@ -7,19 +7,22 @@ import type {
 
 export interface SkillCatalogEntry {
   slug: string;
+  registryRef?: string;
   displayName?: string;
   name?: string;
   description?: string;
   version?: string;
+  installCount?: number;
+  githubStars?: number;
 }
 
 export interface SkillCatalogHost {
   search(query: string): Promise<SkillCatalogEntry[]>;
-  info(slug: string): Promise<SkillCatalogEntry>;
+  info(slug: string, registryRef?: string): Promise<SkillCatalogEntry>;
 }
 
 export interface SkillInstallJobsHost {
-  start(slug: string): Promise<SkillInstallJobSnapshot>;
+  start(slug: string, registryRef?: string): Promise<SkillInstallJobSnapshot>;
   get(jobId: string): SkillInstallJobSnapshot | undefined;
 }
 

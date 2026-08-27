@@ -1,6 +1,6 @@
 export const SKILL_INSTALL_STATES = ["installed", "installing", "failed"] as const;
 export const SKILL_LIBRARY_SOURCES = ["builtin", "installed", "custom"] as const;
-export const SKILL_LIBRARY_ORIGINS = ["builtin", "skillhub", "filesystem"] as const;
+export const SKILL_LIBRARY_ORIGINS = ["builtin", "skillhub", "skills-sh", "filesystem"] as const;
 export const SKILL_LIBRARY_ITEM_STATES = [
   "unmounted",
   "partially_mounted",
@@ -58,6 +58,7 @@ export function isSkillMountStatus(value: string): value is SkillMountStatus {
 
 export interface SkillLibraryEntry {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   version: string;
@@ -82,9 +83,12 @@ export interface SkillLibraryListItem extends SkillLibraryEntry {
 
 export interface SkillSearchResultItem {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   version?: string;
+  installCount?: number;
+  githubStars?: number;
   installed: boolean;
   installedVersion?: string;
   mountedProviderIds: string[];
@@ -92,6 +96,7 @@ export interface SkillSearchResultItem {
 
 export interface SkillInfoItem {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   version?: string;
@@ -158,6 +163,7 @@ export interface SkillInstallFailure {
 export interface SkillInstallJobSnapshot {
   jobId: string;
   slug: string;
+  registryRef?: string;
   version?: string;
   status: "queued" | "running" | "succeeded" | "failed";
   currentStepId?: string;

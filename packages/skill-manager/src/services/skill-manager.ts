@@ -70,9 +70,12 @@ export class SkillManager {
 
       return {
         slug: item.slug,
+        ...(item.registryRef ? { registryRef: item.registryRef } : {}),
         displayName: item.displayName ?? item.name ?? item.slug,
         description: item.description,
         version: item.version,
+        ...(item.installCount === undefined ? {} : { installCount: item.installCount }),
+        ...(item.githubStars === undefined ? {} : { githubStars: item.githubStars }),
         installed: Boolean(installed),
         installedVersion: installed?.version,
         mountedProviderIds: mounts.map((entry) => entry.providerId),
@@ -80,13 +83,18 @@ export class SkillManager {
     });
   }
 
-  async getSkillInfo(slug: string): Promise<SkillInfoItem> {
+  async getSkillInfo(slug: string, registryRef?: string): Promise<SkillInfoItem> {
     const catalog = this.requireCatalog();
     const libraryEntry = this.deps.library.get(slug);
-    const remote = await catalog.info(slug).catch(() => undefined);
+    const resolvedRegistryRef = registryRef ?? libraryEntry?.registryRef;
+    const remote = await (resolvedRegistryRef
+      ? catalog.info(slug, resolvedRegistryRef)
+      : catalog.info(slug)
+    ).catch(() => undefined);
 
     return {
       slug,
+      registryRef: remote?.registryRef ?? libraryEntry?.registryRef ?? registryRef,
       displayName: remote?.name ?? remote?.displayName ?? libraryEntry?.displayName ?? slug,
       description: remote?.description ?? libraryEntry?.description,
       version: remote?.version ?? libraryEntry?.version,
@@ -103,23 +111,23 @@ export class SkillManager {
       .filter(
         (entry) =>
           entry.source === "installed" &&
-          entry.origin === "skillhub" &&
+          entry.origin === "skills-sh" &&
           entry.installState === "installed"
       );
 
     return Promise.all(entries.map((entry) => checkVersion(entry, catalog)));
   }
 
-  async startInstall(slug: string): Promise<SkillInstallJobSnapshot> {
+  async startInstall(slug: string, registryRef?: string): Promise<SkillInstallJobSnapshot> {
     const installJobs = this.requireInstallJobs();
     const existing = this.deps.library.get(slug);
-    if (!canInstallFromSkillHub(existing)) {
+    if (!canInstallFromSkillsSh(existing)) {
       throw {
         code: "skill_slug_conflict",
         message: `A skill with slug ${slug} already exists`,
       };
     }
-    return installJobs.start(slug);
+    return registryRef ? installJobs.start(slug, registryRef) : installJobs.start(slug);
   }
 
   async startUpdate(slug: string): Promise<SkillInstallJobSnapshot> {
@@ -128,15 +136,15 @@ export class SkillManager {
     if (
       !entry ||
       entry.source !== "installed" ||
-      entry.origin !== "skillhub" ||
+      entry.origin !== "skills-sh" ||
       entry.installState !== "installed"
     ) {
       throw {
         code: "skill_update_unavailable",
-        message: `Only installed Skill Hub skills can be updated: ${slug}`,
+        message: `Only installed skills.sh skills can be updated: ${slug}`,
       };
     }
-    return installJobs.start(slug);
+    return installJobs.start(slug, entry.registryRef);
   }
 
   getInstallJob(jobId: string): SkillInstallJobSnapshot {
@@ -342,8 +350,8 @@ export class SkillManager {
   }
 }
 
-function canInstallFromSkillHub(entry: SkillLibraryEntry | undefined): boolean {
-  return !entry || (entry.source === "installed" && entry.origin === "skillhub");
+function canInstallFromSkillsSh(entry: SkillLibraryEntry | undefined): boolean {
+  return !entry || (entry.source === "installed" && entry.origin === "skills-sh");
 }
 
 function parseVersionParts(version: string): number[] {
@@ -375,7 +383,9 @@ async function checkVersion(
   catalog: SkillCatalogHost
 ): Promise<SkillVersionCheckEntry> {
   try {
-    const remote = await catalog.info(entry.slug);
+    const remote = await (entry.registryRef
+      ? catalog.info(entry.slug, entry.registryRef)
+      : catalog.info(entry.slug));
     const latestVersion = remote.version?.trim();
     if (!latestVersion) {
       return { slug: entry.slug, currentVersion: entry.version, status: "unknown" };
@@ -385,7 +395,13 @@ async function checkVersion(
       currentVersion: entry.version,
       latestVersion,
       status:
-        compareSkillVersions(latestVersion, entry.version) > 0 ? "update_available" : "up_to_date",
+        entry.origin === "skills-sh"
+          ? latestVersion === entry.version
+            ? "up_to_date"
+            : "update_available"
+          : compareSkillVersions(latestVersion, entry.version) > 0
+            ? "update_available"
+            : "up_to_date",
     };
   } catch (error) {
     return {

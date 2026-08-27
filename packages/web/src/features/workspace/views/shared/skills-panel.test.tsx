@@ -67,6 +67,8 @@ const translations: Record<string, string> = {
   "skills.empty_installed": "No installed skills yet.",
   "skills.empty_builtin": "No built-in skills yet.",
   "skills.available": "Available",
+  "skills.install_count": "Installs: {{count}}",
+  "skills.github_stars": "GitHub stars: {{count}}",
   "skills.installed": "Installed",
   "skills.install": "Install",
   "skills.check_versions": "Check versions",
@@ -131,6 +133,7 @@ const translations: Record<string, string> = {
   "workspace.skills.source.custom": "Custom",
   "workspace.skills.source.builtin": "Built-in",
   "workspace.skills.origin.skillhub": "skills-hub",
+  "workspace.skills.origin.skills-sh": "skills.sh",
   "workspace.skills.origin.filesystem": "Local",
   "skills.mount_state.unmounted": "Disabled",
   "skills.mount_state.partially_mounted": "Enabled",
@@ -415,7 +418,7 @@ describe("SkillsPanel", () => {
     });
   });
 
-  it("checks installed Skill Hub versions and updates an available skill", async () => {
+  it("checks installed skills.sh versions and updates an available skill", async () => {
     const sendCommand = vi.fn(async (op: string, args?: unknown) => {
       if (op === "skills.library.list") {
         return [
@@ -425,7 +428,7 @@ describe("SkillsPanel", () => {
             description: "Review code changes before merge",
             version: "1.2.3",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/skills/library/code-review",
             installState: "installed",
             installedAt: 1,
@@ -1436,11 +1439,12 @@ describe("SkillsPanel", () => {
           },
           {
             slug: "code-review",
+            registryRef: "mattpocock/skills@code-review",
             displayName: "Code Review",
             description: "Review code changes before merge.",
             version: "1.2.3",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/skills/library/code-review",
             installState: "installed",
             installedAt: 1,
@@ -1552,10 +1556,10 @@ describe("SkillsPanel", () => {
     const filesystemCard = (await within(installedSection).findByText("External Review")).closest(
       "article"
     );
-    const skillHubCard = (await within(installedSection).findByText("Code Review")).closest(
+    const skillsShCard = (await within(installedSection).findByText("Code Review")).closest(
       "article"
     );
-    if (!filesystemCard || !skillHubCard) {
+    if (!filesystemCard || !skillsShCard) {
       throw new Error("Installed skill cards not found");
     }
 
@@ -1564,7 +1568,7 @@ describe("SkillsPanel", () => {
     expect(within(filesystemCard).queryByRole("button", { name: "Uninstall" })).toBeNull();
 
     fireEvent.click(within(installedSection).getByRole("button", { name: "Check versions" }));
-    expect(await within(skillHubCard).findByRole("button", { name: "Update" })).toBeVisible();
+    expect(await within(skillsShCard).findByRole("button", { name: "Update" })).toBeVisible();
 
     fireEvent.click(await within(customSection).findByText("Review Ops Skill"));
     expect(
@@ -2878,8 +2882,11 @@ describe("SkillsPanel", () => {
           },
           {
             slug: "beta-helper",
+            registryRef: "acme/skills@beta-helper",
             displayName: "Beta Helper",
             description: "Available result",
+            installCount: 8_674,
+            githubStars: 518,
             installed: false,
             mountedProviderIds: [],
           },
@@ -2926,6 +2933,22 @@ describe("SkillsPanel", () => {
     const searchActions = searchInstallButton.closest(".skills-panel__card-head-actions");
     expect(searchActions).not.toBeNull();
     expect(searchActions).toContainElement(within(availableCard).getByText("Available"));
+
+    const betaCard = screen.getByText("Beta Helper").closest("article");
+    if (!betaCard) {
+      throw new Error("Skill metrics card not found");
+    }
+    const installCount = within(betaCard).getByLabelText(/Installs: 8,?674/);
+    const githubStars = within(betaCard).getByLabelText("GitHub stars: 518");
+    expect(installCount).toHaveTextContent("8.7K");
+    expect(githubStars).toHaveTextContent("518");
+    expect(
+      installCount.querySelector('[data-icon-semantic="skill.metric.installs"]')
+    ).not.toBeNull();
+    expect(
+      githubStars.querySelector('[data-icon-semantic="skill.metric.githubStars"]')
+    ).not.toBeNull();
+    expect(installCount.closest(".skills-panel__card-head-actions")).not.toBeNull();
   });
 
   it("opens an available skill detail view from search results", async () => {
@@ -2946,6 +2969,7 @@ describe("SkillsPanel", () => {
         return [
           {
             slug: "beta-helper",
+            registryRef: "acme/skills@beta-helper",
             displayName: "Beta Helper",
             description: "Available result",
             version: "2.0.0",
@@ -2958,6 +2982,7 @@ describe("SkillsPanel", () => {
       if (op === "skills.info") {
         return {
           slug: "beta-helper",
+          registryRef: "acme/skills@beta-helper",
           displayName: "Beta Helper",
           description: "Helps with beta workflow",
           version: "2.0.0",
@@ -2986,6 +3011,7 @@ describe("SkillsPanel", () => {
         "skills.info",
         {
           slug: "beta-helper",
+          registryRef: "acme/skills@beta-helper",
         },
         undefined
       );
@@ -3005,6 +3031,7 @@ describe("SkillsPanel", () => {
         "skills.install.start",
         {
           slug: "beta-helper",
+          registryRef: "acme/skills@beta-helper",
         },
         undefined
       );

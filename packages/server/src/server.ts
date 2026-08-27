@@ -270,7 +270,7 @@ export async function createServer(
   const skillMountRepo = new SkillMountRepo({
     filePath: join(stateRoot, "state", "skills", "mounts.json"),
   });
-  const skillsHubClient = new SkillsHubClient({ runCommand: runCommandAsString });
+  const skillsHubClient = new SkillsHubClient();
   const skillLibraryRoot = join(stateRoot, "state", "skills", "library");
   const skillMountMgr = new SkillMountManager({
     getProviderRegistry: () => activeProviderRegistry,

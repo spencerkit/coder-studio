@@ -6,10 +6,13 @@ import { requireSkillInstallSupport } from "./shared.js";
 export function registerSkillInstallCommands(): void {
   registerCommand(
     "skills.install.start",
-    z.object({ slug: z.string().trim().min(1) }),
+    z.object({
+      slug: z.string().trim().min(1),
+      registryRef: z.string().trim().min(1).optional(),
+    }),
     async (args, ctx) => {
       requireSkillInstallSupport(ctx);
-      return createCoderStudioSkillManager(ctx).startInstall(args.slug);
+      return createCoderStudioSkillManager(ctx).startInstall(args.slug, args.registryRef);
     }
   );
 

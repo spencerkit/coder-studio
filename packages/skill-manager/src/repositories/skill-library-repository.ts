@@ -128,6 +128,11 @@ function compareEntryPriority(left: SkillLibraryEntry, right: SkillLibraryEntry)
 function priorityOf(entry: SkillLibraryEntry): number {
   if (entry.source === "builtin") return 4;
   if (entry.source === "custom") return 3;
-  if (entry.source === "installed" && entry.origin === "skillhub") return 2;
+  if (
+    entry.source === "installed" &&
+    (entry.origin === "skillhub" || entry.origin === "skills-sh")
+  ) {
+    return 2;
+  }
   return 1;
 }
