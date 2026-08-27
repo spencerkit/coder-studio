@@ -32,6 +32,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@coder-studio/skill-manager": "workspace:*"
+  },
   "peerDependencies": {
     "zod": "^4.4.2"
   },

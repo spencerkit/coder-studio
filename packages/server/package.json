@@ -31,6 +31,7 @@
   "dependencies": {
     "@coder-studio/core": "workspace:*",
     "@coder-studio/providers": "workspace:*",
+    "@coder-studio/skill-manager": "workspace:*",
     "@coder-studio/utils": "workspace:*",
     "@fastify/compress": "^8.3.1",
     "@fastify/cors": "^11.2.0",

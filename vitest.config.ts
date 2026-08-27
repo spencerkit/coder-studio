@@ -10,6 +10,7 @@ export default defineConfig({
       "packages/desktop/vitest.config.ts",
       "packages/providers/vitest.config.ts",
       "packages/server/vitest.config.ts",
+      "packages/skill-manager/vitest.config.ts",
       "packages/utils/vitest.config.ts",
       "packages/web/vitest.config.ts",
     ],

@@ -1,5 +1,4 @@
-import { type SkillLibraryEntry, type SkillVersionCheckEntry, Topics } from "@coder-studio/core";
-import { buildAgentSkillTargets } from "../../skills/target-registry.js";
+import { Topics } from "@coder-studio/core";
 import type { CommandContext } from "../../ws/dispatch.js";
 
 export function requireSkillsQuerySupport(ctx: CommandContext): asserts ctx is CommandContext & {
@@ -104,82 +103,4 @@ export function hasSyncChanges(result: {
     (result.mounted?.length ?? 0) > 0 ||
     (result.libraryEntries?.length ?? 0) > 0
   );
-}
-
-export async function listTargets(ctx: CommandContext) {
-  requireSkillTargetSupport(ctx);
-  requireSkillHealthSupport(ctx);
-
-  const health = await ctx.skillHealthMgr.listTargetHealth();
-  return buildAgentSkillTargets({
-    providers: ctx.providerRegistry,
-    resolvedSkillDirByProviderId: Object.fromEntries(
-      ctx.providerRegistry.map((provider) => [provider.id, provider.skillMountDirectories?.[0]])
-    ),
-    mountCountsByProviderId: ctx.skillMountRepo.countsByProviderId(),
-    targetHealthByProviderId: health,
-  });
-}
-
-function parseVersionParts(version: string): number[] {
-  return version
-    .trim()
-    .replace(/^v(?=\d)/i, "")
-    .split(".")
-    .map((segment) => {
-      const match = segment.match(/^(\d+)/);
-      return match ? Number.parseInt(match[1]!, 10) : 0;
-    });
-}
-
-export function compareVersions(left: string, right: string): number {
-  const leftParts = parseVersionParts(left);
-  const rightParts = parseVersionParts(right);
-  const length = Math.max(leftParts.length, rightParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const leftValue = leftParts[index] ?? 0;
-    const rightValue = rightParts[index] ?? 0;
-    if (leftValue > rightValue) {
-      return 1;
-    }
-    if (leftValue < rightValue) {
-      return -1;
-    }
-  }
-
-  return 0;
-}
-
-export async function checkSkillHubVersion(
-  entry: SkillLibraryEntry,
-  ctx: CommandContext & {
-    skillsHubClient: NonNullable<CommandContext["skillsHubClient"]>;
-  }
-): Promise<SkillVersionCheckEntry> {
-  try {
-    const remote = await ctx.skillsHubClient.info(entry.slug);
-    const latestVersion = remote.version?.trim();
-    if (!latestVersion) {
-      return {
-        slug: entry.slug,
-        currentVersion: entry.version,
-        status: "unknown",
-      };
-    }
-
-    return {
-      slug: entry.slug,
-      currentVersion: entry.version,
-      latestVersion,
-      status: compareVersions(latestVersion, entry.version) > 0 ? "update_available" : "up_to_date",
-    };
-  } catch (error) {
-    return {
-      slug: entry.slug,
-      currentVersion: entry.version,
-      status: "error",
-      error: error instanceof Error ? error.message : "Version check failed",
-    };
-  }
 }
