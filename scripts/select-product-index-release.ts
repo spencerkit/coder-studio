@@ -2,17 +2,19 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { writeJsonFileAtomic } from "../packages/desktop/src/atomic-json-file.js";
 import { parseDesktopBuildInfo } from "../packages/desktop/src/build-info.js";
+import { parseProductChannel } from "../packages/desktop/src/product-channel.js";
 import {
   listCompatibleProductReleases,
   listProductReleases,
   type ProductCompatibilityHost,
+  type ProductReleaseSource,
   parseProductIndex,
 } from "../packages/desktop/src/product-index.js";
 import { compareVersions } from "../packages/desktop/src/runtime-manifest.js";
 import { error, success } from "./shared/index.js";
 import { isDirectExecution } from "./shared/process.js";
 
-const DEFAULT_PRODUCT_INDEX_URL =
+const DEFAULT_PRODUCT_SOURCE_URL =
   "https://github.com/spencerkit/coder-studio/releases/download/product-stable/product-index.json";
 
 export interface SelectProductIndexReleaseOptions {
@@ -22,11 +24,11 @@ export interface SelectProductIndexReleaseOptions {
   outputFile: string;
   requiredVersion?: string;
   previousToVersion?: string;
-  productIndexUrl?: string;
+  productSourceUrl?: string;
 }
 
 interface SelectProductIndexReleaseCommand
-  extends Omit<SelectProductIndexReleaseOptions, "publicKeyPem" | "productIndexUrl"> {
+  extends Omit<SelectProductIndexReleaseOptions, "publicKeyPem" | "productSourceUrl"> {
   publicKeyFile: string;
 }
 
@@ -56,23 +58,39 @@ function compatibilityHost(
   };
 }
 
+function parseProductReleaseSource(
+  value: unknown,
+  publicKeyPem: string,
+  sourceUrl: string
+): ProductReleaseSource {
+  const channel =
+    value && typeof value === "object" ? (value as Record<string, unknown>).channel : undefined;
+  if (channel === "product-index") {
+    return parseProductIndex(value, publicKeyPem, sourceUrl);
+  }
+  if (channel === "product") {
+    return parseProductChannel(value, publicKeyPem, sourceUrl);
+  }
+  throw new Error("Product release selection source kind is unsupported");
+}
+
 export async function selectProductIndexRelease(
   options: SelectProductIndexReleaseOptions
 ): Promise<ReturnType<typeof listCompatibleProductReleases>[number]> {
   if (options.requiredVersion && options.previousToVersion) {
     throw new Error("A required Product version cannot be combined with --previous-to-version");
   }
-  const index = parseProductIndex(
+  const source = parseProductReleaseSource(
     await readJson(options.indexFile),
     options.publicKeyPem,
-    options.productIndexUrl ?? DEFAULT_PRODUCT_INDEX_URL
+    options.productSourceUrl ?? DEFAULT_PRODUCT_SOURCE_URL
   );
   const buildInfo = parseDesktopBuildInfo(await readJson(options.buildInfoFile));
-  const compatible = listCompatibleProductReleases(index, compatibilityHost(buildInfo));
+  const compatible = listCompatibleProductReleases(source, compatibilityHost(buildInfo));
   const selected = options.requiredVersion
     ? compatible.find((release) => release.version === options.requiredVersion)
     : options.previousToVersion
-      ? listProductReleases(index).find(
+      ? listProductReleases(source).find(
           (release) => compareVersions(release.version, options.previousToVersion as string) < 0
         )
       : compatible[0];

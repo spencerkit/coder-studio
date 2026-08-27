@@ -456,11 +456,15 @@ describe("Desktop publication workflow", () => {
     expect(factoryText).not.toContain("--before-version");
     expect(factoryText).toContain("is no longer the highest compatible accepted Runtime");
     expect(factoryText).not.toContain("prepare-product-release-bundle.ts");
-    expect(factoryText).not.toContain("gh release list");
+    expect(factoryText).toContain("gh release list");
+    expect(factoryText).toContain(
+      "No earlier compatible Product release has a complete valid bundle"
+    );
     expect(readFileSync(workflowPath("desktop-release.yml"), "utf8")).not.toContain(
       "build-product-index.ts"
     );
     expect(factoryText).toContain("product-channel.json");
+    expect(factoryText).toContain("PRODUCT_SOURCE_ASSET");
     expect(factoryText).toContain("pnpm release:artifacts validate-product");
     expect(factoryText).toContain("factory-product.json");
     expect(factoryText).toContain("factory-runtime");
@@ -468,7 +472,8 @@ describe("Desktop publication workflow", () => {
     expect(factoryText).toContain("accepted-product-previous-");
     expect(factoryText).not.toMatch(/pnpm (?:build:desktop-runtime|build:wsl-runtime)/);
     expect(jobs["resolve-factory-product"].outputs).toMatchObject({
-      current_product_index_sha256: "${{ steps.identity.outputs.current_product_index_sha256 }}",
+      current_product_source_asset: "${{ steps.identity.outputs.current_product_source_asset }}",
+      current_product_source_sha256: "${{ steps.identity.outputs.current_product_source_sha256 }}",
       current_product_bundle_artifact:
         "${{ steps.identity.outputs.current_product_bundle_artifact }}",
       previous_product_bundle_artifact:
@@ -626,6 +631,9 @@ describe("Desktop publication workflow", () => {
     });
     expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
       "current-product/product-channel.json"
+    );
+    expect(step(promote, "Revalidate accepted Product stable pointer")?.run).toContain(
+      "ACCEPTED_PRODUCT_SOURCE_ASSET"
     );
     expect(step(promote, "Promote Desktop versioned release")?.run).toContain(
       "--prerelease=false --latest=false"

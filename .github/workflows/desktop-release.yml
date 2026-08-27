@@ -146,7 +146,8 @@ jobs:
     environment: desktop-production
     outputs:
       current_product_tag: ${{ steps.identity.outputs.current_product_tag }}
-      current_product_index_sha256: ${{ steps.identity.outputs.current_product_index_sha256 }}
+      current_product_source_asset: ${{ steps.identity.outputs.current_product_source_asset }}
+      current_product_source_sha256: ${{ steps.identity.outputs.current_product_source_sha256 }}
       current_product_channel_sha256: ${{ steps.identity.outputs.current_product_channel_sha256 }}
       current_windows_manifest_sha256: ${{ steps.identity.outputs.current_windows_manifest_sha256 }}
       current_linux_manifest_sha256: ${{ steps.identity.outputs.current_linux_manifest_sha256 }}
@@ -200,9 +201,17 @@ jobs:
             release/factory-resolution/selection
           printf '%s' "${CODER_STUDIO_RUNTIME_PUBLIC_KEY}" \
             > release/factory-resolution/keys/runtime-public.pem
-          gh release download product-stable \
-            --pattern product-index.json \
-            --dir release/factory-resolution/stable
+          selection_source=release/factory-resolution/stable/product-index.json
+          selection_source_asset=product-index.json
+          if ! gh release download product-stable \
+            --pattern "${selection_source_asset}" \
+            --dir release/factory-resolution/stable 2>/dev/null; then
+            selection_source=release/factory-resolution/stable/product-channel.json
+            selection_source_asset=product-channel.json
+            gh release download product-stable \
+              --pattern "${selection_source_asset}" \
+              --dir release/factory-resolution/stable
+          fi
           required_version=""
           if [[ "${RESUME_CANDIDATE}" == "true" ]]; then
             gh release download "${CANDIDATE_TAG}" \
@@ -211,7 +220,7 @@ jobs:
             required_version=$(node -p "require('./release/factory-resolution/desktop/desktop-channel.json').factoryProduct.version")
           fi
           node --import tsx scripts/select-product-index-release.ts \
-            --index release/factory-resolution/stable/product-index.json \
+            --index "${selection_source}" \
             --build-info packages/desktop/dist/build-info.json \
             --public-key release/factory-resolution/keys/runtime-public.pem \
             --output release/factory-resolution/selection/current.json
@@ -223,6 +232,10 @@ jobs:
           fi
           echo "selected_tag=${selected_tag}" >> "${GITHUB_OUTPUT}"
           echo "selected_version=${selected_version}" >> "${GITHUB_OUTPUT}"
+          selection_source_sha256=$(sha256sum "${selection_source}" | cut -d ' ' -f 1)
+          echo "selection_source=${selection_source}" >> "${GITHUB_OUTPUT}"
+          echo "selection_source_asset=${selection_source_asset}" >> "${GITHUB_OUTPUT}"
+          echo "selection_source_sha256=${selection_source_sha256}" >> "${GITHUB_OUTPUT}"
 
       - name: Download and validate accepted Product bundle
         env:
@@ -304,65 +317,131 @@ jobs:
         id: identity
         env:
           CURRENT_PRODUCT_TAG: ${{ steps.product.outputs.selected_tag }}
+          PRODUCT_SOURCE: ${{ steps.product.outputs.selection_source }}
+          PRODUCT_SOURCE_ASSET: ${{ steps.product.outputs.selection_source_asset }}
+          PRODUCT_SOURCE_SHA256: ${{ steps.product.outputs.selection_source_sha256 }}
         run: |
           current_channel=release/factory-resolution/product/current/product-channel.json
           current_channel_digest=$(sha256sum "${current_channel}" | cut -d ' ' -f 1)
           current_windows_digest=$(node -p "require('./${current_channel}').runtimes['win32-x64'].manifestSha256")
           current_linux_digest=$(node -p "require('./${current_channel}').runtimes['linux-x64'].manifestSha256")
 
-          previous_product_tag=""
-          previous_channel_digest=""
-          previous_windows_digest=""
-          previous_linux_digest=""
+          download_product_bundle() {
+            local selection=$1
+            local bundle=$2
+            local source_package=$3
+            local product_tag windows_manifest linux_manifest
+            product_tag=$(node -p "require('./${selection}').releaseTag") || return 1
+            windows_manifest=$(node -p "require('./${selection}').runtimes['win32-x64'].manifest") || return 1
+            linux_manifest=$(node -p "require('./${selection}').runtimes['linux-x64'].manifest") || return 1
+            mkdir -p "${bundle}"
+            gh release download "${product_tag}" \
+              --pattern product-channel.json \
+              --pattern coder-studio-cli.tgz \
+              --pattern "${windows_manifest}" \
+              --pattern "${linux_manifest}" \
+              --dir "${bundle}" || return 1
+            local windows_digest linux_digest expected_windows_digest expected_linux_digest
+            windows_digest=$(sha256sum "${bundle}/${windows_manifest}" | cut -d ' ' -f 1) || return 1
+            linux_digest=$(sha256sum "${bundle}/${linux_manifest}" | cut -d ' ' -f 1) || return 1
+            expected_windows_digest=$(node -p "require('./${selection}').runtimes['win32-x64'].manifestSha256") || return 1
+            expected_linux_digest=$(node -p "require('./${selection}').runtimes['linux-x64'].manifestSha256") || return 1
+            if [[ "${windows_digest}" != "${expected_windows_digest}" || \
+                  "${linux_digest}" != "${expected_linux_digest}" ]]; then
+              return 1
+            fi
+            local windows_package linux_package
+            windows_package=$(node -p "require('./${bundle}/${windows_manifest}').packageFile") || return 1
+            linux_package=$(node -p "require('./${bundle}/${linux_manifest}').packageFile") || return 1
+            gh release download "${product_tag}" \
+              --pattern "${windows_package}" \
+              --pattern "${linux_package}" \
+              --dir "${bundle}" || return 1
+            tar -xOf "${bundle}/coder-studio-cli.tgz" package/package.json > "${source_package}" || return 1
+            pnpm release:artifacts validate-product \
+              --directory "${bundle}" \
+              --source-package-json "${source_package}" || return 1
+            local declared_tag declared_version selected_version
+            declared_tag=$(node -p "require('./${bundle}/product-channel.json').releaseTag") || return 1
+            declared_version=$(node -p "require('./${bundle}/product-channel.json').version") || return 1
+            selected_version=$(node -p "require('./${selection}').version") || return 1
+            [[ "${declared_tag}" == "${product_tag}" && "${declared_version}" == "${selected_version}" ]]
+          }
+
           current_version=$(node -p "require('./release/factory-resolution/selection/current.json').version")
-          node --import tsx scripts/select-product-index-release.ts \
-            --index release/factory-resolution/stable/product-index.json \
-            --build-info packages/desktop/dist/build-info.json \
-            --public-key release/factory-resolution/keys/runtime-public.pem \
-            --previous-to-version "${current_version}" \
-            --output release/factory-resolution/selection/previous.json
+          if [[ "${PRODUCT_SOURCE_ASSET}" == "product-index.json" ]]; then
+            node --import tsx scripts/select-product-index-release.ts \
+              --index "${PRODUCT_SOURCE}" \
+              --build-info packages/desktop/dist/build-info.json \
+              --public-key release/factory-resolution/keys/runtime-public.pem \
+              --previous-to-version "${current_version}" \
+              --output release/factory-resolution/selection/previous.json
+            if ! download_product_bundle \
+              release/factory-resolution/selection/previous.json \
+              release/factory-resolution/product/previous \
+              release/factory-resolution/source/previous-package.json; then
+              echo "Previous Product selected by the signed index is not a complete valid bundle" >&2
+              exit 1
+            fi
+          else
+            mkdir -p \
+              release/factory-resolution/selection/previous-candidates \
+              release/factory-resolution/product/previous-candidates
+            mapfile -t product_tags < <(
+              gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName \
+                --jq '.[].tagName' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+                | sort -Vr
+            )
+            previous_product_tag=""
+            for candidate_tag in "${product_tags[@]}"; do
+              candidate_source="release/factory-resolution/selection/previous-candidates/${candidate_tag}/product-channel.json"
+              candidate_selection="release/factory-resolution/selection/previous-candidates/${candidate_tag}.json"
+              candidate_bundle="release/factory-resolution/product/previous-candidates/${candidate_tag}"
+              mkdir -p "$(dirname "${candidate_source}")"
+              if ! gh release download "${candidate_tag}" \
+                --pattern product-channel.json \
+                --dir "$(dirname "${candidate_source}")" 2>/dev/null; then
+                continue
+              fi
+              if ! node --import tsx scripts/select-product-index-release.ts \
+                --index "${candidate_source}" \
+                --build-info packages/desktop/dist/build-info.json \
+                --public-key release/factory-resolution/keys/runtime-public.pem \
+                --output "${candidate_selection}"; then
+                continue
+              fi
+              candidate_version=$(node -p "require('./${candidate_selection}').version")
+              if [[ "${candidate_version}" == "${current_version}" || \
+                    "$(printf '%s\n%s\n' "${candidate_version}" "${current_version}" | sort -V | head -n 1)" != "${candidate_version}" ]]; then
+                continue
+              fi
+              if download_product_bundle \
+                "${candidate_selection}" \
+                "${candidate_bundle}" \
+                "release/factory-resolution/source/previous-${candidate_tag}-package.json"; then
+                cp "${candidate_selection}" release/factory-resolution/selection/previous.json
+                mkdir -p release/factory-resolution/product/previous
+                cp -R "${candidate_bundle}/." release/factory-resolution/product/previous/
+                previous_product_tag="${candidate_tag}"
+                break
+              fi
+            done
+            if [[ -z "${previous_product_tag}" ]]; then
+              echo "No earlier compatible Product release has a complete valid bundle" >&2
+              exit 1
+            fi
+          fi
+
           previous_product_tag=$(node -p "require('./release/factory-resolution/selection/previous.json').releaseTag")
           previous_windows_manifest=$(node -p "require('./release/factory-resolution/selection/previous.json').runtimes['win32-x64'].manifest")
           previous_linux_manifest=$(node -p "require('./release/factory-resolution/selection/previous.json').runtimes['linux-x64'].manifest")
-          mkdir -p release/factory-resolution/product/previous
-          gh release download "${previous_product_tag}" \
-            --pattern product-channel.json \
-            --pattern coder-studio-cli.tgz \
-            --pattern "${previous_windows_manifest}" \
-            --pattern "${previous_linux_manifest}" \
-            --dir release/factory-resolution/product/previous
           previous_windows_digest=$(sha256sum "release/factory-resolution/product/previous/${previous_windows_manifest}" | cut -d ' ' -f 1)
           previous_linux_digest=$(sha256sum "release/factory-resolution/product/previous/${previous_linux_manifest}" | cut -d ' ' -f 1)
-          expected_previous_windows_digest=$(node -p "require('./release/factory-resolution/selection/previous.json').runtimes['win32-x64'].manifestSha256")
-          expected_previous_linux_digest=$(node -p "require('./release/factory-resolution/selection/previous.json').runtimes['linux-x64'].manifestSha256")
-          if [[ "${previous_windows_digest}" != "${expected_previous_windows_digest}" || \
-                "${previous_linux_digest}" != "${expected_previous_linux_digest}" ]]; then
-            echo "Previous Product Runtime manifest digest does not match the signed Product index" >&2
-            exit 1
-          fi
-          previous_windows_package=$(node -p "require('./release/factory-resolution/product/previous/${previous_windows_manifest}').packageFile")
-          previous_linux_package=$(node -p "require('./release/factory-resolution/product/previous/${previous_linux_manifest}').packageFile")
-          gh release download "${previous_product_tag}" \
-            --pattern "${previous_windows_package}" \
-            --pattern "${previous_linux_package}" \
-            --dir release/factory-resolution/product/previous
-          tar -xOf release/factory-resolution/product/previous/coder-studio-cli.tgz package/package.json \
-            > release/factory-resolution/source/previous-package.json
-          pnpm release:artifacts validate-product \
-            --directory release/factory-resolution/product/previous \
-            --source-package-json release/factory-resolution/source/previous-package.json
-          declared_previous_tag=$(node -p "require('./release/factory-resolution/product/previous/product-channel.json').releaseTag")
-          declared_previous_version=$(node -p "require('./release/factory-resolution/product/previous/product-channel.json').version")
-          selected_previous_version=$(node -p "require('./release/factory-resolution/selection/previous.json').version")
-          if [[ "${declared_previous_tag}" != "${previous_product_tag}" || \
-                "${declared_previous_version}" != "${selected_previous_version}" ]]; then
-            echo "Previous Product channel does not match the signed Product index selection" >&2
-            exit 1
-          fi
           previous_channel_digest=$(sha256sum release/factory-resolution/product/previous/product-channel.json | cut -d ' ' -f 1)
-          product_index_digest=$(sha256sum release/factory-resolution/stable/product-index.json | cut -d ' ' -f 1)
           echo "current_product_tag=${CURRENT_PRODUCT_TAG}" >> "${GITHUB_OUTPUT}"
-          echo "current_product_index_sha256=${product_index_digest}" >> "${GITHUB_OUTPUT}"
+          echo "current_product_source_asset=${PRODUCT_SOURCE_ASSET}" >> "${GITHUB_OUTPUT}"
+          echo "current_product_source_sha256=${PRODUCT_SOURCE_SHA256}" >> "${GITHUB_OUTPUT}"
           echo "current_product_channel_sha256=${current_channel_digest}" >> "${GITHUB_OUTPUT}"
           echo "current_windows_manifest_sha256=${current_windows_digest}" >> "${GITHUB_OUTPUT}"
           echo "current_linux_manifest_sha256=${current_linux_digest}" >> "${GITHUB_OUTPUT}"
@@ -1255,7 +1334,8 @@ jobs:
       DESKTOP_CHANNEL_SHA256: ${{ needs.publish-candidate.outputs.desktop_channel_sha256 }}
       ARTIFACT_DIGESTS: ${{ needs.publish-candidate.outputs.artifact_digests }}
       PREVIOUS_POINTER_DIGEST: ${{ needs.prepare.outputs.previous_desktop_channel_sha256 }}
-      ACCEPTED_PRODUCT_INDEX_SHA256: ${{ needs.resolve-factory-product.outputs.current_product_index_sha256 }}
+      ACCEPTED_PRODUCT_SOURCE_ASSET: ${{ needs.resolve-factory-product.outputs.current_product_source_asset }}
+      ACCEPTED_PRODUCT_SOURCE_SHA256: ${{ needs.resolve-factory-product.outputs.current_product_source_sha256 }}
       ACCEPTED_PRODUCT_CHANNEL_SHA256: ${{ needs.resolve-factory-product.outputs.current_product_channel_sha256 }}
       CANDIDATE_COMMIT: ${{ needs.publish-candidate.outputs.candidate_commit }}
     steps:
@@ -1287,16 +1367,20 @@ jobs:
         run: |
           mkdir -p release/desktop-promotion/accepted-product
           accepted_product_channel=release/desktop-promotion/current-product/product-channel.json
-          if ! gh release download product-stable \
-            --pattern product-index.json \
-            --dir release/desktop-promotion/accepted-product 2>/dev/null; then
-            echo "The signed Product stable index is required for Desktop promotion" >&2
-            exit 1
-          fi
+          case "${ACCEPTED_PRODUCT_SOURCE_ASSET}" in
+            product-index.json|product-channel.json) ;;
+            *)
+              echo "Accepted Product stable source asset is invalid" >&2
+              exit 1
+              ;;
+          esac
+          gh release download product-stable \
+            --pattern "${ACCEPTED_PRODUCT_SOURCE_ASSET}" \
+            --dir release/desktop-promotion/accepted-product
           current_digest=$(sha256sum "${accepted_product_channel}" | cut -d ' ' -f 1)
-          current_index_digest=$(sha256sum release/desktop-promotion/accepted-product/product-index.json | cut -d ' ' -f 1)
+          current_source_digest=$(sha256sum "release/desktop-promotion/accepted-product/${ACCEPTED_PRODUCT_SOURCE_ASSET}" | cut -d ' ' -f 1)
           if [[ "${current_digest}" != "${ACCEPTED_PRODUCT_CHANNEL_SHA256}" || \
-                "${current_index_digest}" != "${ACCEPTED_PRODUCT_INDEX_SHA256}" ]]; then
+                "${current_source_digest}" != "${ACCEPTED_PRODUCT_SOURCE_SHA256}" ]]; then
             echo "Product stable pointer changed after compatibility acceptance; rerun the candidate acceptance graph" >&2
             exit 1
           fi
