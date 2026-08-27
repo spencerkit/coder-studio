@@ -40,7 +40,10 @@ export function registerSkillQueryCommands(): void {
 
       return buildSkillRecommendations({
         intelligence,
-        search: (query) => ctx.skillsHubClient.search(query),
+        search: (query) =>
+          ctx.skillsHubClient.search(query, {
+            includeRepositoryStats: false,
+          }),
         isInstalled: (slug) => Boolean(ctx.skillLibraryRepo.get(slug)),
         limit: args.limit,
         offset: args.offset,
@@ -50,10 +53,13 @@ export function registerSkillQueryCommands(): void {
 
   registerCommand(
     "skills.info",
-    z.object({ slug: z.string().trim().min(1) }),
+    z.object({
+      slug: z.string().trim().min(1),
+      registryRef: z.string().trim().min(1).optional(),
+    }),
     async (args, ctx) => {
       requireSkillsQuerySupport(ctx);
-      return createCoderStudioSkillManager(ctx).getSkillInfo(args.slug);
+      return createCoderStudioSkillManager(ctx).getSkillInfo(args.slug, args.registryRef);
     }
   );
 }

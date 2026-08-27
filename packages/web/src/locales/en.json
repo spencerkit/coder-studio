@@ -372,6 +372,7 @@
       },
       "origin": {
         "skillhub": "skills-hub",
+        "skills-sh": "skills.sh",
         "filesystem": "Local"
       }
     },
@@ -471,13 +472,15 @@
     "discover_expand_label": "Expand Discover",
     "discover_collapse_label": "Collapse Discover",
     "search": "Search skills",
-    "search_placeholder": "Search Skills Hub",
-    "search_hint": "Search Skills Hub to install into the shared library.",
+    "search_placeholder": "Search skills.sh",
+    "search_hint": "Search skills.sh to install into the shared library.",
     "no_search_results": "No matching skills found.",
     "no_recommendations": "No recommendations for this workspace yet.",
     "install": "Install",
     "installed": "Installed",
     "available": "Available",
+    "install_count": "Installs: {count}",
+    "github_stars": "GitHub stars: {count}",
     "scan": "Refresh",
     "check_versions": "Check versions",
     "checking_versions": "Checking...",

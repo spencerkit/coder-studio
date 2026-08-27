@@ -46,7 +46,7 @@ async function waitForJob(
 }
 
 describe("SkillInstallManager", () => {
-  it("auto-mounts installed Skill Hub skills into installed agent skill targets", async () => {
+  it("auto-mounts installed skills.sh skills into installed agent skill targets", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "skill-install-auto-mount-"));
     try {
       const libraryRoot = join(tempDir, "library");
@@ -81,7 +81,17 @@ describe("SkillInstallManager", () => {
             description: "Review code changes before merge",
             version: "1.2.3",
           })),
-          stageInstall: vi.fn(async () => ({ tempHome: join(tempDir, "home"), exportDir })),
+          stageInstall: vi.fn(async () => ({
+            tempHome: join(tempDir, "home"),
+            exportDir,
+            info: {
+              slug: "code-review",
+              registryRef: "mattpocock/skills@code-review",
+              name: "Code Review",
+              description: "Review code changes before merge",
+              version: "1.2.3",
+            },
+          })),
           readStagedSkill: vi.fn(async () => "skill body"),
           cleanupStage: vi.fn(async () => undefined),
         } as never,
@@ -114,7 +124,8 @@ describe("SkillInstallManager", () => {
         expect.objectContaining({
           slug: "code-review",
           source: "installed",
-          origin: "skillhub",
+          origin: "skills-sh",
+          registryRef: "mattpocock/skills@code-review",
         })
       );
     } finally {

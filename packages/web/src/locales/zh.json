@@ -373,6 +373,7 @@
       },
       "origin": {
         "skillhub": "skills-hub",
+        "skills-sh": "skills.sh",
         "filesystem": "本地"
       }
     },
@@ -483,13 +484,15 @@
     "discover_expand_label": "展开发现技能",
     "discover_collapse_label": "收起发现技能",
     "search": "搜索 Skills",
-    "search_placeholder": "搜索 Skills Hub",
-    "search_hint": "从 Skills Hub 搜索并安装到公共 Skill 库。",
+    "search_placeholder": "搜索 skills.sh",
+    "search_hint": "从 skills.sh 搜索并安装到公共 Skill 库。",
     "no_search_results": "未找到匹配的 Skill。",
     "no_recommendations": "当前工作区暂时没有推荐 Skill。",
     "install": "安装",
     "installed": "已安装",
     "available": "可安装",
+    "install_count": "下载量：{count}",
+    "github_stars": "GitHub 星标：{count}",
     "scan": "刷新",
     "check_versions": "检查版本",
     "checking_versions": "检查中...",

@@ -17,9 +17,12 @@ const RECOMMENDATIONS_PAGE_SIZE = 20;
 
 export interface SkillSearchResultItem {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   version?: string;
+  installCount?: number;
+  githubStars?: number;
   installed: boolean;
   installedVersion?: string;
   mountedProviderIds: string[];
@@ -33,6 +36,7 @@ export interface SkillLibraryListItem extends SkillLibraryEntry {
 
 export interface SkillInfoItem {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   version?: string;
@@ -50,8 +54,8 @@ function appendUniqueRecommendations(
   current: SkillRecommendationEntry[],
   incoming: SkillRecommendationEntry[]
 ) {
-  const seen = new Set(current.map((entry) => entry.slug));
-  const appended = incoming.filter((entry) => !seen.has(entry.slug));
+  const seen = new Set(current.map((entry) => entry.registryRef ?? entry.slug));
+  const appended = incoming.filter((entry) => !seen.has(entry.registryRef ?? entry.slug));
   return appended.length > 0 ? [...current, ...appended] : current;
 }
 
@@ -196,8 +200,11 @@ export function useSkillsPanel(workspaceId: string) {
   }, [dispatch]);
 
   const loadSkillInfo = useCallback(
-    async (slug: string) => {
-      const result = await dispatch<SkillInfoItem>("skills.info", { slug });
+    async (slug: string, registryRef?: string) => {
+      const result = await dispatch<SkillInfoItem>("skills.info", {
+        slug,
+        ...(registryRef ? { registryRef } : {}),
+      });
       if (!result.ok || !result.data) {
         setErrorMessage(result.error?.message ?? "Failed to load skill details");
         return null;
@@ -205,7 +212,7 @@ export function useSkillsPanel(workspaceId: string) {
 
       setSkillInfoBySlug((current) => ({
         ...current,
-        [slug]: result.data!,
+        [registryRef ?? slug]: result.data!,
       }));
       setErrorMessage(null);
       return result.data;
@@ -303,8 +310,11 @@ export function useSkillsPanel(workspaceId: string) {
   ]);
 
   const installSkill = useCallback(
-    async (slug: string) => {
-      const result = await dispatch<SkillInstallJobSnapshot>("skills.install.start", { slug });
+    async (slug: string, registryRef?: string) => {
+      const result = await dispatch<SkillInstallJobSnapshot>("skills.install.start", {
+        slug,
+        ...(registryRef ? { registryRef } : {}),
+      });
       if (!result.ok || !result.data) {
         setErrorMessage(result.error?.message ?? "Failed to install skill");
         return false;

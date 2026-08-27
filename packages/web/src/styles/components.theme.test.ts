@@ -4247,6 +4247,8 @@ describe("components.css theme-sensitive surfaces", () => {
       ".skills-panel__card-head-actions .skills-panel__inline-actions"
     );
     const skillsCardOpen = getLastRuleBlock(".skills-panel__card-open");
+    const skillsMarketplaceStats = getLastRuleBlock(".skills-panel__marketplace-stats");
+    const skillsMarketplaceStat = getLastRuleBlock(".skills-panel__marketplace-stat");
     const skillsCardDescriptionTruncated = getLastRuleBlock(
       ".skills-panel__card-description--truncated"
     );
@@ -4429,6 +4431,11 @@ describe("components.css theme-sensitive surfaces", () => {
     expect(skillsCardHeadActions).toContain("margin-right: calc(var(--sp-3) * -1)");
     expect(skillsCardHeadActions).toContain("gap: var(--gap-default)");
     expect(skillsCardHeadInlineActions).toContain("gap: var(--gap-default)");
+    expect(skillsMarketplaceStats).toContain("display: inline-flex");
+    expect(skillsMarketplaceStats).toContain("color: var(--text-tertiary)");
+    expect(skillsMarketplaceStats).toContain("font-size: var(--type-body-6-size)");
+    expect(skillsMarketplaceStats).toContain("font-variant-numeric: tabular-nums");
+    expect(skillsMarketplaceStat).toContain("white-space: nowrap");
     expect(skillsCardOpen).toContain("display: flex");
     expect(skillsCardOpen).toContain("flex: 1 1 auto");
     expect(skillsCardOpen).toContain("min-width: 0");

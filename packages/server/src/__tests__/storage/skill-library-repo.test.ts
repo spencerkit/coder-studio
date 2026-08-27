@@ -159,10 +159,12 @@ describe("SkillLibraryRepo", () => {
 
     repo.set({
       slug: "code-review",
+      registryRef: "mattpocock/skills@code-review",
       displayName: "Code Review",
       description: "Managed copy",
-      version: "2.0.0",
-      source: "skillhub",
+      version: "12daafb9c4f77deb3c3303dc2e6f8a3c2a0ff7928fc004af959ba18b8bd38068",
+      source: "installed",
+      origin: "skills-sh",
       libraryPath: join(tempDir, "state", "skills", "library", "code-review"),
       installState: "installed",
       installedAt: 1,
@@ -179,7 +181,8 @@ describe("SkillLibraryRepo", () => {
 
     expect(scannedRepo.get("code-review")).toMatchObject({
       source: "installed",
-      origin: "skillhub",
+      origin: "skills-sh",
+      registryRef: "mattpocock/skills@code-review",
       description: "Managed copy",
     });
   });

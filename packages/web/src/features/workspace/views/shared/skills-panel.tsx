@@ -66,6 +66,7 @@ interface SkillTargetSummary {
 
 interface SkillDetailItem {
   slug: string;
+  registryRef?: string;
   displayName: string;
   description?: string;
   version?: string;
@@ -131,6 +132,10 @@ function sourceLabel(skill: Pick<SkillDetailItem, "source" | "origin">, t: Trans
     return t("workspace.skills.origin.skillhub");
   }
 
+  if (skill.origin === "skills-sh") {
+    return t("workspace.skills.origin.skills-sh");
+  }
+
   if (skill.source) {
     return t(`workspace.skills.source.${skill.source}`);
   }
@@ -143,7 +148,69 @@ function formatSkillVersion(version: string | undefined) {
   if (!trimmed) {
     return "";
   }
+  if (/^[a-f0-9]{64}$/i.test(trimmed)) {
+    return `rev ${trimmed.slice(0, 12)}`;
+  }
   return /^v/i.test(trimmed) || trimmed === "local" ? trimmed : `v${trimmed}`;
+}
+
+function formatMarketplaceCount(value: number) {
+  if (value < 1_000) {
+    return String(value);
+  }
+
+  const divisor = value < 1_000_000 ? 1_000 : 1_000_000;
+  const suffix = value < 1_000_000 ? "K" : "M";
+  const compact = value / divisor;
+  const precision = compact < 10 ? 1 : 0;
+  return `${compact.toFixed(precision).replace(/\.0$/, "")}${suffix}`;
+}
+
+function isMarketplaceMetric(value: number | undefined): value is number {
+  return value !== undefined && Number.isSafeInteger(value) && value >= 0;
+}
+
+function SkillMarketplaceStats({
+  installCount,
+  githubStars,
+  t,
+}: {
+  installCount?: number;
+  githubStars?: number;
+  t: Translate;
+}) {
+  const hasInstallCount = isMarketplaceMetric(installCount);
+  const hasGithubStars = isMarketplaceMetric(githubStars);
+  if (!hasInstallCount && !hasGithubStars) {
+    return null;
+  }
+
+  return (
+    <span className="skills-panel__marketplace-stats">
+      {hasInstallCount ? (
+        <Tooltip content={t("skills.install_count", { count: installCount.toLocaleString() })}>
+          <span
+            aria-label={t("skills.install_count", { count: installCount.toLocaleString() })}
+            className="skills-panel__marketplace-stat"
+          >
+            <ThemedIcon semantic="skill.metric.installs" size={12} />
+            <span>{formatMarketplaceCount(installCount)}</span>
+          </span>
+        </Tooltip>
+      ) : null}
+      {hasGithubStars ? (
+        <Tooltip content={t("skills.github_stars", { count: githubStars.toLocaleString() })}>
+          <span
+            aria-label={t("skills.github_stars", { count: githubStars.toLocaleString() })}
+            className="skills-panel__marketplace-stat"
+          >
+            <ThemedIcon semantic="skill.metric.githubStars" size={12} />
+            <span>{formatMarketplaceCount(githubStars)}</span>
+          </span>
+        </Tooltip>
+      ) : null}
+    </span>
+  );
 }
 
 function versionCheckTag(
@@ -204,12 +271,13 @@ function sourceForSkillInfo(info: SkillInfoItem): SkillDetailItem["source"] {
 }
 
 function originForSkillInfo(info: SkillInfoItem): SkillDetailItem["origin"] {
-  return info.libraryEntry?.origin ?? "skillhub";
+  return info.libraryEntry?.origin ?? "skills-sh";
 }
 
 function detailFromLibraryItem(skill: SkillLibraryListItem): SkillDetailItem {
   return {
     slug: skill.slug,
+    registryRef: skill.registryRef,
     displayName: skill.displayName,
     description: skill.description,
     version: skill.version,
@@ -223,6 +291,7 @@ function detailFromLibraryItem(skill: SkillLibraryListItem): SkillDetailItem {
 function detailFromLibraryEntry(skill: SkillLibraryEntry): SkillDetailItem {
   return {
     slug: skill.slug,
+    registryRef: skill.registryRef,
     displayName: skill.displayName,
     description: skill.description,
     version: skill.version,
@@ -236,6 +305,7 @@ function detailFromLibraryEntry(skill: SkillLibraryEntry): SkillDetailItem {
 function detailFromSkillInfo(info: SkillInfoItem): SkillDetailItem {
   return {
     slug: info.slug,
+    registryRef: info.registryRef,
     displayName: info.displayName,
     description: info.description,
     version: info.version,
@@ -249,11 +319,12 @@ function detailFromSkillInfo(info: SkillInfoItem): SkillDetailItem {
 function detailFromSearchResult(item: SkillSearchResultItem): SkillDetailItem {
   return {
     slug: item.slug,
+    registryRef: item.registryRef,
     displayName: item.displayName,
     description: item.description,
     version: item.installedVersion ?? item.version,
     source: "installed",
-    origin: "skillhub",
+    origin: "skills-sh",
     installed: item.installed,
   };
 }
@@ -261,10 +332,11 @@ function detailFromSearchResult(item: SkillSearchResultItem): SkillDetailItem {
 function detailFromRecommendation(item: SkillRecommendationEntry): SkillDetailItem {
   return {
     slug: item.slug,
+    registryRef: item.registryRef,
     displayName: item.displayName,
     description: item.description,
     source: "installed",
-    origin: "skillhub",
+    origin: "skills-sh",
     installed: item.installed,
   };
 }
@@ -272,6 +344,7 @@ function detailFromRecommendation(item: SkillRecommendationEntry): SkillDetailIt
 function skillDetailMatches(left: SkillDetailItem, right: SkillDetailItem) {
   return (
     left.slug === right.slug &&
+    left.registryRef === right.registryRef &&
     left.displayName === right.displayName &&
     left.description === right.description &&
     left.version === right.version &&
@@ -1034,7 +1107,7 @@ function SkillDetailView({
                     <Button
                       size="sm"
                       loading={installingSkillSlugs.has(skill.slug)}
-                      onClick={() => void installSkill(skill.slug)}
+                      onClick={() => void installSkill(skill.slug, skill.registryRef)}
                     >
                       {t("skills.install")}
                     </Button>
@@ -1043,7 +1116,7 @@ function SkillDetailView({
               </div>
             </div>
             <p className="skills-panel__card-slug skills-panel__card-slug--truncated">
-              {skill.slug}
+              {skill.registryRef ?? skill.slug}
             </p>
           </div>
 
@@ -1227,9 +1300,9 @@ function SkillCardOpen({
         ) : null}
       </div>
       <div className="skills-panel__card-body" onClick={open}>
-        <Tooltip content={detail.slug}>
+        <Tooltip content={detail.registryRef ?? detail.slug}>
           <p className="skills-panel__card-slug skills-panel__card-slug--truncated">
-            {detail.slug}
+            {detail.registryRef ?? detail.slug}
           </p>
         </Tooltip>
         {children}
@@ -1313,7 +1386,7 @@ function SkillsLibrarySection({
                 const versionStatus = versionCheckTag(t, versionCheck);
                 const canUpdate =
                   skill.source === "installed" &&
-                  skill.origin === "skillhub" &&
+                  skill.origin === "skills-sh" &&
                   versionCheck?.status === "update_available";
                 const configuredProviderIds = targetSummaries
                   .filter((summary) => summary.configured)
@@ -1364,7 +1437,8 @@ function SkillsLibrarySection({
                       name: skill.displayName,
                     });
                 const isManagedInstalledSkill =
-                  skill.source === "installed" && skill.origin === "skillhub";
+                  skill.source === "installed" &&
+                  (skill.origin === "skillhub" || skill.origin === "skills-sh");
                 const isFilesystemInstalledSkill =
                   skill.source === "installed" && skill.origin === "filesystem";
 
@@ -1630,12 +1704,15 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
       return;
     }
 
-    const cached = skillInfoBySlug[detail.slug];
+    const cacheKey = detail.registryRef ?? detail.slug;
+    const cached = skillInfoBySlug[cacheKey];
     setSelectedSkillDetail(cached ? detailFromSkillInfo(cached) : detail);
-    void loadSkillInfo(detail.slug).then((info) => {
+    void loadSkillInfo(detail.slug, detail.registryRef).then((info) => {
       if (info) {
         setSelectedSkillDetail((current) =>
-          current?.slug === info.slug ? detailFromSkillInfo(info) : current
+          current?.slug === info.slug && current.registryRef === info.registryRef
+            ? detailFromSkillInfo(info)
+            : current
         );
       }
     });
@@ -1708,7 +1785,8 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
       return;
     }
 
-    const cached = skillInfoBySlug[selectedSkillDetail.slug];
+    const cacheKey = selectedSkillDetail.registryRef ?? selectedSkillDetail.slug;
+    const cached = skillInfoBySlug[cacheKey];
     if (cached) {
       const nextDetail = detailFromSkillInfo(cached);
       if (!skillDetailMatches(nextDetail, selectedSkillDetail)) {
@@ -1724,7 +1802,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
         installingSkillSlugs={installingSkillSlugs}
         mounts={
           mountsBySkillSlug[selectedSkillDetail.slug] ??
-          skillInfoBySlug[selectedSkillDetail.slug]?.mounts ??
+          skillInfoBySlug[selectedSkillDetail.registryRef ?? selectedSkillDetail.slug]?.mounts ??
           []
         }
         onBack={() => setSelectedSkillDetail(null)}
@@ -1917,7 +1995,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                       ) : (
                         sortedSearchResults.map((item) => (
                           <article
-                            key={item.slug}
+                            key={item.registryRef ?? item.slug}
                             className="skills-panel__list-item skills-panel__list-item--search workspace-sidebar-row"
                           >
                             <div className="skills-panel__row-head">
@@ -1927,6 +2005,11 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                                 onOpenSkill={openSkillDetail}
                                 badges={
                                   <>
+                                    <SkillMarketplaceStats
+                                      installCount={item.installCount}
+                                      githubStars={item.githubStars}
+                                      t={t}
+                                    />
                                     {(item.installedVersion ?? item.version) ? (
                                       <Tag color="neutral" caps={false}>
                                         {formatSkillVersion(item.installedVersion ?? item.version!)}
@@ -1944,7 +2027,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                                     size="sm"
                                     loading={installingSkillSlugs.has(item.slug)}
                                     disabled={item.installed}
-                                    onClick={() => void installSkill(item.slug)}
+                                    onClick={() => void installSkill(item.slug, item.registryRef)}
                                   >
                                     {item.installed ? t("skills.installed") : t("skills.install")}
                                   </Button>
@@ -1992,7 +2075,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                   <>
                     {sortedRecommendations.map((item) => (
                       <article
-                        key={item.slug}
+                        key={item.registryRef ?? item.slug}
                         className="skills-panel__list-item skills-panel__list-item--recommendation workspace-sidebar-row"
                       >
                         <div className="skills-panel__row-head">
@@ -2010,7 +2093,7 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ workspaceId, refreshToken })
                                 size="sm"
                                 loading={installingSkillSlugs.has(item.slug)}
                                 disabled={item.installed}
-                                onClick={() => void installSkill(item.slug)}
+                                onClick={() => void installSkill(item.slug, item.registryRef)}
                               >
                                 {item.installed ? t("skills.installed") : t("skills.install")}
                               </Button>

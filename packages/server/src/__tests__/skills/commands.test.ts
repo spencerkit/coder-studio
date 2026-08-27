@@ -107,6 +107,8 @@ describe("skills commands", () => {
             displayName: "Code Review",
             description: "Review code changes before merge",
             version: "1.3.0",
+            installCount: 8_674,
+            githubStars: 518,
           },
         ]),
       } as never,
@@ -129,6 +131,8 @@ describe("skills commands", () => {
         displayName: "Code Review",
         description: "Review code changes before merge",
         version: "1.3.0",
+        installCount: 8_674,
+        githubStars: 518,
         installed: true,
         installedVersion: "1.2.3",
         mountedProviderIds: ["codex"],
@@ -363,11 +367,12 @@ describe("skills commands", () => {
         list: vi.fn(() => [
           {
             slug: "code-review",
+            registryRef: "mattpocock/skills@code-review",
             displayName: "Code Review",
             description: "Review code changes before merge",
             version: "1.2.3",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/library/code-review",
             installState: "installed",
             installedAt: 1,
@@ -439,11 +444,12 @@ describe("skills commands", () => {
         list: vi.fn(() => [
           {
             slug: "code-review",
+            registryRef: "mattpocock/skills@code-review",
             displayName: "Code Review",
             description: "Review code changes before merge",
             version: "1.2.3",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/library/code-review",
             installState: "installed",
             installedAt: 1,
@@ -451,11 +457,12 @@ describe("skills commands", () => {
           },
           {
             slug: "security-review",
+            registryRef: "acme/skills@security-review",
             displayName: "Security Review",
             description: "Review security issues",
             version: "1.2.3",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/library/security-review",
             installState: "installed",
             installedAt: 1,
@@ -517,8 +524,8 @@ describe("skills commands", () => {
       },
     ]);
     expect(info).toHaveBeenCalledTimes(2);
-    expect(info).toHaveBeenCalledWith("code-review");
-    expect(info).toHaveBeenCalledWith("security-review");
+    expect(info).toHaveBeenCalledWith("code-review", "mattpocock/skills@code-review");
+    expect(info).toHaveBeenCalledWith("security-review", "acme/skills@security-review");
   });
 
   it("reports unknown and error states when Skill Hub version checks cannot compare versions", async () => {
@@ -534,10 +541,11 @@ describe("skills commands", () => {
         list: vi.fn(() => [
           {
             slug: "missing-version",
+            registryRef: "acme/skills@missing-version",
             displayName: "Missing Version",
             version: "1.0.0",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/library/missing-version",
             installState: "installed",
             installedAt: 1,
@@ -545,10 +553,11 @@ describe("skills commands", () => {
           },
           {
             slug: "lookup-failed",
+            registryRef: "acme/skills@lookup-failed",
             displayName: "Lookup Failed",
             version: "1.0.0",
             source: "installed",
-            origin: "skillhub",
+            origin: "skills-sh",
             libraryPath: "/library/lookup-failed",
             installState: "installed",
             installedAt: 1,
@@ -1152,7 +1161,7 @@ describe("skills commands", () => {
     expect(get).toHaveBeenCalledWith("job-1");
   });
 
-  it("starts updates for installed Skill Hub skills only", async () => {
+  it("starts updates for installed skills.sh skills only", async () => {
     const start = vi.fn(async () => ({
       jobId: "job-update-1",
       slug: "code-review",
@@ -1164,11 +1173,12 @@ describe("skills commands", () => {
       skillLibraryRepo: {
         get: vi.fn(() => ({
           slug: "code-review",
+          registryRef: "mattpocock/skills@code-review",
           displayName: "Code Review",
           description: "Review code changes before merge",
           version: "1.2.3",
           source: "installed",
-          origin: "skillhub",
+          origin: "skills-sh",
           libraryPath: "/library/code-review",
           installState: "installed",
           installedAt: 1,
@@ -1188,7 +1198,7 @@ describe("skills commands", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(start).toHaveBeenCalledWith("code-review");
+    expect(start).toHaveBeenCalledWith("code-review", "mattpocock/skills@code-review");
   });
 
   it("rejects update requests for non-Skill Hub skills", async () => {
@@ -1223,7 +1233,7 @@ describe("skills commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatchObject({
       code: "skill_update_unavailable",
-      message: "Only installed Skill Hub skills can be updated: local-helper",
+      message: "Only installed skills.sh skills can be updated: local-helper",
     });
     expect(start).not.toHaveBeenCalled();
   });
@@ -1260,7 +1270,7 @@ describe("skills commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatchObject({
       code: "skill_update_unavailable",
-      message: "Only installed Skill Hub skills can be updated: code-review",
+      message: "Only installed skills.sh skills can be updated: code-review",
     });
     expect(start).not.toHaveBeenCalled();
   });
@@ -1272,11 +1282,12 @@ describe("skills commands", () => {
       skillLibraryRepo: {
         get: vi.fn(() => ({
           slug: "code-review",
+          registryRef: "mattpocock/skills@code-review",
           displayName: "Code Review",
           description: "Review code changes before merge",
           version: "1.2.3",
           source: "installed",
-          origin: "skillhub",
+          origin: "skills-sh",
           libraryPath: "/library/code-review",
           installState: "failed",
           installedAt: 1,
@@ -1298,7 +1309,7 @@ describe("skills commands", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toMatchObject({
       code: "skill_update_unavailable",
-      message: "Only installed Skill Hub skills can be updated: code-review",
+      message: "Only installed skills.sh skills can be updated: code-review",
     });
     expect(start).not.toHaveBeenCalled();
   });

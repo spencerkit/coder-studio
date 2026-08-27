@@ -33,7 +33,7 @@ describe("skill management domain", () => {
   });
 
   it("exports stable skill library origins", () => {
-    expect(SKILL_LIBRARY_ORIGINS).toEqual(["builtin", "skillhub", "filesystem"]);
+    expect(SKILL_LIBRARY_ORIGINS).toEqual(["builtin", "skillhub", "skills-sh", "filesystem"]);
   });
 
   it("exports stable mount statuses", () => {

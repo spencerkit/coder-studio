@@ -29,10 +29,11 @@ describe("SkillManager", () => {
     const { library, mounts } = createRepositories();
     library.set({
       slug: "review",
+      registryRef: "acme/skills@review",
       displayName: "Review",
       version: "1.0.0",
       source: "installed",
-      origin: "skillhub",
+      origin: "skills-sh",
       libraryPath: "/skills/review",
       installState: "installed",
       installedAt: 1,
@@ -52,7 +53,13 @@ describe("SkillManager", () => {
       mounts,
       catalog: {
         search: vi.fn(async () => [
-          { slug: "review", displayName: "Code Review", version: "2.0.0" },
+          {
+            slug: "review",
+            displayName: "Code Review",
+            version: "2.0.0",
+            installCount: 8_674,
+            githubStars: 518,
+          },
         ]),
         info: vi.fn(),
       },
@@ -63,6 +70,8 @@ describe("SkillManager", () => {
         slug: "review",
         installed: true,
         installedVersion: "1.0.0",
+        installCount: 8_674,
+        githubStars: 518,
         mountedProviderIds: ["codex"],
       }),
     ]);
@@ -106,10 +115,11 @@ describe("SkillManager", () => {
     const { library, mounts } = createRepositories();
     library.set({
       slug: "review",
+      registryRef: "acme/skills@review",
       displayName: "Review",
       version: "v1.2.0",
       source: "installed",
-      origin: "skillhub",
+      origin: "skills-sh",
       libraryPath: "/skills/review",
       installState: "installed",
       installedAt: 1,
@@ -141,7 +151,7 @@ describe("SkillManager", () => {
         status: "update_available",
       },
     ]);
-    expect(info).toHaveBeenCalledWith("review");
+    expect(info).toHaveBeenCalledWith("review", "acme/skills@review");
   });
 
   it("imports a local skill through host content operations and persists metadata", async () => {

@@ -19066,6 +19066,25 @@ body.is-dragging-pane .session-action-btn-drag {
   gap: var(--gap-tight);
 }
 
+.skills-panel__marketplace-stats {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--gap-compact);
+  color: var(--text-tertiary);
+  font-size: var(--type-body-6-size);
+  line-height: var(--type-body-6-line-height);
+  font-weight: var(--type-body-6-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+.skills-panel__marketplace-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
 .skills-panel__card-title,
 .skill-targets-drawer__title {
   margin: 0;
