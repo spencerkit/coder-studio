@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildSidecarCommandPageScript,
   type InstalledDesktopScenario,
+  resolveActualRuntimeVersion,
   toSidecarWebSocketUrl,
   type VerifyInstalledDesktopDeps,
   verifyInstalledDesktopScenario,
@@ -73,6 +74,11 @@ function createDeps(
 }
 
 describe("verify-desktop-installed-update", () => {
+  it("uses the coordinator Runtime when active.json retains an older rollback candidate", () => {
+    expect(resolveActualRuntimeVersion("0.5.13", "0.5.8", null, "0.5.13")).toBe("0.5.13");
+    expect(resolveActualRuntimeVersion(null, "0.5.8", null, "0.5.7")).toBe("0.5.8");
+  });
+
   it("preserves installed logs beside the report before deleting acceptance-owned paths", async () => {
     const runner = await readFile(
       resolve(import.meta.dirname, "verify-desktop-installed-update.ps1"),

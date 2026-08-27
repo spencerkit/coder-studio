@@ -107,6 +107,15 @@ export interface InstalledDesktopScenarioReport extends InstalledEvidence {
   logPaths: string[];
 }
 
+export function resolveActualRuntimeVersion(
+  coordinatorVersion: string | null | undefined,
+  activePointerVersion: string | null,
+  externalVersion: string | null | undefined,
+  factoryVersion: string | null
+): string {
+  return coordinatorVersion || activePointerVersion || externalVersion || factoryVersion || "";
+}
+
 interface SidecarCommandPayload {
   wsUrl: string;
   operation: string;
@@ -431,7 +440,9 @@ export async function verifyInstalledDesktopScenario(
     evidence.actualShellVersion !== scenario.targetShellVersion ||
     evidence.actualRuntimeVersion !== expectedRuntime
   ) {
-    throw new Error("Installed component versions do not match the accepted candidate");
+    throw new Error(
+      `Installed component versions do not match the accepted candidate: shell ${evidence.actualShellVersion} (expected ${scenario.targetShellVersion}); Runtime ${evidence.actualRuntimeVersion} (expected ${expectedRuntime})`
+    );
   }
   if (isWslScenario(scenario.name)) {
     if (evidence.wslRuntimeVersion !== scenario.targetRuntimeVersion) {
@@ -796,11 +807,15 @@ async function createDefaultDeps(options: InstalledDriverOptions): Promise<{
         const observedWslRuntimeVersion = await readWslActiveRuntimeVersion(options.wslDistro);
         const external = await readEvidenceFile(options.evidencePath);
         const observedWslMarker = await wslMarkerExists(options.wslDistro, options.wslMarkerPath);
-        const actualRuntimeVersion =
-          observedRuntimeVersion ??
-          external.actualRuntimeVersion ??
-          observedFactoryRuntimeVersion ??
-          state.productVersion;
+        // active.json can intentionally retain the previous Runtime as a rollback
+        // candidate when a newer Factory Runtime is running. The coordinator state
+        // reflects the Runtime selected for the current process.
+        const actualRuntimeVersion = resolveActualRuntimeVersion(
+          state.productVersion,
+          observedRuntimeVersion,
+          external.actualRuntimeVersion,
+          observedFactoryRuntimeVersion
+        );
         if (
           isWslScenario(options.scenario.name) &&
           typeof external.wslNpmMarkerExists !== "boolean" &&
