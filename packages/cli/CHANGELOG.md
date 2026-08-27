@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.14
+
+### Patch Changes
+
+- [#198](https://github.com/spencerkit/coder-studio/pull/198) [`4b10b7c`](https://github.com/spencerkit/coder-studio/commit/4b10b7c45369bb34cb9591678d8895eee6425c55) Thanks [@pallyoung](https://github.com/pallyoung)! - Extract reusable Skill Manager domain, repositories, and orchestration services, then connect
+  Coder Studio through host adapters while preserving existing Skill command behavior.
+
+- [#198](https://github.com/spencerkit/coder-studio/pull/198) [`a5241df`](https://github.com/spencerkit/coder-studio/commit/a5241df27d80cc5c5992b8692f449863190af6de) Thanks [@pallyoung](https://github.com/pallyoung)! - Inject the actual OS-assigned backend port into agent sessions so Canvas and other automation
+  commands can connect in packaged Windows and WSL Desktop environments.
+
+- [#198](https://github.com/spencerkit/coder-studio/pull/198) [`d3ebcf0`](https://github.com/spencerkit/coder-studio/commit/d3ebcf06b754fe72f137d5f218bc51a6e1543a47) Thanks [@pallyoung](https://github.com/pallyoung)! - Share the selected theme across Local Windows and WSL Desktop windows through a locked Desktop
+  preference store with live cross-process updates and legacy browser settings fallback.
+
 ## 0.5.13
 
 ### Patch Changes

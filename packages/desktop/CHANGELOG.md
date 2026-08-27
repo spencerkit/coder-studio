@@ -1,5 +1,12 @@
 # @coder-studio/desktop
 
+## 0.1.6
+
+### Patch Changes
+
+- [#198](https://github.com/spencerkit/coder-studio/pull/198) [`d3ebcf0`](https://github.com/spencerkit/coder-studio/commit/d3ebcf06b754fe72f137d5f218bc51a6e1543a47) Thanks [@pallyoung](https://github.com/pallyoung)! - Share the selected theme across Local Windows and WSL Desktop windows through a locked Desktop
+  preference store with live cross-process updates and legacy browser settings fallback.
+
 ## 0.1.5
 
 ### Patch Changes
