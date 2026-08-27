@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ProductChannel } from "../packages/desktop/src/product-channel.js";
 import type { ProductIndex, ProductIndexRelease } from "../packages/desktop/src/product-index.js";
 import { canonicalSigningPayload } from "../packages/desktop/src/signed-json.js";
 import { selectProductIndexRelease } from "./select-product-index-release.js";
@@ -66,6 +67,37 @@ async function fixture() {
       value: sign(null, canonicalSigningPayload(unsigned), keys.privateKey).toString("base64"),
     },
   };
+  const stable = releases[2] as ProductIndexRelease;
+  const unsignedChannel: Omit<ProductChannel, "signature"> = {
+    schemaVersion: 1,
+    channel: "product",
+    version: stable.version,
+    releaseTag: stable.releaseTag,
+    generatedAt: stable.publishedAt,
+    minShellVersion: stable.minShellVersion,
+    requirements: stable.requirements,
+    runtimes: {
+      "win32-x64": {
+        ...stable.runtimes["win32-x64"],
+        version: stable.version,
+        publishedAt: stable.publishedAt,
+      },
+      "linux-x64": {
+        ...stable.runtimes["linux-x64"],
+        version: stable.version,
+        publishedAt: stable.publishedAt,
+      },
+    },
+  };
+  const productChannel: ProductChannel = {
+    ...unsignedChannel,
+    signature: {
+      algorithm: "ed25519",
+      value: sign(null, canonicalSigningPayload(unsignedChannel), keys.privateKey).toString(
+        "base64"
+      ),
+    },
+  };
   const buildInfo = {
     schemaVersion: 1,
     shellVersion: "0.1.5",
@@ -78,15 +110,18 @@ async function fixture() {
     dataSchemaVersion: 1,
   };
   const indexFile = join(root, "product-index.json");
+  const productChannelFile = join(root, "product-channel.json");
   const buildInfoFile = join(root, "build-info.json");
   const outputFile = join(root, "selected.json");
   await Promise.all([
     writeFile(indexFile, JSON.stringify(index)),
+    writeFile(productChannelFile, JSON.stringify(productChannel)),
     writeFile(buildInfoFile, JSON.stringify(buildInfo)),
   ]);
   return {
     publicKeyPem: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
     indexFile,
+    productChannelFile,
     buildInfoFile,
     outputFile,
   };
@@ -96,6 +131,16 @@ describe("Product index release selector", () => {
   it("selects the highest compatible accepted Runtime", async () => {
     const value = await fixture();
     await expect(selectProductIndexRelease({ ...value })).resolves.toMatchObject({
+      version: "0.5.13",
+      releaseTag: "v0.5.13",
+    });
+  });
+
+  it("bootstraps selection from the signed stable Product channel", async () => {
+    const value = await fixture();
+    await expect(
+      selectProductIndexRelease({ ...value, indexFile: value.productChannelFile })
+    ).resolves.toMatchObject({
       version: "0.5.13",
       releaseTag: "v0.5.13",
     });
