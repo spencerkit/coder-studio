@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.15
+
+### Patch Changes
+
+- [#203](https://github.com/spencerkit/coder-studio/pull/203) [`0cd1ff7`](https://github.com/spencerkit/coder-studio/commit/0cd1ff78ea1a47a989d6fd8c9d37a04a70ae93cd) Thanks [@pallyoung](https://github.com/pallyoung)! - Switch the Skill marketplace integration to skills.sh, including install support and marketplace
+  download and GitHub star metrics in the Skill Manager UI.
+
 ## 0.5.14
 
 ### Patch Changes
