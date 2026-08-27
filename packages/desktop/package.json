@@ -1,6 +1,6 @@
 {
   "name": "@coder-studio/desktop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Native desktop shell for the local-first Coder Studio agentic workspace.",
   "author": "Coder Studio",
   "license": "MIT",
