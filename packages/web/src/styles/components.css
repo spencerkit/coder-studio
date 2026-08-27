@@ -19081,7 +19081,7 @@ body.is-dragging-pane .session-action-btn-drag {
 .skills-panel__marketplace-stat {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--gap-compact);
   white-space: nowrap;
 }
 
