@@ -575,7 +575,7 @@ try {
         $desktopProcess.Refresh()
       }
       if ($desktopProcess.HasExited) {
-        if ($PinLegacyShellUpdaterToChannel) {
+        if ($PinLegacyShellUpdaterToChannel -or $SkipAuthenticode) {
           Stop-InstallerProcesses $candidateInstallerName
           Start-Sleep -Seconds 1
           Start-SilentInstaller $candidateInstallerPath $installDirectory | Out-Null

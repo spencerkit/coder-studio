@@ -167,7 +167,7 @@ describe("verify-desktop-installed-update", () => {
     );
     expect(runner).toContain("if ($AllowFailedFrozenState) {");
     expect(runner).toContain("--allow-failed-frozen-state");
-    expect(runner).toContain("if ($PinLegacyShellUpdaterToChannel) {");
+    expect(runner).toContain("if ($PinLegacyShellUpdaterToChannel -or $SkipAuthenticode) {");
     expect(runner).toContain("Stop-InstallerProcesses $candidateInstallerName");
     expect(runner).toContain("Start-SilentInstaller $candidateInstallerPath $installDirectory");
     expect(runner).toContain("Wait-ForInstalledShellInstall `");
